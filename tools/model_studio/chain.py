@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """SailAge model-studio generation chain — the validated model-pass pipeline,
 self-contained (tools/model_pass.py is NOT imported, only parsed read-only
-for canonical prompt wording).
+for canonical icon prompt wording).
 
-Pipeline per sprite job:
+Ships and wakes never touch the local chain: they drive
+tools/pixellab_pass.py (top-down north tokens) / tools/pixellab_vfx_pass.py
+(wake sheets) IN-PROCESS — see the td_/fx_ family blocks below.
+
+Pipeline per icon job:
   1. draft  : <repo>/tools/ui_art/model_raw/drafts/<job>.png (MAIN repo,
               read-only) -> base64 -> POST http://127.0.0.1:8001/edit
               {"image","prompt","seed"}; the response body IS the PNG
@@ -14,10 +18,7 @@ Pipeline per sprite job:
               /history, fetch /view.
   3. snap   : nearest-resize to 512x512 -> majority-vote downscale to the
               64 logical grid over opaque px -> quantize to
-              sorted(validate_data.BLOCK_HULL) (BLOCK_ICON for icons) ->
-              hull-only pennant-source snap (channel-sum delta <= 40 of
-              #b3191f -> the exact source hex) + masthead presence check
-              + e/w long-axis band check (bands 28-36 / 40-52 / 52-60).
+              sorted(validate_data.BLOCK_ICON).
   4. writes : studio cache ONLY — model_raw/studio/{gen,snapped,debg}/<job>.png
               (debg is the rembg intermediate, kept so an offline re-check
               can re-run the snap deterministically). Atomic (tmp+replace).
@@ -25,13 +26,18 @@ Pipeline per sprite job:
 
 Terrain jobs skip rembg/snap (the validated driver's terrain path): the gen
 response is decoded, nearest-normalized to 1024x512 when it drifts, and
-stored as the studio gen artifact.
+stored as the studio gen artifact. (Terrain cards are hidden — the coast
+tileset card owns terrain re-rolls — but the machinery stays for the
+store's history.)
 
 Canonical prompts are reconstructed by PARSING the driver file read-only:
 literal constants via ast.literal_eval, ICON_PROMPT_OVERRIDES (which
 references ICON_STYLE by name) via an AST-validated eval against the
 already-parsed ICON_STYLE. The terrain texture clauses are embedded verbatim
 (they are function-local in the driver and cannot be parsed as literals).
+The retired hull/sheet ship machinery (2026-11-07 user direction — the
+top-down amendment replaced that art) is removed: the hull/sheet/px job
+shapes are unknown here.
 
 PNG decode: tools/validate_data.decode_ui_png (imported from the MAIN repo
 by absolute path; indexed type-3 + RGBA type-6) with a local truecolor
@@ -63,9 +69,6 @@ REMBG_WF = ("/home/weidong/repo/LifeSimulator/src/lib/comfyui/"
             "workflow-template-rembg.json")
 CLIENT_ID = "sailage-studio"
 
-PENNANT_SOURCE = "#b3191f"      # the authored masthead source hex (§4.8.4)
-PENNANT_SNAP_MAX = 40           # channel-sum |Δ| that snaps to the source
-BANDS = {1: (28, 36), 2: (40, 52), 3: (52, 60)}  # 64-grid tier bands (e/w)
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 
 # ------------------------------------------------------------- repo paths --
@@ -355,12 +358,6 @@ def _hex_dist2(a: str, b: str) -> int:
     return (ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2
 
 
-def _chan_sum_dist(a: str, b: str) -> int:
-    ar, ag, ab = _hex_rgb(a)
-    br, bg, bb = _hex_rgb(b)
-    return abs(ar - br) + abs(ag - bg) + abs(ab - bb)
-
-
 def _quantize(hexcolor: str, block) -> str:
     best, best_d = None, None
     for cand in block:  # sorted palette; first-lowest wins ties
@@ -370,10 +367,11 @@ def _quantize(hexcolor: str, block) -> str:
     return best
 
 
-def snap(debg_bytes: bytes, block, band=None, pennant_snap=False):
-    """512-grid majority vote -> 64 logical grid, quantized (+ optional
-    pennant-source snap) with the validated metrics. Returns (rows64,
-    metrics) exactly like the driver's snap_and_measure."""
+def snap(debg_bytes: bytes, block):
+    """512-grid majority vote -> 64 logical grid, quantized — the icon
+    snap (BLOCK_ICON). Returns (rows64, metrics) exactly like the
+    driver's snap_and_measure (the hull band/pennant gates retired with
+    the hull family; the informational pennant-red count stays)."""
     w, h, px = decode_rgba(debg_bytes)
     if (w, h) != (512, 512):
         px = _resize_nearest(px, w, h, 512, 512)
@@ -402,11 +400,7 @@ def snap(debg_bytes: bytes, block, band=None, pennant_snap=False):
             else:
                 opaque_cells += 1
                 winner = max(cnt.items(), key=lambda kv: (kv[1], kv[0]))[0]
-                q = _quantize("#%02x%02x%02x" % winner, block)
-                if pennant_snap and _chan_sum_dist(q, PENNANT_SOURCE) <= \
-                        PENNANT_SNAP_MAX:
-                    q = PENNANT_SOURCE
-                row.append(q)
+                row.append(_quantize("#%02x%02x%02x" % winner, block))
         grid.append(row)
 
     xs = [x for y in range(64) for x in range(64) if grid[y][x]]
@@ -418,11 +412,6 @@ def snap(debg_bytes: bytes, block, band=None, pennant_snap=False):
         "fit_inside_64": bool(bbox and bbox[0] >= 0 and bbox[1] >= 0
                               and bbox[2] < 64 and bbox[3] < 64),
     }
-    if band and bbox:
-        lo, hi = band
-        width = bbox[2] - bbox[0] + 1
-        metrics["band"] = {"long_axis_px": width, "band": list(band),
-                           "in_band": lo <= width <= hi}
 
     red_hexes = ("#b3191f", "#b3341f")
     count = 0
@@ -548,81 +537,16 @@ def crop_rows(rows, x0, y0, x1, y1):
 
 # ------------------------------------------------------------- driver parse ---
 
-_LITERAL_NAMES = ("HULLS", "DIRS", "TIER", "BANDS", "POSE", "RIG", "COMPACT",
-                  "STYLE", "ICON_STYLE", "ICON_PRIORITY", "TERRAIN_KEYS")
+_LITERAL_NAMES = ("ICON_STYLE", "ICON_PRIORITY", "TERRAIN_KEYS")
 _DRIVER: dict | None = None
 
 # Hard fallback: the master's proven wording, embedded verbatim from
 # tools/model_pass.py (f6c00bb era). Used when the driver file cannot be
 # parsed (torn read while the re-roll round rewrites it) or drifts shape —
 # prompt boxes must NEVER go empty and /api/jobs must NEVER 500 over this.
+# (The hull/sheet ship constants retired with the hull family,
+# 2026-11-07 — only the icon/terrain wording remains.)
 EMBEDDED_DRIVER: dict = {
-    "HULLS": ["brigantine", "caravel", "caravela_redonda", "carrack", "dhow",
-              "fluyt", "galiot", "galleass", "galleon", "galley", "junk",
-              "latin", "nao", "pinnace", "sloop", "xebec"],
-    "DIRS": ["e", "w", "n", "s", "ne", "nw", "se", "sw"],
-    "TIER": {"latin": 1, "sloop": 1, "galiot": 1, "pinnace": 1,
-             "caravel": 2, "galley": 2, "brigantine": 2, "fluyt": 2,
-             "junk": 2, "dhow": 2, "caravela_redonda": 2, "xebec": 2,
-             "nao": 3, "carrack": 3, "galleon": 3, "galleass": 3},
-    "BANDS": BANDS,
-    "POSE": {
-        "e": "side-view sailing-right pose",
-        "w": "side-view sailing-left pose (the mirrored view of the "
-             "reference)",
-        "n": ("stern-view sailing-away pose, billowed square sails seen from "
-              "behind, lit stern-castle windows"),
-        "s": "bow-view approaching pose, bowsprit pointing at the viewer",
-        "ne": "three-quarter diagonal view sailing toward the top-right",
-        "nw": "three-quarter diagonal view sailing toward the top-left",
-        "se": "three-quarter diagonal view sailing toward the bottom-right",
-        "sw": "three-quarter diagonal view sailing toward the bottom-left",
-    },
-    "RIG": {
-        "latin": "one mast with a big triangular latin lateen sail "
-                 "dominating the profile",
-        "sloop": "one mast with a big lateen mainsail, short bowsprit, "
-                 "small jib",
-        "galiot": "compact hull, one large lateen sail and a short oar bank "
-                  "visible at the waterline",
-        "pinnace": "small oared boat with two staggered oar banks and a "
-                   "bare mast stub carrying the pennant",
-        "caravel": "two masts with two large triangular lateen sails, "
-                   "rounded high prow",
-        "galley": "long low hull with rows of oars at the waterline, one "
-                  "lateen mainsail plus a small square topsail",
-        "brigantine": "two masts: square course and topsail on the fore "
-                      "mast, fore-and-aft gaff spanker on the main",
-        "fluyt": "fat-bellied hull, blunt stern, three masts with square "
-                 "course and topsail stacks",
-        "junk": "three masts with fully-battened rectangular junk sails, "
-                "fan-tail stern",
-        "dhow": "slim hull with sharp prow and one big triangular lateen "
-                "sail",
-        "caravela_redonda": "roundish hull, three masts: square course and "
-                            "topsail stacks fore and main, lateen mizzen",
-        "xebec": "narrow hull, three masts with large overlapping "
-                 "triangular lateen sails",
-        "nao": "three masts with square course and topsail stacks, tall "
-               "fore and aft castles, crow's nests",
-        "carrack": "three masts with square sails plus a lateen mizzen, "
-                   "very high stern castle",
-        "galleon": "three masts with square sails, high stern castle, "
-                   "crow's nests, beakhead, dense gunports",
-        "galleass": "the longest hull, three lateen-rigged masts and many "
-                    "oar stations at the waterline",
-    },
-    "COMPACT": ("Compact proportions: the whole ship fits within a square "
-                "as wide as it is long, compact hull, the outboard rig "
-                "overhangs the hull minimally."),
-    "STYLE": ("Render it as crisp limited-palette pixel art in the style of "
-              "early-90s 16-bit sailing games: billowed canvas sails with "
-              "curved highlight and shadow bands following the bulge, dense "
-              "wooden hull with visible planking lines, small lit cabin "
-              "windows, gunports, a small red pennant flag at the mainmast "
-              "top, strong 1-pixel dark outline around the whole sprite, "
-              "big chunky pixels, pure white background. No water, no "
-              "scenery, no text, no frame."),
     "ICON_STYLE": ("redraw as crisp bold 16-bit game icon, same silhouette "
                    "and recognizability, thick outline, flat colors, "
                    "centered, white background"),
@@ -681,12 +605,6 @@ EMBEDDED_DRIVER: dict = {
     "TERRAIN_KEYS": ["hills_plains", "mountains_plains", "ice_plains",
                      "ice_sea", "reef_sea", "rocky_uniform",
                      "plains_uniform"],
-    # per-hull sheet jobs (the batch refactor's shape — embedded so the
-    # studio survives even if these constants vanish again mid-refactor)
-    "SHEET_DIRS": ["w", "n", "s", "sw", "nw"],
-    "SHEET_CELLS": {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
-                    "sw": (64, 640), "nw": (640, 640)},
-    "SHEET_SIZE": (1792, 1152),
 }
 # Embedded overrides carry no style tail yet (the parsed driver's overrides
 # end with + ICON_STYLE) — append it so both shapes are identical.
@@ -782,11 +700,9 @@ def load_driver(repo: str) -> dict:
                     if "ICON_PROMPT_OVERRIDES" not in consts else [])
         if missing:
             raise RuntimeError(f"constants unresolved: {missing}")
-        # sanity: the keys default_prompt needs must exist
-        for probe in ("POSE", "RIG", "COMPACT", "STYLE", "ICON_STYLE",
-                      "TIER"):
-            if probe not in consts:
-                raise RuntimeError(f"parsed driver lacks {probe}")
+        # sanity: the key default_prompt needs must exist
+        if "ICON_STYLE" not in consts:
+            raise RuntimeError("parsed driver lacks ICON_STYLE")
         _DRIVER = consts
         _DRIVER_SOURCE = "parsed"
         _DRIVER_ERROR = None
@@ -806,49 +722,6 @@ def load_driver(repo: str) -> dict:
 def driver_status() -> dict:
     return {"source": _DRIVER_SOURCE, "error": _DRIVER_ERROR}
 
-
-def flip_x(data: bytes) -> bytes:
-    """Horizontal mirror of any readable PNG (indexed 3 / RGB 2 / RGBA 6) —
-    the ingestion's mirror_x for e/ne/se display when their files are gone."""
-    w, h, px = decode_rgba(data)
-    return encode_png(w, h, [list(reversed(row)) for row in px])
-
-
-# The driver's sheet-prompt template (function-local in model_pass.py,
-# not literal-parseable) — proven wording, embedded verbatim; {rig},
-# {compact}, {scale}, {chroma} are filled from the parsed driver.
-SHEET_PROMPT_TMPL = (
-    "Redraw this input sprite sheet. The five labelled cells show the "
-    "SAME ship seen from five directions: identical hull, identical "
-    "rig, identical materials and colour treatment in every cell; "
-    "only the viewing angle changes. "
-    "Cell w: side view sailing LEFT, the bow with bowsprit at the "
-    "LEFT edge of the cell, stern at the RIGHT edge. "
-    "Cell n: seen from astern — the square transom/stern-castle faces "
-    "the viewer head-on, symmetric, the ship sails away upward, NO "
-    "bowsprit visible. "
-    "Cell s: seen from the bow — the bowsprit toward the viewer, "
-    "transom hidden behind the sails. "
-    "Cells sw and nw: three-quarter views, the bow pointing to the "
-    "BOTTOM-LEFT corner (sw) and the TOP-LEFT corner (nw). "
-    "Cells n and s are opposite views of the same ship: n shows the "
-    "transom, s shows the bowsprit — do not draw the same view twice. "
-    "The small labels above the cells are pre-printed — do NOT draw "
-    "them into the sprites; leave the sixth cell empty. "
-    "Rig: {rig}. {compact} {scale}"
-    "Render every cell as crisp limited-palette pixel art in the "
-    "style of early-90s 16-bit sailing games: billowed canvas sails "
-    "with curved highlight and shadow bands following the bulge, "
-    "dense wooden hull with visible planking lines, small lit cabin "
-    "windows, gunports, a small red pennant flag at the mainmast top, "
-    "strong 1-pixel dark outline around each sprite, big chunky "
-    "pixels, {chroma}. Keep the thin dark dividers. No "
-    "water, no scenery, no extra text, no frame.")
-SHEET_SCALE_CLAUSE = {
-    "pinnace": ("This hull fills about 75% of its cell width in every "
-                "cell — a substantial sloop-of-war, NOT a small boat. "),
-    "nao": "This hull fills about 85% of its cell. ",
-}
 
 # ---- icon group sheets (the driver's icon_group_definitions shape) ----
 ICON_GROUP_SHEET_DOC = "icons get the per-hull treatment: one sheet per family"
@@ -1179,11 +1052,10 @@ def coast_mock_png(result: dict) -> bytes:
     return encode_png(cw * 64, ch * 64, rows)
 
 
-def px_dir() -> str:
-    return os.path.join(RAW, "pixellab")
-
-
 def _px_mod():
+    """The shared lazy import of tools/pixellab_pass.py (std-lib-only at
+    chain import time; PIL inside the tool is lazy too). Used by the
+    top-down ship family and the wake VFX family."""
     if "pixellab_pass" in sys.modules:
         return sys.modules["pixellab_pass"]
     tools_dir = os.path.join(REPO, "tools")
@@ -1193,107 +1065,17 @@ def _px_mod():
     return pixellab_pass
 
 
-def px_manifest() -> dict:
-    path = os.path.join(px_dir(), "pixellab.json")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            doc = json.load(fh)
-        return doc if isinstance(doc, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
-def px_labels() -> list[str]:
-    """Labels with generation state: a manifest record OR a raw-rotation
-    dir on disk. Sorted — the registry order is byte-stable."""
-    root = px_dir()
-    out = set(px_manifest().keys())
-    try:
-        for name in sorted(os.listdir(root)):
-            if os.path.isdir(os.path.join(root, name)):
-                out.add(name)
-    except OSError:
-        pass
-    return sorted(out)
-
-
-def px_ship_of(label: str) -> str:
-    """The ship_types id a label feeds: the manifest records it; the
-    accepted fleet's trial label falls back to stripping the `_uw2`
-    suffix."""
-    rec = px_manifest().get(label) or {}
-    ship = rec.get("ship")
-    if ship:
-        return str(ship)
-    return label[:-len("_uw2")] if label.endswith("_uw2") else label
-
-
-def px_default_prompt(label: str) -> str:
-    """The pinned per-ship descriptor + shared UW2 style suffix — the
-    free-text edit base. Failure falls back to the manifest's recorded
-    description (what actually produced the accepted art)."""
-    try:
-        mod = _px_mod()
-        p = mod._desc(px_ship_of(label))
-        if p and p.strip():
-            return p.strip()
-    except Exception as exc:  # noqa: BLE001 — manifest fallback below
-        print(f"[studio-chain] px default prompt failed for {label} "
-              f"({type(exc).__name__}: {exc}); manifest fallback",
-              flush=True)
-    rec = px_manifest().get(label) or {}
-    return str(rec.get("description")
-               or f"{px_ship_of(label)} sailing ship")
-
-
-def px_dirs(label: str) -> list[str]:
-    """Heading8 dir ids with a snapped (ship-as-drawn) file, pinned
-    compass order."""
-    snap = os.path.join(px_dir(), label, "snapped")
-    order = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
-    try:
-        have = set(os.listdir(snap))
-    except OSError:
-        have = set()
-    return [d for d in order if f"{d}.png" in have]
-
-
-def px_exists(label: str) -> bool:
-    return os.path.isdir(os.path.join(px_dir(), label))
-
-
-def px_fleet_labels() -> list[str]:
-    """Labels with ship-as-drawn state (≥1 snapped rotation) — the
-    ingestible fleet. Trial labels (raw rotations only, no snapped/) are
-    generation history, not fleet members, and never stage."""
-    return [lab for lab in px_labels() if px_dirs(lab)]
-
-
-def px_generate(label: str, description: str, seed: int,
-                on_stage=None) -> dict:
-    """One pixellab ship job: generate (free-text description + seed) ->
-    fetch the 8 rotations -> snap passthrough. ~100-115 s of API time;
-    the studio worker runs jobs serially so that is fine."""
-    t0 = time.time()
-    stage = on_stage or (lambda _s: None)
-    mod = _px_mod()
-    ship = px_ship_of(label)
-    stage("posting")
-    rec = mod.run_ship(ship, label=label, description=description,
-                       seed=seed,
-                       poll_status=lambda s: stage(f"render:{s}"))
-    stage("snapping")
-    mod.snap_ship(label)
-    dirs = px_dirs(label)
-    return {
-        "status": "done" if len(dirs) == 8 else "partial",
-        "object_id": rec.get("object_id"),
-        "seed": seed,
-        "dirs": dirs,
-        "n_dirs": len(dirs),
-        "description": description,
-        "seconds": round(time.time() - t0, 1),
-    }
+def _vfx_mod():
+    """The wake family's lazy import of tools/pixellab_vfx_pass.py (same
+    pattern as _px_mod; the VFX tool shares the pass tool's envelope
+    helpers but carries its own V5_DESCRIPTION / run_size)."""
+    if "pixellab_vfx_pass" in sys.modules:
+        return sys.modules["pixellab_vfx_pass"]
+    tools_dir = os.path.join(REPO, "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import pixellab_vfx_pass  # noqa: PLC0415
+    return pixellab_vfx_pass
 
 
 # ------------------------- top-down north ship family (§4.8 2026-11-07) --
@@ -1394,26 +1176,211 @@ def td_generate(label: str, description: str, seed: int,
     }
 
 
+# --------------------- wake VFX family (§4.8 2026-11-07, single-layer) --
+# The studio's wake path drives tools/pixellab_vfx_pass.py IN-PROCESS: ONE
+# north wake sheet per ship SIZE (32/48/64), rendered UNDER the hull — ships
+# rotate at runtime, so the sheet rotates with them and only the north
+# family ever exists. Re-rolls STAGE into the studio cache (the coast
+# pattern) — the canonical raw store model_raw/pixellab_vfx/v5/ (the
+# ingest's input) is only touched on Accept.
+
+FX_SIZES = (32, 48, 64)
+FX_SIZE_SHIP = {32: "latin", 48: "caravel", 64: "galleass"}  # SIZE_SPRITE
+SEA_RGB = (22, 68, 110)  # the wake review blue (tools/preview_topdown.py)
+
+
+def fx_stage_root() -> str:
+    return os.path.join(STUDIO, "fx")
+
+
+def fx_stage_manifest_path() -> str:
+    return os.path.join(fx_stage_root(), "pixellab_vfx.json")
+
+
+def fx_stage_dir(size: int) -> str:
+    return os.path.join(fx_stage_root(), str(size))
+
+
+def fx_stage_manifest() -> dict:
+    """The staging manifest written by pixellab_vfx_pass.run_size
+    (out_root = the studio fx root): size-keyed records with the effect
+    id, quote, and the template-matched anchor_sprite."""
+    path = fx_stage_manifest_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def fx_ship_of_size(size: int) -> str:
+    return FX_SIZE_SHIP.get(int(size), str(size))
+
+
+def fx_default_prompt() -> str:
+    """The pinned v5 description of record (80-* §4.8 2026-11-07,
+    verbatim — the natural-language wake: foam described, not hexed) —
+    the free-text edit base."""
+    return str(_vfx_mod().V5_DESCRIPTION)
+
+
+def fx_exists(size: int) -> bool:
+    return os.path.isdir(fx_stage_dir(size))
+
+
+def fx_generate(size: int, description: str, on_stage=None) -> dict:
+    """One wake VFX job: POST /v2/vfx (pro artist, game_pack, the
+    representative north token as the sprite input) + poll + raw download
+    into the staging root. The envelope has NO seed. ~2-5 min of API
+    time; the studio worker runs jobs serially so that is fine."""
+    t0 = time.time()
+    stage = on_stage or (lambda _s: None)
+    mod = _vfx_mod()
+    stage("posting")
+    rec = mod.run_size(int(size), artist="pro",
+                       default_description=description,
+                       default_name_fmt=f"waterline-v5-north-{size}-pro",
+                       out_root=fx_stage_root())
+    ok = rec.get("status") == "completed"
+    return {
+        "status": "done" if ok else "partial",
+        "effect_id": rec.get("effect_id"),
+        "quote": rec.get("quoted_generations"),
+        "canvas": rec.get("canvas"),
+        "description": description,
+        "seconds": round(time.time() - t0, 1),
+    }
+
+
+def fx_accept_stage(size: int) -> None:
+    """Accept staging: copy the staged size dir + its manifest record into
+    the canonical raw store model_raw/pixellab_vfx/v5/ (the ingest's
+    input). The manifest record merges FIRST (the builder reads it for
+    the anchor), then the dir swaps in."""
+    import shutil  # noqa: PLC0415
+    src = fx_stage_dir(size)
+    if not os.path.isdir(src):
+        raise RuntimeError(f"no staged wake re-roll for size {size}")
+    rec = fx_stage_manifest().get(str(size))
+    if not rec:
+        raise RuntimeError(f"staged manifest record missing for {size}")
+    v5_root = os.path.join(RAW, "pixellab_vfx", "v5")
+    os.makedirs(v5_root, exist_ok=True)
+    v5_path = os.path.join(v5_root, "pixellab_vfx.json")
+    try:
+        with open(v5_path, encoding="utf-8") as fh:
+            v5_m = json.load(fh)
+    except (OSError, ValueError):
+        v5_m = {}
+    v5_m[str(size)] = rec
+    atomic_write(v5_path, json.dumps(v5_m, indent=1, sort_keys=True)
+                 .encode("utf-8"))
+    dst = os.path.join(v5_root, str(size))
+    tmp = dst + ".stage-tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.copytree(src, tmp)
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    os.replace(tmp, dst)
+
+
+def fx_stage_pack(size: int) -> dict | None:
+    """The staged re-roll's render geometry — {sheet_bytes, frame_w,
+    frame_h, columns, offset, anchor, gif} read out of the staged game
+    pack + staging manifest (the composite preview's source). None when
+    nothing is staged."""
+    import zipfile  # noqa: PLC0415
+    d = fx_stage_dir(size)
+    packs = []
+    if os.path.isdir(d):
+        packs = sorted(f for f in os.listdir(d) if f.endswith("-game.zip"))
+    if not packs:
+        return None
+    anchor = (fx_stage_manifest().get(str(size)) or {}).get(
+        "anchor_sprite") or {}
+    with zipfile.ZipFile(os.path.join(d, packs[0])) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        clip = next(c for c in manifest["clips"] if c["name"] == "behind")
+        gif = next((os.path.join(d, f) for f in sorted(os.listdir(d))
+                    if f.endswith(".gif")), None)
+        return {
+            "sheet_bytes": zf.read(clip["sheets"][0]["file"]),
+            "frame_w": clip["frame"]["w"], "frame_h": clip["frame"]["h"],
+            "columns": clip["sheets"][0]["columns"],
+            "offset": clip["offset"], "anchor": anchor, "gif": gif,
+        }
+
+
+def fx_shipped_pack(size: int) -> dict | None:
+    """The committed family's geometry (assets/ui/fx/ + the frame table)
+    — the same shape as fx_stage_pack, for the shipped-composite preview
+    (what the game shows right now). None before the family ships."""
+    fx_dir = os.path.join(REPO, "assets", "ui", "fx")
+    try:
+        with open(os.path.join(fx_dir, "fx_waterline.json"),
+                  encoding="utf-8") as fh:
+            table = json.load(fh)
+        entry = table.get("sizes", {}).get(str(size)) or {}
+        clip = entry.get("sheet") or {}
+        if not clip:
+            return None
+        with open(os.path.join(fx_dir, clip["file"]), "rb") as fh:
+            data = fh.read()
+    except (OSError, ValueError):
+        return None
+    return {
+        "sheet_bytes": data, "frame_w": clip["frame"]["w"],
+        "frame_h": clip["frame"]["h"], "columns": clip["columns"],
+        "offset": clip["offset"], "anchor": entry.get("anchor_sprite")
+        or {}, "gif": None,
+    }
+
+
+def fx_composite_png(size: int, pack: dict) -> bytes:
+    """Frame 0 of a wake sheet composited UNDER the ship's north token on
+    the review sea blue — the in-game sandwich at native scale (the
+    placement rule: sheet top-left = token box top-left + (anchor_sprite
+    + offset)). Review aid only; never shipped."""
+    from io import BytesIO  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+    ship = fx_ship_of_size(size)
+    tok_path = os.path.join(REPO, "assets", "ui", "tokens",
+                            f"hull_{ship}.png")
+    with open(tok_path, "rb") as fh:
+        tok = Image.open(BytesIO(fh.read())).convert("RGBA")
+    sheet = Image.open(BytesIO(pack["sheet_bytes"])).convert("RGBA")
+    fw, fh = int(pack["frame_w"]), int(pack["frame_h"])
+    frame = sheet.crop((0, 0, fw, fh))
+    s = int(size)
+    cw, ch = max(s, fw) + 16, max(s, fh) + 16
+    canvas = Image.new("RGBA", (cw, ch), SEA_RGB + (255,))
+    box_x, box_y = (cw - s) // 2, (ch - s) // 2
+    off = pack.get("offset") or {}
+    anc = pack.get("anchor") or {}
+    canvas.alpha_composite(frame, (int(box_x + float(anc.get("x", 0.0))
+                                         + float(off.get("x", 0.0))),
+                                   int(box_y + float(anc.get("y", 0.0))
+                                         + float(off.get("y", 0.0)))))
+    canvas.alpha_composite(tok, (box_x, box_y))
+    out = BytesIO()
+    canvas.save(out, "PNG")
+    return out.getvalue()
+
+
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
-    """(family, subject, dir) for all shapes the store has used:
-    - px_<label>         pixellab ship jobs (the §4.8 2026-11-06 family)
-    - hull_<ship>_<dir>  legacy per-dir jobs (e/ne/se = mirror displays)
-    - sheet_<ship>       per-hull 5-cell sheet jobs (the batch refactor)
-    - hull_<ship>        the sheet jobs' progress/ledger key (same family)
-    - icon_<id> / terrain_<key>
+    """(family, subject, dir) for the live job shapes:
+    - td_<label>         top-down north ship jobs (§4.8 2026-11-07)
+    - fx_<size>          wake VFX jobs, size ∈ {32, 48, 64} (same day)
+    - icon_<id> / iconsheet_<group> / terrain_<key>
+    The retired shapes (px_<label> oblique ships, hull_<ship>_<dir>,
+    sheet_<ship>) are UNKNOWN since the 2026-11-07 removal — they raise
+    KeyError, and the registry skips their draft files by prefix.
     Unknown shapes raise KeyError (callers guard per job)."""
-    if job_id.startswith("px_"):
-        return "pxship", job_id[len("px_"):], None
     if job_id.startswith("td_"):
         return "topdown", job_id[len("td_"):], None
-    if job_id.startswith("sheet_"):
-        return "sheet", job_id[len("sheet_"):], None
-    if job_id.startswith("hull_"):
-        rest = job_id[len("hull_"):]
-        ship, _, direction = rest.rpartition("_")
-        if ship and direction in EMBEDDED_DRIVER["DIRS"]:
-            return "hull", ship, direction
-        return "sheet", rest, None  # hull_<ship> — the sheet progress key
+    if job_id.startswith("fx_"):
+        return "fx", job_id[len("fx_"):], None
     if job_id.startswith("iconsheet_"):
         return "iconsheet", job_id[len("iconsheet_"):], None
     if job_id.startswith("icons_"):
@@ -1425,34 +1392,14 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     raise KeyError(job_id)
 
 
-def _hull_prompt_from(d: dict, ship: str, direction: str,
-                      stated_px: int | None) -> str:
-    """The driver's hull_prompt wording (byte-identical template) built
-    from a constants dict — used by default_prompt and reconstruction."""
-    pose = d["POSE"][direction]
-    rig = d["RIG"][ship]
-    prompt = (f"Redraw this input sprite. Keep the exact same "
-              f"silhouette, mast count, sail layout, proportions and "
-              f"{pose}. Rig: {rig}. {d['COMPACT']} ")
-    if stated_px:
-        prompt += (f"Ship length about {stated_px} px of the 512 canvas "
-                   f"including bowsprit. ")
-    return prompt + d["STYLE"]
-
-
-def sheet_prompt_from(d: dict, ship: str) -> str:
-    """The driver's hull_sheet_prompt wording from a constants dict."""
-    return SHEET_PROMPT_TMPL.format(
-        rig=d["RIG"][ship], compact=d["COMPACT"],
-        scale=SHEET_SCALE_CLAUSE.get(ship, ""), chroma=d["CHROMA_BG"])
-
-
 def default_prompt(job_id: str, repo: str) -> str:
     """Canonical driver prompt, reconstructed from parsed constants.
     Guaranteed non-empty: any reconstruction failure — including an
     unknown job shape — falls back to a generic embedded wording."""
-    if job_id.startswith("px_"):
-        return px_default_prompt(job_id[len("px_"):])
+    if job_id.startswith("fx_"):
+        return fx_default_prompt()
+    if job_id.startswith("td_"):
+        return td_default_prompt(job_id[len("td_"):])
     d = load_driver(repo)
     try:
         fam, subject, direction = parse_job(job_id)
@@ -1460,15 +1407,7 @@ def default_prompt(job_id: str, repo: str) -> str:
         return (f"Redraw this input sprite. Keep the exact same "
                 f"silhouette and recognizability. {EMBEDDED_DRIVER['ICON_STYLE']}")
     try:
-        if fam == "hull":
-            prompt = _hull_prompt_from(d, subject, direction, None)
-            if prompt.strip():
-                return prompt
-        elif fam == "sheet":
-            prompt = sheet_prompt_from(d, subject)
-            if prompt.strip():
-                return prompt
-        elif fam == "iconsheet":
+        if fam == "iconsheet":
             groups = dict(icon_group_definitions(repo))
             ids = groups.get(subject)
             if ids:
@@ -1494,22 +1433,6 @@ def default_prompt(job_id: str, repo: str) -> str:
               flush=True)
     # embedded fallback (all keys present by construction)
     e = EMBEDDED_DRIVER
-    if fam == "hull":
-        pose = e["POSE"].get(direction) or e["POSE"]["e"]
-        rig = (e["RIG"].get(subject)
-               or f"period-appropriate sailing rig for a {subject}")
-        return (f"Redraw this input sprite. Keep the exact same "
-                f"silhouette, mast count, sail layout, proportions and "
-                f"{pose}. Rig: {rig}. {e['COMPACT']} {e['STYLE']}")
-    if fam == "sheet":
-        return sheet_prompt_from({
-            "RIG": {**e["RIG"],
-                    subject: e["RIG"].get(
-                        subject, f"its period rig, five consistent views")},
-            "COMPACT": e["COMPACT"],
-            "CHROMA_BG": "a solid flat chroma-key green background "
-                         "(#00ff00)",
-        }, subject)
     if fam == "iconsheet":
         return (f"Redraw this input sprite sheet. Every cell contains one "
                 f"icon of the same icon family — redraw ALL of them in one "
@@ -1548,13 +1471,6 @@ def reconstruct_original(job_id: str, repo: str, rec: dict | None = None):
                 f"{EMBEDDED_DRIVER['ICON_STYLE']}", "default")
 
     def build(dd: dict) -> str:
-        if fam == "hull":
-            stated_px = None
-            if rec and rec.get("prompt") == "tightened-band":
-                stated_px = rec.get("stated_px")
-            return _hull_prompt_from(dd, subject, direction, stated_px)
-        if fam == "sheet":
-            return sheet_prompt_from(dd, subject)
         if fam == "iconsheet":
             groups = dict(icon_group_definitions(repo))
             ids = groups.get(subject) or []
@@ -1605,8 +1521,7 @@ def canonical_seed(job_id: str, repo: str) -> int | None:
                     manifests[s["id"]] = s
         ids = [i for i in d["ICON_PRIORITY"] if i in manifests]
         ids += [i for i in sorted(manifests) if i not in set(ids)]
-        order = ([f"hull_{h}_{dr}" for h in d["HULLS"] for dr in d["DIRS"]]
-                 + [f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
+        order = ([f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
                  + [f"icon_{i}" for i in ids[:129]])
         return 1000 + order.index(job_id)
     except Exception:  # noqa: BLE001 — informational value only
@@ -1710,7 +1625,7 @@ def _run_icon_sheet(job_id: str, subject: str, rec: dict, px, gen_size,
         debg = key_green_bytes(rembg(cell_png, f"icon_{icon_id}"))
         atomic_write(canonical_path("debg", f"icon_{icon_id}"), debg)
         stage(f"snap icon_{icon_id}")
-        grid, metrics = snap(debg, block, band=None, pennant_snap=False)
+        grid, metrics = snap(debg, block)
         png = encode_png(64, 64, grid)
         atomic_write(canonical_path("snapped", f"icon_{icon_id}"), png)
         atomic_write(studio_path("snapped", f"icon_{icon_id}"), png)
@@ -1720,8 +1635,9 @@ def _run_icon_sheet(job_id: str, subject: str, rec: dict, px, gen_size,
 
 
 def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
-    """One studio generation. Writes studio/{gen,snapped,debg}/<job>.png and
-    returns a record (metrics, sizes, seconds). Terrain: gen only."""
+    """One studio generation (icon/icon-sheet/terrain shapes). Writes
+    studio/{gen,snapped,debg}/<job>.png and returns a record (metrics,
+    sizes, seconds). Terrain: gen only."""
     t0 = time.time()
     fam, subject, direction = parse_job(job_id)
     stage = on_stage or (lambda _s: None)
@@ -1751,51 +1667,6 @@ def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
         rec["seconds"] = round(time.time() - t0, 1)
         return rec
 
-    if fam == "sheet":
-        # per-hull 5-cell sheet: one /edit, then per-dir crop -> rembg ->
-        # key -> snap. Studio crops land at the legacy per-dir studio paths
-        # (hull_<ship>_<dir>.png) so accept's atomic copies point at the
-        # canonical per-dir ingestion inputs. The w cell carries the band.
-        d = load_driver(REPO)
-        sheet_dirs = d.get("SHEET_DIRS") or EMBEDDED_DRIVER["SHEET_DIRS"]
-        cells = d.get("SHEET_CELLS") or EMBEDDED_DRIVER["SHEET_CELLS"]
-        size = d.get("SHEET_SIZE") or EMBEDDED_DRIVER["SHEET_SIZE"]
-        w, h, px = decode_rgba(gen)
-        rec["gen_size"] = [w, h]
-        sx, sy = w / size[0], h / size[1]
-        if abs(sx - round(sx)) > 0.02 or abs(sy - round(sy)) > 0.02:
-            rec["drift"] = round(sx, 3)
-        atomic_write(studio_path("gen", job_id), gen)
-        try:
-            band = BANDS[d["TIER"][subject]]
-        except Exception:  # noqa: BLE001 — tier unknown mid-refactor
-            band = None
-        block = sorted(_VD.BLOCK_HULL)
-        per_dir = {}
-        for direction in sheet_dirs:
-            cx, cy = cells[direction]
-            x0, y0 = int(cx * sx), int(cy * sy)
-            x1, y1 = int((cx + 512) * sx), int((cy + 512) * sy)
-            cell = crop_rows(px, x0, y0, x1, y1)
-            cw, ch = x1 - x0, y1 - y0
-            if (cw, ch) != (512, 512):
-                cell = _resize_nearest(cell, cw, ch, 512, 512)
-            cell_png = encode_png(512, 512, cell)
-            stage(f"rembg {direction}")
-            debg = key_green_bytes(rembg(cell_png, f"{job_id}_{direction}"))
-            dir_job = f"hull_{subject}_{direction}"
-            atomic_write(studio_path("debg", dir_job), debg)
-            stage(f"snap {direction}")
-            grid, metrics = snap(debg, block,
-                                 band=(band if direction == "w" else None),
-                                 pennant_snap=True)
-            atomic_write(studio_path("snapped", dir_job),
-                         encode_png(64, 64, grid))
-            per_dir[direction] = {"metrics": metrics}
-        rec["per_dir"] = per_dir
-        rec["seconds"] = round(time.time() - t0, 1)
-        return rec
-
     stage("rembg")
     debg = rembg(gen, job_id)
     atomic_write(studio_path("gen", job_id), gen)
@@ -1803,11 +1674,8 @@ def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
     rec["debg_bytes"] = len(debg)
 
     stage("snap")
-    d = load_driver(REPO)
-    block = sorted(_VD.BLOCK_HULL if fam == "hull" else _VD.BLOCK_ICON)
-    band = (BANDS[d["TIER"][subject]] if fam == "hull"
-            and direction in ("e", "w") else None)
-    grid, metrics = snap(debg, block, band=band, pennant_snap=(fam == "hull"))
+    block = sorted(_VD.BLOCK_ICON)
+    grid, metrics = snap(debg, block)
     rec["metrics"] = metrics
     atomic_write(studio_path("snapped", job_id),
                  encode_png(64, 64, grid))

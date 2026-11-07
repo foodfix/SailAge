@@ -11,23 +11,20 @@ let lastCurrent = null;
 const CAPTIONS = {
   coast: { draft: "shipped ledger strip (16 tiles)", raw: "re-roll strip",
            snapped: "wang mock preview · live map crop" },
-  pxship: { strip: "8 native rotations · ship-as-drawn" },
-  topdown: { strip: "one north token · runtime rotation preview" },
-  hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
-  sheet: { draft: "draft sheet (5 views)", raw: "raw sheet", snapped: "w crop 64" },
+  fx: { anim: "staged re-roll (API gif)", comp: "staged wake · frame 0 under the ship",
+        shipped: "shipped — in game now" },
   icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   iconsheet: { draft: "sheet draft (group)", raw: "generated sheet", snapped: "first icon crop 64" },
-  terrain: { draft: "draft sheet", raw: "raw sheet", snapped: "sheet (no snap)" },
 };
 
-// compass order for the pixellab strip cells
-const PX_DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
-// the top-down strip: the same compass order with the pinned rotation
+// the top-down strip: the compass order with the pinned rotation
 // degrees (80-* §4.8 2026-11-07 — clockwise, screen y-down)
 const TD_ROTATIONS = [["n", 0], ["ne", 45], ["e", 90], ["se", 135],
   ["s", 180], ["sw", 225], ["w", 270], ["nw", 315]];
-const isPx = (job) => job && job.family === "pxship";
 const isTd = (job) => job && job.family === "topdown";
+const isFx = (job) => job && job.family === "fx";
+// a wake card's thumb kinds, in display order
+const FX_KINDS = ["anim", "comp", "shipped"];
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -40,27 +37,6 @@ function thumbURL(job, kind) {
   const t = (job.thumbs || {})[kind];
   if (!t) return null;
   return `/thumb/${kind}/${job.id}.png?v=${t.v}`;
-}
-
-function bandBadge(job) {
-  if (job.family === "pxship" || job.family === "topdown"
-      || job.family === "coast") {
-    return "";  // no band gates on raw ships / tilesets
-  }
-  if (!job.band) return '<span class="badge">band —</span>';
-  if (job.band.in_band === true) return '<span class="badge ok">band OK</span>';
-  if (job.band.in_band === false) {
-    const px = job.band.long_axis_px != null ? ` ${job.band.long_axis_px}px` : "";
-    return `<span class="badge over">OVER${px}</span>`;
-  }
-  return '<span class="badge">band ?</span>';
-}
-
-function pennantBadge(job) {
-  if (job.family !== "hull") return "";
-  if (job.pennant_ok === true) return '<span class="badge pok">pennant ✓</span>';
-  if (job.pennant_ok === false) return '<span class="badge pbad">pennant ✗</span>';
-  return '<span class="badge">pennant ?</span>';
 }
 
 function statusHTML(job, current, queue) {
@@ -124,9 +100,6 @@ function headHTML(job) {
   const acc = job.accepted;
   return `<span class="jid">${job.id}</span>
     <span class="lbl">${label}</span>
-    ${job.mirror_of ? `<span class="badge mirror" title="mirror-derived at ingestion (doc f6c00bb)">⇄ mirror of ${job.mirror_of}</span>` : ""}
-    ${bandBadge(job)}
-    ${pennantBadge(job)}
     <span class="badge acc" style="${acc ? "" : "display:none"}"
       title="${acc ? "accepted " + (acc.at || "") + " (" + (acc.source || "?") + ")" : ""}">★ accepted</span>`;
 }
@@ -138,17 +111,16 @@ function buildCard(job) {
   const head = document.createElement("div");
   head.className = "card-head";
   head.innerHTML = headHTML(job);
-  const isPx = job.family === "pxship";
   const isTdCard = job.family === "topdown";
+  const isFxCard = isFx(job);
   let thumbs, strip = null;
-  if (isPx || isTdCard) {
-    // the pixellab/top-down ship strip: one cell per heading8 dir (the
-    // raw generation IS the art — no draft/raw/snapped trio, no gates);
-    // the top-down cells preview the runtime rotation of ONE north token
+  if (isTdCard) {
+    // the top-down ship strip: one cell per heading (the raw generation
+    // IS the art — no draft/raw/snapped trio, no gates); each cell
+    // previews the runtime rotation of ONE north token
     strip = document.createElement("div");
     strip.className = "pxstrip";
-    const cells = isTdCard ? TD_ROTATIONS.map(([d, deg]) => [d, deg])
-                           : PX_DIRS.map((d) => [d, null]);
+    const cells = TD_ROTATIONS.map(([d, deg]) => [d, deg]);
     for (const [dir, deg] of cells) {
       const cell = document.createElement("div");
       cell.className = "thumb pxcell";
@@ -164,24 +136,23 @@ function buildCard(job) {
   } else {
     thumbs = document.createElement("div");
     thumbs.className = "thumbs";
-    const mk = (kind, cap) => {
+    const kinds = isFxCard ? FX_KINDS : ["draft", "raw", "snapped"];
+    const caps = CAPTIONS[job.family] || {};
+    const last = kinds[kinds.length - 1];
+    for (const kind of kinds) {
       const d = document.createElement("div");
       d.className = "thumb";
-      d.innerHTML = `<img alt="${kind}"><div class="cap">${cap}</div>`;
+      d.innerHTML = `<img alt="${kind}"><div class="cap">${caps[kind] || kind}</div>`;
       const img = $("img", d);
       img.addEventListener("error", () => { d.classList.add("missing"); });
       d.dataset.kind = kind;
       thumbs.appendChild(d);
-      if (kind !== "snapped") {
+      if (kind !== last) {
         const ar = document.createElement("span");
         ar.className = "arrow"; ar.textContent = "→";
         thumbs.appendChild(ar);
       }
-    };
-    const caps = CAPTIONS[job.family] || {};
-    mk("draft", caps.draft || "draft (read-only)");
-    mk("raw", caps.raw || "raw gen");
-    mk("snapped", caps.snapped || "snapped 64");
+    }
   }
   const taWrap = document.createElement("div");
   taWrap.className = "ta-wrap";
@@ -209,16 +180,15 @@ function buildCard(job) {
     <button class="accept small">${job.family === "coast"
       ? "Accept + rebuild" : "Accept"}</button>
     <span class="spacer"></span>`;
-  const supNote = document.createElement("div");
-  supNote.className = "superseded-note";
-  supNote.style.display = "none";
-  supNote.textContent =
-    "superseded — re-roll the sheet card instead (this per-direction path is retired)";
+  if (isFxCard) {
+    // the /v2/vfx envelope has no seed — hide the field
+    $(".seed", controls).style.display = "none";
+  }
   const status = document.createElement("div");
   status.className = "status";
   const metrics = document.createElement("div");
   metrics.className = "metrics";
-  root.append(head, thumbs, taWrap, controls, supNote, status, metrics);
+  root.append(head, thumbs, taWrap, controls, status, metrics);
 
   $(".reroll", controls).addEventListener("click", () => reroll(job.id, ta));
   $(".accept", controls).addEventListener("click", () => accept(job.id));
@@ -226,7 +196,7 @@ function buildCard(job) {
   grid.appendChild(root);
   return { root, els: {
     head, ta, srcTag, status, metrics, seed: $(".seed", controls),
-    controls, supNote, strip,
+    controls, strip,
   }, data: job };
 }
 
@@ -286,8 +256,7 @@ async function accept(jobId) {
 }
 
 $("#reroll-flagged").addEventListener("click", async () => {
-  // superseded legacy jobs are never re-rolled (retired path)
-  const flagged = jobsData.filter(j => j.flagged && !j.superseded).map(j => j.id);
+  const flagged = jobsData.filter(j => j.flagged).map(j => j.id);
   if (!flagged.length) { alert("nothing is flagged"); return; }
   if (!confirm(`Queue ${flagged.length} flagged job(s) for re-roll?\n` +
                flagged.join("\n"))) return;
@@ -312,14 +281,12 @@ document.querySelectorAll(".tab").forEach(btn => {
 });
 
 function visible(job) {
-  if (job.superseded) return filter === "legacy";
-  if (filter === "legacy") return false;
   if (filter === "flagged") return job.flagged;
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
   if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
-  if (filter === "terrain") return job.family === "terrain" || job.family === "coast";
-  if (filter === "hull") return isPx(job) || isTd(job);
+  if (filter === "coast") return job.family === "coast";
+  if (filter === "ships") return isTd(job);
   return job.family === filter;
 }
 
@@ -378,25 +345,16 @@ function updateCard(job) {
   root.classList.toggle("flagged", !!job.flagged);
   root.classList.toggle("accepted", !!job.accepted);
   root.classList.toggle("running", !!(current && current.job === job.id));
-  const sup = !!job.superseded;
-  root.classList.toggle("superseded", sup);
-  els.controls.style.display = sup ? "none" : "";
-  els.supNote.style.display = sup ? "" : "none";
-  els.ta.readOnly = sup;
   els.head.innerHTML = headHTML(job);
-  // thumbs + captions (mirror note when serving the flipped base dir)
-  if (isPx(job) || isTd(job)) {
-    // the pixellab strip: per-dir cells, snapped preferred (what ships);
+  // thumbs + captions
+  if (isTd(job)) {
     // the top-down strip: per-degree rotation previews of ONE north token
-    for (const [dir, deg] of isTd(job)
-         ? TD_ROTATIONS : PX_DIRS.map((d) => [d, null])) {
+    for (const [dir, deg] of TD_ROTATIONS) {
       const cell = root.querySelector(`.pxcell[data-dir="${dir}"]`);
       if (!cell) continue;
       const r = (job.rotations || []).find(x => x.dir === dir);
       const url = r && r.v
-        ? (isTd(job)
-           ? `/thumb/td/${job.subject}/${deg}.png?v=${r.v}`
-           : `/thumb/px/${job.subject}/${dir}.png?v=${r.v}`) : null;
+        ? `/thumb/td/${job.subject}/${deg}.png?v=${r.v}` : null;
       if (url) {
         cell.classList.remove("missing");
         const img = $("img", cell);
@@ -406,21 +364,24 @@ function updateCard(job) {
       }
     }
   } else {
-    const caps = CAPTIONS[job.family] || CAPTIONS.hull;
-    for (const kind of ["draft", "raw", "snapped"]) {
+    const isFxCard = isFx(job);
+    const kinds = isFxCard ? FX_KINDS : ["draft", "raw", "snapped"];
+    const caps = CAPTIONS[job.family] || {};
+    for (const kind of kinds) {
       const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
       if (!d) continue;
-      const t = thumbs[kind];
-      const url = thumbURL(job, kind);
-      $(".cap", d).textContent =
-        caps[kind] + (t && t.mirrored ? ` (⇄ ${t.mirrored})` : "");
+      const url = isFxCard
+        ? (thumbs[kind] ? `/thumb/fx/${job.subject}/${kind}`
+           + (kind === "anim" ? ".gif" : ".png") + `?v=${thumbs[kind].v}`
+           : null)
+        : thumbURL(job, kind);
+      $(".cap", d).textContent = caps[kind] || kind;
       if (url) {
         d.classList.remove("missing");
         const img = $("img", d);
-        const want = url;
-        if (img.dataset.src !== want) {
-          img.dataset.src = want;
-          img.src = want;
+        if (img.dataset.src !== url) {
+          img.dataset.src = url;
+          img.src = url;
         }
       } else {
         d.classList.add("missing");
@@ -447,21 +408,20 @@ function updateCard(job) {
 async function refreshJobs() {
   try {
     const data = await api("/api/jobs");
-    // top-down ships lead the list, then pixellab ships, then icon group
-    // sheets, then the rest
-    const rank = (f) => (f === "topdown" ? 0 : f === "pxship" ? 1
+    // top-down ships lead the list, then the wake cards, then icon
+    // group sheets, then the rest
+    const rank = (f) => (f === "topdown" ? 0 : f === "fx" ? 1
                          : f === "iconsheet" ? 2 : 3);
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
       `coast ${data.counts.coast || 0} · top-down ${data.counts.topdown || 0}`
-      + ` · ships ${data.counts.pxship || 0} · icons ${data.counts.icon}`
+      + ` · wake ${data.counts.fx || 0} · icons ${data.counts.icon}`
       + ` + ${data.counts.iconsheet || 0} sheets — flagged`
       + ` ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;
-    $("#legacy-n").textContent = data.counts.legacy || 0;
     render();
   } catch (e) { console.error(e); }
 }

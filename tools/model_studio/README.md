@@ -9,9 +9,9 @@ the result, and accept it into the game build.
   runs generation jobs strictly one at a time from a FIFO queue.
 - **Chain**: `chain.py` — self-contained re-implementation of the validated
   model-pass pipeline (`tools/model_pass.py` is parsed read-only for the
-  canonical prompt wording, never imported). **Ships** drive
-  `tools/pixellab_pass.py` in-process instead — see "Ship family
-  (pixellab)" below.
+  canonical icon prompt wording, never imported). **Ships and wakes** drive
+  `tools/pixellab_pass.py` / `tools/pixellab_vfx_pass.py` in-process
+  instead — see the ship and wake-VFX family sections below.
 - **Frontend**: `www/` — single-page vanilla HTML/CSS/JS, dark theme.
 
 ## Launch
@@ -48,30 +48,59 @@ studio cache (gitignored) until **Accept + rebuild**: the vendored trio
 the user). No depth tileset (retired — pro corner-API crash history),
 no per-tile cards; the legacy `terrain_*` texture jobs are HIDDEN entirely (2026-11-06 user direction — terrain re-rolls live on the coast tileset card; the retired texture chain is not re-rollable or visible).
 
-## Ship family (pixellab — the §4.8 2026-11-06 ship path)
+## Ship family (top-down north tokens — the §4.8 2026-11-07 path)
 
-One card per fleet ship, keyed by label (`px_<label>`; labels with
-ship-as-drawn state — the 16 accepted fleet labels; trial dirs without
-`snapped/` are hidden). Generation = `tools/pixellab_pass.py run_ship`
-**in-process**: one `create-object-pro-flash` call per re-roll with the
-pinned envelope (64×64 native, 8 directions, view "high top-down", no
-style image ever) — description is FREE TEXT (the prompt box; the
-default seeds once from the tool's `_desc` + pinned UW2 style suffix,
-then the user's wording is what ships) and the seed is user-settable
-(blank → the manifest's seed). After the ~100–115 s render the 8
-rotations download into `model_raw/pixellab/<label>/` (raw, gitignored)
-and **snap is a byte-identical passthrough** into `snapped/` — no
-palette quantize, no pennant recolor, no masthead/band gates (all
-retired for this family). The card shows the 8-rotation strip
-(snapped = exactly what ships); Accept stages the WHOLE fleet's
-snapped rotations (a partial stage would revoke the other ships'
-ledger tokens) and runs `build_ui_art --import-ships-pixellab <stage>`
-(raw mode); the in-game gate is the ship's 8 `hull_{ship}_{dir}`
-tokens in the ledger with `pennant: "raw"`. Cost ≈ $0.05 per re-roll.
-The classic `hull_*`/`sheet_*` draft jobs are hidden entirely (user
-direction): their retired local chain is not re-rollable anywhere.
+One card per fleet ship, keyed by label (`td_<label>`; the 16 accepted
+fleet labels — labels without a snapped north token are hidden).
+Generation = `tools/pixellab_pass.py run_topdown` **in-process**: ONE
+straight-overhead (directly from above) north token per ship, canvas =
+tier size (32/48/64), `create-object-pro-flash`, no style image —
+description is FREE TEXT (the prompt box; the default seeds once from
+the tool's `_desc_topdown` + pinned overhead style suffix), the seed is
+user-settable (blank → random). After the ~20–60 s render the raw north
+token lands in `model_raw/pixellab_topdown/<label>/` (gitignored) and
+**snap is a byte-identical passthrough** into `snapped/north.png`. The
+card previews the 8 runtime rotations (PIL NEAREST — the same
+resampling family the game pins; the game rotates the token, so only
+the north family ever exists). Accept stages the WHOLE fleet's snapped
+north tokens as `hull_<ship>.png` and runs
+`build_ui_art --import-ships-north <stage>`; the gate is the ship's
+`hull_<ship>` ledger token with `pennant: "raw"`. Cost ≈ $0.008/roll.
 
-## Chain (per sprite job — icons/terrain legacy families)
+## Wake VFX family (pixellab v5 — the §4.8 2026-11-07 single-layer path)
+
+Three cards, one per ship SIZE (`fx_32` / `fx_48` / `fx_64`; the
+committed table `assets/ui/fx/fx_waterline.json` keys the same sizes).
+The wake is ONE sheet per size rendered UNDER the hull — ships rotate at
+runtime, so the sheet rotates with them and only the north family
+exists. Generation = `tools/pixellab_vfx_pass.py run_size` **in-process**
+(POST `/v2/vfx`, pro artist, `game_pack: true`, the representative north
+token as the sprite input) — description is FREE TEXT (default = the
+pinned `V5_DESCRIPTION` of record, verbatim in 80-* §4.8; the envelope
+has NO seed — the card shows the quote, ≈10 generations ≈ per roll,
+instead). A re-roll stages into the studio cache
+(`model_raw/studio/fx/<size>/` + a staging `pixellab_vfx.json`
+manifest — the coast pattern: a discarded or failed re-roll never
+pollutes the canonical raw store). The card shows the staged pack's
+frame-0 composite (wake under the ship's north token on the review sea
+blue) next to the SHIPPED composite built from `assets/ui/fx/` —
+old vs new side by side; with a staged re-roll the API's animated gif
+preview is served too. Accept copies the staged size dir + its manifest
+record into `model_raw/pixellab_vfx/v5/` and runs
+`build_ui_art --import-fx-pixellab` (all three sizes re-land,
+idempotent — the other two wake cards stamp in-game too); the gate is
+the size's record (sheet sha256 + effect_id) in
+`tools/assets/pixellab_raw/pixellab_vfx_ledger.json`.
+
+The §4.8 2026-11-06 oblique ship family (`px_<label>`, 8 native
+rotations) and the pre-PixelLab legacy ship jobs (`hull_*` per-dir,
+`sheet_*` 5-cell sheets) are REMOVED entirely (2026-11-07 user
+direction — the top-down amendment replaced that art): not listed, not
+re-rollable, and their chain machinery is gone from `chain.py`. The
+icon/icon-sheet families and the (hidden) terrain machinery are
+untouched.
+
+## Chain (per sprite job — icons; terrain machinery kept, hidden)
 
 1. **draft** — `model_raw/drafts/<job>.png` → base64 → POST
    `http://127.0.0.1:8001/edit` `{"image","prompt","seed"}` (response body
@@ -81,10 +110,8 @@ direction): their retired local chain is not re-rollable anywhere.
    `LifeSimulator/src/lib/comfyui/workflow-template-rembg.json` **AS-IS**
    (InvertMask kept — polarity verified), `/prompt`, poll `/history`, `/view`.
 3. **snap** — nearest-resize to 512×512 → majority-vote downscale to the 64
-   logical grid over opaque px → quantize to `sorted(validate_data.BLOCK_HULL)`
-   (`BLOCK_ICON` for icons) → hull-only pennant-source snap (channel-sum
-   Δ≤40 of `#b3191f` → the exact source hex) + masthead presence check +
-   e/w long-axis band check (tier bands 28–36 / 40–52 / 52–60).
+   logical grid over opaque px → quantize to `sorted(validate_data.BLOCK_ICON)`
+   for icons → masthead presence check (hull-only legacy metrics).
 4. **writes** — studio cache only, atomic (tmp + rename):
    `model_raw/studio/gen/<job>.png`, `studio/snapped/<job>.png` (64×64),
    `studio/debg/<job>.png` (rembg intermediate, kept so an offline re-check
@@ -92,9 +119,10 @@ direction): their retired local chain is not re-rollable anywhere.
    prompt, seed, status, metrics, timestamps), `studio/prompts.json`
    (edited prompts), `studio/accepted.json` (accept marks).
 
-Terrain jobs follow the driver's terrain path instead: gen response decoded,
-nearest-normalized to 1024×512 when it drifts, stored as the studio gen
-artifact (no rembg/snap).
+Only `icon_*` / `iconsheet_*` drafts are listed and re-rollable. The
+legacy `hull_*` / `sheet_*` / `terrain_*` draft files stay in the store
+but are never listed (skipped by prefix), and their prompt/registry
+machinery is removed.
 
 ## API
 
@@ -102,29 +130,35 @@ artifact (no rembg/snap).
 |---|---|---|---|
 | GET | `/api/jobs` | — | registry + studio state merged, `flagged` id list |
 | GET | `/api/status` | — | worker idle/busy, queue, current job + stage |
-| POST | `/api/reroll` | `{job, prompt?, seed?}` | persist prompt (if given), queue the job (seed omitted → random) |
+| POST | `/api/reroll` | `{job, prompt?, seed?}` | persist prompt (if given), queue the job (seed omitted → random; ignored for `fx_*` — the envelope has no seed) |
 | POST | `/api/prompt` | `{job, prompt}` | persist a prompt edit without queueing (empty → revert to canonical) |
 | POST | `/api/accept` | `{job}` | mark the current result accepted in `accepted.json` |
 | GET | `/thumb/<kind>/<job>.png` | — | `draft` / `raw` / `snapped` thumbnail (`raw`/`snapped` prefer the studio reroll, falling back to the canonical store); cache-busting via `?v=<mtime>` |
-| GET | `/thumb/px/<label>/<dir>.png` | — | pixellab ship strip cell (heading8 dir id); serves the snapped token (what ships), raw rotation fallback |
+| GET | `/thumb/td/<label>/<deg>.png` | — | top-down ship rotation preview (PIL NEAREST, pinned degrees) |
+| GET | `/thumb/fx/<size>/<kind>` | — | wake previews: `anim.gif` (staged API gif) / `comp.png` (staged wake under the ship) / `shipped.png` (the committed family — in game now) |
 
 ## UI
 
-- **Ship cards** (`px_<label>`): an 8-rotation strip in compass order
-  (n ne e se s sw w nw), free-text prompt box (edit base = the pinned
-  descriptor + UW2 style suffix), seed field, Re-roll / Accept, live
-  status incl. the pixellab render stage (`posting`, `render:queued…`,
-  `snapping`), and the object_id/seed provenance from the tool manifest.
-  No band/pennant badges — those gates are retired for the family.
+- **Top-down ship cards** (`td_<label>`): an 8-rotation strip in compass
+  order (n ne e se s sw w nw — the runtime rotation preview of ONE north
+  token, PIL NEAREST), free-text prompt box (edit base = the pinned
+  `_desc_topdown` + overhead style suffix), seed field, Re-roll /
+  Accept, live status incl. the render stage (`posting`,
+  `render:…`, `snapping`), and the job_id/seed provenance from the tool
+  manifest.
 
-- One card per job: three thumbnails (draft | raw | snapped), band OK/OVER
-  badge (e/w hull jobs; bands 28–36/40–52/52–60), pennant ✓/✗ badge,
-  mirror-derived mark on `e`/`ne`/`se` (⇄ derived from `w`/`nw`/`sw`,
-  doc f6c00bb), editable prompt textarea (persisted per job), seed field
+- **Wake VFX cards** (`fx_32/48/64`): the staged animated gif → the
+  staged frame-0 composite → the shipped composite (what the game shows
+  now), free-text prompt box (edit base = the pinned `V5_DESCRIPTION`
+  of record), **no seed field** (the envelope has none — the card shows
+  the quote instead), Re-roll / Accept, and the effect_id provenance.
+
+- Icon/terrain job cards: three thumbnails (draft | raw | snapped),
+  editable prompt textarea (persisted per job), seed field
   (blank → random; canonical seed shown as placeholder), Re-roll / Accept
-  buttons, live status line (queued / generating Ns… / done / band-fail).
-- Family tabs (All / Ships / Icons / Terrain / Flagged) and a
-  **Re-roll ALL flagged** button (jobs with band OVER or pennant ✗).
+  buttons, live status line (queued / generating Ns… / done / error).
+- Family tabs (All / Ships / Wake VFX / Coast / Icons / Flagged / In
+  game) and a **Re-roll ALL flagged** button.
 
 ## Robustness (hardened after the browser broken-thumb incident)
 
@@ -133,35 +167,32 @@ artifact (no rembg/snap).
   ~500 `<img>` requests at once — the intermittently-broken-thumbnails
   mechanism; single curl requests never hit it). `do_HEAD` answers
   headers-only instead of the stdlib 501 HTML page.
-- **Never-404 thumbs**: a hull mirror dir (`e`/`ne`/`se`) whose file is
-  gone (the 5-dir canonical round can prune them) is served from its
-  `w`/`nw`/`sw` base **horizontally flipped** (the ingestion's mirror_x —
-  exact for the whole snap chain, which is cellwise under column mirror),
-  with an `X-Mirrored: <base>` header and a `(⇄ base)` caption. Terrain
-  `snapped` falls back to its normalized gen sheet (terrain has no
-  rembg/snap). Flipped PNGs go through a bounded in-memory cache keyed by
-  source path + mtime.
+- **Never-404 thumbs**: terrain `snapped` falls back to its normalized
+  gen sheet (terrain has no rembg/snap); every thumb slot of a listed
+  job degrades to a `missing` cell in the UI instead of breaking the
+  grid. Thumbs go through a bounded in-memory cache keyed by source
+  path + mtime.
 - **Prompts never go empty**: `tools/model_pass.py` is untracked and
   rewritten by re-roll rounds — a torn or reshaped parse now keeps the
   last good parse, else falls back to the **embedded** proven-wording
-  constants (all families/dirs/rigs/icon overrides shipped in chain.py).
+  constants (icon overrides + style shipped in chain.py; the td/fx edit
+  bases come from the pass tools' pinned descriptors).
   `default_prompt` and `canonical_seed` never raise; `registry()` guards
   each job so one bad store file cannot 500 `/api/jobs` (that 500 was the
   empty-grid / empty-textarea failure mode). Driver source + error are
   visible at `GET /api/status` → `driver`.
 - **Original prompts (user direction: edit from the actual original)**:
   every generation stores the EXACT prompt in `studio/state.json`
-  (`original_prompt` + `original_prompt_source: "exact"`); legacy batch
-  jobs are backfilled with a faithful **reconstruction** of the driver's
-  actual wording (hull template + the re-roll round's kept `stated_px`
-  calibration from progress.json, ICON_PROMPT_OVERRIDES, terrain
-  per-sheet clauses), tagged `original_prompt_source: "reconstructed"`
+  (`original_prompt` + `original_prompt_source: "exact"`); icon jobs are
+  backfilled with a faithful **reconstruction** of the driver's actual
+  wording (ICON_PROMPT_OVERRIDES + style; terrain per-sheet clauses),
+  tagged `original_prompt_source: "reconstructed"`
   (or `"default"` if even the fallback wording had to be used — never
   pinned to state.json so it upgrades when the driver parses again).
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
-## Job shapes (legacy + sheets + icon groups — driver-drift tolerant)
+## Job shapes (icons — driver-drift tolerant)
 
 - **Icon group sheets** `iconsheet_<group>` (progress key `icons_<group>`;
   12 families of 8–14 icons): the card shows the sheet draft, the
@@ -176,55 +207,37 @@ artifact (no rembg/snap).
   dirs win per id, so studio re-roll crops win); per-icon in-game /
   rejected reasons surface in the card's status line.
 
-The store has carried two ship-job shapes; the registry supports both and
-**never raises**: an unparseable/unknown draft id is skipped (or degraded
-to a generic card) and reported in `/api/status` → `registry.warnings`
-and `/api/jobs` → `warnings` — the API always answers valid JSON.
-
-- **Legacy** `hull_<ship>_<dir>` — per-dir jobs; e/ne/se are mirror
-  displays (⇄ badge, flip-served thumbs when their files are pruned).
-  When a hull has a sheet job, its leftover per-direction jobs are marked
-  `superseded: true` (with `superseded_by: sheet_<hull>`): they stay
-  listed in `/api/jobs` for transparency, render **read-only** (no
-  Re-roll/Accept, note: "re-roll the sheet card instead") and only in the
-  collapsed **Legacy** tab — hidden from All/Ships/Flagged, skipped by
-  Re-roll ALL flagged, and refused (409) at the reroll/accept API so the
-  retired per-dir path can never shadow the sheet pipeline's canonical
-  outputs.
-- **Per-hull sheets** `sheet_<hull>` (draft name; progress/ledger key
-  `hull_<hull>`) — one 1792×1152 5-cell sheet per /edit (w/n/s/sw/nw
-  512² cells + legend). The card shows the sheet draft, the generated
-  sheet, and the **w crop** as the snapped representative (w is the
-  band-gated base cell; the other 4 crops live at their legacy per-dir
-  paths). Band/pennant/flags ride the w cell. A studio re-roll crops the
-  generated sheet per cell (nearest, driver box math incl. non-integer
-  scale), rembg + chroma-green keys + snaps each into
-  `studio/snapped/hull_<hull>_<dir>.png`; **Accept** atomically copies
-  those crops to the canonical per-dir paths and triggers one ingest run
-  gated on the w base — or, with no studio crops, just records
-  acceptance + the ingest (the batch driver writes the canonical crops
-  itself).
+The registry **never raises**: draft files whose id starts with a
+retired prefix (`hull_` / `sheet_` / `terrain_` / `px_`) are skipped
+outright, an unparseable/unknown draft id is degraded to a generic card,
+and both are reported in `/api/status` → `registry.warnings` and
+`/api/jobs` → `warnings` — the API always answers valid JSON.
 
 ## Accept → in game (一键进游戏)
 
-**Accept** on a ship job now flows straight into the game build:
+**Accept** flows straight into the game build per family:
 
-1. The accepted snapped PNG (`studio/snapped/<job>.png`, falling back to
-   the canonical store file) is atomically copied to
-   `model_raw/snapped/<job>.png` — the stable ingestion-input path.
-2. The worker (same FIFO as generation) runs
-   `python3 <repo>/tools/build_ui_art.py --import-ships <repo>/tools/ui_art/model_raw/snapped`
-   — the idempotent full-ladder re-run (~1–2 min). Gate rejections are
-   non-fatal fallbacks: band out-of-range / masthead missing / pennant
-   snap failures come back as `REJECT <job>: <reason> — <detail>` lines.
-3. The card status walks **queued for ingest → ingesting… → in game ✓**
-   or **REJECTED: <reason>**; the result (state, reason, ledger sha,
-   log tail) is stored per job in `studio/state.json` (`ingest` key) and
-   mirrored into `accepted.json`. e/ne/se accepts resolve through their
-   `w`/`nw`/`sw` base (the ingestion gates the base; mirrors derive).
-4. Header/filter chip **In game (n)** lists accepted+ingested jobs.
-5. Icon/terrain accepts record acceptance only — tagged
-   **accepted (game flow pending)** until their ingestion surfaces land.
+1. **Top-down ships** (`td_<label>`): the WHOLE fleet's snapped north
+   tokens are staged as `hull_<ship>.png` (a partial stage would revoke
+   the other ships' ledger tokens) and the worker runs
+   `build_ui_art --import-ships-north <stage>`; the gate is the ship's
+   `hull_<ship>` token in `ingest_ledger.json` with `pennant: "raw"`.
+2. **Wake VFX** (`fx_<size>`): the staged size dir + manifest record are
+   copied into `model_raw/pixellab_vfx/v5/` and the worker runs
+   `build_ui_art --import-fx-pixellab` — all three sizes re-land
+   (idempotent), so the other wake cards stamp in-game too; the gate is
+   the size's record (sheet sha256 + effect_id) in
+   `tools/assets/pixellab_raw/pixellab_vfx_ledger.json`.
+3. **Icon sheets** (`iconsheet_<group>`): one
+   `build_ui_art --import-icons <raw>/snapped <studio>/snapped` run;
+   per-icon REJECT lines surface per icon in the card's status.
+4. The card status walks **queued for ingest → ingesting… → in game ✓**
+   or **REJECTED / error: <reason>**; the result (state, reason, log
+   tail) is stored per job in `studio/state.json` (`ingest` key) and
+   mirrored into `accepted.json`.
+5. Header/filter chip **In game (n)** lists accepted+ingested jobs.
+6. Single-icon accepts record acceptance only — tagged
+   **accepted (game flow pending)**.
 
 Restart note: the token runtime loads data artifacts (no `godot --import`
 needed after a token replace) — restart the game to see accepted art.
