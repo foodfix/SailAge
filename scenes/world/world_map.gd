@@ -181,7 +181,7 @@ var _player_fx_back: TextureRect = null
 var _player_fx_front: TextureRect = null
 var _player_fx_atlas_back: AtlasTexture = null
 var _player_fx_atlas_front: AtlasTexture = null
-var _player_fx_dir: String = ""
+var _player_fx_size: int = 0
 var _player_fx_frame: int = -1
 ## NPC marker id → its fx record `{back, front, atlas_back, atlas_front,
 ## dir, moving, frame}` — rebuilt by the marker pass, stepped by the tick.
@@ -305,13 +305,15 @@ var _ocean_warmed := false
 # --- Phase 10: player token, arrow field, world markers (§4.8.9/§4.8.10/§3) --
 
 ## The S3 player fleet token (§4.8.9): the 8-dir directional sprite
-## `hull_{flagship_type}_player_{dir}` when the registry resolves it, else the
-## §4.5 white square fallback (`.tscn` node + code-built outline). The dir id
-## follows the fleet's movement heading (`world.heading`, guard-read); at rest
+## `hull_{flagship_type}_player` when the registry resolves it, else the
+## §4.5 white square fallback (`.tscn` node + code-built outline). The
+## token is the tier-sized north sprite (`80-*` §4.8 2026-11-07), rotated
+## to the fleet's movement heading (`world.heading`, guard-read); at rest
 ## the last heading persists.
 var _token_sprite: TextureRect = null
-## Last dir id the token was built for (skips a registry re-probe per step).
-var _token_dir := ""
+## Last token canvas size the fx were built for (skips a table re-probe
+## per step; the canvas width IS the tier size — no data read).
+var _token_size := 0
 ## Last flagship ship type the token was built for (a refit re-resolves).
 var _token_ship_type := ""
 
@@ -1965,30 +1967,34 @@ func _sync_marker_nodes() -> void:
 		var role := str(marker.get("role", ""))
 		var role_color := NpcFleetsLib.marker_color(
 			role, str(marker.get("nation_id", "")))
-		# §4.8 NPC world-fleet tokens (amendment 3d2a7d21): a fleet whose
-		# flagship/owner/movement-heading all resolve renders the 8-dir hull
-		# token `hull_{type}_{owner}_{dir}` (the nation's PENNANT_* variant,
-		# pirate fleets → the pirate pennant) instead of the letter square;
-		# the §4.5.2 letter square is demoted to the corner role chip. The
-		# bare square stands only as the fallback (unknown ship type, an
-		# ownerless nation, no heading — docked fleets — or an unresolved
-		# registry id): the §4.5.2 square, exactly as before.
+		# §4.8 NPC world-fleet tokens (amendment 3d2a7d21, superseded for
+		# ids by the 2026-11-07 top-down amendment): a fleet whose
+		# flagship/owner resolve renders the tier-sized north hull token
+		# `hull_{type}_{owner}` (owner fallback → the shared `hull_{type}`),
+		# rotated to the fleet's movement heading; the §4.5.2 letter square
+		# is demoted to the corner role chip. The bare square stands only as
+		# the fallback (unknown ship type, an ownerless nation, or an
+		# unresolved registry id): the §4.5.2 square, exactly as before.
 		var dir_id := ArrowFieldLib.dir_id_of_heading(
 			str(marker.get("heading", "")))
 		var token_texture: Texture2D = null
+		var owner := ""
 		if not dir_id.is_empty():
-			var owner := NpcFleetsLib.marker_owner(
+			owner = NpcFleetsLib.marker_owner(
 				role, str(marker.get("nation_id", "")))
 			var ship_type := str(marker.get("ship_type", ""))
 			if not owner.is_empty() and not ship_type.is_empty():
 				token_texture = UiKitLib.icon_texture(
-					"hull_%s_%s_%s" % [ship_type, owner, dir_id])
-		_sync_npc_token(square, token_texture, role_color,
-			str(marker.get("letter", "")))
+					"hull_%s_%s" % [ship_type, owner])
+		var token_size := 0
+		if token_texture != null:
+			token_size = int(token_texture.get_width())
+		_sync_npc_token(square, token_texture, token_size, role_color,
+			str(marker.get("letter", "")), dir_id)
 		# The waterline sheets (80-* §4.8 2026-11-07): full sandwich for
 		# every hull-token fleet, gated on the marker's `sailing` flag —
 		# the same motion predicate the §4.5.2 wake layer paints from.
-		_sync_marker_fx(square, id, dir_id, token_texture != null,
+		_sync_marker_fx(square, id, token_size, token_texture != null,
 			bool(marker.get("sailing", false)))
 		# §3 (A.4): a treasure fleet wears the `marker_treasure` token when the
 		# registry resolves it — the role letter rides on top (§4.8.5 overlay
@@ -2100,23 +2106,26 @@ func _sync_marker_token(square: ColorRect, role: String) -> void:
 ## role chip (role letter on the role color) pins to the token's top-right
 ## corner. `texture == null` is the §4.5.2 fallback: the coloured letter
 ## square exactly as before (chip + token hidden). Render-only either way.
-func _sync_npc_token(square: ColorRect, texture: Texture2D,
-		role_color: Color, letter_text: String) -> void:
+func _sync_npc_token(square: ColorRect, texture: Texture2D, size: int,
+		role_color: Color, letter_text: String, dir_id: String) -> void:
 	var token: TextureRect = square.get_node_or_null("HullToken")
 	if token == null:
 		token = TextureRect.new()
 		token.name = "HullToken"
 		token.stretch_mode = TextureRect.STRETCH_SCALE
 		token.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		token.size = Vector2(_cell_pixels, _cell_pixels)
 		token.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		square.add_child(token)
 		# Beneath the letter/count/chip overlays — the §4.8.5 overlay rule:
 		# identification letters stay badges drawn ON TOP of the token sprite.
 		square.move_child(token, 0)
+		# The NEAREST filter pin: the token and its fx children rotate at
+		# runtime — pixels stay crisp (children inherit; the chip/letter
+		# siblings keep their own default).
+		token.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		# The waterline z ladder (80-* §4.8 2026-11-07): the hull token and
-		# its FRONT sheet ride z -1 (created later, tree order above), the
-		# BACK sheet z -2 — badges/count/chip/treasure stay at z 0 above.
+		# its FRONT sheet ride z -1 (the sheets are the token's children),
+		# the BACK sheet z -2 — badges/count/chip/treasure stay at z 0 above.
 		token.z_index = -1
 	var chip: ColorRect = square.get_node_or_null("Chip")
 	if chip == null:
@@ -2144,14 +2153,20 @@ func _sync_npc_token(square: ColorRect, texture: Texture2D,
 			letter_node.text = letter_text
 			letter_node.visible = not letter_text.is_empty()
 		return
-	# Token mode: the demoted square keeps only its corner chip.
+	# Token mode: the demoted square keeps only its corner chip. The token
+	# draws at its native tier canvas size, centered in the square; the
+	# rotation pivot is the token center (= the square center), so turning
+	# never drifts the sprite (80-* §4.8 2026-11-07 draw rule).
 	square.color = Color(role_color.r, role_color.g, role_color.b, 0.0)
 	token.texture = texture
-	token.position = (square.size - Vector2(_cell_pixels, _cell_pixels)) * 0.5
+	token.size = Vector2(size, size)
+	token.position = (square.size - Vector2(size, size)) * 0.5
+	token.pivot_offset = Vector2(size, size) * 0.5
+	token.rotation_degrees = ArrowFieldLib.rotation_degrees_of_dir(dir_id)
 	token.visible = true
 	chip.color = role_color
 	chip.position = token.position \
-		+ Vector2(_cell_pixels - NPC_ROLE_CHIP_PX, 0.0)
+		+ Vector2(size - NPC_ROLE_CHIP_PX, 0.0)
 	var chip_letter: Label = chip.get_node("ChipLetter")
 	chip_letter.text = letter_text
 	chip_letter.visible = not letter_text.is_empty()
@@ -2159,12 +2174,14 @@ func _sync_npc_token(square: ColorRect, texture: Texture2D,
 		letter_node.visible = false
 
 
-## One NPC marker's waterline sheets (80-* §4.8 2026-11-07): the BACK/FRONT
-## rects ride the square at z -2/-1 around the z -1 hull token, sized and
-## placed from the committed table (`anchor_sprite + offset`, cell-scaled).
-## Visibility = hull token resolved AND the marker is sailing; geometry
-## reapplies only when the dir changes. Record: `_npc_fx[id]`.
-func _sync_marker_fx(square: ColorRect, id: String, dir_id: String,
+## One NPC marker's waterline sheets (80-* §4.8 2026-11-07, top-down VFX
+## revision): the BACK/FRONT rects are children of the HullToken — they
+## rotate WITH the sandwich around the token center — sized and placed
+## from the committed table (`anchor_sprite + offset`, native scale),
+## keyed on the token canvas size (the tier table). Visibility = hull
+## token resolved AND the marker is sailing; geometry reapplies only when
+## the size changes. Record: `_npc_fx[id]`.
+func _sync_marker_fx(square: ColorRect, id: String, size: int,
 		has_token: bool, moving: bool) -> void:
 	var rec: Dictionary = _npc_fx.get(id, {})
 	var fx_back: TextureRect = rec.get("back")
@@ -2174,30 +2191,35 @@ func _sync_marker_fx(square: ColorRect, id: String, dir_id: String,
 		fx_back.stretch_mode = TextureRect.STRETCH_SCALE
 		fx_back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		fx_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fx_back.z_index = -2
 		fx_back.visible = false
-		square.add_child(fx_back)
 		var fx_front := TextureRect.new()
 		fx_front.name = "FxFront"
 		fx_front.stretch_mode = TextureRect.STRETCH_SCALE
 		fx_front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		fx_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fx_front.z_index = -1
 		fx_front.visible = false
-		square.add_child(fx_front)
+		# Parented to the token (created by _sync_npc_token, which runs
+		# first): relative z −1/0 over the token's −1 → totals −2/−1, the
+		# ladder the §4.8.5 badges sit above.
+		var token := square.get_node_or_null("HullToken")
+		if token == null:
+			return  # no token node yet — nothing to dress this pass
+		token.add_child(fx_back)
+		fx_back.z_index = -1
+		token.add_child(fx_front)
+		fx_front.z_index = 0
 		rec = {"back": fx_back, "front": fx_front, "atlas_back": null,
-			"atlas_front": null, "dir": "", "moving": false, "frame": -1}
+			"atlas_front": null, "size": 0, "moving": false, "frame": -1}
 	rec["moving"] = moving
-	var show := has_token and not dir_id.is_empty() \
-		and WaterlineFxLib.has(dir_id)
+	var show := has_token and size > 0 and WaterlineFxLib.has(size)
 	if not show:
 		fx_back.visible = false
 		(rec.get("front") as TextureRect).visible = false
 		rec["frame"] = -1
 		_npc_fx[id] = rec
 		return
-	if str(rec.get("dir")) != dir_id:
-		rec["dir"] = dir_id
+	if int(rec.get("size")) != size:
+		rec["size"] = size
 		rec["frame"] = -1
 		var atlas_back: AtlasTexture = rec.get("atlas_back")
 		if atlas_back == null:
@@ -2210,14 +2232,11 @@ func _sync_marker_fx(square: ColorRect, id: String, dir_id: String,
 		for layer: String in ["back", "front"]:
 			var atlas: AtlasTexture = rec.get("atlas_%s" % layer)
 			atlas.atlas = UiKitLib.icon_texture(
-				WaterlineFxLib.layer_id(dir_id, layer))
-			atlas.region = WaterlineFxLib.atlas_region(dir_id, layer, 0)
+				WaterlineFxLib.layer_id(size, layer))
+			atlas.region = WaterlineFxLib.atlas_region(size, layer, 0)
 			var rect := rec.get(layer) as TextureRect
-			rect.position = (square.size - Vector2(_cell_pixels,
-				_cell_pixels)) * 0.5 \
-				+ WaterlineFxLib.layer_offset_px(dir_id, layer, _cell_pixels)
-			rect.size = WaterlineFxLib.layer_size_px(dir_id, layer,
-				_cell_pixels)
+			rect.position = WaterlineFxLib.layer_offset_px(size, layer)
+			rect.size = WaterlineFxLib.layer_size_px(size, layer)
 	_npc_fx[id] = rec
 
 
@@ -2233,18 +2252,18 @@ func _tick_waterline_fx(delta: float) -> void:
 		return
 	var player_show := _has_game() \
 		and SailingSimLib.effective_speed() > 0 \
-		and not _player_fx_dir.is_empty()
+		and _player_fx_size > 0
 	if _player_fx_back != null and _player_fx_front != null:
 		_player_fx_back.visible = player_show
 		_player_fx_front.visible = player_show
 		if player_show:
-			var f := WaterlineFxLib.frame_at(_player_fx_dir, _fx_clock_ms)
+			var f := WaterlineFxLib.frame_at(_player_fx_size, _fx_clock_ms)
 			if f != _player_fx_frame:
 				_player_fx_frame = f
 				_player_fx_atlas_back.region = WaterlineFxLib.atlas_region(
-					_player_fx_dir, "back", f)
+					_player_fx_size, "back", f)
 				_player_fx_atlas_front.region = WaterlineFxLib.atlas_region(
-					_player_fx_dir, "front", f)
+					_player_fx_size, "front", f)
 	for id in _npc_fx:
 		var rec: Dictionary = _npc_fx[id]
 		var back := rec.get("back") as TextureRect
@@ -2252,24 +2271,24 @@ func _tick_waterline_fx(delta: float) -> void:
 		if back == null or front == null:
 			continue
 		var show: bool = bool(rec.get("moving", false)) \
-			and not str(rec.get("dir", "")).is_empty() \
-			and WaterlineFxLib.has(str(rec.get("dir")))
+			and int(rec.get("size", 0)) > 0 \
+			and WaterlineFxLib.has(int(rec.get("size", 0)))
 		back.visible = show
 		front.visible = show
 		if not show:
 			rec["frame"] = -1
 			continue
-		var dir := str(rec.get("dir"))
-		var g := WaterlineFxLib.geometry(dir)
+		var size := int(rec.get("size"))
+		var g := WaterlineFxLib.geometry(size)
 		var cycle := int(g.get("frame_ms", 0)) * int(g.get("frames", 1))
 		var phase := int(abs(id.hash())) % maxi(cycle, 1)
-		var f := WaterlineFxLib.frame_at(dir, _fx_clock_ms + phase)
+		var f := WaterlineFxLib.frame_at(size, _fx_clock_ms + phase)
 		if f != int(rec.get("frame", -1)):
 			rec["frame"] = f
 			(rec.get("atlas_back") as AtlasTexture).region = \
-				WaterlineFxLib.atlas_region(dir, "back", f)
+				WaterlineFxLib.atlas_region(size, "back", f)
 			(rec.get("atlas_front") as AtlasTexture).region = \
-				WaterlineFxLib.atlas_region(dir, "front", f)
+				WaterlineFxLib.atlas_region(size, "front", f)
 
 
 ## Ensures the wake layer exists and repaints it from the last marker pass.
@@ -2497,6 +2516,14 @@ func _player_token_init() -> void:
 	holder.name = "Token"
 	holder.size = Vector2(_cell_pixels, _cell_pixels)
 	holder.position = Vector2.ONE * _cell_pixels * -0.5
+	# The rotation pivot is the token center (the marker anchor) — the
+	# even centering offsets keep every tier canvas centered on it, so
+	# turning never drifts the sprite (80-* §4.8 2026-11-07).
+	holder.pivot_offset = Vector2(_cell_pixels, _cell_pixels) * 0.5
+	# The NEAREST filter pin: rotated pixel art stays crisp (children
+	# inherit the filter — CanvasItem.texture_filter defaults to
+	# TEXTURE_FILTER_PARENT_NODE).
+	holder.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.visible = false
 	# The waterline sandwich (80-* §4.8 2026-11-07): BACK sheet below the
@@ -2545,38 +2572,56 @@ func _refresh_player_token() -> void:
 	var heading := str(GameState.world.get("heading", ""))
 	var dir_id := ArrowFieldLib.dir_id_of_heading(heading)
 	var texture: Texture2D = null
-	if not ship_type.is_empty() and not dir_id.is_empty():
-		texture = UiKitLib.icon_texture(
-			"hull_%s_player_%s" % [ship_type, dir_id])
+	if not ship_type.is_empty():
+		texture = UiKitLib.icon_texture("hull_%s_player" % ship_type)
 	_token_ship_type = ship_type
-	_token_dir = dir_id if texture != null else _token_dir
+	var holder := _token_sprite.get_parent() as Control
+	if holder != null:
+		# The top-down rotation map (80-* §4.8 2026-11-07): the whole
+		# sandwich (FxBack → sprite → FxFront) rotates around the token
+		# center — the pivot set at init keeps the sprite pinned to the
+		# marker anchor while turning.
+		holder.rotation_degrees = \
+			ArrowFieldLib.rotation_degrees_of_dir(dir_id)
+	var size := 0
+	if texture != null:
+		# Native tier canvas, centered in the 64 px cell (offsets
+		# 32→(16,16) / 48→(8,8) / 64→(0,0), all even — the token center
+		# IS the cell center at every size).
+		size = int(texture.get_width())
+		_token_sprite.size = Vector2(size, size)
+		_token_sprite.position = \
+			(Vector2(_cell_pixels, _cell_pixels) - Vector2(size, size)) * 0.5
+	_token_size = size
 	_token_sprite.texture = texture
 	_token_sprite.get_parent().visible = texture != null
 	var square := marker.get_node_or_null("Square") as Control
 	if square != null:
 		square.visible = texture == null
-	_apply_player_fx(dir_id if texture != null else "", texture)
+	_apply_player_fx(size, texture)
 
 
-## The player token's waterline sheets (80-* §4.8 2026-11-07): when the
-## dir changes (or the first time a hull resolves), the BACK/FRONT rects
-## take the committed geometry — AtlasTextures over the shared sheet, the
-## box-local placement `anchor_sprite + offset` scaled to the cell. The
-## tick owns visibility (speed gate) and frame stepping.
-func _apply_player_fx(dir_id: String, texture: Texture2D) -> void:
+## The player token's waterline sheets (80-* §4.8 2026-11-07, top-down VFX
+## revision): when the size changes (a refit re-resolves the flagship), the
+## BACK/FRONT rects take the committed geometry — AtlasTextures over the
+## shared sheet, box-local placement `anchor_sprite + offset` (native
+## scale) on the token box top-left. The rects are children of the
+## rotating Token holder, so they turn with the sandwich. The tick owns
+## visibility (speed gate) and frame stepping.
+func _apply_player_fx(size: int, texture: Texture2D) -> void:
 	if _player_fx_back == null or _player_fx_front == null:
 		return
-	if dir_id.is_empty() or texture == null \
-			or not WaterlineFxLib.has(dir_id):
-		_player_fx_dir = ""
+	if size <= 0 or texture == null or not WaterlineFxLib.has(size):
+		_player_fx_size = 0
 		_player_fx_back.visible = false
 		_player_fx_front.visible = false
 		_player_fx_frame = -1
 		return
-	if dir_id == _player_fx_dir:
+	if size == _player_fx_size:
 		return
-	_player_fx_dir = dir_id
+	_player_fx_size = size
 	_player_fx_frame = -1
+	var box_top_left := _token_sprite.position
 	if _player_fx_atlas_back == null:
 		_player_fx_atlas_back = AtlasTexture.new()
 		_player_fx_atlas_front = AtlasTexture.new()
@@ -2586,12 +2631,12 @@ func _apply_player_fx(dir_id: String, texture: Texture2D) -> void:
 		var atlas := _player_fx_atlas_back if layer == "back" \
 			else _player_fx_atlas_front
 		atlas.atlas = UiKitLib.icon_texture(
-			WaterlineFxLib.layer_id(dir_id, layer))
-		atlas.region = WaterlineFxLib.atlas_region(dir_id, layer, 0)
+			WaterlineFxLib.layer_id(size, layer))
+		atlas.region = WaterlineFxLib.atlas_region(size, layer, 0)
 		var rect := _player_fx_back if layer == "back" else _player_fx_front
-		rect.position = WaterlineFxLib.layer_offset_px(dir_id, layer,
-			_cell_pixels)
-		rect.size = WaterlineFxLib.layer_size_px(dir_id, layer, _cell_pixels)
+		rect.position = box_top_left \
+			+ WaterlineFxLib.layer_offset_px(size, layer)
+		rect.size = WaterlineFxLib.layer_size_px(size, layer)
 
 
 ## The arrow field's draw layer: a world-anchored Control under the map

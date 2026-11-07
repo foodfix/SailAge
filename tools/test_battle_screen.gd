@@ -1315,15 +1315,28 @@ func _test_phase10_fx_layer() -> void:
 				== "neutral",
 		"enemy owner ids: pirate → pirate, navy+nation → the nation, the "
 			+ "rest → neutral")
-	_check(ScreenLib.hull_sprite_id("caravel", "player", 0)
-			== "hull_caravel_player_e"
-			and ScreenLib.hull_sprite_id("sloop", "pirate", 1)
-				== "hull_sloop_pirate_ne"
-			and ScreenLib.hull_sprite_id("galleon", "england", 7)
-				== "hull_galleon_england_se",
-		"the sprite id is hull_{type}_{owner}_{dir} per §4.8.6")
-	_check(ScreenLib.hull_sprite_id("", "player", 0) == "",
+	_check(ScreenLib.hull_sprite_id("caravel", "player")
+			== "hull_caravel_player"
+			and ScreenLib.hull_sprite_id("sloop", "pirate")
+				== "hull_sloop_pirate"
+			and ScreenLib.hull_sprite_id("galleon", "england")
+				== "hull_galleon_england",
+		"the sprite id is hull_{type}_{owner} per §4.8 2026-11-07 (north; "
+			+ "facing is a runtime rotation)")
+	_check(ScreenLib.hull_sprite_id("", "player") == "",
 		"a type-less hull maps to no sprite id (the placeholder fallback)")
+	# The pinned top-down rotation map (80-* §4.8 2026-11-07): clockwise
+	# degrees, screen y-down, on the §4.8.6 dir id of each bucket.
+	_check(ScreenLib.heading_rotation_degrees(0) == 90.0
+			and ScreenLib.heading_rotation_degrees(1) == 45.0
+			and ScreenLib.heading_rotation_degrees(2) == 0.0
+			and ScreenLib.heading_rotation_degrees(3) == 315.0
+			and ScreenLib.heading_rotation_degrees(4) == 270.0
+			and ScreenLib.heading_rotation_degrees(5) == 225.0
+			and ScreenLib.heading_rotation_degrees(6) == 180.0
+			and ScreenLib.heading_rotation_degrees(7) == 135.0,
+		"heading_rotation_degrees covers every bucket (e90 ne45 n0 nw315 "
+			+ "w270 sw225 s180 se135)")
 
 	# (d) The battle water: the shared WaterLayer build, every one of the
 	# 48×30 cells stamped with the flat sea column, and NO material (the
@@ -1372,9 +1385,9 @@ func _test_phase10_fx_layer() -> void:
 	# (f) The sequencer's event mapping (pure `map_entry`).
 	var snap := {
 		"player:0": {"cell": Vector2i(10, 15),
-			"sprite_id": "hull_caravel_player_e"},
+			"sprite_id": "hull_caravel_player"},
 		"enemy:0": {"cell": Vector2i(13, 15),
-			"sprite_id": "hull_sloop_pirate_w"},
+			"sprite_id": "hull_sloop_pirate"},
 	}
 	var cannon_events: Array = FxLib.map_entry({
 		"kind": "cannon",
@@ -1405,7 +1418,7 @@ func _test_phase10_fx_layer() -> void:
 	}, snap)
 	_check(sunk_events.size() == 4
 			and str(sunk_events[3]["kind"]) == "sink"
-			and str(sunk_events[3]["sprite_id"]) == "hull_sloop_pirate_w",
+			and str(sunk_events[3]["sprite_id"]) == "hull_sloop_pirate",
 		"a sinking volley appends the sink fade carrying the hull sprite id")
 	var ram_events: Array = FxLib.map_entry({
 		"kind": "ram",

@@ -221,13 +221,23 @@ static func owner_id_for_side(side: String, kind: String,
 	return "neutral"
 
 
-## The §4.8 token sprite id `hull_{ship_type_id}_{owner}_{dir}`; "" when the
+## The §4.8 token sprite id — the north token scheme (80-* §4.8 2026-11-07):
+## `hull_{ship_type_id}_{owner}` (the owner id resolves onto the shared
+## `hull_{ship_type_id}` through the registry); facing is a runtime
+## rotation (`heading_rotation_degrees`), not part of the id. "" when the
 ## hull has no type (the placeholder-square fallback then renders).
-static func hull_sprite_id(ship_type_id: String, owner: String,
-		heading8: int) -> String:
+static func hull_sprite_id(ship_type_id: String, owner: String) -> String:
 	if ship_type_id.is_empty() or owner.is_empty():
 		return ""
-	return "hull_%s_%s_%s" % [ship_type_id, owner, heading_dir_id(heading8)]
+	return "hull_%s_%s" % [ship_type_id, owner]
+
+
+## The token rotation for a `heading8` bucket: the pinned top-down map
+## (`ArrowField.rotation_degrees_of_dir`, clockwise degrees, screen
+## y-down) on the §4.8.6 dir id (vel = 0 keeps the last heading per
+## `60-*` §4.3a, so the facing always reads the unit's stored `heading8`).
+static func heading_rotation_degrees(heading8: int) -> float:
+	return ArrowFieldLib.rotation_degrees_of_dir(heading_dir_id(heading8))
 
 
 ## This battle's enemy owner id (the encounter's kind/nation are fixed at
@@ -245,8 +255,7 @@ func _unit_sprite_id(unit: Dictionary) -> String:
 	var side := str(unit.get("side", ""))
 	var owner := "player" if side == BattleSimLib.SIDE_PLAYER \
 		else _enemy_owner_id()
-	return hull_sprite_id(str(ship.get("ship_type_id", "")), owner,
-		int(unit.get("heading8", 0)))
+	return hull_sprite_id(str(ship.get("ship_type_id", "")), owner)
 
 ## Emitted when a battle sets up (tests observe the engine without a swap).
 signal battle_opened(encounter: Dictionary)
@@ -1817,25 +1826,30 @@ func _on_world_draw() -> void:
 			letter = TOKEN_FLAGSHIP if flagship else TOKEN_PLAYER
 		else:
 			letter = TOKEN_ENEMY
-		# §4.8.6 hull token: `hull_{type}_{owner}_{dir}` from the unit's
-		# `heading8` (vel = 0 keeps the last heading, `60-*` §4.3a), resolved
-		# through the §4.9 registry. A registry miss keeps the Phase-1
-		# placeholder square (the fallback path never goes away).
+		# §4.8 hull token (top-down amendment, 2026-11-07): the tier-sized
+		# north token `hull_{type}_{owner}` (owner fallback → the shared
+		# `hull_{type}`), resolved through the §4.9 registry and rotated to
+		# the unit's `heading8` (vel = 0 keeps the last heading, `60-*`
+		# §4.3a). A registry miss keeps the Phase-1 placeholder square (the
+		# fallback path never goes away).
+		var heading8 := int(unit.get("heading8", 0))
 		var sprite_id := hull_sprite_id(
 			str((unit.get("ship", {}) as Dictionary).get("ship_type_id", "")),
 			owner if str(unit.get("side", "")) != BattleSimLib.SIDE_PLAYER
-			else "player", int(unit.get("heading8", 0)))
+			else "player")
 		var texture := UiKitLib.icon_texture(sprite_id) \
 			if not sprite_id.is_empty() else null
 		if texture != null:
-			# The 64×64 token canvas (the §4.8 64-canvas amendment) draws at
-			# 0.5 scale — 32 px on the 32 px battle tile; its designed
-			# footprint (§4.8.7 bands) halves with it. Nearest filtering is
-			# pinned on the grid view (see `_ready`).
-			var size := TILE_PX * _cam_zoom
+			# The tier-sized token canvas draws at 0.5 × native — t3 64→32 px
+			# on the 32 px battle tile (unchanged), t2 48→24, t1 32→16. The
+			# rotation pivots on the drawn-rect center (draw_set_transform);
+			# nearest filtering is pinned on the grid view (see `_ready`).
+			var blit_px := texture.get_size() * 0.5 * _cam_zoom
+			var rot := deg_to_rad(heading_rotation_degrees(heading8))
+			_grid_view.draw_set_transform(center, rot, Vector2.ONE)
 			_grid_view.draw_texture_rect(texture,
-				Rect2(center - Vector2(size, size) * 0.5,
-					Vector2(size, size)), false)
+				Rect2(-blit_px * 0.5, blit_px), false)
+			_grid_view.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
 			var half := TOKEN_PX * _cam_zoom * 0.5
 			var rect := Rect2(center - Vector2(half, half),

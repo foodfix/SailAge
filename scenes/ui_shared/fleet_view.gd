@@ -24,7 +24,8 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const ConfirmLib := preload("res://scenes/ui_shared/confirm_dialog.gd")
 ## §4.9 icon registry (W4-B): fleet rows resolve the static-n hull token
-## `hull_{ship_type_id}_{owner}_n` through it; a miss keeps the text-only row.
+## `hull_{ship_type_id}_{owner}` (the north token) through it; a miss keeps
+## the text-only row.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 
 ## Group every open modal joins (docs/90-* §11).
@@ -664,18 +665,19 @@ func _label(text: String, color: Color) -> Label:
 	return label
 
 
-## The row's hull token (W4-B, §4.8/§4.5.1): the static-n
-## `hull_{ship_type_id}_{owner}_n` sprite through the §4.9 registry —
-## owner guard-read per ship with the player fleet as the default (this view
-## renders only the player's fleet). A registry miss (the registry fills at
-## the W4 merges) returns null and the row keeps its text-only layout.
+## The row's hull token (W4-B, §4.8/§4.5.1): the north `hull_{ship_type_id}_{owner}`
+## sprite through the §4.9 registry (the top-down amendment, 2026-11-07 —
+## the roster shows the un-rotated north token) — owner guard-read per ship
+## with the player fleet as the default (this view renders only the
+## player's fleet). A registry miss (the registry fills at the W4 merges)
+## returns null and the row keeps its text-only layout.
 func _hull_token_icon(ship: Dictionary) -> TextureRect:
 	var ship_type_id := str(ship.get("ship_type_id", ""))
 	if ship_type_id.is_empty():
 		return null
 	var owner_id := str(ship.get("owner_id", "player"))
 	var tex := UiKitLib.icon_texture(
-		"hull_%s_%s_n" % [ship_type_id, owner_id])
+		"hull_%s_%s" % [ship_type_id, owner_id])
 	if tex == null:
 		return null
 	var icon := TextureRect.new()

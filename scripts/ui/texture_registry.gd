@@ -27,12 +27,15 @@ extends RefCounted
 ## with the same fallback chain: a missing id resolves null exactly as
 ## before (the white-square/flat fallback is the consumers' unchanged rule).
 ##
-## Owner fallback (80-* §4.8 2026-11-06 raw dedupe): the pixellab hull
-## family ships ONE owner-less file per ship × dir (`hull_<ship>_<dir>.png`);
-## an owner id `hull_<ship>_<owner>_<dir>` whose per-owner file is absent
-## resolves ONTO the shared id through the UiKit map — every owner of a
-## ship references the same ImageTexture (one VRAM copy), and a future
-## per-owner file simply shadows the shared one (the direct path wins).
+## Owner fallback (80-* §4.8 top-down amendment, 2026-11-07): the north
+## hull family ships ONE owner-less file per ship (`hull_<ship>.png`,
+## tier-sized, bow up); an owner id `hull_<ship>_<owner>` whose per-owner
+## file is absent resolves ONTO the shared id through the UiKit map —
+## every owner of a ship references the same ImageTexture (one VRAM
+## copy), and a future per-owner file simply shadows the shared one (the
+## direct path wins). The retired dir-suffixed grids
+## (`hull_<ship>_<dir>` / `hull_<ship>_<owner>_<dir>`) have no files and
+## no fallback — direction is a runtime rotation now.
 ##
 ## Idempotent: the static guard makes the second call a no-op. Deterministic:
 ## the dir list is a fixed table, and each dir walk is sorted, so the map is
@@ -119,8 +122,8 @@ static func _load_token_texture(id: String) -> Texture2D:
 		return ImageTexture.create_from_image(image)
 	if id.begins_with("hull_"):
 		var segs := id.substr(5).rsplit("_", false, 2)
-		if segs.size() == 3:
-			var shared := "hull_%s_%s" % [segs[0], segs[2]]
+		if segs.size() == 2:
+			var shared := "hull_%s" % segs[0]
 			if shared != id:
 				return UiKitLib.icon_texture(shared)
 	# The waterline VFX family (80-* §4.8 2026-11-07) joins the raw-bytes

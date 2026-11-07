@@ -871,6 +871,20 @@ def _ingest_raw_dedupe() -> bool:
     return "pixellab" in str(doc.get("generated_by", ""))
 
 
+def _ingest_north() -> bool:
+    """True when the committed ledger's last ship ingestion was the
+    top-down north mode (80-* §4.8 2026-11-07): the shipped hull family
+    is ONE owner-less north file per ship (`hull_{ship}.png`), tier-sized
+    (32/48/64), rotated at runtime — no dir tokens exist at all."""
+    if not INGEST_LEDGER.is_file():
+        return False
+    try:
+        doc = json.loads(INGEST_LEDGER.read_text())
+    except ValueError:
+        return False
+    return "import-ships-north" in str(doc.get("generated_by", ""))
+
+
 def resolve_ingest_overrides(root: Path = ROOT):
     """The override ladder (80-* §4.8: the ingested tokens are the PRIMARY
     art, the ×2-upscale generator is the fallback): a ledger entry whose
@@ -896,6 +910,16 @@ def resolve_ingest_overrides(root: Path = ROOT):
         if p.is_file():
             out[(ship, owner, d)] = p
 
+    if _ingest_north():
+        # North mode (80-* §4.8 2026-11-07): tokens are keyed by the
+        # shipped file stem `hull_{ship}`; the override key is
+        # (ship, "", "north") and serves the shared hull_{ship}.png.
+        for tid in (doc.get("tokens") or {}):
+            ship = tid[len("hull_"):] if tid.startswith("hull_") else tid
+            p = root / TOKENS_DIR / f"hull_{ship}.png"
+            if p.is_file():
+                out[(ship, "", "north")] = p
+        return out
     if _ingest_raw_dedupe():
         for tid in (doc.get("tokens") or {}):
             ship, d = _parse_token_id(tid)
@@ -1225,6 +1249,149 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
         "files": written,
         "painted": sum(1 for rec in led_tokens.values()
                        if rec.get("pennant") == "auto-painted"),
+    }
+    return report["ingest"]
+
+
+# tier → canvas table (80-* §4.8 2026-11-07 top-down amendment; the
+# generator reads tier, no new data field).
+NORTH_TIER_SIZE = {1: 32, 2: 48, 3: 64}
+
+
+def run_ship_ingest_north(raw_root: Path, outroot: Path,
+                          report: dict) -> dict:
+    """--import-ships-north: the top-down hull ingestion (80-* §4.8
+    2026-11-07). ONE owner-less north file per ship
+    (`assets/ui/tokens/hull_{ship}.png`), canvas = tier size
+    (t1 32 / t2 48 / t3 64), shipped RAW 1:1 (ship-as-drawn: no quantize,
+    no pennant remap — the model's pixels are the shipped pixels, the
+    same token for every owner). Gates: decode + canvas fit (exact tier
+    S×S). Provenance: the pixellab_topdown manifest (job id, seed,
+    description sha). Any stale file from the retired grids
+    (`hull_{ship}_{dir}.png` / `hull_{ship}_{owner}_{dir}.png`) is
+    pruned with its .import sidecar; committed ingested tokens whose
+    entry did not survive this run are revoked. `facility_*` tokens are
+    untouched."""
+    ship_types = json.loads(SHIP_TYPES.read_text())
+    roster = ship_types.get("ship_types",
+                            ship_types if isinstance(ship_types, list)
+                            else [])
+    tiers = {s["id"]: int(s["tier"]) for s in roster}
+    tokens_dir = outroot / TOKENS_DIR
+
+    prev = _read_ledger("--import-ships-north")
+    prev_tokens = prev.get("tokens") or {}
+
+    manifest = {}
+    pm = raw_root / "pixellab_topdown.json"
+    if pm.is_file():
+        try:
+            manifest = json.loads(pm.read_text())
+        except ValueError:
+            manifest = {}
+
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    candidates, accepted = [], {}       # accepted: ship id -> (w, h, px)
+    led_tokens, rejected = {}, []
+    for ship in sorted(tiers):
+        sp = raw_root / ship / "snapped" / "north.png"
+        if not sp.is_file():
+            continue  # not generated (yet) — a gap, not a rejection
+        candidates.append(ship)
+        raw_bytes = sp.read_bytes()
+        try:
+            w, h, px = decode_png(raw_bytes)
+        except Exception as exc:
+            rejected.append({"job": f"hull_{ship}", "reason": "decode",
+                             "detail": f"snapped PNG does not decode: {exc}"})
+            continue
+        want = NORTH_TIER_SIZE[tiers[ship]]
+        if (w, h) != (want, want):
+            rejected.append({"job": f"hull_{ship}", "reason": "canvas",
+                             "detail": f"{w}x{h} != tier-{tiers[ship]} "
+                                       f"{want}x{want}"})
+            continue
+        sha = hashlib.sha256(raw_bytes).hexdigest()
+        rec = manifest.get(ship) or {}
+        desc = rec.get("description") or ""
+        prev_rec = prev_tokens.get(ship) or {}
+        accepted_at = (prev_rec.get("accepted_at")
+                       if prev_rec.get("snapped_sha") == sha else None)
+        led_tokens[f"hull_{ship}"] = {
+            "job": f"hull_{ship}",
+            "seed": rec.get("seed"),
+            "snapped_sha": sha,
+            "accepted_at": accepted_at or today,
+            "size": want,
+            "pennant": "raw",
+            "pixellab": {"job_id": rec.get("job_id"),
+                         "seed": rec.get("seed"),
+                         "description_sha": hashlib.sha256(
+                             desc.encode()).hexdigest()[:16]},
+        }
+        accepted[ship] = (w, h, px)
+
+    written = 0
+    for ship in sorted(accepted):
+        w, h, px = accepted[ship]
+        write_png(tokens_dir / f"hull_{ship}.png", w, h, px)
+        written += 1
+
+    # Retired-grid hygiene: the north family owns the owner-LESS dir-less
+    # names, so every dir-suffixed file left by the retired 8-dir grids
+    # (raw dedupe `hull_{ship}_{dir}` and classic `hull_{ship}_{owner}_{dir}`)
+    # is stale. facility_* files never match the patterns.
+    pattern = re.compile(
+        r"hull_.+_(%s)\.png$|hull_.+_(%s)_(%s)\.png$"
+        % ("|".join(DIR_ORDER), "|".join(OWNER_ORDER),
+           "|".join(DIR_ORDER)))
+    pruned = 0
+    for f in sorted(tokens_dir.glob("hull_*.png")):
+        if pattern.match(f.name):
+            f.unlink()
+            f.with_name(f.name + ".import").unlink(missing_ok=True)
+            pruned += 1
+    if pruned:
+        print(f"  ingest: pruned {pruned} retired dir-suffixed token "
+              "file(s) — the north family is one file per ship")
+
+    # Provenance revocation: committed ingested north tokens whose entry
+    # did not survive this run are removed so the ladder falls those ids
+    # back to the generator THIS run.
+    live = set(accepted)
+    stale = [tid for tid in sorted(prev_tokens)
+             if tid not in {f"hull_{s}" for s in live}]
+    for tid in stale:
+        (tokens_dir / f"{tid}.png").unlink(missing_ok=True)
+        (tokens_dir / f"{tid}.png.import").unlink(missing_ok=True)
+    revoked = len(stale)
+
+    doc = {
+        "counts": {
+            "candidates": len(candidates),
+            "accepted_base": len(led_tokens),
+            "accepted_derived": 0,
+            "rejected": len(rejected),
+            "revoked_stale": revoked,
+            "shipped_files": written,
+            "pruned_retired_grid": pruned,
+        },
+        "generated_by":
+            "tools/build_ui_art.py --import-ships-north",
+        "rejected": rejected,
+        "tokens": led_tokens,
+        "derived": {},
+    }
+    _write_ledger(prev, "ships", doc)
+
+    report["ingest"] = {
+        "candidates": len(candidates),
+        "accepted_base": len(led_tokens),
+        "accepted_derived": 0,
+        "rejected": rejected,
+        "revoked": revoked,
+        "pruned": pruned,
+        "files": written,
     }
     return report["ingest"]
 
@@ -1843,32 +2010,42 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
     rig = m.aux.get(("hulls", "rig"))
     if reg is None:
         fail("tools/ui_art/hulls/hulls.json registry missing")
-    want_tmpl = (f"{TOKENS_DIR}/hull_{{ship_type}}_{{dir}}.png"
-                 if _ingest_raw_dedupe() else
-                 f"{TOKENS_DIR}/hull_{{ship_type}}_{{owner}}_{{dir}}.png")
-    if reg.get("path_template") != want_tmpl:
-        fail(f"hulls.json: path_template {reg.get('path_template')!r} != "
-             f"the pinned {want_tmpl!r} (governor contract drift)")
-    if list(reg.get("owners", [])) != OWNER_ORDER:
-        fail("hulls.json: owners != pinned 9-owner set (§4.8.4)")
-    if list(reg.get("authored_dirs", [])) != DIR_ORDER:
-        fail(f"hulls.json: authored_dirs != the pinned §4.8.6 dir set {DIR_ORDER} "
-             "(UW2 amendment: all eight hull directions are authored maps)")
-    if "derive" in reg:
-        fail("hulls.json: carries a derive table — the §4.8.6 amendment "
-             "removes hull derivation (all eight dirs authored per hull)")
-    bands = {int(k): tuple(v) for k, v in
-             reg.get("footprint", {}).get("bands", {}).items()}
-    if bands != FOOTPRINT_BANDS:
-        fail(f"hulls.json: footprint bands {bands} != pinned §4.8.7 {FOOTPRINT_BANDS}")
-    if rig is not None:
-        pennants = rig.get("pennants", {})
-        if pennants.get("source") != PENNANT_SOURCE:
-            fail("rig.json: pennant source drifts from the pinned authored "
-                 "source hex (§4.8.4 amended)")
-        if pennants.get("targets") != PENNANTS:
-            fail("rig.json: pennant targets drift from the §4.8.4 amended "
-                 "owner table")
+    if _ingest_north():
+        # North mode (80-* §4.8 2026-11-07): the registry's grid metadata
+        # (path_template / owners / authored_dirs / bands) pins the
+        # RETIRED 8-dir grids; the string-map renderer still consumes the
+        # per-dir docs (the generated north fallback is the outlined ×2
+        # 'n' map), so the docs render as usual but the grid checks are
+        # legacy metadata here.
+        print("  hulls: north mode — registry grid checks are legacy "
+              "metadata, skipped (80-* §4.8 2026-11-07)")
+    else:
+        want_tmpl = (f"{TOKENS_DIR}/hull_{{ship_type}}_{{dir}}.png"
+                     if _ingest_raw_dedupe() else
+                     f"{TOKENS_DIR}/hull_{{ship_type}}_{{owner}}_{{dir}}.png")
+        if reg.get("path_template") != want_tmpl:
+            fail(f"hulls.json: path_template {reg.get('path_template')!r} != "
+                 f"the pinned {want_tmpl!r} (governor contract drift)")
+        if list(reg.get("owners", [])) != OWNER_ORDER:
+            fail("hulls.json: owners != pinned 9-owner set (§4.8.4)")
+        if list(reg.get("authored_dirs", [])) != DIR_ORDER:
+            fail(f"hulls.json: authored_dirs != the pinned §4.8.6 dir set {DIR_ORDER} "
+                 "(UW2 amendment: all eight hull directions are authored maps)")
+        if "derive" in reg:
+            fail("hulls.json: carries a derive table — the §4.8.6 amendment "
+                 "removes hull derivation (all eight dirs authored per hull)")
+        bands = {int(k): tuple(v) for k, v in
+                 reg.get("footprint", {}).get("bands", {}).items()}
+        if bands != FOOTPRINT_BANDS:
+            fail(f"hulls.json: footprint bands {bands} != pinned §4.8.7 {FOOTPRINT_BANDS}")
+        if rig is not None:
+            pennants = rig.get("pennants", {})
+            if pennants.get("source") != PENNANT_SOURCE:
+                fail("rig.json: pennant source drifts from the pinned authored "
+                     "source hex (§4.8.4 amended)")
+            if pennants.get("targets") != PENNANTS:
+                fail("rig.json: pennant targets drift from the §4.8.4 amended "
+                     "owner table")
 
     ship_types = json.loads(SHIP_TYPES.read_text())
     roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
@@ -1980,6 +2157,33 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
                      f"{CANVAS}px canvas")
         report.setdefault("footprints", []).append(
             (ship, tier, side[0], side[1], (lo, hi)))
+
+        if _ingest_north():
+            # North mode (80-* §4.8 2026-11-07): ONE owner-less north
+            # file per ship — the generated fallback is the outlined ×2
+            # 'n' map on the 64 canvas; the ladder override serves the
+            # committed ingested token byte-identical (ship-as-drawn).
+            w, h, px = staged["n"]
+            dest = outroot / TOKENS_DIR / f"hull_{ship}.png"
+            override = (ingest_files or {}).get((ship, "", "north"))
+            if override is not None and override.is_file():
+                if override != dest:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(override, dest)
+                counts["tokens_ingested"] += 1
+                continue
+            colors = {("#%02x%02x%02x" % p[:3]) for p in px if p[3]}
+            off = sorted(c for c in colors if c not in HULL_BLOCK)
+            if off:
+                fail(f"hull {ship}/n: hexes outside the hull block "
+                     f"(§4.8.4): {off}")
+            if len(colors) > COLOR_BUDGET_32:
+                fail(f"hull {ship}/n: {len(colors)} colors > budget "
+                     f"{COLOR_BUDGET_32} (§4.8.3)")
+            write_png(dest, *upscale_nearest(w, h, px,
+                                             CANVAS // AUTHORED_GRID))
+            counts["tokens"] += 1
+            continue
 
         if _ingest_raw_dedupe():
             # Raw dedupe (80-* §4.8 2026-11-06): ONE owner-less file per
@@ -2168,7 +2372,12 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
 
 def run_seam_ring(m: Manifests, outroot: Path, report: dict):
     """Verify (never alter): variants of a terrain kind share a byte-identical
-    outer 1px ring; sea_pattern is torus-safe (80-* §4.8.2)."""
+    outer 1px ring; sea_pattern is torus-safe (80-* §4.8.2). Corner-
+    vocabulary kinds are exempt: their per-tile rings intentionally differ
+    (each tile carries land in a different corner — the 2026-11-06 PixelLab
+    terrain amendment's 16-tile coast_wang Wang corner set; its water-
+    flanking edges are the tileset acceptance's contract, not the variant
+    gate's)."""
     adir = outroot / "assets/ui"
     if not adir.is_dir():
         return
@@ -2176,6 +2385,8 @@ def run_seam_ring(m: Manifests, outroot: Path, report: dict):
     for p in sorted(adir.rglob("*.png")):
         mo = re.fullmatch(r"terrain_([a-z_]+)_(\d+)\.png", p.name)
         if mo:
+            if mo.group(1) in SEAM_RING_EXEMPT_KINDS:
+                continue  # corner vocabulary — see the docstring
             groups.setdefault(mo.group(1), []).append(p)
         elif p.name == "sea_pattern.png":
             report["sea_pattern"] = p
@@ -2854,18 +3065,21 @@ def run_check() -> None:
         # §4.8 2026-11-07 — the waterline VFX family joins the same
         # ledger-governed contract: the committed sheets are copied into
         # the temp rebuild before the compare (never regenerated, never
-        # re-downloaded).
+        # re-downloaded). v2 (the top-down revision): the ledger keys
+        # SIZES, one north family per ship size.
         fx_ledger = (ROOT / "tools" / "assets" / "pixellab_raw"
                      / "pixellab_vfx_ledger.json")
         if fx_ledger.is_file():
-            fx_dirs = list(json.loads(fx_ledger.read_text())
-                           .get("dirs", {}).keys())
-            for d in fx_dirs:
+            fx_doc = json.loads(fx_ledger.read_text())
+            fx_keys = list(fx_doc.get("sizes", {}).keys()) \
+                if int(fx_doc.get("version", 1)) >= 2 \
+                else list(fx_doc.get("dirs", {}).keys())
+            for k in fx_keys:
                 for layer in ("back", "front"):
-                    name = f"fx_waterline_{layer}_{d}.png"
+                    name = f"fx_waterline_{layer}_{k}.png"
                     src = committed / "fx" / name
                     if not src.is_file():
-                        fail(f"--check: the fx ledger names {d}/{layer} "
+                        fail(f"--check: the fx ledger names {k}/{layer} "
                              "but assets/ui/fx does not ship it; run "
                              "build_ui_art --import-fx-pixellab")
                     dst_dir = Path(td) / "assets" / "ui" / "fx"
@@ -2932,6 +3146,29 @@ def run_import_mode(snapped_dir: Path, raw: bool = False) -> None:
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 
+def run_import_north_mode(raw_root: Path) -> None:
+    """--import-ships-north: the top-down hull ingestion (80-* §4.8
+    2026-11-07) + the full build. RAW_ROOT is the pixellab_topdown tree
+    (default tools/ui_art/model_raw/pixellab_topdown) carrying
+    <ship>/snapped/north.png + the manifest. Gate: 16 north files (one
+    per ship; gaps fall back to the generated north token)."""
+    if not raw_root.is_dir():
+        fail(f"import: raw root not found: {raw_root}")
+    report = {}
+    ingest = run_ship_ingest_north(raw_root, ROOT, report)
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
+    report["ingest"] = ingest
+    summary(m, report, ROOT)
+    counts = report.get("hulls", {})
+    total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)
+    if m.classes.get("hulls") is not None and total != 16:
+        fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
+             f"+ ingested {counts.get('tokens_ingested', 0)}) != 16 "
+             "(north: one file per ship)")
+    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
+
+
 def run_import_icons_mode(source_dirs: list[Path]) -> None:
     """--import-icons: the formal icon ingestion (re-quantize to the icon
     block, exact 2:1 nearest halving to the 32px inline art), then the
@@ -2971,6 +3208,138 @@ def run_import_terrain_mode(gen_dir: Path, sheet_file: str) -> None:
 FX_LEDGER = (ROOT / "tools" / "assets" / "pixellab_raw"
              / "pixellab_vfx_ledger.json")
 FX_DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+FX_SIZES = (32, 48, 64)
+
+# Terrain kinds exempt from the variant-seam ring gate (corner
+# vocabularies — per-tile rings intentionally differ; see run_seam_ring).
+SEAM_RING_EXEMPT_KINDS = {"coast_wang"}
+
+
+def run_import_fx_v4_mode(raw_root: Path) -> None:
+    """--import-fx-pixellab (v4, the shipping mode): ingest the top-down
+    north waterline family VERBATIM — one behind/front sheet pair per
+    ship SIZE (32/48/64) out of each raw dir's game pack, the committed
+    frame table assets/ui/fx/fx_waterline.json keyed per size and the
+    provenance ledger. The builder never contacts the API and never
+    regenerates. Layer placement lives in the frame table: layer
+    top-left = token box top-left + (anchor_sprite + clip offset) (the
+    pack README's `anchor + offset` rule with the anchor resolved into
+    the size's token box by tools/pixellab_vfx_pass.py's template
+    match). The runtime rotates the sheets together with the hull
+    sandwich (80-* §4.8 top-down VFX revision)."""
+    import zipfile  # noqa: PLC0415
+    out_fx = ROOT / "assets" / "ui" / "fx"
+    out_fx.mkdir(parents=True, exist_ok=True)
+    table: dict = {"version": 2,
+                   "generated_by":
+                       "tools/build_ui_art.py --import-fx-pixellab",
+                   "sizes": {}}
+    ledger: dict = {"version": 2,
+                    "generated_by":
+                        "tools/build_ui_art.py --import-fx-pixellab",
+                    "sizes": {}}
+    pass_manifest_path = raw_root / "pixellab_vfx.json"
+    pass_manifest = (json.loads(pass_manifest_path.read_text())
+                     if pass_manifest_path.is_file() else {})
+    for size in FX_SIZES:
+        key = str(size)
+        sdir = raw_root / key
+        if not sdir.is_dir():
+            fail(f"--import-fx-pixellab: raw dir missing: {sdir}")
+        packs = sorted(sdir.rglob("*-game.zip"))
+        if len(packs) != 1:
+            fail(f"--import-fx-pixellab: expected exactly 1 game pack under "
+                 f"{sdir}, found {len(packs)}")
+        pack = packs[0]
+        with zipfile.ZipFile(pack) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            clips = {c["name"]: c for c in manifest["clips"]}
+            layers = {}
+            for layer, clip_name in (("back", "behind"), ("front", "front")):
+                clip = clips[clip_name]
+                sheet_file = clip["sheets"][0]["file"]
+                data = zf.read(sheet_file)
+                out = out_fx / f"fx_waterline_{layer}_{size}.png"
+                out.write_bytes(data)
+                layers[layer] = {
+                    "file": out.name,
+                    "frame": {"w": clip["frame"]["w"],
+                              "h": clip["frame"]["h"]},
+                    "columns": clip["sheets"][0]["columns"],
+                    "frames": clip["frames"],
+                    "offset": {"x": clip["offset"]["x"],
+                               "y": clip["offset"]["y"]},
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+        # Uniform frame timing gate: the runtime's frame_at is closed-form
+        # on frame_ms; a non-uniform pack must fail the ingest loudly.
+        frame_json = next(sdir.glob(f"{pack.name[:-9]}.json"), None)
+        if frame_json is None:
+            fail(f"--import-fx-pixellab: frame json missing for size "
+                 f"{size} (expected {pack.name[:-9]}.json)")
+        frames_meta = json.loads(frame_json.read_text()).get("frames", [])
+        durations = sorted({int(f.get("duration", 0))
+                            for f in frames_meta})
+        frame_ms = int(manifest["frame_ms"])
+        if durations != [frame_ms]:
+            fail(f"--import-fx-pixellab: size {size}: non-uniform durations "
+                 f"{durations} != frame_ms {frame_ms}")
+        rec = pass_manifest.get(key, {})
+        anchor = rec.get("anchor_sprite")
+        if not anchor or anchor.get("method") == "bbox-fallback":
+            fail(f"--import-fx-pixellab: size {size}: anchor_sprite missing "
+                 "or bbox-fallback — re-run tools/pixellab_vfx_pass.py "
+                 "v4-run")
+        table["sizes"][key] = {
+            "sprite": rec.get("sprite"),
+            "canvas": manifest["canvas"],
+            "fps": manifest["fps"],
+            "frame_ms": frame_ms,
+            "frames": manifest["frames"],
+            "loop": bool(manifest["loop"]),
+            "anchor_sprite": {"x": anchor["x"], "y": anchor["y"],
+                              "method": anchor["method"],
+                              "match_rate": anchor["match_rate"]},
+            "layers": layers,
+        }
+        ledger["sizes"][key] = {
+            "effect_id": rec.get("effect_id"),
+            "artist": rec.get("artist", "pro"),
+            "name": rec.get("name"),
+            "sprite": rec.get("sprite"),
+            "quoted_generations": rec.get("quoted_generations"),
+            "description_sha256": rec.get("description_sha256"),
+            "background_job_id": rec.get("background_job_id"),
+            "sheets": {k: v["sha256"] for k, v in layers.items()},
+        }
+        print(f"  fx {size}: back {layers['back']['frame']['w']}x"
+              f"{layers['back']['frame']['h']} + front "
+              f"{layers['front']['frame']['w']}x"
+              f"{layers['front']['frame']['h']} @ {frame_ms} ms "
+              f"anchor ({anchor['x']},{anchor['y']})", flush=True)
+    json_path = out_fx / "fx_waterline.json"
+    json_path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    ledger["table_sha256"] = hashlib.sha256(
+        json_path.read_bytes()).hexdigest()
+    FX_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    FX_LEDGER.write_text(json.dumps(ledger, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    # Retired-grid hygiene: the per-dir sheets of the superseded family
+    # never coexist with the per-size family.
+    pruned = 0
+    for f in sorted(out_fx.glob("fx_waterline_*.png")):
+        m2 = re.match(r"fx_waterline_(back|front)_[a-z]+\.png$", f.name)
+        if m2:
+            f.unlink()
+            f.with_name(f.name + ".import").unlink(missing_ok=True)
+            pruned += 1
+    if pruned:
+        print(f"build_ui_art: pruned {pruned} retired per-dir waterline "
+              "sheet(s)")
+    print(f"build_ui_art: fx family -> {out_fx.relative_to(ROOT)} "
+          f"({len(FX_SIZES)} sizes x 2 sheets + fx_waterline.json)")
+    print(f"build_ui_art: fx ledger -> {FX_LEDGER.relative_to(ROOT)}")
 
 
 def run_import_fx_mode(raw_root: Path) -> None:
@@ -3104,7 +3473,17 @@ def main() -> None:
                          "2026-11-06): all 8 native dirs, no quantize, no "
                          "band gate, palette lock waived, pennant-only "
                          "recolor already applied; committed provenance "
-                         "ledger carries the pixellab manifest object ids")
+                         "ledger carries the pixellab manifest object ids "
+                         "(RETIRED for hulls by the 2026-11-07 top-down "
+                         "amendment — kept for history/re-ingest)")
+    ap.add_argument("--import-ships-north", nargs="?", const="auto",
+                    metavar="RAW_ROOT",
+                    help="ingest the top-down north hull tokens (80-* §4.8 "
+                         "2026-11-07): one owner-less tier-sized north file "
+                         "per ship, raw 1:1, no quantize, committed "
+                         "provenance ledger; RAW_ROOT is the "
+                         "pixellab_topdown tree (default "
+                         "tools/ui_art/model_raw/pixellab_topdown)")
     ap.add_argument("--import-icons", metavar="SRC_DIR", nargs="+",
                     help="ingest the model-pass snapped icons (64-grid "
                          "RGBA) from one or more SRC_DIRs (later dirs win "
@@ -3127,18 +3506,25 @@ def main() -> None:
     ap.add_argument("--import-fx-pixellab", nargs="?", const="auto",
                     metavar="RAW_ROOT",
                     help="ingest the PixelLab waterline VFX family verbatim "
-                         "(80-* §4.8 2026-11-07): behind/front sheets + "
-                         "fx_waterline.json + provenance ledger; RAW_ROOT "
-                         "holds <dir>_pro/ raw dirs (default "
-                         "tools/ui_art/model_raw/pixellab_vfx/v3)")
+                         "(80-* §4.8 2026-11-07): v4 = the per-size north "
+                         "family (back/front sheets + fx_waterline.json + "
+                         "provenance ledger; RAW_ROOT default "
+                         "tools/ui_art/model_raw/pixellab_vfx/v4); with "
+                         "--fx-legacy the superseded per-dir v3 family "
+                         "(RAW_ROOT default .../v3)")
+    ap.add_argument("--fx-legacy", action="store_true",
+                    help="with --import-fx-pixellab: ingest the RETIRED "
+                         "per-dir v3 waterline family instead of v4")
     args = ap.parse_args()
     modes = [args.check, args.contact_sheet, args.import_ships,
              args.import_icons, args.import_terrain,
-             args.import_ships_pixellab, args.import_fx_pixellab]
+             args.import_ships_pixellab, args.import_ships_north,
+             args.import_fx_pixellab]
     if sum(1 for m in modes if m) > 1:
         fail("--check, --contact-sheet, --import-ships, --import-icons, "
-             "--import-terrain, --import-ships-pixellab and "
-             "--import-fx-pixellab are mutually exclusive modes")
+             "--import-terrain, --import-ships-pixellab, "
+             "--import-ships-north and --import-fx-pixellab are mutually "
+             "exclusive modes")
     if args.check:
         run_check()
         return
@@ -3151,12 +3537,25 @@ def main() -> None:
     if args.import_ships_pixellab:
         run_import_mode(Path(args.import_ships_pixellab), raw=True)
         return
+    if args.import_ships_north:
+        root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_topdown")
+        if args.import_ships_north != "auto":
+            root = Path(args.import_ships_north)
+        run_import_north_mode(root)
+        return
     if args.import_fx_pixellab:
+        if args.fx_legacy:
+            root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_vfx"
+                    / "v3")
+            if args.import_fx_pixellab != "auto":
+                root = Path(args.import_fx_pixellab)
+            run_import_fx_mode(root)
+            return
         root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_vfx"
-                / "v3")
+                / "v4")
         if args.import_fx_pixellab != "auto":
             root = Path(args.import_fx_pixellab)
-        run_import_fx_mode(root)
+        run_import_fx_v4_mode(root)
         return
     if args.import_icons:
         run_import_icons_mode([Path(p) for p in args.import_icons])

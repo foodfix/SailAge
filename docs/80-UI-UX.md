@@ -2104,6 +2104,102 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      bumped re-roll (user-capped) → ingest via
      `build_ui_art --import-ships-pixellab` (8 native dirs; mirror
      derivation skipped for pixellab tokens).
+     **[2026-11-07 amendment note: the view, envelope, direction
+     scheme and file grid of this block are SUPERSEDED by the
+     top-down hull token amendment below; the pennant scheme, the
+     ship-as-drawn raw rule, the raw-output/API-key handling and
+     the owner-fallback mechanism carry over as re-pinned there.]**
+
+     **Top-down hull tokens (amended 2026-11-07, user direction —
+     the 45°-oblique "high top-down" hulls proved too hard for the
+     model to hold consistent across 8 directions, so the family
+     moves to ONE straight-overhead token per ship, rotated at
+     runtime; SUPERSEDES for hulls the 2026-11-06 hull-backend
+     amendment's view/envelope/direction/file-grid parts):**
+     `tools/pixellab_pass.py --topdown` generates hull tokens via
+     `POST /v2/generate-image-v2` (Pro; async background job,
+     polled to completion; per-call ~$0.008 at the pinned sizes).
+     **Envelope, pinned verbatim — exactly four fields, never a
+     style_image or reference_images:** `{"description",
+     "image_size": {S, S}, "no_background": true, "seed": 91000}`
+     with S from the ship's tier (below). The endpoint has no
+     view/direction parameters — camera and facing live in the
+     prompt text. **Canvas = tier table (pinned):** tier 1 (latin,
+     sloop, galiot, pinnace) → 32×32; tier 2 (caravel, galley,
+     brigantine, fluyt, junk, dhow, caravela_redonda, xebec) →
+     48×48; tier 3 (nao, carrack, galleon, galleass) → 64×64
+     (4/8/4 ships; size derived from `tier` in
+     `data/ship_types.json` — no new data field). **Identity
+     prefix:** unchanged (`{Name-en} sailing ship, {rig}` from
+     `tools/ui_art/hulls/rig.json`, oar clause included). **Shared
+     style suffix, pinned verbatim (the 16-ship consistency
+     anchor; overhead rewrite of the 2026-11-06 suffix):**
+     `wooden sailing ship seen from directly overhead, straight
+     top-down bird's-eye view, hull axis vertical with the bow
+     pointing to the top edge of the canvas, dense multi-strake
+     planking bands in several wood tones, dark gunwale, gold trim
+     line along the sheer, gunport row with tiny dark ports along
+     the hull sides, stern cabin with small lit windows, sails
+     spread under way and clearly visible from above with two
+     shading bands and one bright highlight arc each, thin dark
+     rigging ropes to bowsprit and hull, small red pennant at the
+     mainmast top, retro 16-bit sailing ship sprite in the style
+     of classic 1990s naval adventure games like Uncharted Waters
+     2 / New Horizons, dark 1-pixel silhouette outline,
+     transparent background.` (preceded by the identity prefix,
+     comma-joined). **Ship-as-drawn rule:** tokens ship RAW 1:1 —
+     no resize, no quantize; the model's native S×S deliberate
+     pixels are the shipped pixels; gates = canvas fit (exact
+     S×S) + provenance ledger (job id + seed + description hash);
+     the hull may sit anywhere sensible on its canvas — exact
+     hull-centering is a review-sheet property, NOT a validator
+     gate (the runtime keys on canvas center, see below).
+     **Pennant scheme:** unchanged from 2026-11-06 (ship-as-drawn;
+     the same bytes ship for every owner; per-owner shadowing
+     reserved for a future amendment). **File grid:** the family
+     ships ONE owner-less north file per ship
+     (`assets/ui/tokens/hull_{ship}.png`, 16 files; the six
+     `facility_*` tokens are untouched). The runtime resolves an
+     owner id `hull_{ship}_{owner}` whose per-owner file is absent
+     onto the shared file through the registry — the dir segment
+     disappears from every hull id. **Runtime rotation map
+     (pinned, clockwise degrees in screen y-down):** n 0, ne 45,
+     e 90, se 135, s 180, sw 225, w 270, nw 315 — the heading8
+     dir id (§4.8.6, unchanged as the heading authority) selects
+     the rotation; Godot rotates the token with the **NEAREST**
+     filter (crisp pixels, no smoothing) — no baked direction
+     variants. **World-map draw rule:** the token draws at its
+     native canvas size, centered in the 64 px cell — offsets from
+     the cell origin are 32→(16,16), 48→(8,8), 64→(0,0), all even,
+     so the token center equals the cell center at every size and
+     rotation never drifts off-center; tier size contrast is real
+     on the map (t1 ships are genuinely half a t3's canvas).
+     **Whole-sandwich rotation:** the FxBack → hull → FxFront
+     waterline sandwich rotates as one unit around the token
+     center; hull letters, fleet badges and NPC role chips are
+     NOT rotated (they live in the unrotated marker/badge layer).
+     **Battle screen:** token draws at 0.5 × native canvas (t3→32
+     px on the 32 px tile — unchanged from today; t2→24, t1→16)
+     with the same rotation map; roster keeps its 32 px
+     keep-aspect box on the north token. Raw north tokens live
+     gitignored under
+     `tools/ui_art/model_raw/pixellab_topdown/<label>/`
+     with a manifest recording job id/seed/description
+     (re-download without re-generation); **raw model output is
+     never committed** (§9.2); API key handling unchanged
+     (gitignored `tools/pixellab_config.json`, env
+     `PIXELLAB_API_KEY` overrides). Fleet acceptance flow:
+     per-ship user review of the north token (+ a rotation
+     preview) → reject = one seed-bumped re-roll (user-capped) →
+     ingest via `build_ui_art --import-ships-pixellab`, which also
+     removes any stale dir-suffixed files. **Retired by this
+     amendment:** the `"high top-down"` Pro-Flash hull envelope
+     and its `n_directions: 8` generation, the
+     `hull_{ship}_{dir}` / `hull_{ship}_{owner}_{dir}` ids, the
+     128-file 8-dir grid and the per-dir waterline sheets (see the
+     same-day VFX revision below). The 2026-11-06 identity
+     prefix, pennant scheme, raw rules and coast-tileset work are
+     NOT retired.
 
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
@@ -2343,6 +2439,47 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      from — the hull token itself always shows. Letter-square fallbacks
      and docked fleets wear neither sheet; render-only, the day-tick
      budget is untouched. Battle-screen hulls (60-*) are out of scope.
+     **Top-down VFX revision (amended 2026-11-07, same day, user
+     direction — SUPERSEDES the per-dir family above; ships rotate at
+     runtime, so the wake must rotate with them):** the family
+     regenerates as ONE north family per size —
+     `fx_waterline_{back,front}_{size}` (size ∈ {32,48,64}),
+     `assets/ui/fx/fx_waterline_{back,front}_{size}.png` plus the
+     committed frame table `assets/ui/fx/fx_waterline.json` keyed per
+     size (canvas w×h, frame count, fps, loop, `meta.anchor`; sheets
+     draw the anchor on the hull token center; canvases may exceed
+     both the hull canvas and the 64 px cell and spill into
+     neighbouring cells on the overlay layers — BACK z = −2 — as the
+     per-dir sheets already did). **Generation:** 3 `/v2/vfx` calls
+     total (one per size); envelope unchanged (four fields) with
+     `sprite` = the representative north token per size — galleass
+     64×64, caravel 48×48, latin 32×32
+     (`assets/ui/tokens/hull_{galleass,caravel,latin}.png`) — and
+     `name: waterline-v4-north-{size}-pro`. **v4 description of
+     record:** the v3 template verbatim with two substitutions: the
+     opening clause reads `Waterline VFX around this straight
+     top-down (directly from above) 16-bit pixel-art sailing ship
+     sprite` and {MOTION} is pinned to the single value `north (up
+     on screen)` (the runtime rotation turns the whole sandwich, so
+     only the north family ever exists). Everything else in the v3
+     template (forbidden rings, foam hexes, calm-seas clause, the two
+     disclosed trims) is unchanged and stays pinned. Raw output
+     gitignored under `tools/ui_art/model_raw/pixellab_vfx/v4/<size>_pro/`
+     (sheets + game pack + `response.json` carrying
+     `effect_id`/`conversation`/quote — retries are discounted
+     change-calls; re-download without re-generation); **raw model
+     output is never committed**. **Ingest/runtime:**
+     `build_ui_art --import-fx-pixellab` copies the sheets verbatim,
+     template-matches each size's anchor and rewrites the frame
+     table; the runtime lookup keys on (size, back/front) and the
+     sheet rotates together with the hull sandwich around the token
+     center (the light source follows the rotation — accepted user
+     direction). The per-dir files
+     `fx_waterline_{back,front}_{dir}.png` and their frame entries
+     retire from `assets/ui/fx/`. Visible-while-moving, the shared
+     clock with per-fleet phase offset, letter-square/docked
+     exclusions and the §4.5.2 trail separation are all unchanged;
+     battle-screen hulls remain out of scope.
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through

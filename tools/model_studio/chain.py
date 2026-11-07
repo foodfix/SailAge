@@ -1296,6 +1296,104 @@ def px_generate(label: str, description: str, seed: int,
     }
 
 
+# ------------------------- top-down north ship family (§4.8 2026-11-07) --
+# The studio's top-down path drives tools/pixellab_pass.py --topdown
+# IN-PROCESS: ONE straight-overhead north token per ship (canvas = tier
+# size), ship-as-drawn — no band/pennant gates (all retired). The runtime
+# rotates the token; the card previews the 8 rotations (PIL NEAREST — the
+# same resampling family the game pins).
+
+def td_dir():
+    return os.path.join(RAW, "pixellab_topdown")
+
+
+def td_manifest() -> dict:
+    path = os.path.join(td_dir(), "pixellab_topdown.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def td_labels() -> list[str]:
+    root = td_dir()
+    out = set(td_manifest().keys())
+    try:
+        for name in sorted(os.listdir(root)):
+            if os.path.isdir(os.path.join(root, name)):
+                out.add(name)
+    except OSError:
+        pass
+    return sorted(out)
+
+
+def td_ship_of(label: str) -> str:
+    rec = td_manifest().get(label) or {}
+    ship = rec.get("ship")
+    return str(ship) if ship else label
+
+
+def td_default_prompt(label: str) -> str:
+    """The pinned per-ship descriptor + overhead style suffix — the
+    free-text edit base. Failure falls back to the manifest's recorded
+    description (what actually produced the accepted art)."""
+    try:
+        mod = _px_mod()
+        p = mod._desc_topdown(td_ship_of(label))
+        if p and p.strip():
+            return p.strip()
+    except Exception as exc:  # noqa: BLE001 — manifest fallback below
+        print(f"[studio-chain] td default prompt failed for {label} "
+              f"({type(exc).__name__}: {exc}); manifest fallback",
+              flush=True)
+    rec = td_manifest().get(label) or {}
+    return str(rec.get("description")
+               or f"{td_ship_of(label)} sailing ship")
+
+
+def td_north_path(label: str) -> str:
+    return os.path.join(td_dir(), label, "snapped", "north.png")
+
+
+def td_exists(label: str) -> bool:
+    return os.path.isdir(os.path.join(td_dir(), label))
+
+
+def td_fleet_labels() -> list[str]:
+    """Labels with generation state (≥1 snapped north token) — the
+    ingestible fleet."""
+    return [lab for lab in td_labels()
+            if os.path.isfile(td_north_path(lab))]
+
+
+def td_generate(label: str, description: str, seed: int,
+                on_stage=None) -> dict:
+    """One top-down ship job: generate (free-text description + seed) ->
+    snap passthrough (byte-identical north token). ~20-60 s of API time;
+    the studio worker runs jobs serially so that is fine."""
+    t0 = time.time()
+    stage = on_stage or (lambda _s: None)
+    mod = _px_mod()
+    ship = td_ship_of(label)
+    stage("posting")
+    rec = mod.run_topdown(ship, label=label, description=description,
+                          seed=seed,
+                          poll_status=lambda s: stage(f"render:{s}"))
+    stage("snapping")
+    mod.snap_topdown(label)
+    ok = os.path.isfile(td_north_path(label))
+    return {
+        "status": "done" if ok else "partial",
+        "job_id": rec.get("job_id"),
+        "seed": seed,
+        "size": rec.get("size"),
+        "description": description,
+        "seconds": round(time.time() - t0, 1),
+    }
+
+
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     """(family, subject, dir) for all shapes the store has used:
     - px_<label>         pixellab ship jobs (the §4.8 2026-11-06 family)
@@ -1306,6 +1404,8 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     Unknown shapes raise KeyError (callers guard per job)."""
     if job_id.startswith("px_"):
         return "pxship", job_id[len("px_"):], None
+    if job_id.startswith("td_"):
+        return "topdown", job_id[len("td_"):], None
     if job_id.startswith("sheet_"):
         return "sheet", job_id[len("sheet_"):], None
     if job_id.startswith("hull_"):

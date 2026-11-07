@@ -416,8 +416,11 @@ static func icon_texture(id: String) -> Texture2D:
 		return _textures.get(id) as Texture2D
 	if _token_loader.is_valid():
 		var tex := _token_loader.call(id) as Texture2D
-		if tex != null:
-			_textures[id] = tex
+		# Misses cache too (the top-down amendment made misses common —
+		# a dir-less owner id probing the fallback chain, fx sizes absent
+		# until ingest): a miss is a miss for the session; the file-swap
+		# pin is file replace + RESTART, and `clear_textures` re-seeds.
+		_textures[id] = tex
 		return tex
 	return null
 

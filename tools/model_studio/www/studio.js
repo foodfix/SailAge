@@ -12,6 +12,7 @@ const CAPTIONS = {
   coast: { draft: "shipped ledger strip (16 tiles)", raw: "re-roll strip",
            snapped: "wang mock preview · live map crop" },
   pxship: { strip: "8 native rotations · ship-as-drawn" },
+  topdown: { strip: "one north token · runtime rotation preview" },
   hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   sheet: { draft: "draft sheet (5 views)", raw: "raw sheet", snapped: "w crop 64" },
   icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
@@ -21,7 +22,12 @@ const CAPTIONS = {
 
 // compass order for the pixellab strip cells
 const PX_DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+// the top-down strip: the same compass order with the pinned rotation
+// degrees (80-* §4.8 2026-11-07 — clockwise, screen y-down)
+const TD_ROTATIONS = [["n", 0], ["ne", 45], ["e", 90], ["se", 135],
+  ["s", 180], ["sw", 225], ["w", 270], ["nw", 315]];
 const isPx = (job) => job && job.family === "pxship";
+const isTd = (job) => job && job.family === "topdown";
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -37,7 +43,8 @@ function thumbURL(job, kind) {
 }
 
 function bandBadge(job) {
-  if (job.family === "pxship" || job.family === "coast") {
+  if (job.family === "pxship" || job.family === "topdown"
+      || job.family === "coast") {
     return "";  // no band gates on raw ships / tilesets
   }
   if (!job.band) return '<span class="badge">band —</span>';
@@ -132,17 +139,23 @@ function buildCard(job) {
   head.className = "card-head";
   head.innerHTML = headHTML(job);
   const isPx = job.family === "pxship";
+  const isTdCard = job.family === "topdown";
   let thumbs, strip = null;
-  if (isPx) {
-    // the pixellab ship strip: one cell per heading8 dir (the raw
-    // generation IS the art — no draft/raw/snapped trio, no gates)
+  if (isPx || isTdCard) {
+    // the pixellab/top-down ship strip: one cell per heading8 dir (the
+    // raw generation IS the art — no draft/raw/snapped trio, no gates);
+    // the top-down cells preview the runtime rotation of ONE north token
     strip = document.createElement("div");
     strip.className = "pxstrip";
-    for (const dir of PX_DIRS) {
+    const cells = isTdCard ? TD_ROTATIONS.map(([d, deg]) => [d, deg])
+                           : PX_DIRS.map((d) => [d, null]);
+    for (const [dir, deg] of cells) {
       const cell = document.createElement("div");
       cell.className = "thumb pxcell";
       cell.dataset.dir = dir;
-      cell.innerHTML = `<img alt="${dir}"><div class="cap">${dir}</div>`;
+      cell.innerHTML = `<img alt="${dir}"${deg === null
+        ? "" : ` style="image-rendering:pixelated;transform:rotate(0deg)"`}`
+        + `<div class="cap">${dir}${deg === null ? "" : " " + deg + "°"}</div>`;
       const img = $("img", cell);
       img.addEventListener("error", () => { cell.classList.add("missing"); });
       strip.appendChild(cell);
@@ -306,7 +319,7 @@ function visible(job) {
   if (filter === "all") return true;
   if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
   if (filter === "terrain") return job.family === "terrain" || job.family === "coast";
-  if (filter === "hull") return isPx(job);
+  if (filter === "hull") return isPx(job) || isTd(job);
   return job.family === filter;
 }
 
@@ -372,14 +385,18 @@ function updateCard(job) {
   els.ta.readOnly = sup;
   els.head.innerHTML = headHTML(job);
   // thumbs + captions (mirror note when serving the flipped base dir)
-  if (isPx(job)) {
-    // the pixellab strip: per-dir cells, snapped preferred (what ships)
-    for (const dir of PX_DIRS) {
+  if (isPx(job) || isTd(job)) {
+    // the pixellab strip: per-dir cells, snapped preferred (what ships);
+    // the top-down strip: per-degree rotation previews of ONE north token
+    for (const [dir, deg] of isTd(job)
+         ? TD_ROTATIONS : PX_DIRS.map((d) => [d, null])) {
       const cell = root.querySelector(`.pxcell[data-dir="${dir}"]`);
       if (!cell) continue;
       const r = (job.rotations || []).find(x => x.dir === dir);
       const url = r && r.v
-        ? `/thumb/px/${job.subject}/${dir}.png?v=${r.v}` : null;
+        ? (isTd(job)
+           ? `/thumb/td/${job.subject}/${deg}.png?v=${r.v}`
+           : `/thumb/px/${job.subject}/${dir}.png?v=${r.v}`) : null;
       if (url) {
         cell.classList.remove("missing");
         const img = $("img", cell);
@@ -430,12 +447,17 @@ function updateCard(job) {
 async function refreshJobs() {
   try {
     const data = await api("/api/jobs");
-    // pixellab ships lead the list, then icon group sheets, then the rest
-    const rank = (f) => (f === "pxship" ? 0 : f === "iconsheet" ? 1 : 2);
+    // top-down ships lead the list, then pixellab ships, then icon group
+    // sheets, then the rest
+    const rank = (f) => (f === "topdown" ? 0 : f === "pxship" ? 1
+                         : f === "iconsheet" ? 2 : 3);
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `coast ${data.counts.coast || 0} · ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
+      `coast ${data.counts.coast || 0} · top-down ${data.counts.topdown || 0}`
+      + ` · ships ${data.counts.pxship || 0} · icons ${data.counts.icon}`
+      + ` + ${data.counts.iconsheet || 0} sheets — flagged`
+      + ` ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;

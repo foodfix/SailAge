@@ -2645,11 +2645,14 @@ func _place_pirate(world, id: String, cell: Vector2i) -> void:
 # --- Waterline VFX (80-* §4.8 2026-11-07) -----------------------------------
 
 ## The fleet token's waterline sheets on a booted world: the sandwich nodes
-## exist under FleetMarker/Token, the committed geometry applies for the
-## fleet's heading dir, and the speed gate drives visibility (speed > 0
-## shows both sheets). The NPC record contract pins the `moving` flag as
-## the gate (the §4.5.2 predicate). One boot + one re-fixture — the frame
-## math lives in tools/test_waterline_fx.gd.
+## exist under FleetMarker/Token (children of the rotating holder), the
+## committed geometry applies for the flagship's tier SIZE (the canvas
+## width), and the speed gate drives visibility (speed > 0 shows both
+## sheets). The NPC record contract pins the `moving` flag as the gate
+## (the §4.5.2 predicate) and the sheets parented to the rotating token.
+## One boot + one re-fixture — the frame math lives in
+## tools/test_waterline_fx.gd. The geometry/visibility pins need the v4
+## family ingested (the W5 gate).
 func _test_waterline_fx() -> void:
 	var fxlib := preload("res://scripts/world/waterline_fx.gd")
 	# Production registers the texture registry at the title screen; this
@@ -2658,7 +2661,7 @@ func _test_waterline_fx() -> void:
 	preload("res://scripts/ui/texture_registry.gd").ensure_registered()
 	_make_run("fair", ["caravel"])
 	GameState.world["position"] = {"x": OPEN_CELL.x, "y": OPEN_CELL.y}
-	GameState.world["heading"] = "e"
+	GameState.world["heading"] = "n"
 	var host := Node2D.new()
 	add_child(host)
 	var world = WorldScene.instantiate()
@@ -2666,46 +2669,59 @@ func _test_waterline_fx() -> void:
 	world.route_to_battle = false
 	host.add_child(world)
 	_clear_dialogs(world)
+	var holder := world.get_node_or_null("FleetMarker/Token") as Control
 	var back := world.get_node_or_null(
 		"FleetMarker/Token/FxBack") as TextureRect
 	var front := world.get_node_or_null(
 		"FleetMarker/Token/FxFront") as TextureRect
-	_check(back != null and front != null,
-		"the player token carries the FxBack/FxFront sandwich nodes")
-	if back != null and front != null:
+	_check(holder != null and back != null and front != null
+		and back.get_parent() == holder and front.get_parent() == holder,
+		"the player token carries the FxBack/FxFront sandwich under the "
+			+ "rotating holder")
+	_check(holder != null
+		and holder.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST,
+		"the token holder pins the NEAREST filter (the rotation crispness "
+			+ "pin)")
+	var size := int(world._token_size)
+	_check(size == 0 or fxlib.has(size),
+		"the resolved flagship tier size is in the committed table "
+			+ "(caravel → 48)")
+	if back != null and front != null and size > 0 and fxlib.has(size):
 		var speed := SailingSimLib.effective_speed()
 		world._tick_waterline_fx(0.016)
 		_check(back.visible == (speed > 0) and front.visible == (speed > 0),
 			"fx visibility == (effective_speed %d > 0) on the booted token"
 				% speed)
 		if speed > 0:
-			_check(back.position == fxlib.layer_offset_px("e", "back",
-					world._cell_pixels),
-				"FxBack sits at anchor+offset scaled to the cell")
-			_check(back.size == fxlib.layer_size_px("e", "back",
-					world._cell_pixels),
-				"FxBack size == frame px scaled to the cell")
+			_check(back.position == world._token_sprite.position
+					+ fxlib.layer_offset_px(size, "back"),
+				"FxBack sits at token box + anchor+offset (native scale)")
+			_check(back.size == fxlib.layer_size_px(size, "back"),
+				"FxBack size == frame px (native scale)")
 			var atlas := back.texture as AtlasTexture
 			_check(atlas != null and atlas.atlas != null
-				and atlas.region.size == fxlib.layer_size_px("e", "back",
-					64.0),
-				"FxBack texture is the shared sheet atlas (unscaled region)")
+				and atlas.region.size == fxlib.layer_size_px(size, "back"),
+				"FxBack texture is the shared sheet atlas (native region)")
 	# The NPC record contract: `moving` (the marker's `sailing` flag) gates
-	# the sandwich; the hull-token presence gates the record's existence.
+	# the sandwich; the hull-token presence gates the record's existence;
+	# the sheets live under the (rotating) HullToken node.
 	var square := ColorRect.new()
 	square.size = Vector2(world._cell_pixels, world._cell_pixels) * 0.7
+	var token := TextureRect.new()
+	token.name = "HullToken"
+	square.add_child(token)
 	var root := world.get_node_or_null("FleetMarkers")
 	(root if root != null else world).add_child(square)
-	world._sync_marker_fx(square, "npc_fx_fixture", "e", true, false)
-	var npc_back := square.get_node_or_null("FxBack") as TextureRect
+	world._sync_marker_fx(square, "npc_fx_fixture", 48, true, false)
+	var npc_back := token.get_node_or_null("FxBack") as TextureRect
 	_check(npc_back != null and not npc_back.visible,
 		"NPC fx hidden while the marker is not sailing")
-	world._sync_marker_fx(square, "npc_fx_fixture", "e", true, true)
+	world._sync_marker_fx(square, "npc_fx_fixture", 48, true, true)
 	world._tick_waterline_fx(0.016)
 	_check(npc_back != null and npc_back.visible
-		and (square.get_node("FxFront") as TextureRect).visible,
+		and (token.get_node("FxFront") as TextureRect).visible,
 		"NPC fx visible while the marker sails")
-	world._sync_marker_fx(square, "npc_fx_fixture", "e", false, true)
+	world._sync_marker_fx(square, "npc_fx_fixture", 48, false, true)
 	_check(npc_back != null and not npc_back.visible,
 		"NPC fx hidden when no hull token resolves (square fallback)")
 	host.queue_free()

@@ -359,11 +359,14 @@ func _test_ingested_token_flips() -> void:
 		return
 	var derived: Dictionary = derived_v
 	var raw_px: bool = String(doc_v.get("generated_by", "")).contains("pixellab")
-	if raw_px:
-		# 80-* §4.8 (2026-11-06): the pixellab hull family ships all 8
-		# native rotations — no mirror-derived pairs exist by design; the
-		# flip pin applies only to the classic 5+3 ingestion.
-		_check(true, "raw pixellab ingest: 8 native dirs, no derived pairs")
+	var north_px: bool = String(doc_v.get("generated_by", "")) \
+		.contains("import-ships-north")
+	if raw_px or north_px:
+		# 80-* §4.8 (2026-11-06 + the 2026-11-07 top-down amendment): the
+		# pixellab hull families ship native rotations / one native north
+		# token — no mirror-derived pairs exist by design; the flip pin
+		# applies only to the classic 5+3 ingestion.
+		_check(true, "model-pass ingest: native tokens, no derived pairs")
 		return
 	var pairs := 0
 	var all_flip := true
@@ -414,7 +417,7 @@ func _test_token_raw_bytes_load() -> void:
 	TextureRegistryLib._reset_for_tests()
 	UiKitLib.clear_textures()
 	TextureRegistryLib.ensure_registered()
-	var id := "hull_galleon_player_e"
+	var id := "hull_galleon_player"
 	var token_tex := UiKitLib.icon_texture(id)
 	_check(token_tex != null,
 		"a token id resolves through the lazy raw-byte loader")
@@ -423,11 +426,11 @@ func _test_token_raw_bytes_load() -> void:
 		return
 	_check(token_tex is ImageTexture,
 		"the token texture is a runtime ImageTexture (raw decode, not an imported CompressedTexture2D)")
-	# Raw dedupe (80-* §4.8 2026-11-06): the owner id falls back onto the
-	# SHARED owner-less file — its pixels are the expected bytes, and the
-	# shared id plus every other owner resolve to the SAME texture object
-	# (one VRAM copy per ship × dir).
-	var shared_id := "hull_galleon_e"
+	# North dedupe (80-* §4.8 2026-11-07 top-down amendment): the owner id
+	# falls back onto the SHARED owner-less file — its pixels are the
+	# expected bytes, and the shared id plus every other owner resolve to
+	# the SAME texture object (one VRAM copy per ship).
+	var shared_id := "hull_galleon"
 	var expected := Image.new()
 	var bytes := FileAccess.get_file_as_bytes(
 		"res://assets/ui/tokens/%s.png" % shared_id)
@@ -446,8 +449,8 @@ func _test_token_raw_bytes_load() -> void:
 	_check(UiKitLib.icon_texture(id) == token_tex,
 		"the second resolve returns the SAME texture (the one id cache)")
 	_check(UiKitLib.icon_texture(shared_id) == token_tex,
-		"the shared owner-less id resolves to the SAME texture (raw-dedupe VRAM pin)")
-	_check(UiKitLib.icon_texture("hull_galleon_pirate_e") == token_tex,
+		"the shared owner-less id resolves to the SAME texture (north VRAM pin)")
+	_check(UiKitLib.icon_texture("hull_galleon_pirate") == token_tex,
 		"another owner id resolves onto the shared texture (owner fallback, one ImageTexture)")
 	_check(UiKitLib.icon_texture("kit_absent_icon") == null,
 		"an unknown id stays null under the loader (flat fallback, unchanged)")

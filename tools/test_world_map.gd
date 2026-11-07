@@ -1309,9 +1309,10 @@ func _test_token_heading_follows_steps() -> void:
 	_check(str(GameState.world["heading"]) == "W",
 		"a step-mode step records its own delta heading (got %s)"
 			% str(GameState.world["heading"]))
-	_check(world._token_dir == "w",
-		"the player token faces the recorded movement heading (got %s)"
-			% str(world._token_dir))
+	_check(world._token_sprite.get_parent().rotation_degrees
+		== ArrowFieldLib.rotation_degrees_of_dir("w"),
+		"the player token rotation follows the recorded movement heading "
+			+ "(got %s)" % str(world._token_sprite.get_parent().rotation_degrees))
 	world.release_direction("move_w")
 	world.queue_free()
 	await get_tree().process_frame
@@ -1621,8 +1622,9 @@ func _test_npc_path_playback() -> void:
 
 # --- NPC hull tokens + role chips (80-* §4.8 amendment 3d2a7d21) -----------
 
-## A sailing NPC fleet renders the 8-dir hull token (`hull_{type}_{owner}_{dir}`
-## — flagship type, nation pennant, movement-heading dir) with the demoted
+## A sailing NPC fleet renders the tier-sized north hull token
+## (`hull_{type}_{owner}` — owner fallback → the shared file, rotated to the
+## movement heading per the 2026-11-07 top-down amendment) with the demoted
 ## §4.5.2 letter square as a ~6px corner role chip; a fleet whose
 ## type/owner/heading does not resolve (docked, legacy data, registry miss)
 ## keeps the coloured letter square, exactly as before.
@@ -1680,13 +1682,15 @@ func _test_npc_hull_tokens() -> void:
 		if square != null else null
 	var chip: ColorRect = square.get_node_or_null("Chip") \
 		if square != null else null
-	var want_id := "hull_%s_%s_%s" % [ship_type, NpcFleetsLib.marker_owner(
-			str(entry["role"]), str(entry["nation_id"])),
-		ArrowFieldLib.dir_id_of_heading(heading)]
+	var want_id := "hull_%s_%s" % [ship_type, NpcFleetsLib.marker_owner(
+		str(entry["role"]), str(entry["nation_id"]))]
 	_check(token != null and token.visible and token.texture != null
 		and token.texture == UiKitLib.icon_texture(want_id),
-		"the sailing fleet renders the §4.8 hull token for its heading (%s)"
-			% want_id)
+		"the sailing fleet renders the §4.8 north hull token (%s)" % want_id)
+	_check(token != null and token.rotation_degrees
+		== ArrowFieldLib.rotation_degrees_of_dir(
+			ArrowFieldLib.dir_id_of_heading(heading)),
+		"the token rotation follows the pinned top-down map")
 	_check(chip != null and chip.visible
 		and chip.size == Vector2.ONE * world.NPC_ROLE_CHIP_PX
 		and chip.color == NpcFleetsLib.marker_color(
@@ -1701,8 +1705,9 @@ func _test_npc_hull_tokens() -> void:
 		and not (square.get_node("Letter") as Label).visible,
 		"the §4.5.2 letter square is demoted under the token (transparent)")
 	# (c) heading flip: teleporting the fleet far from its leg re-derives the
-	# heading, and the token follows the new dir on the next sync.
-	var before_id := want_id
+	# heading, and the token's rotation follows the new dir on the next sync
+	# (the id itself is heading-independent under the north scheme).
+	var before_degrees := token.rotation_degrees
 	NpcFleetsLib.set_position(fleet, HELM_CELL + Vector2i(-300, 5))
 	world._sync_marker_nodes()
 	var entry2: Dictionary = {}
@@ -1711,12 +1716,12 @@ func _test_npc_hull_tokens() -> void:
 			entry2 = marker
 	var heading2 := str(entry2.get("heading", ""))
 	_check(not heading2.is_empty(), "the teleported fleet still reports a heading")
-	var want_id2 := "hull_%s_%s_%s" % [ship_type, NpcFleetsLib.marker_owner(
-			str(entry2["role"]), str(entry2["nation_id"])),
-		ArrowFieldLib.dir_id_of_heading(heading2)]
-	_check(token.texture == UiKitLib.icon_texture(want_id2)
-		and (heading2 == heading or want_id2 != before_id),
-		"the token dir follows the re-derived heading after the teleport")
+	_check(token.texture == UiKitLib.icon_texture(want_id)
+		and (heading2 == heading
+			or token.rotation_degrees != before_degrees
+				and token.rotation_degrees == ArrowFieldLib.rotation_degrees_of_dir(
+					ArrowFieldLib.dir_id_of_heading(heading2))),
+		"the token rotation follows the re-derived heading after the teleport")
 	# (d) the square fallback: a fleet whose token cannot resolve — no
 	# heading (docked/idle), an ownerless nation — keeps the §4.5.2 letter
 	# square unchanged (the registry-miss case resolves through the same

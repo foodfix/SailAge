@@ -8677,6 +8677,10 @@ G13_TIER_BANDS = {1: (28, 36), 2: (40, 52), 3: (52, 60)}
 # truth); a source already authored at 64 (sea_pattern) ships 1:1.
 G13_CANVAS_64 = 64
 
+# The top-down canvas = tier table (80-* §4.8 2026-11-07): one north token
+# per ship at its tier's canvas, runtime-rotated.
+G13_NORTH_TIER_SIZE = {1: 32, 2: 48, 3: 64}
+
 # §4.8 hull block, amended 2026-11-04 (the shared-hull pennant scheme): the
 # owner rides ONLY the masthead pennant — the authored maps carry the source
 # hex below and the governor remaps it to the owner's pennant value; wood/
@@ -9206,7 +9210,9 @@ def _g13_vfx_ledger() -> dict:
         doc = json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
-    if not isinstance(doc.get("dirs"), dict) or not doc["dirs"]:
+    group = doc.get("sizes") if int(doc.get("version", 1)) >= 2 \
+        else doc.get("dirs")
+    if not isinstance(group, dict) or not group:
         return {}
     return doc
 
@@ -9214,8 +9220,10 @@ def _g13_vfx_ledger() -> dict:
 def _g13_check_vfx_family(sprites: dict) -> None:
     """The waterline VFX family audit (80-* §4.8 2026-11-07; group 13):
     ledger ↔ committed sheets (sha256), the committed frame table's
-    contract (8 dirs × back/front, 8 uniform frames, loop, anchor in the
-    64 box), and each sheet's decode dims against its frame grid."""
+    contract, and each sheet's decode dims against its frame grid.
+    v1 (superseded same day): 8 dirs × back/front, anchor in the 64 box.
+    v2 — the top-down revision: ONE north family per ship size
+    {32, 48, 64} × back/front, anchor in the size's token box."""
     ledger = _g13_vfx_ledger()
     if not ledger:
         fail("vfx-ledger", "pixellab_vfx_ledger.json",
@@ -9236,14 +9244,25 @@ def _g13_check_vfx_family(sprites: dict) -> None:
     except ValueError as exc:
         fail("vfx-table", "fx_waterline.json",
              f"not valid JSON ({exc})", 13)
-    dirs = table.get("dirs", {})
-    if sorted(dirs) != sorted(ledger.get("dirs", {})):
+    v2 = int(ledger.get("version", 1)) >= 2
+    if v2 and int(table.get("version", 0)) < 2:
+        fail("vfx-table", "fx_waterline.json",
+             "the v2 (per-size) ledger needs the v2 per-size frame table", 13)
+    ledger_keys = sorted(ledger.get("sizes", {}) if v2
+                         else ledger.get("dirs", {}))
+    groups = table.get("sizes", {}) if int(table.get("version", 0)) >= 2 \
+        else table.get("dirs", {})
+    if sorted(groups) != ledger_keys:
         fail("vfx-ledger", "fx_waterline.json",
-             "table dirs != ledger dirs", 13)
-    if len(dirs) != 8:
+             "table keys != ledger keys", 13)
+    if v2 and sorted(groups) != ["32", "48", "64"]:
         fail("vfx-ledger", "fx_waterline.json",
-             f"expected 8 dirs, table has {len(dirs)}", 13)
-    for d, entry in sorted(dirs.items()):
+             f"expected the 3 sizes 32/48/64, table has {sorted(groups)}", 13)
+    if not v2 and len(groups) != 8:
+        fail("vfx-ledger", "fx_waterline.json",
+             f"expected 8 dirs, table has {len(groups)}", 13)
+    for d, entry in sorted(groups.items()):
+        box = int(d) if v2 else 64
         if int(entry.get("frames", 0)) != 8:
             fail("vfx-frames", f"fx_waterline[{d}]",
                  f"frames {entry.get('frames')} != the pinned 8 "
@@ -9254,9 +9273,9 @@ def _g13_check_vfx_family(sprites: dict) -> None:
             fail("vfx-frames", f"fx_waterline[{d}]", "frame_ms <= 0", 13)
         anchor = entry.get("anchor_sprite", {})
         ax, ay = int(anchor.get("x", -1)), int(anchor.get("y", -1))
-        if not (0 <= ax <= 64 and 0 <= ay <= 64):
+        if not (0 <= ax <= box and 0 <= ay <= box):
             fail("vfx-anchor", f"fx_waterline[{d}]",
-                 f"anchor ({ax},{ay}) outside the 64 box", 13)
+                 f"anchor ({ax},{ay}) outside the {box} box", 13)
         for layer in ("back", "front"):
             clip = entry.get("layers", {}).get(layer, {})
             sid = f"fx_waterline_{layer}_{d}"
@@ -9276,22 +9295,27 @@ def _g13_check_vfx_family(sprites: dict) -> None:
                 fail("vfx-sheet", sid,
                      f"sheet {sprite.w}x{sprite.h} != the "
                      f"{columns}x{rows} grid of {fw}x{fh} frames", 13)
-            led = ledger.get("dirs", {}).get(d, {}).get("sheets", {})
+            led = (ledger.get("sizes", {}) if v2
+                   else ledger.get("dirs", {})).get(d, {}).get("sheets", {})
             actual = hashlib.sha256((ART_ROOT / "assets" / "ui" / "fx"
                                      / f"{sid}.png").read_bytes()).hexdigest()
             if led.get(layer) != actual:
                 fail("vfx-sheet", sid,
                      f"sha256 != ledger ({actual[:12]}…)", 13)
-        if not str(ledger.get("dirs", {}).get(d, {}).get("effect_id", "")):
+        effect_id = (ledger.get("sizes", {}) if v2
+                     else ledger.get("dirs", {})).get(d, {}).get("effect_id",
+                                                                 "")
+        if not str(effect_id):
             fail("vfx-ledger", f"fx_waterline[{d}]",
                  "effect_id missing from the provenance ledger", 13)
 
 
 def _g13_raw_pixellab_ingest() -> bool:
-    """True when the last ship ingestion was the PixelLab raw mode
+    """True when the last ship ingestion was a PixelLab raw mode
     (ledger generated_by marker or per-token pixellab provenance;
-    80-* §4.8 2026-11-06 — palette/budget checks are waived for that
-    family: the audit is the provenance ledger + fit + pennant)."""
+    80-* §4.8 2026-11-06 + the same-day top-down revision — palette/
+    budget checks are waived for those families: the audit is the
+    provenance ledger + fit + pennant)."""
     ledger = G13_INGEST_LEDGER
     if not ledger.is_file():
         return False
@@ -9299,11 +9323,27 @@ def _g13_raw_pixellab_ingest() -> bool:
         doc = json.loads(ledger.read_text())
     except ValueError:
         return False
-    if "pixellab" in str(doc.get("generated_by", "")):
+    by = str(doc.get("generated_by", ""))
+    if "pixellab" in by or "import-ships-north" in by:
         return True
     tokens = doc.get("tokens") or {}
     return any(isinstance(rec, dict) and rec.get("pixellab")
                for rec in tokens.values())
+
+
+def _g13_north_ingest() -> bool:
+    """True when the last ship ingestion was the top-down north mode
+    (80-* §4.8 2026-11-07): one owner-less tier-sized north file per ship
+    (`hull_{ship}.png`, 32/48/64 by tier), runtime-rotated — no dir
+    tokens exist."""
+    ledger = G13_INGEST_LEDGER
+    if not ledger.is_file():
+        return False
+    try:
+        doc = json.loads(ledger.read_text())
+    except ValueError:
+        return False
+    return "import-ships-north" in str(doc.get("generated_by", ""))
 
 
 def _g13_check_pixels(class_name: str, sprite: _G13Sprite, block: frozenset) -> None:
@@ -10009,22 +10049,31 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
              f"shipped grid ({want_shipped}: "
              f"{'one owner-less file per token — raw dedupe' if _g13_raw_pixellab_ingest() else '9 owners per token'})", 13)
 
-    # base token records: real ship × base dir, sha-256 + ISO date, and
-    # the complete 9-owner file set on the shipped grid
+    # base token records: real ship × base dir (north mode: real ship —
+    # the key IS the shipped file stem), sha-256 + ISO date, and the file
+    # on the shipped grid
+    north = _g13_north_ingest()
     for tid, rec in sorted(tokens.items()):
-        if not isinstance(tid, str) or not tid.startswith("hull_") \
-                or tid.count("_") < 2:
-            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
-                 f"bad token id {tid!r}", 13)
-        ship, d = tid[len("hull_"):].rsplit("_", 1)
         raw_bases = _g13_raw_pixellab_ingest()
-        allowed_dirs = (RAW_INGEST_DIRS if raw_bases
-                        else G13_INGEST_BASE_DIRS)
-        if ship not in ship_ids or d not in allowed_dirs:
-            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
-                 f"token {tid!r} is not a real ship's BASE dir "
-                 f"({'pixellab 8-native' if raw_bases else 'f6c00bb bases'} "
-                 f"{allowed_dirs})", 13)
+        if north:
+            if not isinstance(tid, str) or not tid.startswith("hull_") \
+                    or tid[len("hull_"):] not in ship_ids:
+                fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                     f"bad north token id {tid!r} (hull_{{ship}})", 13)
+            ship, d = tid[len("hull_"):], None
+        else:
+            if not isinstance(tid, str) or not tid.startswith("hull_") \
+                    or tid.count("_") < 2:
+                fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                     f"bad token id {tid!r}", 13)
+            ship, d = tid[len("hull_"):].rsplit("_", 1)
+            allowed_dirs = (RAW_INGEST_DIRS if raw_bases
+                            else G13_INGEST_BASE_DIRS)
+            if ship not in ship_ids or d not in allowed_dirs:
+                fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                     f"token {tid!r} is not a real ship's BASE dir "
+                     f"({'pixellab 8-native' if raw_bases else 'f6c00bb bases'} "
+                     f"{allowed_dirs})", 13)
         if rec.get("job") != tid:
             fail("art-ingest", tid, "token record's job != its key", 13)
         sha = rec.get("snapped_sha")
@@ -10048,7 +10097,14 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
             fail("art-ingest", tid,
                  f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
-        if _g13_raw_pixellab_ingest():
+        if north:
+            p = ASSETS_UI / "tokens" / f"{tid}.png"
+            if not p.is_file():
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     "ingested north token file missing from the shipped "
+                     "grid (one tier-sized file per ship; the runtime "
+                     "rotates it)", 13)
+        elif _g13_raw_pixellab_ingest():
             p = ASSETS_UI / "tokens" / f"hull_{ship}_{d}.png"
             if not p.is_file():
                 fail("art-ingest", str(p.relative_to(ART_ROOT)),
@@ -10117,12 +10173,20 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
 
     # snapped-source sha provenance where the gitignored cache exists
     # (classic: model_raw/snapped/hull_{ship}_{dir}.png; pixellab raw:
-    # model_raw/pixellab/<label>/snapped/{dir}.png, 80-* §4.8 2026-11-06)
+    # model_raw/pixellab/<label>/snapped/{dir}.png, 80-* §4.8 2026-11-06;
+    # north: model_raw/pixellab_topdown/<ship>/snapped/north.png, the
+    # same-day top-down amendment)
     raw_px = _g13_raw_pixellab_ingest()
     cache = UI_ART_DIR / "model_raw" / "snapped"
     found = 0
     for tid, rec in sorted(tokens.items()):
-        if raw_px:
+        if north:
+            ship = tid[len("hull_"):]
+            sp = UI_ART_DIR / "model_raw" / "pixellab_topdown" / ship \
+                / "snapped" / "north.png"
+            if not sp.is_file():
+                continue
+        elif raw_px:
             ship, d = tid[len("hull_"):].rsplit("_", 1)
             sp = None
             for cand in (ship, f"{ship}_uw2"):
@@ -10531,7 +10595,18 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                         "w": ("n", "rot_ccw"), "nw": ("ne", "mirror_x"),
                         "se": ("ne", "mirror_y"), "sw": ("ne", "rot_180")}
             raw_dedupe_grid = _g13_raw_pixellab_ingest()
-            if raw_dedupe_grid:
+            if _g13_north_ingest():
+                # North mode (80-* §4.8 2026-11-07): the shipped grid is
+                # ONE tier-sized north file per ship — the runtime rotates
+                # it; the ×8 dir and ×9 owner expansions do not apply.
+                tier_of = {s["id"]: int(s["tier"]) for s in ship_types}
+                for ship in ship_types:
+                    sid = f"hull_{ship['id']}"
+                    s_px = G13_NORTH_TIER_SIZE[tier_of[ship["id"]]]
+                    entries_h.append(
+                        (sid, {"id": sid, "width": s_px, "height": s_px,
+                               "file": f"assets/ui/tokens/{sid}.png"}))
+            elif raw_dedupe_grid:
                 # Raw dedupe (80-* §4.8 2026-11-06): the shipped grid is
                 # the owner-less 16 × 8 — the runtime falls owner ids onto
                 # the shared file (registry owner_variant_rule), so the
@@ -10601,11 +10676,13 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     check_decls.setdefault(sid, (decl_c, None))
                 terrain_entries = declared.setdefault("assets/ui/terrain", [])
                 terrain_entries.extend(entries_c)
-            # §4.8 2026-11-07 — the PixelLab waterline family: the 16 sheets
-            # (8 dirs × back/front) enter the fx inventory through the
-            # build-time ledger, the coast-family precedent (raw-pixellab
-            # ruling — palette/budget waived; the audit is the dedicated
-            # fx ledger + frame-table contract below).
+            # §4.8 2026-11-07 — the PixelLab waterline family: the sheets
+            # (v1: 8 dirs × back/front; v2 — the same-day top-down
+            # revision — one north family per ship size 32/48/64 ×
+            # back/front) enter the fx inventory through the build-time
+            # ledger, the coast-family precedent (raw-pixellab ruling —
+            # palette/budget waived; the audit is the dedicated fx ledger
+            # + frame-table contract below).
             fx_ledger = _g13_vfx_ledger() if class_name == "fx" else {}
             if fx_ledger:
                 # sheet dims come from the committed frame table (the pinned
@@ -10615,8 +10692,13 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 fx_table = json.loads(fx_table_path.read_text()) \
                     if fx_table_path.is_file() else {}
                 entries_f: list = []
-                for d in sorted(fx_ledger.get("dirs", {})):
-                    entry_t = fx_table.get("dirs", {}).get(d, {})
+                fx_v2 = int(fx_ledger.get("version", 1)) >= 2
+                ledger_group = fx_ledger.get("sizes", {}) if fx_v2 \
+                    else fx_ledger.get("dirs", {})
+                table_group = fx_table.get("sizes", {}) if fx_v2 \
+                    else fx_table.get("dirs", {})
+                for d in sorted(ledger_group):
+                    entry_t = table_group.get(d, {})
                     frames_n = int(entry_t.get("frames", 8))
                     for layer in ("back", "front"):
                         clip = entry_t.get("layers", {}).get(layer, {})

@@ -18,9 +18,10 @@ extends RefCounted
 ##
 ## Dir ids follow §4.8.6: heading8 bucket 0 = east, increasing
 ## counterclockwise in the mathematical frame (screen y-down: (1,−1) = NE,
-## (0,−1) = N …) → `e, ne, n, nw, w, sw, s, se`. The same table maps the S3
-## player token (`hull_{type}_{owner}_{dir}`, §4.8.9) — one source for both
-## so a sprite id can never disagree with a sampled arrow.
+## (0,−1) = N …) → `e, ne, n, nw, w, sw, s, se`. The same table selects the
+## runtime rotation of the north hull token (`hull_{ship}` rotated to the
+## heading, §4.8 2026-11-07 top-down amendment) — one source for both so a
+## rotation can never disagree with a sampled arrow.
 
 ## Lattice stride in tiles (§4.8.10 "stride 4×4 tiles").
 const STRIDE := 4
@@ -63,6 +64,21 @@ static func dir_id_of_compass(token: String) -> String:
 ## by the caller) — "" when the heading is outside the 8-dir domain.
 static func dir_id_of_heading(heading: String) -> String:
 	return dir_id_of_compass(heading.to_upper())
+
+
+## The top-down rotation map (80-* §4.8 2026-11-07 amendment, pinned):
+## dir id → clockwise degrees in screen y-down. The north hull token
+## (`hull_{ship}`, bow up) rotates to this angle to face `dir_id`; Godot
+## rotates with the NEAREST filter, so pixels stay crisp. Unknown id → 0
+## (north) — callers gate on `dir_id_of_heading` first anyway.
+const DIR_ROTATION_DEGREES := {
+	"n": 0.0, "ne": 45.0, "e": 90.0, "se": 135.0,
+	"s": 180.0, "sw": 225.0, "w": 270.0, "nw": 315.0,
+}
+
+
+static func rotation_degrees_of_dir(dir_id: String) -> float:
+	return float(DIR_ROTATION_DEGREES.get(dir_id, 0.0))
 
 
 ## §4.3a heading8 bucket of a tile-space vector: nearest compass ray by the

@@ -188,7 +188,10 @@ func _test_s2_row() -> void:
 		"S2 no longer carries a density row (80-* §4.6.3 amended)")
 	_check(s2.get_node_or_null("Layout/Cards") != null,
 		"S2 still renders the nationality cards")
+	_check(s2.get_node_or_null("Layout/Footer/Lang") == null,
+		"S2 no longer has its own language button")
 	s2.queue_free()
+	s2 = null
 	await get_tree().process_frame
 
 	# S1 mount: the Settings button opens the panel; no return action there.
@@ -208,8 +211,6 @@ func _test_s2_row() -> void:
 			"the S1 mount carries the language toggle")
 		_check(title.get_node_or_null("Center/Stack/Buttons/Language") == null,
 			"S1 no longer has its own language button")
-		_check(s2.get_node_or_null("Layout/Footer/Lang") == null,
-			"S2 no longer has its own language button")
 		# A pre-game choice writes the run input before new_game.
 		_check(panel.call("apply_preset", "extreme"),
 			"the S1 panel applies a preset")

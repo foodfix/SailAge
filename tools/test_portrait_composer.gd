@@ -365,7 +365,7 @@ func _test_texture_registry() -> void:
 	# One id per family resolves through the kit.
 	var probes := {
 		"coin": "icons (stem id)",
-		"hull_caravel_player_n": "tokens (hull grid)",
+		"hull_caravel_player": "tokens (north hull grid)",
 		"facility_market": "tokens (facility)",
 		"sea_pattern": "terrain (water pattern)",
 		"terrain_land_0": "terrain (kind tile)",

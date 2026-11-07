@@ -541,8 +541,10 @@ ids → manifest edit); runtime ComfyUI-style generation +
 discovery reveal pics ×30 (model pass via `art_prompts.json`);
 sail-state hull variants; named-pirate ship variant; world-map wake
 (**claimed 2026-11-07** — delivered as the PixelLab waterline VFX
-family's BACK sheet, `80-*` §4.8 2026-11-07 amendment); animations
-beyond the pinned set.
+family's BACK sheet, `80-*` §4.8 2026-11-07 amendment; **revised same
+day** — the family regenerates as one north sheet per ship size
+{32,48,64} under the top-down hull token amendment, `80-*` §4.8);
+animations beyond the pinned set.
 
 ---
 

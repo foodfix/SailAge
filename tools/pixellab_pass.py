@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
 """PixelLab hull-token generation pass — build-time SaaS backend.
 
-One `create-object-pro-flash` call per ship: native 64×64 pixel-art render
-(view "low top-down" = the §4.8 oblique elevated convention) + 8 rotations.
-Raw PNGs land gitignored under model_raw/pixellab/<ship>/ plus a manifest;
-raw model output is never committed (90-* §9.2). The key is read from the
-PIXELLAB_API_KEY environment variable only — never stored in files.
+Top-down mode (2026-11-07 amendment, the shipping path): ONE straight-
+overhead north token per ship via `POST /generate-image-v2`, canvas from
+the ship's tier (t1 32 / t2 48 / t3 64). Raw PNGs land gitignored under
+model_raw/pixellab_topdown/<ship>/ plus a manifest; raw model output is
+never committed (90-* §9.2). The key is read from the PIXELLAB_API_KEY
+environment variable or the gitignored tools/pixellab_config.json — never
+committed.
 
 Usage:
-  python3 tools/pixellab_pass.py run [ship ...]   # default: all 16
+  python3 tools/pixellab_pass.py --topdown run [ship ...]   # default: all 16
+  python3 tools/pixellab_pass.py --topdown snap [ship ...]
+  python3 tools/pixellab_pass.py --topdown status
+
+Legacy Pro-Flash 8-dir hull mode (RETIRED by the 2026-11-07 top-down
+amendment — kept only for history/re-download of the old raws):
+  python3 tools/pixellab_pass.py run [ship ...]
   python3 tools/pixellab_pass.py status
+The coast-tileset path is untouched and stays pinned for the studio.
 """
 from __future__ import annotations
 
+import base64  # noqa: PLC0415
 import json
 import os
 import sys
@@ -26,6 +36,31 @@ MANIFEST = os.path.join(OUT_DIR, "pixellab.json")
 DIRS = ("north", "north-east", "north-west", "south", "south-east",
         "south-west", "east", "west")
 POLL_S, POLL_MAX = 5, 600
+
+# ---- top-down mode pins (80-* §4.8, 2026-11-07 amendment) -------------
+# Canvas = tier table (pinned); no new data field — tier comes from
+# data/ship_types.json.
+TIER_SIZE = {1: 32, 2: 48, 3: 64}
+TOPDOWN_OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw",
+                               "pixellab_topdown")
+TOPDOWN_MANIFEST = os.path.join(TOPDOWN_OUT_DIR, "pixellab_topdown.json")
+TOPDOWN_SEED = 91000
+# Shared style suffix, pinned verbatim (overhead rewrite of the 2026-11-06
+# suffix). Identity prefix (name + rig) is prepended, comma-joined.
+TOPDOWN_SUFFIX = (
+    ", wooden sailing ship seen from directly overhead, straight "
+    "top-down bird's-eye view, hull axis vertical with the bow "
+    "pointing to the top edge of the canvas, dense multi-strake "
+    "planking bands in several wood tones, dark gunwale, gold trim "
+    "line along the sheer, gunport row with tiny dark ports along "
+    "the hull sides, stern cabin with small lit windows, sails "
+    "spread under way and clearly visible from above with two "
+    "shading bands and one bright highlight arc each, thin dark "
+    "rigging ropes to bowsprit and hull, small red pennant at the "
+    "mainmast top, retro 16-bit sailing ship sprite in the style "
+    "of classic 1990s naval adventure games like Uncharted Waters "
+    "2 / New Horizons, dark 1-pixel silhouette outline, "
+    "transparent background.")
 
 # Per-ship visual descriptors (identity payload). Derived from the
 # deterministic manifest rig strings (hulls.json) + §4.8 craft vocabulary.
@@ -85,6 +120,159 @@ def _desc(ship: str) -> str:
     rig = h.get("rig", "sailing rig")
     name = types.get(ship, {}).get("name", {}).get("en", ship)
     return f"{name} sailing ship, {rig}{_STYLE_SUFFIX}"
+
+
+def _desc_topdown(ship: str) -> str:
+    """Top-down identity: same prefix rule as the 2026-11-06 pass
+    ({Name-en} sailing ship, {rig}) + the pinned overhead suffix. The
+    oblique brigantine trial descriptor does NOT apply here."""
+    with open(os.path.join(REPO, "data", "ship_types.json"),
+              encoding="utf-8") as fh:
+        types = {s["id"]: s for s in json.load(fh)["ship_types"]}
+    with open(os.path.join(REPO, "tools", "ui_art", "hulls", "rig.json"),
+              encoding="utf-8") as fh:
+        rigs = json.load(fh)["hulls"]
+    if isinstance(rigs, list):
+        h = next((e for e in rigs if e.get("id") == ship), {})
+    else:
+        h = rigs.get(ship, {})
+    rig = h.get("rig", "sailing rig")
+    name = types.get(ship, {}).get("name", {}).get("en", ship)
+    return f"{name} sailing ship, {rig}{TOPDOWN_SUFFIX}"
+
+
+def _tier_of(ship: str) -> int:
+    with open(os.path.join(REPO, "data", "ship_types.json"),
+              encoding="utf-8") as fh:
+        types = {s["id"]: s for s in json.load(fh)["ship_types"]}
+    return int(types[ship]["tier"])
+
+
+def _size_of(ship: str) -> int:
+    return TIER_SIZE[_tier_of(ship)]
+
+
+def _job_image_bytes(job: dict) -> bytes:
+    """Extract the PNG from a completed generate-image-v2 background job.
+    The schema only promises `last_response` as an opaque object; handle
+    the shapes the API has used: image.base64, images[0].base64, or an
+    image/url field carrying a downloadable link."""
+    lr = job.get("last_response") or {}
+    for cand in ([lr.get("image")] if isinstance(lr.get("image"), dict)
+                 else []) + list(lr.get("images") or []):
+        if isinstance(cand, dict) and cand.get("base64"):
+            return base64.b64decode(cand["base64"])
+    for key in ("image_url", "url", "result_url"):
+        v = lr.get(key)
+        if isinstance(v, str) and v:
+            return _download(v)
+    raise RuntimeError(f"no image in completed job "
+                       f"(last_response keys: {sorted(lr)})")
+
+
+def run_topdown(ship: str, label: str | None = None,
+                description: str | None = None, seed: int | None = None,
+                poll_status=None) -> dict:
+    """One generate-image-v2 generation (the pinned 4-field envelope — no
+    style_image, no reference_images; 80-* §4.8 2026-11-07) + raw north
+    download. The studio (tools/model_studio) calls this in-process with
+    an explicit description (the user's edit) + seed; the CLI keeps the
+    pinned defaults. poll_status, when given, receives each background
+    job status string for the studio's stage ticker."""
+    size = _size_of(ship)
+    payload = {
+        "description": description or _desc_topdown(ship),
+        "image_size": {"width": size, "height": size},
+        "no_background": True,
+        "seed": TOPDOWN_SEED if seed is None else int(seed),
+    }
+    print(f"[pixellab-topdown {ship}] POST generate-image-v2 "
+          f"({size}x{size}) ...", flush=True)
+    created = _post("/generate-image-v2", payload)
+    job_id = created["background_job_id"]
+    usage = created.get("usage") or {}
+    print(f"    job={job_id} usage={json.dumps(usage)}", flush=True)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        raise RuntimeError(f"{ship}: job {job_id} status="
+                           f"{job.get('status')!r} "
+                           f"(last: {json.dumps(job)[:300]})")
+
+    dest = label or ship
+    dest_dir = os.path.join(TOPDOWN_OUT_DIR, dest)
+    os.makedirs(dest_dir, exist_ok=True)
+    png = _job_image_bytes(job)
+    with open(os.path.join(dest_dir, "north.png"), "wb") as fh:
+        fh.write(png)
+    rec = {"job_id": job_id, "description": payload["description"],
+           "seed": payload["seed"], "size": size, "ship": ship,
+           "label": dest, "bytes": {"north": len(png)},
+           "usage": usage, "job_status": job.get("status")}
+    os.makedirs(TOPDOWN_OUT_DIR, exist_ok=True)
+    with open(TOPDOWN_MANIFEST, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    manifest[dest] = rec
+    with open(TOPDOWN_MANIFEST, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=1, ensure_ascii=False)
+    return rec
+
+
+def snap_topdown(ship: str) -> None:
+    """Ship-as-drawn passthrough: the RAW north token copies
+    BYTE-IDENTICAL into <label>/snapped/north.png for ingest naming.
+    Gate: canvas fit (exact tier size S×S). No resize, no quantize,
+    no pennant remap — the model's pixels are the shipped pixels."""
+    from PIL import Image  # noqa: PLC0415
+    src_dir = os.path.join(TOPDOWN_OUT_DIR, ship)
+    src = os.path.join(src_dir, "north.png")
+    if not os.path.exists(src):
+        raise SystemExit(f"{ship}: no raw north token at {src} — "
+                         f"run --topdown run first")
+    want = _size_of(ship)
+    img = Image.open(src)
+    w, h = img.size
+    fit = (w, h) == (want, want)
+    dst_dir = os.path.join(src_dir, "snapped")
+    os.makedirs(dst_dir, exist_ok=True)
+    with open(src, "rb") as fh:
+        data = fh.read()
+    with open(os.path.join(dst_dir, "north.png"), "wb") as fh:
+        fh.write(data)
+    print(f"  {ship}: raw copy {w}x{h} want={want}x{want} fit={fit}",
+          flush=True)
+
+
+def run_topdown_fleet(ships: list[str]) -> None:
+    for i, ship in enumerate(ships, 1):
+        rec = run_topdown(ship)
+        print(f"[pixellab-topdown {i}/{len(ships)}] {ship} saved "
+              f"north.png ({rec['bytes']['north']} bytes)", flush=True)
+    print(f"[pixellab-topdown] manifest -> {TOPDOWN_MANIFEST}", flush=True)
+
+
+def status_topdown() -> None:
+    if not os.path.exists(TOPDOWN_MANIFEST):
+        print("no top-down manifest yet")
+        return
+    with open(TOPDOWN_MANIFEST, encoding="utf-8") as fh:
+        m = json.load(fh)
+    for ship, e in m.items():
+        print(f"{ship:18s} size={e['size']} seed={e['seed']} "
+              f"job={e['job_id'][:12]}…")
+    print(f"{len(m)} ships")
 
 
 def _ships() -> list[str]:
@@ -472,8 +660,20 @@ def status() -> None:
 
 
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    if cmd == "run":
+    args = sys.argv[1:]
+    topdown = bool(args) and args[0] == "--topdown"
+    if topdown:
+        args = args[1:]
+    cmd = args[0] if args else "status"
+    if topdown:
+        if cmd == "run":
+            run_topdown_fleet(args[1:] or _ships())
+        elif cmd == "snap":
+            for ship in (args[1:] or _ships()):
+                snap_topdown(ship)
+        else:
+            status_topdown()
+    elif cmd == "run":
         run(sys.argv[2:] or _ships())
     elif cmd == "snap":
         _pennant_fleet(sys.argv[2:] or _ships())
