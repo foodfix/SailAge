@@ -1117,6 +1117,13 @@ def td_ship_of(label: str) -> str:
     return str(ship) if ship else label
 
 
+def td_fallback_prompt(label: str) -> str:
+    """The bare last-resort template ({ship} sailing ship) — shown only
+    live; the registry tags it source "default" so the state backfill
+    never pins it (same never-pin contract as the icon family)."""
+    return f"{td_ship_of(label)} sailing ship"
+
+
 def td_default_prompt(label: str) -> str:
     """The pinned per-ship descriptor + overhead style suffix — the
     free-text edit base. Failure falls back to the manifest's recorded
@@ -1131,8 +1138,7 @@ def td_default_prompt(label: str) -> str:
               f"({type(exc).__name__}: {exc}); manifest fallback",
               flush=True)
     rec = td_manifest().get(label) or {}
-    return str(rec.get("description")
-               or f"{td_ship_of(label)} sailing ship")
+    return str(rec.get("description") or td_fallback_prompt(label))
 
 
 def td_north_path(label: str) -> str:

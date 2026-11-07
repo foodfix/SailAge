@@ -224,7 +224,13 @@ class Studio:
                                or "manifest")
         else:
             original_prompt = chain.td_default_prompt(label)
-            original_source = "canonical"
+            # Bare template = composer AND manifest both failed — tag it
+            # "default" so the backfill never pins fallback wording (same
+            # contract as the icon family; it upgrades on a later scan).
+            original_source = ("default"
+                               if original_prompt ==
+                               chain.td_fallback_prompt(label)
+                               else "canonical")
         eff_prompt = prompts.get(job_id) or original_prompt
         return {
             "id": job_id,

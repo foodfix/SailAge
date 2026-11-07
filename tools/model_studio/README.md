@@ -191,7 +191,11 @@ machinery is removed.
   wording (ICON_PROMPT_OVERRIDES + style; terrain per-sheet clauses),
   tagged `original_prompt_source: "reconstructed"`
   (or `"default"` if even the fallback wording had to be used — never
-  pinned to state.json so it upgrades when the driver parses again).
+  pinned to state.json so it upgrades when the driver parses again;
+  the td/fx families share this never-pin rule — `td_default_prompt`
+  degrades to the bare `{ship} sailing ship` template only when the
+  pinned descriptor AND the raw-store manifest both fail, and the
+  registry tags that source `"default"` via `td_fallback_prompt`).
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
