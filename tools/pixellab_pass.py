@@ -257,7 +257,7 @@ def snap_topdown(ship: str) -> None:
           flush=True)
 
 
-def run_topdown_fleet(ships: list[str]) -> None:
+def run_topdown_fleet(ships: list[str], seed: int | None = None) -> None:
     for i, ship in enumerate(ships, 1):
         raw = os.path.join(TOPDOWN_OUT_DIR, ship, "north.png")
         if os.path.isfile(raw):
@@ -267,7 +267,7 @@ def run_topdown_fleet(ships: list[str]) -> None:
                   f"raw north.png — skipped (delete it to re-roll)",
                   flush=True)
             continue
-        rec = run_topdown(ship)
+        rec = run_topdown(ship, seed=seed)
         print(f"[pixellab-topdown {i}/{len(ships)}] {ship} saved "
               f"north.png ({rec['bytes']['north']} bytes)", flush=True)
     print(f"[pixellab-topdown] manifest -> {TOPDOWN_MANIFEST}", flush=True)
@@ -671,13 +671,21 @@ def status() -> None:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    # `--seed N` anywhere: the acceptance flow's seed-bumped re-roll
+    seed_override = None
+    if "--seed" in args:
+        i = args.index("--seed")
+        seed_override = int(args[i + 1])
+        del args[i:i + 2]
     topdown = bool(args) and args[0] == "--topdown"
     if topdown:
         args = args[1:]
     cmd = args[0] if args else "status"
     if topdown:
         if cmd == "run":
-            run_topdown_fleet(args[1:] or _ships())
+            run_topdown_fleet(args[1:] or _ships(), seed=seed_override)
         elif cmd == "snap":
             for ship in (args[1:] or _ships()):
                 snap_topdown(ship)

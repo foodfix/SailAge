@@ -71,12 +71,12 @@ def main() -> None:
             cx = 4 + j * CELL + (CELL - s) // 2
             cy = y0 + (CELL - s) // 2
             sheet.alpha_composite(rot, (cx, cy))
-        draw.line((0, y0 + CELL + label_h, sheet.w, y0 + CELL + label_h),
-                  fill=(0, 0, 0, 90), width=1)
+        draw.line((0, y0 + CELL + label_h, sheet.width,
+                   y0 + CELL + label_h), fill=(0, 0, 0, 90), width=1)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     sheet.save(out)
     print(f"preview_topdown: {len(rows)} ships x {len(ROTATIONS)} rotations"
-          f" -> {out} ({sheet.w}x{sheet.h})")
+          f" -> {out} ({sheet.width}x{sheet.height})")
 
 
 if __name__ == "__main__":
