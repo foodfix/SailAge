@@ -70,30 +70,37 @@ any ship's snapped token is missing, since a gap would silently fall
 back to the generated token); the gate is the ship's
 `hull_<ship>` ledger token with `pennant: "raw"`. Cost ≈ $0.008/roll.
 
-## Wake VFX family (pixellab v5 — the §4.8 2026-11-07 single-layer path)
+## Wake VFX family (pixellab v6 — the §4.8 2026-11-08 per-ship path)
 
-Three cards, one per ship SIZE (`fx_32` / `fx_48` / `fx_64`; the
-committed table `assets/ui/fx/fx_waterline.json` keys the same sizes).
-The wake is ONE sheet per size rendered UNDER the hull — ships rotate at
-runtime, so the sheet rotates with them and only the north family
-exists. Generation = `tools/pixellab_vfx_pass.py run_size` **in-process**
-(POST `/v2/vfx`, pro artist, `game_pack: true`, the representative north
+16 cards, one per SHIP TYPE (`fx_<ship>`; the committed table
+`assets/ui/fx/fx_waterline.json` keys the same 16
+`data/ship_types.json` ids). The wake is ONE sheet per ship rendered
+UNDER the hull — each sheet is authored around that ship's own hull
+silhouette; ships rotate at runtime, so the sheet rotates with them and
+only the north family exists. Generation =
+`tools/pixellab_vfx_pass.py run_ship` **in-process**
+(POST `/v2/vfx`, pro artist, `game_pack: true`, the ship's OWN north
 token as the sprite input) — description is FREE TEXT (default = the
 pinned `V5_DESCRIPTION` of record, verbatim in 80-* §4.8; the envelope
 has NO seed — the card shows the quote, ≈10 generations ≈ per roll,
 instead). A re-roll stages into the studio cache
-(`model_raw/studio/fx/<size>/` + a staging `pixellab_vfx.json`
+(`model_raw/studio/fx/<ship>/` + a staging `pixellab_vfx.json`
 manifest — the coast pattern: a discarded or failed re-roll never
 pollutes the canonical raw store). The card shows the staged pack's
 frame-0 composite (wake under the ship's north token on the review sea
 blue) next to the SHIPPED composite built from `assets/ui/fx/` —
 old vs new side by side; with a staged re-roll the API's animated gif
-preview is served too. Accept copies the staged size dir + its manifest
-record into `model_raw/pixellab_vfx/v5/` and runs
-`build_ui_art --import-fx-pixellab` (all three sizes re-land,
-idempotent — the other two wake cards stamp in-game too); the gate is
-the size's record (sheet sha256 + effect_id) in
+preview is served too. Accept copies the staged ship dir + its manifest
+record into `model_raw/pixellab_vfx/v6/` and runs
+`build_ui_art --import-fx-pixellab` (all 16 ships re-land,
+idempotent — the other wake cards stamp in-game too); the gate is
+the ship's record (sheet sha256 + effect_id) in
 `tools/assets/pixellab_raw/pixellab_vfx_ledger.json`.
+
+The retired per-SIZE wake family (`fx_32/48/64`, the v5 single-layer
+path) is REMOVED (2026-11-08 user direction — the per-ship revision
+replaced it): its cards, persisted state entries and stage dirs are
+gone; the registry enumerates only `chain.FX_SHIPS`.
 
 The §4.8 2026-11-06 oblique ship family (`px_<label>`, 8 native
 rotations) and the pre-PixelLab legacy ship jobs (`hull_*` per-dir,
@@ -150,11 +157,12 @@ machinery is removed.
   `render:…`, `snapping`), and the job_id/seed provenance from the tool
   manifest.
 
-- **Wake VFX cards** (`fx_32/48/64`): the staged animated gif → the
-  staged frame-0 composite → the shipped composite (what the game shows
-  now), free-text prompt box (edit base = the pinned `V5_DESCRIPTION`
-  of record), **no seed field** (the envelope has none — the card shows
-  the quote instead), Re-roll / Accept, and the effect_id provenance.
+- **Wake VFX cards** (`fx_<ship>`, 16 ships): the staged animated gif →
+  the staged frame-0 composite → the shipped composite (what the game
+  shows now), free-text prompt box (edit base = the pinned
+  `V5_DESCRIPTION` of record), **no seed field** (the envelope has
+  none — the card shows the quote instead), Re-roll / Accept, and the
+  effect_id provenance.
 
 - Icon/terrain job cards: three thumbnails (draft | raw | snapped),
   editable prompt textarea (persisted per job), seed field
@@ -229,11 +237,11 @@ and both are reported in `/api/status` → `registry.warnings` and
    fleet-completeness pre-check — a missing snapped token would
    silently fall back to the generated art); the gate is the ship's
    `hull_<ship>` token in `ingest_ledger.json` with `pennant: "raw"`.
-2. **Wake VFX** (`fx_<size>`): the staged size dir + manifest record are
-   copied into `model_raw/pixellab_vfx/v5/` and the worker runs
-   `build_ui_art --import-fx-pixellab` — all three sizes re-land
+2. **Wake VFX** (`fx_<ship>`): the staged ship dir + manifest record are
+   copied into `model_raw/pixellab_vfx/v6/` and the worker runs
+   `build_ui_art --import-fx-pixellab` — all 16 ships re-land
    (idempotent), so the other wake cards stamp in-game too; the gate is
-   the size's record (sheet sha256 + effect_id) in
+   the ship's record (sheet sha256 + effect_id) in
    `tools/assets/pixellab_raw/pixellab_vfx_ledger.json`.
 3. **Icon sheets** (`iconsheet_<group>`): one
    `build_ui_art --import-icons <raw>/snapped <studio>/snapped` run;
