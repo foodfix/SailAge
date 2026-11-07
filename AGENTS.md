@@ -40,7 +40,8 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
    promotion (61 manifest edits), the runtime ComfyUI-style portrait
    generation plan + `user://portraits/` cache + offline-lock amendment,
    discovery reveal pics ×30 (model pass via `tools/art_prompts.json`),
-   sail-state hull variants, named-pirate ship variant, world-map wake,
+   sail-state hull variants, named-pirate ship variant, world-map wake
+   (claimed 2026-11-07 — the PixelLab waterline VFX family, 80-* §4.8),
    animations beyond the pinned set). Phase-9's parking lot lives in
    `docs/IMPLEMENT-Phase9.md` (per-broadside pre-loaded shot types, the
    merchant fourth archetype, sandbox preset persistence, Phase-7

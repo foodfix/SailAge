@@ -2250,6 +2250,99 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      terrain suite pins verify it directly). The §4.7.17 crest FOAM
      accent is retired with it (`CREST_MIX` 0.70 → 0.0 — the shader
      block stays, the mix is the off switch).
+     **Fleet waterline & wake VFX (amended 2026-11-07, user direction —
+     the hull tokens stop floating on the water):** every world-map hull
+     token — the player `FleetMarker` token and every NPC marker's
+     `HullToken` alike — renders the full sandwich keyed on the fleet's
+     dir id: the **BACK sheet** below the hull (stern wake fan + under-
+     hull shading) → the hull token → the **FRONT sheet** above the hull
+     (translucent sea water over the lower hull + waterline foam ON the
+     planks = the "half the hull under water" read), both under the
+     §4.8.5 letter/chip/count badges. (Scope history, user direction
+     same day: NPCs were FRONT-only while the v1 family's ring art
+     existed — the closed ripple rings read as noise across hundreds of
+     fleets; when the v2 re-roll outlawed rings the scope returned to
+     both layers for everyone. The §4.5.2 dashed trails are unchanged
+     and stay a separate pinned feature.) Letter-square fallbacks and
+     docked fleets wear neither sheet. Family: `fx_waterline_{back,front}_{dir}` (8 dirs),
+     `assets/ui/fx/fx_waterline_{back,front}_{dir}.png` plus the
+     committed frame table `assets/ui/fx/fx_waterline.json` (per dir:
+     canvas w×h, frame count, fps, loop, the effect's `meta.anchor` —
+     sheets draw the anchor on the hull cell center; canvases may
+     exceed 64×64 for the wake). **Generation:**
+     `tools/pixellab_vfx_pass.py` POSTs `/v2/vfx` — envelope pinned
+     verbatim, exactly four fields (`description`, `sprite` = the
+     shared `hull_galleass_<dir>.png` bytes — the largest silhouette at
+     61×64, so the foam line hugs outside every other hull and the ≤5 px
+     inner read on smaller ships is wake spread, `artist`, `game_pack:
+     true`; the VFX schema has no seed and no style_image), `name:
+     waterline-v3-<dir>-pro`. **v1 SUPERSEDED (2026-11-07 user
+     sheet review — REJECTED):** the v1 wording produced closed
+     elliptical ripple rings around the ship and a thin foam-only front
+     layer (no submersion read); the v1 `e`/`ne` raws (and the
+     never-downloaded `n` job) are retired for reference only. **v2
+     SUPERSEDED (same day, kept as the accepted-look reference):** the
+     v2 trial (lite vs pro on `e`) fixed the rings and the submersion
+     read — lite quoted 2 (effect_id 6351949f…, 8 frames @10 fps), pro
+     quoted 10 (effect_id 6190f842…, 8 frames @8 fps); pro won the A/B
+     (user decision: richer water sheet, chunkier foam ridge, visible
+     wake trail) — but v2's description never stated the ship's
+     travelling direction (the artist inferred bow/stern from the
+     sprite alone), so v2 is not the shipping family. **v3 description
+     of record (2026-11-07, user direction — the prompt MUST state the
+     motion):** the v2 text with an explicit motion sentence inserted
+     after the opening clause and two trims to stay under the 1000-char
+     quote tier (pro 1.25× ⇒ 10; max 963 chars). Template pinned
+     verbatim (doc = source of truth; per-dir files gitignored at
+     `tools/ui_art/model_raw/pixellab_vfx/v3/description_<dir>.txt`):
+     `Waterline VFX around this high top-down (about 45 degrees from
+     above) 16-bit pixel-art sailing ship sprite, 8-frame looping
+     animation. The ship is sailing {MOTION}. In front of the sprite:
+     translucent deep-blue sea water covers the lower half of the
+     wooden hull — the ship visibly sits low in the sea — with a broken
+     white foam ridge running along the ship's waterline ON the hull
+     planks, plus white spray arcing forward from the bow. Behind the
+     sprite: a foam wake fanning out behind the stern, tapering into
+     dots, small foam scallops hugging both hull sides. STRICTLY
+     FORBIDDEN: circular or elliptical ripple rings or any closed loops
+     around the ship; water touches only the hull sides, bow and stern.
+     Foam #dff0f4 over dark sea blues; never cover sails, deck, masts
+     or the red pennant; transparent background. Style: crisp 16-bit
+     pixel art, flat color, matching the ship sprite. Calm seas:
+     gentle, slow, subtle.` with {MOTION} ∈ {n: `north (up on screen)`
+     (950 chars), ne: `north-east (up-right on screen)` (961), e: `east
+     (right on screen)` (952), se: `south-east (down-right on screen)`
+     (963), s: `south (down on screen)` (952), sw: `south-west
+     (down-left on screen)` (962), w: `west (left on screen)` (951),
+     nw: `north-west (up-left on screen)` (960)}. **Trims vs v2
+     (disclosed):** cut `strongest on the near side and both ends of
+     the hull,` (foam-ridge emphasis — regression check on the sheets)
+     and `faint dark shading under the hull,` (under-hull shadow). Raw
+     output gitignored under
+     `tools/ui_art/model_raw/pixellab_vfx/v3/<dir>_pro/` (sheets + game
+     pack + `response.json` carrying
+     `effect_id`/`conversation`/quote — retries are discounted
+     change-calls; re-download without re-generation); **raw model
+     output is never committed**.
+     **Ingest:** `build_ui_art --import-fx-pixellab` copies the
+     behind/front sheets + frame JSON verbatim into `assets/ui/fx/` and
+     writes the provenance ledger `tools/assets/pixellab_raw/
+     pixellab_vfx_ledger.json` (effect ids + sheet sha256s); `--check`
+     copies the committed family into the temp rebuild (the coast-tiles
+     precedent — never regenerates, never contacts the API). The family
+     joins the **raw-bytes lazy registry family**: ids resolve through
+     the registry miss resolver (file replace + restart, no `.import`
+     refresh). **Runtime:** one shared clock in `world_map._process`
+     steps every visible fleet's frame from the committed fps/durations
+     with a per-fleet deterministic phase offset (marker-id hash — 300
+     fleets never foam in lockstep); **sheets render only while the
+     fleet is moving (2026-11-07 user direction, speed > 0):** player =
+     `SailingSim.effective_speed() > 0` (the HUD knots source —
+     becalmed, docked or waiting hides both sheets), NPC = the marker's
+     `sailing` flag, the same predicate the §4.5.2 wake layer paints
+     from — the hull token itself always shows. Letter-square fallbacks
+     and docked fleets wear neither sheet; render-only, the day-tick
+     budget is untouched. Battle-screen hulls (60-*) are out of scope.
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through

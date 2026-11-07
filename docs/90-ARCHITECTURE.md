@@ -835,6 +835,12 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   game launch reuses the stale `.godot/imported` cache and renders the
   old textures (the 2026-11-04 "buttons still broken after the fix"
   report was exactly this).
+- **Waterline VFX family (2026-11-07, 80-* §4.8):** `assets/ui/fx/`
+  joins the raw-bytes lazy family — the registry miss resolver falls
+  through the tokens dir onto the fx dir (`fx_waterline_{back,front}_
+  {dir}.png` + `fx_waterline.json`), so a re-rolled VFX sheet reaches
+  the game by the same file-replace + restart seam; no `.import`
+  sidecars are consulted.
 - **Why `project.godot` stays unchanged:** `ui_theme.gd`/`ui_kit.gd`/
   `ui_motion.gd` are `class_name` statics, not autoloads; the theme
   applies at `title_screen._ready()` (`get_window().theme`, `80-*` §4.9);

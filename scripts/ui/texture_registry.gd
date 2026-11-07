@@ -65,6 +65,12 @@ const SCAN_DIRS: Array[String] = [
 const TOKENS_DIR := "res://assets/ui/tokens"
 static var _token_dir := TOKENS_DIR
 
+## The fx family's dir (90-* §9.2 2026-11-07): resolved LAZILY through the
+## same miss resolver after the tokens dir — the sheets have no `.import`
+## sidecars, so a re-roll reaches the game by file replace + restart.
+const FX_DIR := "res://assets/ui/fx"
+static var _fx_dir := FX_DIR
+
 static var _registered := false
 ## Ids registered by the last successful pass (the suite/report read seam).
 ## Tokens are not in this count — they resolve lazily on first render.
@@ -117,6 +123,16 @@ static func _load_token_texture(id: String) -> Texture2D:
 			var shared := "hull_%s_%s" % [segs[0], segs[2]]
 			if shared != id:
 				return UiKitLib.icon_texture(shared)
+	# The waterline VFX family (80-* §4.8 2026-11-07) joins the raw-bytes
+	# lazy family through this same miss resolver: fx ids are owner-less,
+	# so the direct fx path is the last resort before null.
+	var fx_path := "%s/%s.png" % [_fx_dir, id]
+	if FileAccess.file_exists(fx_path):
+		var fx_image := Image.new()
+		if fx_image.load_png_from_buffer(
+				FileAccess.get_file_as_bytes(fx_path)) != OK:
+			return null
+		return ImageTexture.create_from_image(fx_image)
 	return null
 
 
@@ -132,8 +148,12 @@ static func _scan_dir(dir_path: String) -> Dictionary:
 	var name := dir.get_next()
 	while not name.is_empty():
 		# PNGs only; the `.import` sidecars and any dot-files are not ids.
+		# The waterline family (fx_waterline_*, 80-* §4.8 2026-11-07) is
+		# the raw-bytes lazy family inside this dir — it has no `.import`
+		# sidecars and resolves through the miss resolver, never here.
 		if not dir.current_is_dir() and name.ends_with(".png") \
-				and not name.begins_with("."):
+				and not name.begins_with(".") \
+				and not name.begins_with("fx_waterline_"):
 			names.append(name)
 		name = dir.get_next()
 	dir.list_dir_end()

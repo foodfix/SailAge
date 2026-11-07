@@ -2851,6 +2851,26 @@ def run_check() -> None:
             dst_dir = Path(td) / "assets" / "ui" / "terrain"
             dst_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst_dir / f"{sid}.png")
+        # §4.8 2026-11-07 — the waterline VFX family joins the same
+        # ledger-governed contract: the committed sheets are copied into
+        # the temp rebuild before the compare (never regenerated, never
+        # re-downloaded).
+        fx_ledger = (ROOT / "tools" / "assets" / "pixellab_raw"
+                     / "pixellab_vfx_ledger.json")
+        if fx_ledger.is_file():
+            fx_dirs = list(json.loads(fx_ledger.read_text())
+                           .get("dirs", {}).keys())
+            for d in fx_dirs:
+                for layer in ("back", "front"):
+                    name = f"fx_waterline_{layer}_{d}.png"
+                    src = committed / "fx" / name
+                    if not src.is_file():
+                        fail(f"--check: the fx ledger names {d}/{layer} "
+                             "but assets/ui/fx does not ship it; run "
+                             "build_ui_art --import-fx-pixellab")
+                    dst_dir = Path(td) / "assets" / "ui" / "fx"
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst_dir / name)
         # The pipeline owns PNGs; Godot's .import sidecars are committed by
         # the master --import pass and carry no rebuild semantics (master
         # reconciliation 2026-11-04, ledgered).
@@ -2945,6 +2965,127 @@ def run_import_terrain_mode(gen_dir: Path, sheet_file: str) -> None:
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 
+# ---- PixelLab waterline VFX ingestion (--import-fx-pixellab; 80-* §4.8
+# 2026-11-07) ----------------------------------------------------------
+
+FX_LEDGER = (ROOT / "tools" / "assets" / "pixellab_raw"
+             / "pixellab_vfx_ledger.json")
+FX_DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+
+
+def run_import_fx_mode(raw_root: Path) -> None:
+    """--import-fx-pixellab: ingest the PixelLab waterline family
+    VERBATIM — behind/front sheets per direction out of each raw dir's
+    game pack, the committed frame table assets/ui/fx/fx_waterline.json
+    and the provenance ledger. The builder never contacts the API and
+    never regenerates; the raw dirs carry effect ids + conversations for
+    discounted change-calls. Layer placement lives in the frame table:
+    layer top-left = token box top-left + (anchor_sprite + clip offset)
+    (the pack README's `anchor + offset` rule with the anchor resolved
+    into the 64 token box by tools/pixellab_vfx_pass.py's template
+    match)."""
+    import zipfile  # noqa: PLC0415
+    out_fx = ROOT / "assets" / "ui" / "fx"
+    out_fx.mkdir(parents=True, exist_ok=True)
+    table: dict = {"version": 1,
+                   "generated_by":
+                       "tools/build_ui_art.py --import-fx-pixellab",
+                   "dirs": {}}
+    ledger: dict = {"version": 1,
+                    "generated_by":
+                        "tools/build_ui_art.py --import-fx-pixellab",
+                    "dirs": {}}
+    for d in FX_DIRS:
+        ddir = raw_root / f"{d}_pro"
+        if not ddir.is_dir():
+            fail(f"--import-fx-pixellab: raw dir missing: {ddir}")
+        # the pass tool nests the dir id under its --raw root
+        # (v3/<d>_pro/<d>/), so search recursively for the one game pack.
+        packs = sorted(ddir.rglob("*-game.zip"))
+        if len(packs) != 1:
+            fail(f"--import-fx-pixellab: expected exactly 1 game pack under "
+                 f"{ddir}, found {len(packs)}")
+        pack = packs[0]
+        ddir = pack.parent
+        with zipfile.ZipFile(pack) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            clips = {c["name"]: c for c in manifest["clips"]}
+            layers = {}
+            for layer, clip_name in (("back", "behind"), ("front", "front")):
+                clip = clips[clip_name]
+                sheet_file = clip["sheets"][0]["file"]
+                data = zf.read(sheet_file)
+                out = out_fx / f"fx_waterline_{layer}_{d}.png"
+                out.write_bytes(data)
+                layers[layer] = {
+                    "file": out.name,
+                    "frame": {"w": clip["frame"]["w"],
+                              "h": clip["frame"]["h"]},
+                    "columns": clip["sheets"][0]["columns"],
+                    "frames": clip["frames"],
+                    "offset": {"x": clip["offset"]["x"],
+                               "y": clip["offset"]["y"]},
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+        # Uniform frame timing gate: the runtime's frame_at is closed-form
+        # on frame_ms; a non-uniform pack must fail the ingest loudly.
+        frame_json = next(ddir.glob(f"{pack.name[:-9]}.json"), None)
+        if frame_json is None:
+            fail(f"--import-fx-pixellab: frame json missing for {d} "
+                 f"(expected {pack.name[:-9]}.json)")
+        frames_meta = json.loads(frame_json.read_text()).get("frames", [])
+        durations = sorted({int(f.get("duration", 0))
+                            for f in frames_meta})
+        frame_ms = int(manifest["frame_ms"])
+        if durations != [frame_ms]:
+            fail(f"--import-fx-pixellab: {d}: non-uniform durations "
+                 f"{durations} != frame_ms {frame_ms}")
+        pass_manifest_path = raw_root / f"{d}_pro" / "pixellab_vfx.json"
+        pass_manifest = (json.loads(pass_manifest_path.read_text())
+                         if pass_manifest_path.is_file() else {})
+        rec = pass_manifest.get(d, {})
+        anchor = rec.get("anchor_sprite")
+        if not anchor or anchor.get("method") == "bbox-fallback":
+            fail(f"--import-fx-pixellab: {d}: anchor_sprite missing or "
+                 "bbox-fallback — re-run tools/pixellab_vfx_pass.py")
+        table["dirs"][d] = {
+            "canvas": manifest["canvas"],
+            "fps": manifest["fps"],
+            "frame_ms": frame_ms,
+            "frames": manifest["frames"],
+            "loop": bool(manifest["loop"]),
+            "anchor_sprite": {"x": anchor["x"], "y": anchor["y"],
+                              "method": anchor["method"],
+                              "match_rate": anchor["match_rate"]},
+            "layers": layers,
+        }
+        ledger["dirs"][d] = {
+            "effect_id": rec.get("effect_id"),
+            "artist": rec.get("artist", "pro"),
+            "name": rec.get("name"),
+            "quoted_generations": rec.get("quoted_generations"),
+            "description_sha256": rec.get("description_sha256"),
+            "background_job_id": rec.get("background_job_id"),
+            "sheets": {k: v["sha256"] for k, v in layers.items()},
+        }
+        print(f"  fx {d}: back {layers['back']['frame']['w']}x"
+              f"{layers['back']['frame']['h']} + front "
+              f"{layers['front']['frame']['w']}x"
+              f"{layers['front']['frame']['h']} @ {frame_ms} ms "
+              f"anchor ({anchor['x']},{anchor['y']})", flush=True)
+    json_path = out_fx / "fx_waterline.json"
+    json_path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    ledger["table_sha256"] = hashlib.sha256(
+        json_path.read_bytes()).hexdigest()
+    FX_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    FX_LEDGER.write_text(json.dumps(ledger, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    print(f"build_ui_art: fx family -> {out_fx.relative_to(ROOT)} "
+          f"(8 dirs x 2 sheets + fx_waterline.json)")
+    print(f"build_ui_art: fx ledger -> {FX_LEDGER.relative_to(ROOT)}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Phase-10 UI art governor (docs/IMPLEMENT-Phase10.md decision 5/9, 80-* §4.8)")
     ap.add_argument("--check", action="store_true",
@@ -2983,14 +3124,21 @@ def main() -> None:
                          f"(default {TERRAIN_SHEET_FILE}; a non-default "
                          "sheet is an explicit override — e.g. trying the "
                          "rocky sheet — and is ledgered as such)")
+    ap.add_argument("--import-fx-pixellab", nargs="?", const="auto",
+                    metavar="RAW_ROOT",
+                    help="ingest the PixelLab waterline VFX family verbatim "
+                         "(80-* §4.8 2026-11-07): behind/front sheets + "
+                         "fx_waterline.json + provenance ledger; RAW_ROOT "
+                         "holds <dir>_pro/ raw dirs (default "
+                         "tools/ui_art/model_raw/pixellab_vfx/v3)")
     args = ap.parse_args()
     modes = [args.check, args.contact_sheet, args.import_ships,
              args.import_icons, args.import_terrain,
-             args.import_ships_pixellab]
+             args.import_ships_pixellab, args.import_fx_pixellab]
     if sum(1 for m in modes if m) > 1:
         fail("--check, --contact-sheet, --import-ships, --import-icons, "
-             "--import-terrain and --import-ships-pixellab are mutually "
-             "exclusive modes")
+             "--import-terrain, --import-ships-pixellab and "
+             "--import-fx-pixellab are mutually exclusive modes")
     if args.check:
         run_check()
         return
@@ -3002,6 +3150,13 @@ def main() -> None:
         return
     if args.import_ships_pixellab:
         run_import_mode(Path(args.import_ships_pixellab), raw=True)
+        return
+    if args.import_fx_pixellab:
+        root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_vfx"
+                / "v3")
+        if args.import_fx_pixellab != "auto":
+            root = Path(args.import_fx_pixellab)
+        run_import_fx_mode(root)
         return
     if args.import_icons:
         run_import_icons_mode([Path(p) for p in args.import_icons])

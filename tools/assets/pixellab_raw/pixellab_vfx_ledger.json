@@ -1,0 +1,103 @@
+{
+ "dirs": {
+  "e": {
+   "artist": "pro",
+   "background_job_id": "02e316a1-5220-4148-b056-8c8c0f046302",
+   "description_sha256": "60652fc74aaa3e3f4c3efd95b04db2edfd0f060733a5a34f7143ddbe18ce10fa",
+   "effect_id": "596a12ed-40a2-4d60-a951-f64b86e93417",
+   "name": "waterline-v3-e-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "e720c25c5f9f971907c9310c60e51f1d7aaa7e2940dfb0dda529a0f618288089",
+    "front": "ab78519cc1bc2245e6432575cf467506d3a9b5197504cc5dab091630001182a9"
+   }
+  },
+  "n": {
+   "artist": "pro",
+   "background_job_id": "26a947df-7416-4254-8992-d62da48aae47",
+   "description_sha256": "64033d128a88c2954443121c806a42145dddcefaad3be6cfc241ae1246247269",
+   "effect_id": "c619b280-e9d5-46b9-8106-7e4acda02d3d",
+   "name": "waterline-v3-n-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "39bad0fe4576a37564ff910844e7cebb64d92b36bde5a2af06e8ac8ad2b3cfae",
+    "front": "6dcae4a9a18a44710a0fcbf2aa3f2f41fc339a0da32e5a4fc1908e0fefd90d35"
+   }
+  },
+  "ne": {
+   "artist": "pro",
+   "background_job_id": "0c05044c-38aa-438f-87dc-540e448952ba",
+   "description_sha256": "ab911251454ba87abbef70c6cb70e86008e0ce8963fa52ec1150730b32ccdc71",
+   "effect_id": "a4b586e0-2983-4b69-b086-a0d7b27393cb",
+   "name": "waterline-v3-ne-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "7eb59ef5103b29a015e8e41bd18207d8354e1139d2afde6e191b0b824e640961",
+    "front": "b43caa57550852339f666b98357cafebf088d4dc26fc6f1c1f713d50e9224254"
+   }
+  },
+  "nw": {
+   "artist": "pro",
+   "background_job_id": "7a0ab2ac-1c43-4cf8-86a3-daefb3f5eb1c",
+   "description_sha256": "17a63230c4cba3b5c74a4da6bbaf88997b83e446448eecd8fbaa3622774f74a0",
+   "effect_id": "96650d8c-996c-42f7-a376-c33ca1fe1b60",
+   "name": "waterline-v3-nw-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "d5ee0b193e31893d4446e09a06571f24f14408ba7961c45f65e0a010a7ba4480",
+    "front": "3a21d33cf6a838f87193ca694d33bb2225358e2f762b1d9fea00aa7e91a9f4f9"
+   }
+  },
+  "s": {
+   "artist": "pro",
+   "background_job_id": "5d10f7a8-215f-443a-bc60-559c4133b0cb",
+   "description_sha256": "6e784b08c5a2ee0444e42f54d069b53518c16345da2c4b4cee32ac3a343c7447",
+   "effect_id": "e7bd2b77-327b-4f39-88f8-386bfd43349b",
+   "name": "waterline-v3-s-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "a814fce2b7513c8b6ee82aa6a5e1f9679b3390787e5ec3c39598733e70a13a25",
+    "front": "0de31ad0e36362cb143a14c8a0eada00ce189e5e4d4f1ef8c936fd6055d75588"
+   }
+  },
+  "se": {
+   "artist": "pro",
+   "background_job_id": "bdac14e5-9567-4571-aaa1-702b3ff2ae1e",
+   "description_sha256": "759f2ac47d9ff59f4b2d4321f4efc4d5049b3a1901d5896a4500170f6a8b04bb",
+   "effect_id": "1f0f38e8-784f-436a-b792-6764b33fae12",
+   "name": "waterline-v3-se-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "d5fa107ee28f18692383268e62a5ae36b04d4661c78860524c367e258d4e3388",
+    "front": "7713370edf0f0e5d351f79f3563c626867c9e9c1bcaa8d4249690853125f9de5"
+   }
+  },
+  "sw": {
+   "artist": "pro",
+   "background_job_id": "4f03ca79-d372-48dd-87ab-f1437c7e8625",
+   "description_sha256": "811f47c237933a010ee09eb36158b05004ed31c9798426dd1ecf4c2d5df02c0e",
+   "effect_id": "d004a175-b70b-4e37-b913-22a3d1c46081",
+   "name": "waterline-v3-sw-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "351cbacb75c961737b4c3b570be45967538fb00fc9449f53d411a3ecdb3377f4",
+    "front": "9684ebe92e3ceb7c06cd203fe3006649c15e0b42c342b3328ea82407c4af3cbc"
+   }
+  },
+  "w": {
+   "artist": "pro",
+   "background_job_id": "9cd9d5a1-dc9f-4d13-b0b5-5d6eb0a18769",
+   "description_sha256": "8da62a326a69781a9edf77967b1c0adab7bee489e5ead649821caa50fb1c238b",
+   "effect_id": "86153dd6-3363-41c1-8218-546a4424224f",
+   "name": "waterline-v3-w-pro",
+   "quoted_generations": 10,
+   "sheets": {
+    "back": "9ffea98b7b5db896ef0ad2dea7588d0e67e1ca8eb5b7d839f684ce0bfe1cf1f8",
+    "front": "a4749513f1eefb0b2546e0cb2985b76ca6ed167f77d15a99c595c3709a7d3682"
+   }
+  }
+ },
+ "generated_by": "tools/build_ui_art.py --import-fx-pixellab",
+ "table_sha256": "ef8d44d3ea70ddf34cc0fc33f8ad3f87186d093b5b1d64435c88a989e6ae3f98",
+ "version": 1
+}

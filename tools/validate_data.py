@@ -104,6 +104,7 @@ merged sources must rebuild byte-identically where they live).
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 import os
@@ -9193,6 +9194,99 @@ def _g13_terrain_pixellab_ledger() -> dict:
     return doc
 
 
+def _g13_vfx_ledger() -> dict:
+    """The PixelLab waterline-family ledger (80-* §4.8 2026-11-07): the
+    build_ui_art --import-fx-pixellab output. Empty dict when absent or
+    unparseable — the family is then simply not in the inventory."""
+    path = DATA_DIR.parent / "tools" / "assets" / "pixellab_raw" / \
+        "pixellab_vfx_ledger.json"
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(doc.get("dirs"), dict) or not doc["dirs"]:
+        return {}
+    return doc
+
+
+def _g13_check_vfx_family(sprites: dict) -> None:
+    """The waterline VFX family audit (80-* §4.8 2026-11-07; group 13):
+    ledger ↔ committed sheets (sha256), the committed frame table's
+    contract (8 dirs × back/front, 8 uniform frames, loop, anchor in the
+    64 box), and each sheet's decode dims against its frame grid."""
+    ledger = _g13_vfx_ledger()
+    if not ledger:
+        fail("vfx-ledger", "pixellab_vfx_ledger.json",
+             "the fx class ships fx_waterline_* sheets but the provenance "
+             "ledger is missing — run build_ui_art --import-fx-pixellab", 13)
+    table_path = ART_ROOT / "assets" / "ui" / "fx" / "fx_waterline.json"
+    if not table_path.is_file():
+        fail("vfx-table", "fx_waterline.json",
+             "the committed frame table is missing", 13)
+    table_sha = hashlib.sha256(table_path.read_bytes()).hexdigest()
+    if table_sha != ledger.get("table_sha256"):
+        fail("vfx-table", "fx_waterline.json",
+             f"sha256 {table_sha[:12]}… != ledger table_sha256 "
+             f"{str(ledger.get('table_sha256'))[:12]}… — re-run "
+             "build_ui_art --import-fx-pixellab", 13)
+    try:
+        table = json.loads(table_path.read_text())
+    except ValueError as exc:
+        fail("vfx-table", "fx_waterline.json",
+             f"not valid JSON ({exc})", 13)
+    dirs = table.get("dirs", {})
+    if sorted(dirs) != sorted(ledger.get("dirs", {})):
+        fail("vfx-ledger", "fx_waterline.json",
+             "table dirs != ledger dirs", 13)
+    if len(dirs) != 8:
+        fail("vfx-ledger", "fx_waterline.json",
+             f"expected 8 dirs, table has {len(dirs)}", 13)
+    for d, entry in sorted(dirs.items()):
+        if int(entry.get("frames", 0)) != 8:
+            fail("vfx-frames", f"fx_waterline[{d}]",
+                 f"frames {entry.get('frames')} != the pinned 8 "
+                 "(80-* §4.8 2026-11-07)", 13)
+        if not bool(entry.get("loop", False)):
+            fail("vfx-loop", f"fx_waterline[{d}]", "loop must be true", 13)
+        if int(entry.get("frame_ms", 0)) <= 0:
+            fail("vfx-frames", f"fx_waterline[{d}]", "frame_ms <= 0", 13)
+        anchor = entry.get("anchor_sprite", {})
+        ax, ay = int(anchor.get("x", -1)), int(anchor.get("y", -1))
+        if not (0 <= ax <= 64 and 0 <= ay <= 64):
+            fail("vfx-anchor", f"fx_waterline[{d}]",
+                 f"anchor ({ax},{ay}) outside the 64 box", 13)
+        for layer in ("back", "front"):
+            clip = entry.get("layers", {}).get(layer, {})
+            sid = f"fx_waterline_{layer}_{d}"
+            sprite = sprites.get(sid)
+            if sprite is None:
+                fail("vfx-sheet", sid, "sheet missing from the fx class "
+                     "decode", 13)
+                continue
+            fw = int(clip.get("frame", {}).get("w", 0))
+            fh = int(clip.get("frame", {}).get("h", 0))
+            columns = int(clip.get("columns", 0))
+            if fw <= 0 or fh <= 0 or columns <= 0:
+                fail("vfx-sheet", sid, "frame/columns missing", 13)
+                continue
+            rows = (int(entry.get("frames", 0)) + columns - 1) // columns
+            if sprite.w != fw * columns or sprite.h != fh * rows:
+                fail("vfx-sheet", sid,
+                     f"sheet {sprite.w}x{sprite.h} != the "
+                     f"{columns}x{rows} grid of {fw}x{fh} frames", 13)
+            led = ledger.get("dirs", {}).get(d, {}).get("sheets", {})
+            actual = hashlib.sha256((ART_ROOT / "assets" / "ui" / "fx"
+                                     / f"{sid}.png").read_bytes()).hexdigest()
+            if led.get(layer) != actual:
+                fail("vfx-sheet", sid,
+                     f"sha256 != ledger ({actual[:12]}…)", 13)
+        if not str(ledger.get("dirs", {}).get(d, {}).get("effect_id", "")):
+            fail("vfx-ledger", f"fx_waterline[{d}]",
+                 "effect_id missing from the provenance ledger", 13)
+
+
 def _g13_raw_pixellab_ingest() -> bool:
     """True when the last ship ingestion was the PixelLab raw mode
     (ledger generated_by marker or per-token pixellab provenance;
@@ -10507,6 +10601,39 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     check_decls.setdefault(sid, (decl_c, None))
                 terrain_entries = declared.setdefault("assets/ui/terrain", [])
                 terrain_entries.extend(entries_c)
+            # §4.8 2026-11-07 — the PixelLab waterline family: the 16 sheets
+            # (8 dirs × back/front) enter the fx inventory through the
+            # build-time ledger, the coast-family precedent (raw-pixellab
+            # ruling — palette/budget waived; the audit is the dedicated
+            # fx ledger + frame-table contract below).
+            fx_ledger = _g13_vfx_ledger() if class_name == "fx" else {}
+            if fx_ledger:
+                # sheet dims come from the committed frame table (the pinned
+                # grid contract): w = frame.w × columns, h = frame.h × rows
+                fx_table_path = ART_ROOT / "assets" / "ui" / "fx" / \
+                    "fx_waterline.json"
+                fx_table = json.loads(fx_table_path.read_text()) \
+                    if fx_table_path.is_file() else {}
+                entries_f: list = []
+                for d in sorted(fx_ledger.get("dirs", {})):
+                    entry_t = fx_table.get("dirs", {}).get(d, {})
+                    frames_n = int(entry_t.get("frames", 8))
+                    for layer in ("back", "front"):
+                        clip = entry_t.get("layers", {}).get(layer, {})
+                        fw = int(clip.get("frame", {}).get("w", 0))
+                        fh = int(clip.get("frame", {}).get("h", 0))
+                        columns = int(clip.get("columns", 3))
+                        sid_f = f"fx_waterline_{layer}_{d}"
+                        decl_f = {"id": sid_f, "class": "fx",
+                                  "file": f"assets/ui/fx/{sid_f}.png",
+                                  "width": fw * columns,
+                                  "height": fh * ((frames_n + columns - 1)
+                                      // columns),
+                                  "pixellab": True}
+                        entries_f.append((sid_f, decl_f))
+                        check_decls.setdefault(sid_f, (decl_f, None))
+                fx_entries = declared.setdefault("assets/ui/fx", [])
+                fx_entries.extend(entries_f)
         sprites: dict[str, _G13Sprite] = {}
         for parent, entries in sorted(declared.items()):
             dir_path = ART_ROOT / parent
@@ -10535,6 +10662,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     elif class_name == "terrain" and \
                             isinstance(decl, dict) and decl.get("pixellab"):
                         pass  # PixelLab coast family: same raw ruling
+                    elif class_name == "fx" and \
+                            isinstance(decl, dict) and decl.get("pixellab"):
+                        pass  # waterline family: same raw ruling
                     else:
                         mask = isinstance(decl, dict) and \
                             decl.get("class") == "terrain_pattern"
@@ -10570,6 +10700,8 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     _g13_check_pennants(sprites, hull_uw2_ships)
             elif class_name == "shore":
                 _g13_check_shore_strips(sprites)
+            elif class_name == "fx":
+                _g13_check_vfx_family(sprites)
 
     # Staged classes with artifacts but no manifests yet cannot exist (the
     # artifacts are generated FROM the manifests), so any file outside the

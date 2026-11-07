@@ -60,6 +60,10 @@ const PickerScene := preload("res://scenes/world/fleet_picker.tscn")
 const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+## The fleet waterline & wake VFX contract (80-* §4.8 2026-11-07): the
+## committed frame table + closed-form frame stepping for the BACK/FRONT
+## sheet sandwich around every hull token (player + NPC) while it moves.
+const WaterlineFxLib := preload("res://scripts/world/waterline_fx.gd")
 
 ## The single shipped map id (docs/90-* §9.1). Map switching is retired with
 ## the dual-map pipeline: `world.map_id` is always this value, so the scene
@@ -167,6 +171,23 @@ var _last_markers: Array = []
 ## right-click attack (the §4.11.11.2 loot row applies to those only — a
 ## hostile contact keeps the §4.11.10 aftermath untouched).
 var _battle_player_initiated: bool = false
+
+# --- Waterline VFX state (80-* §4.8 2026-11-07) -----------------------------
+
+## The player token's BACK/FRONT sheet rects (holders' children under
+## FleetMarker/Token) and their AtlasTextures; `dir` is the last applied
+## heading dir id (geometry reapplies only on change).
+var _player_fx_back: TextureRect = null
+var _player_fx_front: TextureRect = null
+var _player_fx_atlas_back: AtlasTexture = null
+var _player_fx_atlas_front: AtlasTexture = null
+var _player_fx_dir: String = ""
+var _player_fx_frame: int = -1
+## NPC marker id → its fx record `{back, front, atlas_back, atlas_front,
+## dir, moving, frame}` — rebuilt by the marker pass, stepped by the tick.
+var _npc_fx: Dictionary = {}
+## The shared fx animation clock (ms; one clock, per-fleet phase offsets).
+var _fx_clock_ms: int = 0
 
 # --- Phase 8 W5-A: the right-click interaction layer (80-* §4.10) -----------
 
@@ -456,6 +477,9 @@ func _process(delta: float) -> void:
 	# Interpolated rendering (§2.6): render-only, after the logic tick.
 	_tick_marker_glide(delta)
 	_tick_npc_glides(delta)
+	# The waterline sheets (80-* §4.8 2026-11-07): frame stepping + the
+	# speed gate — render-only, after the movement ticks.
+	_tick_waterline_fx(delta)
 
 ## Forces the lazy ocean-currents decode on the first frame after boot
 ## (docs/20-* §4.16): the ~1 s raster decode + reversal index otherwise land
@@ -1961,6 +1985,11 @@ func _sync_marker_nodes() -> void:
 					"hull_%s_%s_%s" % [ship_type, owner, dir_id])
 		_sync_npc_token(square, token_texture, role_color,
 			str(marker.get("letter", "")))
+		# The waterline sheets (80-* §4.8 2026-11-07): full sandwich for
+		# every hull-token fleet, gated on the marker's `sailing` flag —
+		# the same motion predicate the §4.5.2 wake layer paints from.
+		_sync_marker_fx(square, id, dir_id, token_texture != null,
+			bool(marker.get("sailing", false)))
 		# §3 (A.4): a treasure fleet wears the `marker_treasure` token when the
 		# registry resolves it — the role letter rides on top (§4.8.5 overlay
 		# rule); the §4.8 hull token (when it resolved) draws beneath it.
@@ -2028,6 +2057,7 @@ func _sync_marker_nodes() -> void:
 		var dead: ColorRect = _marker_nodes[id]
 		_marker_nodes.erase(id)
 		dead.queue_free()
+		_npc_fx.erase(id)
 	_sync_wake_layer()
 	_sync_wreck_nodes()
 	# Phase 10 (§3): the discovery site markers ride the same pass — the
@@ -2084,6 +2114,10 @@ func _sync_npc_token(square: ColorRect, texture: Texture2D,
 		# Beneath the letter/count/chip overlays — the §4.8.5 overlay rule:
 		# identification letters stay badges drawn ON TOP of the token sprite.
 		square.move_child(token, 0)
+		# The waterline z ladder (80-* §4.8 2026-11-07): the hull token and
+		# its FRONT sheet ride z -1 (created later, tree order above), the
+		# BACK sheet z -2 — badges/count/chip/treasure stay at z 0 above.
+		token.z_index = -1
 	var chip: ColorRect = square.get_node_or_null("Chip")
 	if chip == null:
 		chip = ColorRect.new()
@@ -2123,6 +2157,119 @@ func _sync_npc_token(square: ColorRect, texture: Texture2D,
 	chip_letter.visible = not letter_text.is_empty()
 	if letter_node != null:
 		letter_node.visible = false
+
+
+## One NPC marker's waterline sheets (80-* §4.8 2026-11-07): the BACK/FRONT
+## rects ride the square at z -2/-1 around the z -1 hull token, sized and
+## placed from the committed table (`anchor_sprite + offset`, cell-scaled).
+## Visibility = hull token resolved AND the marker is sailing; geometry
+## reapplies only when the dir changes. Record: `_npc_fx[id]`.
+func _sync_marker_fx(square: ColorRect, id: String, dir_id: String,
+		has_token: bool, moving: bool) -> void:
+	var rec: Dictionary = _npc_fx.get(id, {})
+	var fx_back: TextureRect = rec.get("back")
+	if fx_back == null:
+		fx_back = TextureRect.new()
+		fx_back.name = "FxBack"
+		fx_back.stretch_mode = TextureRect.STRETCH_SCALE
+		fx_back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		fx_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fx_back.z_index = -2
+		fx_back.visible = false
+		square.add_child(fx_back)
+		var fx_front := TextureRect.new()
+		fx_front.name = "FxFront"
+		fx_front.stretch_mode = TextureRect.STRETCH_SCALE
+		fx_front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		fx_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fx_front.z_index = -1
+		fx_front.visible = false
+		square.add_child(fx_front)
+		rec = {"back": fx_back, "front": fx_front, "atlas_back": null,
+			"atlas_front": null, "dir": "", "moving": false, "frame": -1}
+	rec["moving"] = moving
+	var show := has_token and not dir_id.is_empty() \
+		and WaterlineFxLib.has(dir_id)
+	if not show:
+		fx_back.visible = false
+		(rec.get("front") as TextureRect).visible = false
+		rec["frame"] = -1
+		_npc_fx[id] = rec
+		return
+	if str(rec.get("dir")) != dir_id:
+		rec["dir"] = dir_id
+		rec["frame"] = -1
+		var atlas_back: AtlasTexture = rec.get("atlas_back")
+		if atlas_back == null:
+			atlas_back = AtlasTexture.new()
+			rec["atlas_back"] = atlas_back
+			(rec.get("back") as TextureRect).texture = atlas_back
+			var atlas_front := AtlasTexture.new()
+			rec["atlas_front"] = atlas_front
+			(rec.get("front") as TextureRect).texture = atlas_front
+		for layer: String in ["back", "front"]:
+			var atlas: AtlasTexture = rec.get("atlas_%s" % layer)
+			atlas.atlas = UiKitLib.icon_texture(
+				WaterlineFxLib.layer_id(dir_id, layer))
+			atlas.region = WaterlineFxLib.atlas_region(dir_id, layer, 0)
+			var rect := rec.get(layer) as TextureRect
+			rect.position = (square.size - Vector2(_cell_pixels,
+				_cell_pixels)) * 0.5 \
+				+ WaterlineFxLib.layer_offset_px(dir_id, layer, _cell_pixels)
+			rect.size = WaterlineFxLib.layer_size_px(dir_id, layer,
+				_cell_pixels)
+	_npc_fx[id] = rec
+
+
+## The waterline fx clock (80-* §4.8 2026-11-07): one ms clock; per-fleet
+## frame index from the committed frame_ms + a deterministic phase offset
+## (id hash) so hundreds of fleets never foam in lockstep. Visibility:
+## player = hull resolved AND `SailingSim.effective_speed() > 0`; NPC =
+## hull resolved AND the marker's `sailing` flag (the §4.5.2 predicate).
+## Render-only — regions update only when a fleet's frame index changes.
+func _tick_waterline_fx(delta: float) -> void:
+	_fx_clock_ms += int(round(delta * 1000.0))
+	if WaterlineFxLib.table().is_empty():
+		return
+	var player_show := _has_game() \
+		and SailingSimLib.effective_speed() > 0 \
+		and not _player_fx_dir.is_empty()
+	if _player_fx_back != null and _player_fx_front != null:
+		_player_fx_back.visible = player_show
+		_player_fx_front.visible = player_show
+		if player_show:
+			var f := WaterlineFxLib.frame_at(_player_fx_dir, _fx_clock_ms)
+			if f != _player_fx_frame:
+				_player_fx_frame = f
+				_player_fx_atlas_back.region = WaterlineFxLib.atlas_region(
+					_player_fx_dir, "back", f)
+				_player_fx_atlas_front.region = WaterlineFxLib.atlas_region(
+					_player_fx_dir, "front", f)
+	for id in _npc_fx:
+		var rec: Dictionary = _npc_fx[id]
+		var back := rec.get("back") as TextureRect
+		var front := rec.get("front") as TextureRect
+		if back == null or front == null:
+			continue
+		var show: bool = bool(rec.get("moving", false)) \
+			and not str(rec.get("dir", "")).is_empty() \
+			and WaterlineFxLib.has(str(rec.get("dir")))
+		back.visible = show
+		front.visible = show
+		if not show:
+			rec["frame"] = -1
+			continue
+		var dir := str(rec.get("dir"))
+		var g := WaterlineFxLib.geometry(dir)
+		var cycle := int(g.get("frame_ms", 0)) * int(g.get("frames", 1))
+		var phase := int(abs(id.hash())) % maxi(cycle, 1)
+		var f := WaterlineFxLib.frame_at(dir, _fx_clock_ms + phase)
+		if f != int(rec.get("frame", -1)):
+			rec["frame"] = f
+			(rec.get("atlas_back") as AtlasTexture).region = \
+				WaterlineFxLib.atlas_region(dir, "back", f)
+			(rec.get("atlas_front") as AtlasTexture).region = \
+				WaterlineFxLib.atlas_region(dir, "front", f)
 
 
 ## Ensures the wake layer exists and repaints it from the last marker pass.
@@ -2352,6 +2499,17 @@ func _player_token_init() -> void:
 	holder.position = Vector2.ONE * _cell_pixels * -0.5
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.visible = false
+	# The waterline sandwich (80-* §4.8 2026-11-07): BACK sheet below the
+	# hull sprite, FRONT sheet above it, both hidden until a hull token
+	# resolves AND the fleet is moving (the tick owns visibility).
+	var fx_back := TextureRect.new()
+	fx_back.name = "FxBack"
+	fx_back.stretch_mode = TextureRect.STRETCH_SCALE
+	fx_back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fx_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_back.visible = false
+	holder.add_child(fx_back)
+	_player_fx_back = fx_back
 	var sprite := TextureRect.new()
 	sprite.name = "Sprite"
 	sprite.stretch_mode = TextureRect.STRETCH_SCALE
@@ -2360,6 +2518,14 @@ func _player_token_init() -> void:
 	sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(sprite)
 	_token_sprite = sprite
+	var fx_front := TextureRect.new()
+	fx_front.name = "FxFront"
+	fx_front.stretch_mode = TextureRect.STRETCH_SCALE
+	fx_front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fx_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_front.visible = false
+	holder.add_child(fx_front)
+	_player_fx_front = fx_front
 	get_node("FleetMarker").add_child(holder)
 	_refresh_player_token()
 
@@ -2389,6 +2555,43 @@ func _refresh_player_token() -> void:
 	var square := marker.get_node_or_null("Square") as Control
 	if square != null:
 		square.visible = texture == null
+	_apply_player_fx(dir_id if texture != null else "", texture)
+
+
+## The player token's waterline sheets (80-* §4.8 2026-11-07): when the
+## dir changes (or the first time a hull resolves), the BACK/FRONT rects
+## take the committed geometry — AtlasTextures over the shared sheet, the
+## box-local placement `anchor_sprite + offset` scaled to the cell. The
+## tick owns visibility (speed gate) and frame stepping.
+func _apply_player_fx(dir_id: String, texture: Texture2D) -> void:
+	if _player_fx_back == null or _player_fx_front == null:
+		return
+	if dir_id.is_empty() or texture == null \
+			or not WaterlineFxLib.has(dir_id):
+		_player_fx_dir = ""
+		_player_fx_back.visible = false
+		_player_fx_front.visible = false
+		_player_fx_frame = -1
+		return
+	if dir_id == _player_fx_dir:
+		return
+	_player_fx_dir = dir_id
+	_player_fx_frame = -1
+	if _player_fx_atlas_back == null:
+		_player_fx_atlas_back = AtlasTexture.new()
+		_player_fx_atlas_front = AtlasTexture.new()
+		_player_fx_back.texture = _player_fx_atlas_back
+		_player_fx_front.texture = _player_fx_atlas_front
+	for layer: String in ["back", "front"]:
+		var atlas := _player_fx_atlas_back if layer == "back" \
+			else _player_fx_atlas_front
+		atlas.atlas = UiKitLib.icon_texture(
+			WaterlineFxLib.layer_id(dir_id, layer))
+		atlas.region = WaterlineFxLib.atlas_region(dir_id, layer, 0)
+		var rect := _player_fx_back if layer == "back" else _player_fx_front
+		rect.position = WaterlineFxLib.layer_offset_px(dir_id, layer,
+			_cell_pixels)
+		rect.size = WaterlineFxLib.layer_size_px(dir_id, layer, _cell_pixels)
 
 
 ## The arrow field's draw layer: a world-anchored Control under the map

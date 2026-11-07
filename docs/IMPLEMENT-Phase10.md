@@ -539,8 +539,10 @@ Officer portraits (96); tier-3 non-legend captain promotion (**61**
 ids → manifest edit); runtime ComfyUI-style generation +
 `user://portraits/` cache + offline-lock amendment (own future plan);
 discovery reveal pics ×30 (model pass via `art_prompts.json`);
-sail-state hull variants; named-pirate ship variant; world-map wake;
-animations beyond the pinned set.
+sail-state hull variants; named-pirate ship variant; world-map wake
+(**claimed 2026-11-07** — delivered as the PixelLab waterline VFX
+family's BACK sheet, `80-*` §4.8 2026-11-07 amendment); animations
+beyond the pinned set.
 
 ---
 
