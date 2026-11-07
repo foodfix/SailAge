@@ -2580,6 +2580,42 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      43×73, 86×104; anchors template-matched into the size boxes);
      ingest gates: `--check` byte-identical (257 files), validator
      groups 1–13 green, 61/61 suites green.
+     **Per-ship wake revision (amended 2026-11-08, user direction —
+     SUPERSEDES the per-size family above; the wake is generated for
+     EVERY ship type, not just the three size representatives):** the
+     family regenerates as ONE north sheet per SHIP TYPE —
+     `fx_waterline_{ship}` (ship ∈ the 16 `data/ship_types.json` ids),
+     `assets/ui/fx/fx_waterline_{ship}.png` — and the frame table goes
+     to **version 4** (per ship: canvas, fps, frame_ms, frames, loop,
+     `anchor_sprite`, one `sheet` record, `sprite`; the per-size keys
+     {32,48,64} and their sheets retire). The single-layer render
+     rules are unchanged — everything UNDER the hull, z ladder wake
+     −2 / hull −1 / badges 0. **Generation: exactly 16 `/v2/vfx`
+     calls total (one per ship type);** the envelope is unchanged
+     (four fields + `game_pack: true`) with `sprite` = that ship's
+     OWN north token `assets/ui/tokens/hull_{ship}.png` (the wake
+     hugs the hull silhouette it ships with — one representative per
+     size read too wide or too narrow on the tier-mates) and
+     `name: waterline-v6-north-{ship}-pro`; the description is the
+     v5 template verbatim (unchanged, still pinned). Raw output
+     gitignored under `tools/ui_art/model_raw/pixellab_vfx/v6/<ship>/`
+     (sheets + game pack + `response.json` + the `pixellab_vfx.json`
+     manifest keyed by ship id — retries are discounted change-calls;
+     re-download without re-generation); **raw model output is never
+     committed**. The anchor template-match resolves into the ship's
+     OWN token box (the box = the token PNG's canvas — 4×32², 8×48²,
+     4×64² across the 16 ships). **Ingest/runtime:**
+     `build_ui_art --import-fx-pixellab` copies the 16 sheets
+     verbatim, rewrites the table to v4 and prunes the retired
+     per-size files `fx_waterline_{32,48,64}.png`; the runtime lookup
+     keys on the fleet's ship type id — player = the flagship's
+     `ship_type_id`, NPC = the marker's `ship_type` — with the sheet
+     still rotating together with the hull sandwich around the token
+     center. Visible-while-moving, the shared clock with per-fleet
+     phase offset, letter-square/docked exclusions and the §4.5.2
+     trail separation are all unchanged; battle-screen hulls remain
+     out of scope. Group 13 cross-checks the table keys against
+     `data/ship_types.json` (16 ships, no gaps, no extras).
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through

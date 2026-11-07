@@ -1,37 +1,167 @@
 {
  "generated_by": "tools/build_ui_art.py --import-fx-pixellab",
- "sizes": {
-  "32": {
+ "ships": {
+  "brigantine": {
    "artist": "pro",
-   "background_job_id": "220bbf16-9aac-4fe8-916c-8b7f8b4fafc7",
+   "background_job_id": "9e59db56-fdac-4010-9d91-7c6c23185f84",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "396e7caa-39c7-497a-96e1-06cc2b347700",
-   "name": "waterline-v5-north-32-pro",
+   "effect_id": "c086a692-22de-4324-8510-dfb84af13aa8",
+   "name": "waterline-v6-north-brigantine-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "85dcafd002b123967f27df4cac79a5315d9aac23ee3884c97c1adf0a52bed6ab",
-   "sprite": "hull_latin"
+   "sheet_sha256": "8935109c7c1acdd3974a672e8c48d4cdfef42f6bf4c09037e7fec51d3c0c0f63",
+   "sprite": "hull_brigantine"
   },
-  "48": {
+  "caravel": {
    "artist": "pro",
-   "background_job_id": "3f1435fc-7cb2-4b42-9664-c004bc13608b",
+   "background_job_id": "b4085261-db7f-494b-8fa1-4c98c5ad95ce",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "358943dd-ac6d-458d-a17f-abeb2287ca25",
-   "name": "waterline-v5-north-48-pro",
+   "effect_id": "52cd8127-ac23-4cd0-a19e-a39f1843ea42",
+   "name": "waterline-v6-north-caravel-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "be7630cfcd813ddcfb630f3ca2432e2ad346d4c7d9deeb5a8d475e1ead3a1190",
+   "sheet_sha256": "4126d457fb0479f7ceb35fa0297d665c291fa544678d3f4a2e2f61ac6559684d",
    "sprite": "hull_caravel"
   },
-  "64": {
+  "caravela_redonda": {
    "artist": "pro",
-   "background_job_id": "b46217d9-4b93-469e-9961-0571fef2bf63",
+   "background_job_id": "156788b5-285c-4253-99a3-68fecc62c7b7",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "7279416f-05a3-4b25-adec-af4cb450e2be",
-   "name": "waterline-v5-north-64-pro",
+   "effect_id": "3bb2e05d-26d6-4aff-9f9c-9993d4177e7b",
+   "name": "waterline-v6-north-caravela_redonda-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "cf84d7a09aab2925d5392d5af6135187f9766ec35a23c9cbf268f9235bf58cd9",
+   "sheet_sha256": "097c34f1652c285df4c79fcee141f18d445e7e7fb34afd61e2c50d24594592f6",
+   "sprite": "hull_caravela_redonda"
+  },
+  "carrack": {
+   "artist": "pro",
+   "background_job_id": "b2687b59-1767-4d6e-969b-a5346ca7ff4d",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "49f578c6-e1d8-4f0c-b465-bf7b21da9be6",
+   "name": "waterline-v6-north-carrack-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "6762e8a3ee7de6c10d436b758ce3f6cea140224a2521eb63691f38ee5db041aa",
+   "sprite": "hull_carrack"
+  },
+  "dhow": {
+   "artist": "pro",
+   "background_job_id": "b05ecff2-a2a5-4318-8f23-08c534810da8",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "9764bbbf-1edf-429e-bbea-1779f02b6b9f",
+   "name": "waterline-v6-north-dhow-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "6468a21df4369e9f757d498c12de0d8ba7abf2998689b705b31b230cde3ab37d",
+   "sprite": "hull_dhow"
+  },
+  "fluyt": {
+   "artist": "pro",
+   "background_job_id": "1286c1ca-d359-4b1f-b4e6-8ad3c5a1a8bd",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "44ccfa87-a8c5-4a60-b429-db77a778537a",
+   "name": "waterline-v6-north-fluyt-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "ebd5962a4dd26f708317b3fd52f5a5e90c9ace3b13c0ed5246bc3cee3bc8048b",
+   "sprite": "hull_fluyt"
+  },
+  "galiot": {
+   "artist": "pro",
+   "background_job_id": "226dbcd4-e043-4fdb-8bd2-2a0b471f8c1c",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "b63845ed-1d28-4506-998f-126916bf8ee3",
+   "name": "waterline-v6-north-galiot-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "5c859394a208e5e223fc52879a626a856a9567788845083d24c6337d86bf6b2d",
+   "sprite": "hull_galiot"
+  },
+  "galleass": {
+   "artist": "pro",
+   "background_job_id": "6a5479ff-dfb1-4b21-b668-470b39908750",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "a662fe8f-2612-4048-96a0-e10bbc19ca28",
+   "name": "waterline-v6-north-galleass-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "6bd762218adf62f4daf7d8b6328baa7c04bcc90a317708cdfb26fe3390f98f7d",
    "sprite": "hull_galleass"
+  },
+  "galleon": {
+   "artist": "pro",
+   "background_job_id": "c8fd2b81-fda0-4b89-b949-620e54aba8ab",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "81962706-cf5c-4e7f-aaf5-2c091e2a3d68",
+   "name": "waterline-v6-north-galleon-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "8911906d2f1c7263065f9b6d52b6d8116bc6f32c1ca911a3c8d2060fee4814c7",
+   "sprite": "hull_galleon"
+  },
+  "galley": {
+   "artist": "pro",
+   "background_job_id": "b62fbc5d-adf8-43c2-924a-8a9cf97d4a5b",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "54a69cb4-f62e-410e-87ba-f70335580b8f",
+   "name": "waterline-v6-north-galley-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "3e7322a6373792a585e347737f9775d332a6dfaf4b04a3bfd9f368ca32b6ef8d",
+   "sprite": "hull_galley"
+  },
+  "junk": {
+   "artist": "pro",
+   "background_job_id": "0ee922ad-7dcf-479e-bb75-4cec928dd209",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "e629e08d-764a-4484-acfa-755faee7deb3",
+   "name": "waterline-v6-north-junk-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "5217d823b2f047013632ecf4833fb3a66c876697bb172e3f827856c619bbf4fb",
+   "sprite": "hull_junk"
+  },
+  "latin": {
+   "artist": "pro",
+   "background_job_id": "617ca9b8-4ca4-46fe-8e11-10162b032413",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "7e41bb68-4915-4f24-9a41-4ddabc976bbe",
+   "name": "waterline-v6-north-latin-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "232e5c36642d48eea34efe374a20a853bb589055ba15e8696d4ee8e32673fce3",
+   "sprite": "hull_latin"
+  },
+  "nao": {
+   "artist": "pro",
+   "background_job_id": "95e6f7ed-1a32-4c19-a8cd-bf03c463c359",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "4befa306-0a29-4c00-9015-a291de252096",
+   "name": "waterline-v6-north-nao-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "e0e5c036e9c98b68011171194ab0f3a177b3c8bab6622f908eea438924d8c881",
+   "sprite": "hull_nao"
+  },
+  "pinnace": {
+   "artist": "pro",
+   "background_job_id": "63346630-fd54-40d1-a31e-40048ab8f804",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "4a9a960c-f861-4df7-a401-aaf367dc1670",
+   "name": "waterline-v6-north-pinnace-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "bb061af0bba0cb9e0f5c72b516d2d9158715e846f5cbc269e29236c532bb12e7",
+   "sprite": "hull_pinnace"
+  },
+  "sloop": {
+   "artist": "pro",
+   "background_job_id": "a0eb2de6-4785-4fae-af88-361cd6a4544a",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "dcae42ef-ac1f-464a-a9d5-f6d286545265",
+   "name": "waterline-v6-north-sloop-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "5903c3e532b821450d59f6fcce73ab206e207de298b0db8d35d3ff18d5b58e73",
+   "sprite": "hull_sloop"
+  },
+  "xebec": {
+   "artist": "pro",
+   "background_job_id": "3d967834-a23c-4044-85eb-cafca65cd29b",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "02b225de-974d-45a7-8e53-9a4de1db06a0",
+   "name": "waterline-v6-north-xebec-pro",
+   "quoted_generations": 10,
+   "sheet_sha256": "137968e05c3e1289600897577694c0172ed6b1cbf036e219394998afe15ede80",
+   "sprite": "hull_xebec"
   }
  },
- "table_sha256": "dfcd69f2e3c8281c7e3cf764d42f7af8ed4199dffbb23592b51890ee91120b16",
- "version": 3
+ "table_sha256": "96cf272c279dbae139851f17c13f06f2c6039b8f28e24d5eeed78d56b789afbe",
+ "version": 4
 }

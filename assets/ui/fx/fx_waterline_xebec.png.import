@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c2u7h883nac3f"
-path="res://.godot/imported/fx_waterline_48.png-3eac247f79749f4d47d3b2e22b2064ba.ctex"
+uid="uid://ujxt4ldek8kl"
+path="res://.godot/imported/fx_waterline_xebec.png-a8cb1801a00a66ddc9e2b71f9efb4594.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/fx/fx_waterline_48.png"
-dest_files=["res://.godot/imported/fx_waterline_48.png-3eac247f79749f4d47d3b2e22b2064ba.ctex"]
+source_file="res://assets/ui/fx/fx_waterline_xebec.png"
+dest_files=["res://.godot/imported/fx_waterline_xebec.png-a8cb1801a00a66ddc9e2b71f9efb4594.ctex"]
 
 [params]
 

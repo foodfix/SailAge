@@ -1068,7 +1068,7 @@ def _px_mod():
 def _vfx_mod():
     """The wake family's lazy import of tools/pixellab_vfx_pass.py (same
     pattern as _px_mod; the VFX tool shares the pass tool's envelope
-    helpers but carries its own V5_DESCRIPTION / run_size)."""
+    helpers but carries its own V5_DESCRIPTION / run_ship)."""
     if "pixellab_vfx_pass" in sys.modules:
         return sys.modules["pixellab_vfx_pass"]
     tools_dir = os.path.join(REPO, "tools")
@@ -1182,16 +1182,18 @@ def td_generate(label: str, description: str, seed: int,
     }
 
 
-# --------------------- wake VFX family (§4.8 2026-11-07, single-layer) --
+# --------------------- wake VFX family (§4.8 2026-11-08, per-ship) ------
 # The studio's wake path drives tools/pixellab_vfx_pass.py IN-PROCESS: ONE
-# north wake sheet per ship SIZE (32/48/64), rendered UNDER the hull — ships
-# rotate at runtime, so the sheet rotates with them and only the north
-# family ever exists. Re-rolls STAGE into the studio cache (the coast
-# pattern) — the canonical raw store model_raw/pixellab_vfx/v5/ (the
-# ingest's input) is only touched on Accept.
+# north wake sheet per SHIP TYPE (all 16 data/ship_types.json ids — each
+# wake is authored around that ship's own hull), rendered UNDER the hull —
+# ships rotate at runtime, so the sheet rotates with them and only the
+# north family ever exists. Re-rolls STAGE into the studio cache (the
+# coast pattern) — the canonical raw store model_raw/pixellab_vfx/v6/
+# (the ingest's input) is only touched on Accept.
 
-FX_SIZES = (32, 48, 64)
-FX_SIZE_SHIP = {32: "latin", 48: "caravel", 64: "galleass"}  # SIZE_SPRITE
+FX_SHIPS = ("latin", "sloop", "caravel", "galley", "brigantine", "nao",
+            "carrack", "galleon", "galiot", "galleass", "fluyt", "junk",
+            "dhow", "pinnace", "caravela_redonda", "xebec")  # SHIPS
 SEA_RGB = (22, 68, 110)  # the wake review blue (tools/preview_topdown.py)
 
 
@@ -1203,13 +1205,13 @@ def fx_stage_manifest_path() -> str:
     return os.path.join(fx_stage_root(), "pixellab_vfx.json")
 
 
-def fx_stage_dir(size: int) -> str:
-    return os.path.join(fx_stage_root(), str(size))
+def fx_stage_dir(ship: str) -> str:
+    return os.path.join(fx_stage_root(), ship)
 
 
 def fx_stage_manifest() -> dict:
-    """The staging manifest written by pixellab_vfx_pass.run_size
-    (out_root = the studio fx root): size-keyed records with the effect
+    """The staging manifest written by pixellab_vfx_pass.run_ship
+    (out_root = the studio fx root): ship-keyed records with the effect
     id, quote, and the template-matched anchor_sprite."""
     path = fx_stage_manifest_path()
     try:
@@ -1220,10 +1222,6 @@ def fx_stage_manifest() -> dict:
         return {}
 
 
-def fx_ship_of_size(size: int) -> str:
-    return FX_SIZE_SHIP.get(int(size), str(size))
-
-
 def fx_default_prompt() -> str:
     """The pinned v5 description of record (80-* §4.8 2026-11-07,
     verbatim — the natural-language wake: foam described, not hexed) —
@@ -1231,22 +1229,22 @@ def fx_default_prompt() -> str:
     return str(_vfx_mod().V5_DESCRIPTION)
 
 
-def fx_exists(size: int) -> bool:
-    return os.path.isdir(fx_stage_dir(size))
+def fx_exists(ship: str) -> bool:
+    return os.path.isdir(fx_stage_dir(ship))
 
 
-def fx_generate(size: int, description: str, on_stage=None) -> dict:
-    """One wake VFX job: POST /v2/vfx (pro artist, game_pack, the
-    representative north token as the sprite input) + poll + raw download
-    into the staging root. The envelope has NO seed. ~2-5 min of API
-    time; the studio worker runs jobs serially so that is fine."""
+def fx_generate(ship: str, description: str, on_stage=None) -> dict:
+    """One wake VFX job: POST /v2/vfx (pro artist, game_pack, the ship's
+    OWN north token as the sprite input) + poll + raw download into the
+    staging root. The envelope has NO seed. ~1-5 min of API time; the
+    studio worker runs jobs serially so that is fine."""
     t0 = time.time()
     stage = on_stage or (lambda _s: None)
     mod = _vfx_mod()
     stage("posting")
-    rec = mod.run_size(int(size), artist="pro",
+    rec = mod.run_ship(str(ship), artist="pro",
                        default_description=description,
-                       default_name_fmt=f"waterline-v5-north-{size}-pro",
+                       default_name_fmt=f"waterline-v6-north-{ship}-pro",
                        out_root=fx_stage_root())
     ok = rec.get("status") == "completed"
     return {
@@ -1259,30 +1257,30 @@ def fx_generate(size: int, description: str, on_stage=None) -> dict:
     }
 
 
-def fx_accept_stage(size: int) -> None:
-    """Accept staging: copy the staged size dir + its manifest record into
-    the canonical raw store model_raw/pixellab_vfx/v5/ (the ingest's
+def fx_accept_stage(ship: str) -> None:
+    """Accept staging: copy the staged ship dir + its manifest record into
+    the canonical raw store model_raw/pixellab_vfx/v6/ (the ingest's
     input). The manifest record merges FIRST (the builder reads it for
     the anchor), then the dir swaps in."""
     import shutil  # noqa: PLC0415
-    src = fx_stage_dir(size)
+    src = fx_stage_dir(ship)
     if not os.path.isdir(src):
-        raise RuntimeError(f"no staged wake re-roll for size {size}")
-    rec = fx_stage_manifest().get(str(size))
+        raise RuntimeError(f"no staged wake re-roll for ship {ship}")
+    rec = fx_stage_manifest().get(str(ship))
     if not rec:
-        raise RuntimeError(f"staged manifest record missing for {size}")
-    v5_root = os.path.join(RAW, "pixellab_vfx", "v5")
-    os.makedirs(v5_root, exist_ok=True)
-    v5_path = os.path.join(v5_root, "pixellab_vfx.json")
+        raise RuntimeError(f"staged manifest record missing for {ship}")
+    v6_root = os.path.join(RAW, "pixellab_vfx", "v6")
+    os.makedirs(v6_root, exist_ok=True)
+    v6_path = os.path.join(v6_root, "pixellab_vfx.json")
     try:
-        with open(v5_path, encoding="utf-8") as fh:
-            v5_m = json.load(fh)
+        with open(v6_path, encoding="utf-8") as fh:
+            v6_m = json.load(fh)
     except (OSError, ValueError):
-        v5_m = {}
-    v5_m[str(size)] = rec
-    atomic_write(v5_path, json.dumps(v5_m, indent=1, sort_keys=True)
+        v6_m = {}
+    v6_m[str(ship)] = rec
+    atomic_write(v6_path, json.dumps(v6_m, indent=1, sort_keys=True)
                  .encode("utf-8"))
-    dst = os.path.join(v5_root, str(size))
+    dst = os.path.join(v6_root, str(ship))
     tmp = dst + ".stage-tmp"
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.copytree(src, tmp)
@@ -1291,19 +1289,19 @@ def fx_accept_stage(size: int) -> None:
     os.replace(tmp, dst)
 
 
-def fx_stage_pack(size: int) -> dict | None:
+def fx_stage_pack(ship: str) -> dict | None:
     """The staged re-roll's render geometry — {sheet_bytes, frame_w,
     frame_h, columns, offset, anchor, gif} read out of the staged game
     pack + staging manifest (the composite preview's source). None when
     nothing is staged."""
     import zipfile  # noqa: PLC0415
-    d = fx_stage_dir(size)
+    d = fx_stage_dir(ship)
     packs = []
     if os.path.isdir(d):
         packs = sorted(f for f in os.listdir(d) if f.endswith("-game.zip"))
     if not packs:
         return None
-    anchor = (fx_stage_manifest().get(str(size)) or {}).get(
+    anchor = (fx_stage_manifest().get(str(ship)) or {}).get(
         "anchor_sprite") or {}
     with zipfile.ZipFile(os.path.join(d, packs[0])) as zf:
         manifest = json.loads(zf.read("manifest.json"))
@@ -1318,7 +1316,7 @@ def fx_stage_pack(size: int) -> dict | None:
         }
 
 
-def fx_shipped_pack(size: int) -> dict | None:
+def fx_shipped_pack(ship: str) -> dict | None:
     """The committed family's geometry (assets/ui/fx/ + the frame table)
     — the same shape as fx_stage_pack, for the shipped-composite preview
     (what the game shows right now). None before the family ships."""
@@ -1327,7 +1325,7 @@ def fx_shipped_pack(size: int) -> dict | None:
         with open(os.path.join(fx_dir, "fx_waterline.json"),
                   encoding="utf-8") as fh:
             table = json.load(fh)
-        entry = table.get("sizes", {}).get(str(size)) or {}
+        entry = table.get("ships", {}).get(str(ship)) or {}
         clip = entry.get("sheet") or {}
         if not clip:
             return None
@@ -1343,14 +1341,13 @@ def fx_shipped_pack(size: int) -> dict | None:
     }
 
 
-def fx_composite_png(size: int, pack: dict) -> bytes:
-    """Frame 0 of a wake sheet composited UNDER the ship's north token on
-    the review sea blue — the in-game sandwich at native scale (the
-    placement rule: sheet top-left = token box top-left + (anchor_sprite
-    + offset)). Review aid only; never shipped."""
+def fx_composite_png(ship: str, pack: dict) -> bytes:
+    """Frame 0 of a wake sheet composited UNDER the ship's own north
+    token on the review sea blue — the in-game sandwich at native scale
+    (the placement rule: sheet top-left = token box top-left +
+    (anchor_sprite + offset)). Review aid only; never shipped."""
     from io import BytesIO  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
-    ship = fx_ship_of_size(size)
     tok_path = os.path.join(REPO, "assets", "ui", "tokens",
                             f"hull_{ship}.png")
     with open(tok_path, "rb") as fh:
@@ -1358,7 +1355,7 @@ def fx_composite_png(size: int, pack: dict) -> bytes:
     sheet = Image.open(BytesIO(pack["sheet_bytes"])).convert("RGBA")
     fw, fh = int(pack["frame_w"]), int(pack["frame_h"])
     frame = sheet.crop((0, 0, fw, fh))
-    s = int(size)
+    s = tok.width
     cw, ch = max(s, fw) + 16, max(s, fh) + 16
     canvas = Image.new("RGBA", (cw, ch), SEA_RGB + (255,))
     box_x, box_y = (cw - s) // 2, (ch - s) // 2
@@ -1377,7 +1374,8 @@ def fx_composite_png(size: int, pack: dict) -> bytes:
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     """(family, subject, dir) for the live job shapes:
     - td_<label>         top-down north ship jobs (§4.8 2026-11-07)
-    - fx_<size>          wake VFX jobs, size ∈ {32, 48, 64} (same day)
+    - fx_<ship>          wake VFX jobs, ship ∈ data/ship_types.json
+                         (the per-ship wake revision, §4.8 2026-11-08)
     - icon_<id> / iconsheet_<group> / terrain_<key>
     The retired shapes (px_<label> oblique ships, hull_<ship>_<dir>,
     sheet_<ship>) are UNKNOWN since the 2026-11-07 removal — they raise

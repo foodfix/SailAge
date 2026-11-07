@@ -2642,17 +2642,17 @@ func _place_pirate(world, id: String, cell: Vector2i) -> void:
 	world.fleet_sim().reset_index()
 
 
-# --- Waterline VFX (80-* §4.8 2026-11-07) -----------------------------------
+# --- Waterline VFX (80-* §4.8 2026-11-08, per-ship revision) -----------------
 
 ## The fleet token's wake sheet on a booted world: the sheet node exists
 ## under FleetMarker/Token (a child of the rotating holder, UNDER the
-## hull sprite), the committed geometry applies for the flagship's tier
-## SIZE (the canvas width), and the speed gate drives visibility (speed
+## hull sprite), the committed geometry applies for the flagship's SHIP
+## TYPE (the per-ship key), and the speed gate drives visibility (speed
 ## > 0 shows the sheet). The NPC record contract pins the `moving` flag
 ## as the gate (the §4.5.2 predicate) and the sheet parented to the
 ## rotating token. One boot + one re-fixture — the frame math lives in
-## tools/test_waterline_fx.gd. The geometry/visibility pins need the v5
-## family ingested (the W5 gate).
+## tools/test_waterline_fx.gd. The geometry/visibility pins need the v6
+## family ingested (the W6 gate).
 func _test_waterline_fx() -> void:
 	var fxlib := preload("res://scripts/world/waterline_fx.gd")
 	# Production registers the texture registry at the title screen; this
@@ -2685,11 +2685,12 @@ func _test_waterline_fx() -> void:
 		and holder.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST,
 		"the token holder pins the NEAREST filter (the rotation crispness "
 			+ "pin)")
-	var size := int(world._token_size)
-	_check(size == 0 or fxlib.has(size),
-		"the resolved flagship tier size is in the committed table "
-			+ "(caravel → 48)")
-	if back != null and size > 0 and fxlib.has(size):
+	var ship := str(world._player_fx_ship)
+	_check(ship == "caravel",
+		"the fx key is the flagship's ship type id (caravel)")
+	_check(ship.is_empty() or fxlib.has(ship),
+		"the resolved flagship ship id is in the committed table")
+	if back != null and not ship.is_empty() and fxlib.has(ship):
 		var speed := SailingSimLib.effective_speed()
 		world._tick_waterline_fx(0.016)
 		_check(back.visible == (speed > 0),
@@ -2697,14 +2698,15 @@ func _test_waterline_fx() -> void:
 				% speed)
 		if speed > 0:
 			_check(back.position == world._token_sprite.position
-					+ fxlib.sheet_offset_px(size),
+					+ fxlib.sheet_offset_px(ship),
 				"FxBack sits at token box + anchor+offset (native scale)")
-			_check(back.size == fxlib.sheet_size_px(size),
+			_check(back.size == fxlib.sheet_size_px(ship),
 				"FxBack size == frame px (native scale)")
 			var atlas := back.texture as AtlasTexture
 			_check(atlas != null and atlas.atlas != null
-				and atlas.region.size == fxlib.sheet_size_px(size),
-				"FxBack texture is the shared sheet atlas (native region)")
+				and atlas.region.size == fxlib.sheet_size_px(ship),
+				"FxBack texture is the ship's own sheet atlas (native "
+					+ "region)")
 	# The NPC record contract: `moving` (the marker's `sailing` flag) gates
 	# the sheet; the hull-token presence gates the record's existence; the
 	# sheet lives under the (rotating) HullToken node.
@@ -2715,15 +2717,15 @@ func _test_waterline_fx() -> void:
 	square.add_child(token)
 	var root := world.get_node_or_null("FleetMarkers")
 	(root if root != null else world).add_child(square)
-	world._sync_marker_fx(square, "npc_fx_fixture", 48, true, false)
+	world._sync_marker_fx(square, "npc_fx_fixture", "caravel", true, false)
 	var npc_back := token.get_node_or_null("FxBack") as TextureRect
 	_check(npc_back != null and not npc_back.visible,
 		"NPC fx hidden while the marker is not sailing")
-	world._sync_marker_fx(square, "npc_fx_fixture", 48, true, true)
+	world._sync_marker_fx(square, "npc_fx_fixture", "caravel", true, true)
 	world._tick_waterline_fx(0.016)
 	_check(npc_back != null and npc_back.visible,
 		"NPC fx visible while the marker sails")
-	world._sync_marker_fx(square, "npc_fx_fixture", 48, false, true)
+	world._sync_marker_fx(square, "npc_fx_fixture", "", true, true)
 	_check(npc_back != null and not npc_back.visible,
-		"NPC fx hidden when no hull token resolves (square fallback)")
+		"NPC fx hidden when no ship id resolves (square fallback)")
 	host.queue_free()

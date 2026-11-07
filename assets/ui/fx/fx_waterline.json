@@ -1,15 +1,46 @@
 {
  "generated_by": "tools/build_ui_art.py --import-fx-pixellab",
- "sizes": {
-  "32": {
+ "ships": {
+  "brigantine": {
    "anchor_sprite": {
     "match_rate": 1.0,
     "method": "template-match",
-    "x": 16,
-    "y": 32
+    "x": 24,
+    "y": 44
    },
    "canvas": {
-    "h": 88,
+    "h": 100,
+    "w": 80
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_brigantine.png",
+    "frame": {
+     "h": 71,
+     "w": 46
+    },
+    "frames": 8,
+    "offset": {
+     "x": -23,
+     "y": -45
+    },
+    "sha256": "8935109c7c1acdd3974a672e8c48d4cdfef42f6bf4c09037e7fec51d3c0c0f63"
+   },
+   "sprite": "hull_brigantine"
+  },
+  "caravel": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 24,
+    "y": 44
+   },
+   "canvas": {
+    "h": 104,
     "w": 96
    },
    "fps": 8,
@@ -18,30 +49,30 @@
    "loop": true,
    "sheet": {
     "columns": 3,
-    "file": "fx_waterline_32.png",
+    "file": "fx_waterline_caravel.png",
     "frame": {
-     "h": 61,
-     "w": 37
+     "h": 83,
+     "w": 47
     },
     "frames": 8,
     "offset": {
-     "x": -18,
-     "y": -33
+     "x": -23,
+     "y": -45
     },
-    "sha256": "85dcafd002b123967f27df4cac79a5315d9aac23ee3884c97c1adf0a52bed6ab"
+    "sha256": "4126d457fb0479f7ceb35fa0297d665c291fa544678d3f4a2e2f61ac6559684d"
    },
-   "sprite": "hull_latin"
+   "sprite": "hull_caravel"
   },
-  "48": {
+  "caravela_redonda": {
    "anchor_sprite": {
     "match_rate": 1.0,
     "method": "template-match",
     "x": 24,
-    "y": 44
+    "y": 45
    },
    "canvas": {
-    "h": 88,
-    "w": 88
+    "h": 100,
+    "w": 96
    },
    "fps": 8,
    "frame_ms": 125,
@@ -49,21 +80,145 @@
    "loop": true,
    "sheet": {
     "columns": 3,
-    "file": "fx_waterline_48.png",
+    "file": "fx_waterline_caravela_redonda.png",
     "frame": {
-     "h": 51,
-     "w": 42
+     "h": 65,
+     "w": 40
     },
     "frames": 8,
     "offset": {
-     "x": -21,
-     "y": -27
+     "x": -20,
+     "y": -39
     },
-    "sha256": "be7630cfcd813ddcfb630f3ca2432e2ad346d4c7d9deeb5a8d475e1ead3a1190"
+    "sha256": "097c34f1652c285df4c79fcee141f18d445e7e7fb34afd61e2c50d24594592f6"
    },
-   "sprite": "hull_caravel"
+   "sprite": "hull_caravela_redonda"
   },
-  "64": {
+  "carrack": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 32,
+    "y": 64
+   },
+   "canvas": {
+    "h": 112,
+    "w": 104
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_carrack.png",
+    "frame": {
+     "h": 76,
+     "w": 52
+    },
+    "frames": 8,
+    "offset": {
+     "x": -26,
+     "y": -48
+    },
+    "sha256": "6762e8a3ee7de6c10d436b758ce3f6cea140224a2521eb63691f38ee5db041aa"
+   },
+   "sprite": "hull_carrack"
+  },
+  "dhow": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 24,
+    "y": 44
+   },
+   "canvas": {
+    "h": 96,
+    "w": 80
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_dhow.png",
+    "frame": {
+     "h": 70,
+     "w": 32
+    },
+    "frames": 8,
+    "offset": {
+     "x": -16,
+     "y": -45
+    },
+    "sha256": "6468a21df4369e9f757d498c12de0d8ba7abf2998689b705b31b230cde3ab37d"
+   },
+   "sprite": "hull_dhow"
+  },
+  "fluyt": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 24,
+    "y": 44
+   },
+   "canvas": {
+    "h": 100,
+    "w": 96
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_fluyt.png",
+    "frame": {
+     "h": 72,
+     "w": 44
+    },
+    "frames": 8,
+    "offset": {
+     "x": -22,
+     "y": -45
+    },
+    "sha256": "ebd5962a4dd26f708317b3fd52f5a5e90c9ace3b13c0ed5246bc3cee3bc8048b"
+   },
+   "sprite": "hull_fluyt"
+  },
+  "galiot": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 16,
+    "y": 30
+   },
+   "canvas": {
+    "h": 88,
+    "w": 80
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_galiot.png",
+    "frame": {
+     "h": 56,
+     "w": 44
+    },
+    "frames": 8,
+    "offset": {
+     "x": -22,
+     "y": -31
+    },
+    "sha256": "5c859394a208e5e223fc52879a626a856a9567788845083d24c6337d86bf6b2d"
+   },
+   "sprite": "hull_galiot"
+  },
+  "galleass": {
    "anchor_sprite": {
     "match_rate": 1.0,
     "method": "template-match",
@@ -80,20 +235,268 @@
    "loop": true,
    "sheet": {
     "columns": 3,
-    "file": "fx_waterline_64.png",
+    "file": "fx_waterline_galleass.png",
     "frame": {
-     "h": 99,
+     "h": 107,
      "w": 78
     },
     "frames": 8,
     "offset": {
      "x": -39,
-     "y": -66
+     "y": -67
     },
-    "sha256": "cf84d7a09aab2925d5392d5af6135187f9766ec35a23c9cbf268f9235bf58cd9"
+    "sha256": "6bd762218adf62f4daf7d8b6328baa7c04bcc90a317708cdfb26fe3390f98f7d"
    },
    "sprite": "hull_galleass"
+  },
+  "galleon": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 32,
+    "y": 63
+   },
+   "canvas": {
+    "h": 132,
+    "w": 136
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_galleon.png",
+    "frame": {
+     "h": 82,
+     "w": 60
+    },
+    "frames": 8,
+    "offset": {
+     "x": -30,
+     "y": -51
+    },
+    "sha256": "8911906d2f1c7263065f9b6d52b6d8116bc6f32c1ca911a3c8d2060fee4814c7"
+   },
+   "sprite": "hull_galleon"
+  },
+  "galley": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 24,
+    "y": 46
+   },
+   "canvas": {
+    "h": 112,
+    "w": 112
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_galley.png",
+    "frame": {
+     "h": 67,
+     "w": 54
+    },
+    "frames": 8,
+    "offset": {
+     "x": -27,
+     "y": -39
+    },
+    "sha256": "3e7322a6373792a585e347737f9775d332a6dfaf4b04a3bfd9f368ca32b6ef8d"
+   },
+   "sprite": "hull_galley"
+  },
+  "junk": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 25,
+    "y": 43
+   },
+   "canvas": {
+    "h": 96,
+    "w": 96
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_junk.png",
+    "frame": {
+     "h": 73,
+     "w": 43
+    },
+    "frames": 8,
+    "offset": {
+     "x": -22,
+     "y": -41
+    },
+    "sha256": "5217d823b2f047013632ecf4833fb3a66c876697bb172e3f827856c619bbf4fb"
+   },
+   "sprite": "hull_junk"
+  },
+  "latin": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 16,
+    "y": 32
+   },
+   "canvas": {
+    "h": 68,
+    "w": 43
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_latin.png",
+    "frame": {
+     "h": 62,
+     "w": 37
+    },
+    "frames": 8,
+    "offset": {
+     "x": -18,
+     "y": -35
+    },
+    "sha256": "232e5c36642d48eea34efe374a20a853bb589055ba15e8696d4ee8e32673fce3"
+   },
+   "sprite": "hull_latin"
+  },
+  "nao": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 32,
+    "y": 63
+   },
+   "canvas": {
+    "h": 132,
+    "w": 128
+   },
+   "fps": 6,
+   "frame_ms": 167,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_nao.png",
+    "frame": {
+     "h": 98,
+     "w": 58
+    },
+    "frames": 8,
+    "offset": {
+     "x": -29,
+     "y": -56
+    },
+    "sha256": "e0e5c036e9c98b68011171194ab0f3a177b3c8bab6622f908eea438924d8c881"
+   },
+   "sprite": "hull_nao"
+  },
+  "pinnace": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 16,
+    "y": 30
+   },
+   "canvas": {
+    "h": 88,
+    "w": 80
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_pinnace.png",
+    "frame": {
+     "h": 57,
+     "w": 36
+    },
+    "frames": 8,
+    "offset": {
+     "x": -18,
+     "y": -31
+    },
+    "sha256": "bb061af0bba0cb9e0f5c72b516d2d9158715e846f5cbc269e29236c532bb12e7"
+   },
+   "sprite": "hull_pinnace"
+  },
+  "sloop": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 16,
+    "y": 31
+   },
+   "canvas": {
+    "h": 88,
+    "w": 88
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_sloop.png",
+    "frame": {
+     "h": 63,
+     "w": 44
+    },
+    "frames": 8,
+    "offset": {
+     "x": -22,
+     "y": -35
+    },
+    "sha256": "5903c3e532b821450d59f6fcce73ab206e207de298b0db8d35d3ff18d5b58e73"
+   },
+   "sprite": "hull_sloop"
+  },
+  "xebec": {
+   "anchor_sprite": {
+    "match_rate": 1.0,
+    "method": "template-match",
+    "x": 25,
+    "y": 45
+   },
+   "canvas": {
+    "h": 104,
+    "w": 96
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_xebec.png",
+    "frame": {
+     "h": 77,
+     "w": 46
+    },
+    "frames": 8,
+    "offset": {
+     "x": -23,
+     "y": -49
+    },
+    "sha256": "137968e05c3e1289600897577694c0172ed6b1cbf036e219394998afe15ede80"
+   },
+   "sprite": "hull_xebec"
   }
  },
- "version": 3
+ "version": 4
 }

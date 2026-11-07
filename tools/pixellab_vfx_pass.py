@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """PixelLab waterline VFX generation pass — build-time SaaS backend.
 
-v4 mode (2026-11-07 top-down amendment, the shipping path): ONE `POST
-/v2/vfx` call per ship SIZE (3 total: 32/48/64), built around the
-representative NORTH token of each tier (latin 32, caravel 48, galleass
-64) — ships rotate at runtime, so only the north family ever exists.
-Raw output lands gitignored under `tools/ui_art/model_raw/pixellab_vfx/v4/<size>/`
-(spritesheet + frame JSON + game-pack zip + response.json carrying
-`effect_id`/`conversation` for discounted change-calls); raw model output
-is never committed (90-* §9.2). The key is read from PIXELLAB_API_KEY or
-the gitignored tools/pixellab_config.json — never stored in files.
+v6 mode (2026-11-08 per-ship wake revision, the shipping path): exactly
+16 `POST /v2/vfx` calls — ONE per ship type — each built around that
+ship's OWN north token (the wake hugs the hull silhouette it ships
+with). Raw output lands gitignored under
+`tools/ui_art/model_raw/pixellab_vfx/v6/<ship>/` (spritesheet + frame
+JSON + game-pack zip + response.json carrying
+`effect_id`/`conversation` for discounted change-calls); raw model
+output is never committed (90-* §9.2). The key is read from
+PIXELLAB_API_KEY or the gitignored tools/pixellab_config.json — never
+stored in files.
 
 Usage:
-  python3 tools/pixellab_vfx_pass.py v5-run [size ...]  # default: 32 48 64
-  python3 tools/pixellab_vfx_pass.py v5-status
-  python3 tools/pixellab_vfx_pass.py v5-fetch <size> …  # re-download, no
+  python3 tools/pixellab_vfx_pass.py v6-run [ship ...]  # default: all 16
+                                                        # ship types
+  python3 tools/pixellab_vfx_pass.py v6-status
+  python3 tools/pixellab_vfx_pass.py v6-fetch <ship> …  # re-download, no
                                                         #  re-generation
+  python3 tools/pixellab_vfx_pass.py v5-run [size ...]  # the superseded
+  python3 tools/pixellab_vfx_pass.py v5-status          # per-size family
+  python3 tools/pixellab_vfx_pass.py v5-fetch <size> …
   python3 tools/pixellab_vfx_pass.py v4-run [size ...]  # the retired
   python3 tools/pixellab_vfx_pass.py v4-status          # two-layer family
 
@@ -28,6 +33,7 @@ for history/re-download of the v3 raws):
 from __future__ import annotations
 
 import base64
+import glob as _glob
 import hashlib
 import json
 import os
@@ -40,6 +46,7 @@ API = "https://api.pixellab.ai/v2"
 OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw", "pixellab_vfx")
 V4_OUT_DIR = os.path.join(OUT_DIR, "v4")
 V5_OUT_DIR = os.path.join(OUT_DIR, "v5")
+V6_OUT_DIR = os.path.join(OUT_DIR, "v6")
 MANIFEST = os.path.join(OUT_DIR, "pixellab_vfx.json")
 SPRITE_FMT = "assets/ui/tokens/hull_galleass_{}.png"  # the reference hull
 POLL_S, POLL_MAX = 5, 600
@@ -52,6 +59,17 @@ DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 # per ship size; the representative hull per size drives the effect.
 SIZES = (32, 48, 64)
 SIZE_SPRITE = {32: "hull_latin", 48: "hull_caravel", 64: "hull_galleass"}
+
+# v6 pins (80-* §4.8 per-ship wake revision, 2026-11-08): one north wake
+# sheet PER SHIP TYPE — exactly 16 /v2/vfx calls — with the sprite being
+# that ship's OWN north token, so the wake hugs the hull silhouette it
+# ships with. The ids match `data/ship_types.json` (the group-13 audit
+# cross-checks the ingest against the data file; this tuple is the call
+# plan, not the schema).
+SHIPS = ("latin", "sloop", "caravel", "galley", "brigantine", "nao",
+         "carrack", "galleon", "galiot", "galleass", "fluyt", "junk",
+         "dhow", "pinnace", "caravela_redonda", "xebec")
+
 
 # Pinned verbatim (80-* §4.8 2026-11-07 amendment; user-approved wording).
 # The foam tone is the palette FOAM value #dff0f4; the behind/in-front
@@ -522,6 +540,163 @@ def fetch_size(size: int, out_root: str = V4_OUT_DIR) -> None:
               flush=True)
 
 
+def _ship_sprite_path(ship: str) -> str:
+    """The ship's OWN north token (the v6 pin): run this only AFTER the
+    hull ingest."""
+    if ship not in SHIPS:
+        raise SystemExit(f"unknown ship {ship!r} (valid: {SHIPS})")
+    p = os.path.join(REPO, "assets", "ui", "tokens", f"hull_{ship}.png")
+    if not os.path.exists(p):
+        raise SystemExit(f"north token missing: {p} — generate + ingest "
+                         "the hulls first")
+    return p
+
+
+def _ship_box(ship: str) -> int:
+    """The token canvas side (the anchor box) read straight from the
+    token PNG's IHDR — 32/48/64 per the tier table, no PIL needed."""
+    with open(_ship_sprite_path(ship), "rb") as fh:
+        head = fh.read(33)
+    if head[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SystemExit(f"not a PNG: {ship}")
+    return int.from_bytes(head[16:20], "big")
+
+
+def run_ship(ship: str, artist: str = "pro", name: str | None = None,
+             desc_path: str | None = None, out_root: str = V6_OUT_DIR,
+             expect_quote: int | None = None,
+             default_description: str = V5_DESCRIPTION,
+             default_name_fmt: str = "waterline-v6-north-{ship}-pro") -> dict:
+    """One POST /v2/vfx + poll + raw download for one ship TYPE (v6: the
+    sprite is that ship's own north token — the per-ship wake revision).
+    The envelope stays the pinned four fields + game_pack; the
+    description is the v5 template verbatim (unchanged this round)."""
+    description = default_description
+    if desc_path:
+        with open(desc_path, encoding="utf-8") as fh:
+            description = fh.read()
+        print(f"[v6 {ship}] description: {len(description)} chars "
+              f"sha256={hashlib.sha256(description.encode('utf-8'))
+                    .hexdigest()[:16]}…", flush=True)
+    sprite_path = _ship_sprite_path(ship)
+    box = _ship_box(ship)
+    payload_name = name or default_name_fmt.format(ship=ship)
+    with open(sprite_path, "rb") as fh:
+        sprite_b64 = base64.b64encode(fh.read()).decode("ascii")
+    payload = {
+        "description": description,
+        "sprite": {"base64": sprite_b64, "format": "png"},
+        "artist": artist,
+        "name": payload_name,
+        "game_pack": True,
+    }
+    print(f"[v6 {ship}/{artist}] POST /v2/vfx (token {box}px) ...",
+          flush=True)
+    created = _post("/vfx", payload)
+    job_id = created["background_job_id"]
+    print(f"    job={job_id} quote={created.get('quoted_generations')}",
+          flush=True)
+    if expect_quote is not None \
+            and created.get("quoted_generations") != expect_quote:
+        manifest = _load_manifest(out_root)
+        manifest[ship] = {"background_job_id": job_id,
+                          "artist": artist, "name": payload_name,
+                          "ship": ship, "size": box,
+                          "quoted_generations":
+                              created.get("quoted_generations"),
+                          "status": "quote-guard-tripped"}
+        _save_manifest(manifest, out_root)
+        raise SystemExit(
+            f"quote guard: expected {expect_quote}, server quoted "
+            f"{created.get('quoted_generations')} — job {job_id} was "
+            "submitted and will deliver on its own; fetch it later with "
+            "the fetch command, and STOP before any further calls")
+    manifest = _load_manifest(out_root)
+    manifest[ship] = {
+        "background_job_id": job_id,
+        "artist": artist,
+        "name": payload_name,
+        "ship": ship,
+        "size": box,
+        "sprite": f"hull_{ship}",
+        "quoted_generations": created.get("quoted_generations"),
+        "description_sha256": hashlib.sha256(
+            description.encode("utf-8")).hexdigest(),
+        "sprite_sha256": hashlib.sha256(
+            open(sprite_path, "rb").read()).hexdigest(),
+        "status": "submitted",
+    }
+    _save_manifest(manifest, out_root)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        manifest[ship]["status"] = str(job.get("status", "timeout"))
+        _save_manifest(manifest, out_root)
+        raise RuntimeError(
+            f"ship {ship}: job {job_id} status={job.get('status')!r} "
+            f"(last: {json.dumps(job)[:300]})")
+
+    result = job.get("last_response") or {}
+    dest = os.path.join(out_root, ship)
+    os.makedirs(dest, exist_ok=True)
+    for fname, url in (result.get("files") or {}).items():
+        data = _download(url)
+        with open(os.path.join(dest, fname), "wb") as fh:
+            fh.write(data)
+        print(f"    saved {fname} ({len(data)} B)", flush=True)
+    with open(os.path.join(dest, "response.json"), "w",
+              encoding="utf-8") as fh:
+        json.dump(result, fh, indent=1, sort_keys=True)
+    manifest[ship].update({
+        "effect_id": result.get("effect_id"),
+        "status": "completed",
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
+        "canvas": result.get("canvas"),
+        "frames": result.get("frames"),
+        "fps": result.get("fps"),
+        "loop": result.get("loop"),
+        "anchor": result.get("anchor"),
+    })
+    pack_zips = sorted(_glob.glob(os.path.join(dest, "*-game.zip")))
+    if pack_zips:
+        manifest[ship]["anchor_sprite"] = _anchor_in_sprite(
+            sprite_path, pack_zips[0], box=box)
+    _save_manifest(manifest, out_root)
+    print(f"[v6 {ship}/{artist}] done: effect_id="
+          f"{result.get('effect_id')} canvas={result.get('canvas')} "
+          f"frames={result.get('frames')} fps={result.get('fps')}",
+          flush=True)
+    return manifest[ship]
+
+
+def fetch_ship(ship: str, out_root: str = V6_OUT_DIR) -> None:
+    """Re-download the completed result from its stored links — never a
+    new generation."""
+    if ship not in SHIPS:
+        raise SystemExit(f"unknown ship {ship!r} (valid: {SHIPS})")
+    resp_path = os.path.join(out_root, ship, "response.json")
+    if not os.path.exists(resp_path):
+        raise SystemExit(f"no response.json for {ship} — run it first")
+    with open(resp_path, encoding="utf-8") as fh:
+        result = json.load(fh)
+    dest = os.path.join(out_root, ship)
+    os.makedirs(dest, exist_ok=True)
+    for name, url in (result.get("files") or {}).items():
+        data = _download(url)
+        with open(os.path.join(dest, name), "wb") as fh:
+            fh.write(data)
+        print(f"[v6 {ship}] re-fetched {name} ({len(data)} B)",
+              flush=True)
+
+
+
 def main() -> None:
     import argparse  # noqa: PLC0415
     ap = argparse.ArgumentParser(
@@ -529,10 +704,12 @@ def main() -> None:
     ap.add_argument("cmd",
                     choices=("run", "status", "fetch",
                              "v4-run", "v4-status", "v4-fetch",
-                             "v5-run", "v5-status", "v5-fetch"))
+                             "v5-run", "v5-status", "v5-fetch",
+                             "v6-run", "v6-status", "v6-fetch"))
     ap.add_argument("targets", nargs="*",
                     help=f"dir ids, subset of {DIRS} (legacy) — or ship "
-                         f"sizes, subset of {SIZES} (v4/v5)")
+                         f"sizes, subset of {SIZES} (v4/v5) — or ship "
+                         f"types, subset of {SHIPS} (v6)")
     ap.add_argument("--artist", choices=("lite", "pro"), default=None,
                     help="VFX artist tier (default: lite legacy, pro v4)")
     ap.add_argument("--name", help="effect name "
@@ -543,7 +720,8 @@ def main() -> None:
                          "the pinned constant (v1 or v4)")
     ap.add_argument("--raw", default=None,
                     help=f"raw output root (default: {OUT_DIR} legacy, "
-                         f"{V4_OUT_DIR} v4, {V5_OUT_DIR} v5)")
+                         f"{V4_OUT_DIR} v4, {V5_OUT_DIR} v5, "
+                         f"{V6_OUT_DIR} v6)")
     ap.add_argument("--expect-quote", type=int,
                     help="abort BEFORE spending if the POST's quote "
                          "differs (the guard: the quote is in the 202 "
@@ -551,9 +729,10 @@ def main() -> None:
     args = ap.parse_args()
     v4 = args.cmd.startswith("v4")
     v5 = args.cmd.startswith("v5")
-    raw = args.raw or (V5_OUT_DIR if v5 else
+    v6 = args.cmd.startswith("v6")
+    raw = args.raw or (V6_OUT_DIR if v6 else V5_OUT_DIR if v5 else
                        V4_OUT_DIR if v4 else OUT_DIR)
-    artist = args.artist or ("pro" if (v4 or v5) else "lite")
+    artist = args.artist or ("pro" if (v4 or v5 or v6) else "lite")
     if args.cmd == "status":
         m = _load_manifest(raw)
         for d in DIRS:
@@ -568,7 +747,7 @@ def main() -> None:
                       f"canvas={rec.get('canvas')} frames="
                       f"{rec.get('frames')} fps={rec.get('fps')}")
         return
-    if args.cmd == "v4-status" or args.cmd == "v5-status":
+    if args.cmd in ("v4-status", "v5-status"):
         m = _load_manifest(raw)
         for s in SIZES:
             rec = m.get(str(s))
@@ -576,6 +755,22 @@ def main() -> None:
                 print(f"{s:3d} —")
             else:
                 print(f"{s:3d} {rec.get('status', '?'):10s} "
+                      f"artist={rec.get('artist')} "
+                      f"sprite={rec.get('sprite')} "
+                      f"effect={rec.get('effect_id')} "
+                      f"quote={rec.get('quoted_generations')} "
+                      f"canvas={rec.get('canvas')} frames="
+                      f"{rec.get('frames')} fps={rec.get('fps')} "
+                      f"anchor={rec.get('anchor_sprite')}")
+        return
+    if args.cmd == "v6-status":
+        m = _load_manifest(raw)
+        for ship in SHIPS:
+            rec = m.get(ship)
+            if rec is None:
+                print(f"{ship:18s} —")
+            else:
+                print(f"{ship:18s} {rec.get('status', '?'):10s} "
                       f"artist={rec.get('artist')} "
                       f"sprite={rec.get('sprite')} "
                       f"effect={rec.get('effect_id')} "
@@ -613,6 +808,29 @@ def main() -> None:
         if failed:
             raise SystemExit(f"failed sizes: {failed}")
         return
+    if args.cmd.startswith("v6"):
+        want = [t for t in args.targets if t in SHIPS]
+        unknown = [t for t in args.targets if t not in SHIPS]
+        if unknown:
+            raise SystemExit(f"unknown ship ids: {unknown} (valid: {SHIPS})")
+        if not want:
+            want = list(SHIPS)
+        failed = []
+        for ship in want:
+            try:
+                if args.cmd == "v6-run":
+                    run_ship(ship, artist=artist, name=args.name,
+                             desc_path=args.desc_file, out_root=raw,
+                             expect_quote=args.expect_quote)
+                else:
+                    fetch_ship(ship, out_root=raw)
+            except Exception as exc:  # noqa: BLE001 — keep the batch going
+                print(f"[vfx {ship}] FAILED: {exc}", flush=True)
+                failed.append(ship)
+        if failed:
+            raise SystemExit(f"failed ships: {failed}")
+        return
+
     dirs = [d for d in args.targets if d in DIRS]
     unknown = [d for d in args.targets if d not in DIRS]
     if unknown:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://6glh6lyl6iwb"
-path="res://.godot/imported/fx_waterline_32.png-6df509d5bfce807cab0cbae5f112862d.ctex"
+uid="uid://bhqv84efwll64"
+path="res://.godot/imported/fx_waterline_carrack.png-f27e4123fcc791f9219dd0d51371ff2a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/fx/fx_waterline_32.png"
-dest_files=["res://.godot/imported/fx_waterline_32.png-6df509d5bfce807cab0cbae5f112862d.ctex"]
+source_file="res://assets/ui/fx/fx_waterline_carrack.png"
+dest_files=["res://.godot/imported/fx_waterline_carrack.png-f27e4123fcc791f9219dd0d51371ff2a.ctex"]
 
 [params]
 

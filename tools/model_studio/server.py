@@ -23,7 +23,7 @@ API:
   GET  /api/status           worker state, queue, current job
   GET  /thumb/<kind>/<job>   draft | raw | snapped PNG (cache-busting ?v=)
   GET  /thumb/td/<l>/<deg>   top-down rotation previews (NEAREST)
-  GET  /thumb/fx/<s>/<kind>  wake previews: anim.gif | comp.png | shipped.png
+  GET  /thumb/fx/<ship>/<kind>  wake previews: anim.gif | comp.png | shipped.png
 
 Launch:
   python3 tools/model_studio/server.py --port 8010 --repo /home/weidong/repo/SailAge
@@ -131,29 +131,28 @@ class Studio:
 
     # -- registry ---------------------------------------------------------
     # -- thumbnails -------------------------------------------------------
-    def _fx_entry(self, size, prompts, state, accepted):
-        """One wake VFX card (§4.8 2026-11-07 single-layer): ONE north
-        wake sheet per ship SIZE, rendered UNDER the hull. Provenance =
-        the staged manifest (a pending studio re-roll) or the committed
-        fx ledger (what the game ships). No seed — the /v2/vfx envelope
-        has none; the card shows the quote instead."""
-        size = int(size)
-        job_id = f"fx_{size}"
-        ship = chain.fx_ship_of_size(size)
-        staged = chain.fx_stage_manifest().get(str(size)) or {}
+    def _fx_entry(self, ship, prompts, state, accepted):
+        """One wake VFX card (§4.8 2026-11-08 per-ship revision): ONE
+        north wake sheet per SHIP TYPE, rendered UNDER the hull.
+        Provenance = the staged manifest (a pending studio re-roll) or
+        the committed fx ledger (what the game ships). No seed — the
+        /v2/vfx envelope has none; the card shows the quote instead."""
+        ship = str(ship)
+        job_id = f"fx_{ship}"
+        staged = chain.fx_stage_manifest().get(ship) or {}
         studio_rec = state.get(job_id, {}) or {}
         ledger = self._read_json(
             os.path.join(self.repo, "tools", "assets", "pixellab_raw",
                          "pixellab_vfx_ledger.json"), {})
-        shipped = (ledger.get("sizes", {}).get(str(size)) or {})
+        shipped = (ledger.get("ships", {}).get(ship) or {})
         quote = (staged.get("quoted_generations")
                  or shipped.get("quoted_generations") or 10)
         thumbs = {}
-        if chain.fx_shipped_pack(size):
+        if chain.fx_shipped_pack(ship):
             thumbs["shipped"] = {"v": int(os.path.getmtime(
                 os.path.join(self.repo, "assets", "ui", "fx",
                              "fx_waterline.json")) * 1000)}
-        staged_pack = chain.fx_stage_pack(size)
+        staged_pack = chain.fx_stage_pack(ship)
         if staged_pack:
             v = int(os.path.getmtime(chain.fx_stage_manifest_path())
                     * 1000)
@@ -162,14 +161,14 @@ class Studio:
                 thumbs["anim"] = {"v": v}
         original_prompt = chain.fx_default_prompt()
         eff_prompt = prompts.get(job_id) or original_prompt
-        label = f"wake {size}px · {ship}"
+        label = f"wake {ship}"
         if staged:
             label += " · staged re-roll pending accept"
         return {
             "id": job_id,
             "family": "fx",
-            "subject": str(size),
-            "size": size,
+            "subject": ship,
+            "size": None,
             "ship": ship,
             "dir": None,
             "tier": None,
@@ -495,14 +494,14 @@ class Studio:
         self._thumb_cache_put(("coast",) + key, data)
         return data
 
-    def fx_thumb(self, size: int, kind: str):
+    def fx_thumb(self, ship: str, kind: str):
         """(bytes, content_type | None) — the wake card's previews:
         anim = the staged re-roll's API gif; comp = the staged pack's
         frame 0 under the ship's north token; shipped = the same
         composite from the committed assets (what the game shows now).
         Cached by source+mtime like the other thumbs."""
         if kind == "anim":
-            gif = (chain.fx_stage_pack(size) or {}).get("gif")
+            gif = (chain.fx_stage_pack(ship) or {}).get("gif")
             if not gif or not os.path.isfile(gif):
                 return None, None
             key = f"{gif}|{os.path.getmtime(gif)}"
@@ -512,20 +511,20 @@ class Studio:
                     data = fh.read()
                 self._thumb_cache_put(key, data)
             return data, "image/gif"
-        pack = (chain.fx_stage_pack(size) if kind == "comp"
-                else chain.fx_shipped_pack(size))
+        pack = (chain.fx_stage_pack(ship) if kind == "comp"
+                else chain.fx_shipped_pack(ship))
         if not pack:
             return None, None
         src = (chain.fx_stage_manifest_path() if kind == "comp"
                else os.path.join(self.repo, "assets", "ui", "fx",
                                  "fx_waterline.json"))
-        key = f"fx{size}|{kind}|{os.path.getmtime(src)}"
+        key = f"fx{ship}|{kind}|{os.path.getmtime(src)}"
         data = self._thumb_cache_get(key)
         if data is None:
             try:
-                data = chain.fx_composite_png(size, pack)
+                data = chain.fx_composite_png(ship, pack)
             except Exception as exc:  # noqa: BLE001 — never kill a request
-                log(f"fx composite failed for {size}/{kind}: {exc}")
+                log(f"fx composite failed for {ship}/{kind}: {exc}")
                 return None, None
             self._thumb_cache_put(key, data)
         return data, "image/png"
@@ -606,14 +605,14 @@ class Studio:
             except Exception as exc:  # noqa: BLE001 — degrade, never die
                 warnings.append(f"td_{label}: {type(exc).__name__}: {exc}")
                 log(f"registry SKIP td_{label}: {warnings[-1]}")
-        # The wake VFX cards follow (§4.8 2026-11-07 single-layer): one
-        # per ship size.
-        for size in chain.FX_SIZES:
+        # The wake VFX cards follow (§4.8 2026-11-08 per-ship revision):
+        # one per ship type.
+        for ship in chain.FX_SHIPS:
             try:
-                jobs.append(self._fx_entry(size, prompts, state, accepted))
+                jobs.append(self._fx_entry(ship, prompts, state, accepted))
             except Exception as exc:  # noqa: BLE001 — degrade, never die
-                warnings.append(f"fx_{size}: {type(exc).__name__}: {exc}")
-                log(f"registry SKIP fx_{size}: {warnings[-1]}")
+                warnings.append(f"fx_{ship}: {type(exc).__name__}: {exc}")
+                log(f"registry SKIP fx_{ship}: {warnings[-1]}")
         # The coast tileset card (§4.8 2026-11-06 — one card per tileset)
         try:
             jobs.append(self._coast_entry(prompts, state, accepted))
@@ -1113,15 +1112,15 @@ class Studio:
             + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
 
     def _fx_ingest_order(self, order: dict) -> None:
-        """Accept→game for a wake size (§4.8 2026-11-07 single-layer):
-        stage the re-rolled size into the canonical raw store
-        (model_raw/pixellab_vfx/v5/), then run
-        build_ui_art --import-fx-pixellab — ALL three sizes re-land
+        """Accept→game for a wake ship (§4.8 2026-11-08 per-ship
+        revision): stage the re-rolled ship into the canonical raw store
+        (model_raw/pixellab_vfx/v6/), then run
+        build_ui_art --import-fx-pixellab — ALL 16 ships re-land
         (idempotent), so the other wake cards stamp in-game too. Gate:
-        the size's record (sheet sha256 + effect_id) in the committed fx
+        the ship's record (sheet sha256 + effect_id) in the committed fx
         ledger."""
         job_id = order["job"]
-        size = int(job_id[len("fx_"):])
+        ship = job_id[len("fx_"):]
         with self.lock:
             self.current = {"type": "ingest", "job": job_id,
                             "stage": "staging",
@@ -1132,7 +1131,7 @@ class Studio:
                                             "%H:%M:%S")})
         t0 = time.time()
         try:
-            chain.fx_accept_stage(size)
+            chain.fx_accept_stage(ship)
             with self.lock:
                 if self.current:
                     self.current["stage"] = "build-ladder"
@@ -1146,7 +1145,7 @@ class Studio:
             ledger = self._read_json(
                 os.path.join(self.repo, "tools", "assets", "pixellab_raw",
                              "pixellab_vfx_ledger.json"), {})
-            rec = (ledger.get("sizes") or {}).get(str(size)) or {}
+            rec = (ledger.get("ships") or {}).get(ship) or {}
             tail = out.strip()[-700:]
             ok = (proc.returncode == 0 and rec.get("sheet_sha256")
                   and rec.get("effect_id"))
@@ -1165,7 +1164,7 @@ class Studio:
                        "seconds": round(time.time() - t0, 1)}
             else:
                 ing = {"state": "error", "exit_code": 0,
-                       "reason": f"fx {size} did not land in the ledger",
+                       "reason": f"fx {ship} did not land in the ledger",
                        "log_tail": tail,
                        "seconds": round(time.time() - t0, 1)}
         except subprocess.TimeoutExpired:
@@ -1178,12 +1177,12 @@ class Studio:
         ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         self._set_ingest_state(job_id, ing)
         if ing.get("state") == "in-game":
-            # the import re-lands ALL sizes — stamp the other wake cards
+            # the import re-lands ALL ships — stamp the other wake cards
             # in-game too (their bytes are unchanged; idempotent)
             with self.lock:
                 st = self.state()
-                for other_size in chain.FX_SIZES:
-                    other = f"fx_{other_size}"
+                for other_ship in chain.FX_SHIPS:
+                    other = f"fx_{other_ship}"
                     if other == job_id:
                         continue
                     oth = st.setdefault("jobs", {}).setdefault(other, {})
@@ -1394,20 +1393,20 @@ class Handler(BaseHTTPRequestHandler):
             if self.command != "HEAD":
                 self.wfile.write(data)
             return
-        # /thumb/fx/<size>/<kind> — the wake card: anim.gif (staged API
+        # /thumb/fx/<ship>/<kind> — the wake card: anim.gif (staged API
         # gif), comp.png (staged wake under the ship), shipped.png (the
         # committed family — what the game shows now)
-        mf = re.match(r"^/thumb/fx/(\d+)/(anim|comp|shipped)\.(?:gif|png)$",
-                      path)
+        mf = re.match(r"^/thumb/fx/([a-z_]+)/(anim|comp|shipped)\."
+                      r"(?:gif|png)$", path)
         if mf:
-            size, kind = int(mf.group(1)), mf.group(2)
-            if size not in chain.FX_SIZES:
-                self._json(404, {"error": f"unknown fx size {size}"})
+            ship, kind = mf.group(1), mf.group(2)
+            if ship not in chain.FX_SHIPS:
+                self._json(404, {"error": f"unknown fx ship {ship}"})
                 return
-            data, ctype = self.studio.fx_thumb(size, kind)
+            data, ctype = self.studio.fx_thumb(ship, kind)
             if data is None:
                 self._json(404, {"error": f"no fx {kind} thumb for "
-                                          f"{size}"})
+                                          f"{ship}"})
                 return
             self.send_response(200)
             self.send_header("Content-Type", ctype or "image/png")
@@ -1475,8 +1474,7 @@ class Handler(BaseHTTPRequestHandler):
         if job_id.startswith(HIDDEN_PREFIXES):
             return False  # the retired ship families + hidden terrain
         if job_id.startswith("fx_") and JOB_RE.match(job_id):
-            tail = job_id[len("fx_"):]
-            return tail.isdigit() and int(tail) in chain.FX_SIZES
+            return job_id[len("fx_"):] in chain.FX_SHIPS
         if job_id.startswith("td_") and JOB_RE.match(job_id):
             return chain.td_exists(job_id[len("td_"):])
         return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
@@ -1630,7 +1628,7 @@ class Handler(BaseHTTPRequestHandler):
             elif fam == "fx":
                 # record the staged re-roll's provenance (the staged
                 # manifest record becomes the ingest input) and queue the
-                # fx import (all three sizes re-land, idempotent)
+                # fx import (all 16 ships re-land, idempotent)
                 manifest = chain.fx_stage_manifest().get(subject) or {}
                 acc[job_id]["effect_id"] = manifest.get("effect_id")
                 acc[job_id]["pending"] = bool(manifest)

@@ -3065,17 +3065,20 @@ def run_check() -> None:
         # §4.8 2026-11-07 — the waterline VFX family joins the same
         # ledger-governed contract: the committed sheets are copied into
         # the temp rebuild before the compare (never regenerated, never
-        # re-downloaded). v3 (the single-layer revision): the ledger keys
-        # SIZES, one north sheet per ship size.
+        # re-downloaded). v4 (the per-ship revision): the ledger keys
+        # SHIPS, one north sheet per ship type; v3 (superseded): per size.
         fx_ledger = (ROOT / "tools" / "assets" / "pixellab_raw"
                      / "pixellab_vfx_ledger.json")
         if fx_ledger.is_file():
             fx_doc = json.loads(fx_ledger.read_text())
-            fx_keys = list(fx_doc.get("sizes", {}).keys()) \
-                if int(fx_doc.get("version", 1)) >= 2 \
+            fx_version = int(fx_doc.get("version", 1))
+            fx_keys = list(fx_doc.get("ships", {}).keys()) \
+                if fx_version >= 4 \
+                else list(fx_doc.get("sizes", {}).keys()) \
+                if fx_version >= 2 \
                 else list(fx_doc.get("dirs", {}).keys())
             for k in fx_keys:
-                single = int(fx_doc.get("version", 1)) >= 3
+                single = fx_version >= 3
                 name = f"fx_waterline_{k}.png" if single \
                     else f"fx_waterline_back_{k}.png"
                 src = committed / "fx" / name
@@ -3210,15 +3213,151 @@ FX_LEDGER = (ROOT / "tools" / "assets" / "pixellab_raw"
              / "pixellab_vfx_ledger.json")
 FX_DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 FX_SIZES = (32, 48, 64)
+FX_V6_RAW = ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_vfx" / "v6"
+
+
+def _fx_ships() -> list[str]:
+    """The 16 ship type ids (data/ship_types.json) — the single source of
+    truth for the v6 per-ship family's key set (80-* §4.8 2026-11-08)."""
+    doc = json.loads((ROOT / "data" / "ship_types.json").read_text(
+        encoding="utf-8"))
+    return sorted(s["id"] for s in doc["ship_types"])
 
 # Terrain kinds exempt from the variant-seam ring gate (corner
 # vocabularies — per-tile rings intentionally differ; see run_seam_ring).
 SEAM_RING_EXEMPT_KINDS = {"coast_wang"}
 
 
+def run_import_fx_v6_mode(raw_root: Path) -> None:
+    """--import-fx-pixellab (v6, the shipping mode): ingest the top-down
+    north wake family VERBATIM — ONE sheet per SHIP TYPE (all 16
+    data/ship_types.json ids) out of each raw dir's game pack behind clip
+    (the per-ship wake revision, 80-* §4.8 2026-11-08: each wake is
+    authored around that ship's own hull silhouette; still the
+    single-layer rule — the whole effect renders UNDER the ship, no front
+    layer), the committed frame table assets/ui/fx/fx_waterline.json
+    **version 4** keyed per ship id and the provenance ledger. The
+    builder never contacts the API and never regenerates. Sheet placement
+    lives in the frame table: sheet top-left = token box top-left +
+    (anchor_sprite + clip offset) (the pack README's `anchor + offset`
+    rule with the anchor resolved into the ship's OWN token box by
+    tools/pixellab_vfx_pass.py's template match). The runtime rotates the
+    sheet together with the hull around the token center."""
+    import zipfile  # noqa: PLC0415
+    ships = _fx_ships()
+    out_fx = ROOT / "assets" / "ui" / "fx"
+    out_fx.mkdir(parents=True, exist_ok=True)
+    table: dict = {"version": 4,
+                   "generated_by":
+                       "tools/build_ui_art.py --import-fx-pixellab",
+                   "ships": {}}
+    ledger: dict = {"version": 4,
+                    "generated_by":
+                        "tools/build_ui_art.py --import-fx-pixellab",
+                    "ships": {}}
+    pass_manifest_path = raw_root / "pixellab_vfx.json"
+    pass_manifest = (json.loads(pass_manifest_path.read_text())
+                     if pass_manifest_path.is_file() else {})
+    for ship in ships:
+        sdir = raw_root / ship
+        if not sdir.is_dir():
+            fail(f"--import-fx-pixellab: raw dir missing: {sdir}")
+        packs = sorted(sdir.rglob("*-game.zip"))
+        if len(packs) != 1:
+            fail(f"--import-fx-pixellab: expected exactly 1 game pack under "
+                 f"{sdir}, found {len(packs)}")
+        pack = packs[0]
+        with zipfile.ZipFile(pack) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            clips = {c["name"]: c for c in manifest["clips"]}
+            clip = clips["behind"]  # the single layer: everything under
+            sheet_file = clip["sheets"][0]["file"]
+            data = zf.read(sheet_file)
+            out = out_fx / f"fx_waterline_{ship}.png"
+            out.write_bytes(data)
+            layers = {
+                "file": out.name,
+                "frame": {"w": clip["frame"]["w"],
+                          "h": clip["frame"]["h"]},
+                "columns": clip["sheets"][0]["columns"],
+                "frames": clip["frames"],
+                "offset": {"x": clip["offset"]["x"],
+                           "y": clip["offset"]["y"]},
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        # Uniform frame timing gate: the runtime's frame_at is closed-form
+        # on frame_ms; a non-uniform pack must fail the ingest loudly.
+        frame_json = next(sdir.glob(f"{pack.name[:-9]}.json"), None)
+        if frame_json is None:
+            fail(f"--import-fx-pixellab: frame json missing for ship "
+                 f"{ship} (expected {pack.name[:-9]}.json)")
+        frames_meta = json.loads(frame_json.read_text()).get("frames", [])
+        durations = sorted({int(f.get("duration", 0))
+                            for f in frames_meta})
+        frame_ms = int(manifest["frame_ms"])
+        if durations != [frame_ms]:
+            fail(f"--import-fx-pixellab: ship {ship}: non-uniform durations "
+                 f"{durations} != frame_ms {frame_ms}")
+        rec = pass_manifest.get(ship, {})
+        anchor = rec.get("anchor_sprite")
+        if not anchor or anchor.get("method") == "bbox-fallback":
+            fail(f"--import-fx-pixellab: ship {ship}: anchor_sprite missing "
+                 "or bbox-fallback — re-run tools/pixellab_vfx_pass.py "
+                 "v6-run")
+        table["ships"][ship] = {
+            "sprite": rec.get("sprite"),
+            "canvas": manifest["canvas"],
+            "fps": manifest["fps"],
+            "frame_ms": frame_ms,
+            "frames": manifest["frames"],
+            "loop": bool(manifest["loop"]),
+            "anchor_sprite": {"x": anchor["x"], "y": anchor["y"],
+                              "method": anchor["method"],
+                              "match_rate": anchor["match_rate"]},
+            "sheet": layers,
+        }
+        ledger["ships"][ship] = {
+            "effect_id": rec.get("effect_id"),
+            "artist": rec.get("artist", "pro"),
+            "name": rec.get("name"),
+            "sprite": rec.get("sprite"),
+            "quoted_generations": rec.get("quoted_generations"),
+            "description_sha256": rec.get("description_sha256"),
+            "background_job_id": rec.get("background_job_id"),
+            "sheet_sha256": layers["sha256"],
+        }
+        print(f"  fx {ship}: sheet {layers['frame']['w']}x"
+              f"{layers['frame']['h']} @ {frame_ms} ms "
+              f"anchor ({anchor['x']},{anchor['y']})", flush=True)
+    json_path = out_fx / "fx_waterline.json"
+    json_path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    ledger["table_sha256"] = hashlib.sha256(
+        json_path.read_bytes()).hexdigest()
+    FX_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    FX_LEDGER.write_text(json.dumps(ledger, indent=1, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    # Retired-grid hygiene: the per-size single-layer family and the
+    # layered families never coexist with the per-ship family.
+    pruned = 0
+    for f in sorted(out_fx.glob("fx_waterline_*.png")):
+        if re.match(r"fx_waterline_(back|front)_.+\.png$", f.name) \
+                or re.match(r"fx_waterline_(back|front)_[a-z]+\.png$", f.name) \
+                or re.match(r"fx_waterline_(32|48|64)\.png$", f.name):
+            f.unlink()
+            f.with_name(f.name + ".import").unlink(missing_ok=True)
+            pruned += 1
+    if pruned:
+        print(f"build_ui_art: pruned {pruned} retired waterline sheet(s)")
+    print(f"build_ui_art: fx family -> {out_fx.relative_to(ROOT)} "
+          f"({len(ships)} sheets + fx_waterline.json)")
+    print(f"build_ui_art: fx ledger -> {FX_LEDGER.relative_to(ROOT)}")
+
+
 def run_import_fx_v5_mode(raw_root: Path) -> None:
-    """--import-fx-pixellab (v5, the shipping mode): ingest the top-down
-    north wake family VERBATIM — ONE sheet per ship SIZE (32/48/64) out
+    """--import-fx-pixellab (v5, SUPERSEDED by the v6 per-ship mode —
+    kept for history/re-ingest): ingest the top-down north wake family
+    VERBATIM — ONE sheet per ship SIZE (32/48/64) out
     of each raw dir's game pack behind clip (the single-layer revision:
     the whole effect renders UNDER the ship; no front layer), the
     committed frame table assets/ui/fx/fx_waterline.json **version 3**
@@ -3504,11 +3643,11 @@ def main() -> None:
     ap.add_argument("--import-fx-pixellab", nargs="?", const="auto",
                     metavar="RAW_ROOT",
                     help="ingest the PixelLab waterline VFX family verbatim "
-                         "(80-* §4.8 2026-11-07): v5 = the single-layer "
-                         "north family (ONE sheet per size + the v3 "
-                         "fx_waterline.json + provenance ledger; RAW_ROOT "
-                         "default tools/ui_art/model_raw/pixellab_vfx/v5); "
-                         "with --fx-legacy the superseded per-dir v3 family "
+                         "(80-* §4.8): v6 = the per-ship north family (ONE "
+                         "sheet per ship type + the v4 fx_waterline.json + "
+                         "provenance ledger; RAW_ROOT default "
+                         "tools/ui_art/model_raw/pixellab_vfx/v6); with "
+                         "--fx-legacy the retired per-dir v3 family "
                          "(RAW_ROOT default .../v3)")
     ap.add_argument("--fx-legacy", action="store_true",
                     help="with --import-fx-pixellab: ingest the RETIRED "
@@ -3549,11 +3688,10 @@ def main() -> None:
                 root = Path(args.import_fx_pixellab)
             run_import_fx_mode(root)
             return
-        root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_vfx"
-                / "v5")
+        root = FX_V6_RAW
         if args.import_fx_pixellab != "auto":
             root = Path(args.import_fx_pixellab)
-        run_import_fx_v5_mode(root)
+        run_import_fx_v6_mode(root)
         return
     if args.import_icons:
         run_import_icons_mode([Path(p) for p in args.import_icons])

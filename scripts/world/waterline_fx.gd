@@ -1,30 +1,30 @@
 class_name WaterlineFx
 extends RefCounted
-## The fleet waterline & wake VFX runtime contract (80-* §4.8 2026-11-07,
-## single-layer revision — same day): the committed frame table
+## The fleet waterline & wake VFX runtime contract (80-* §4.8 2026-11-08,
+## per-ship wake revision): the committed frame table
 ## `assets/ui/fx/fx_waterline.json` — written by
-## `build_ui_art --import-fx-pixellab` from the PixelLab v5 pro game packs —
+## `build_ui_art --import-fx-pixellab` from the PixelLab v6 pro game packs —
 ## drives every fleet token's wake sheet on the world map. The family is
-## ONE sheet per ship SIZE (32/48/64, the tier canvas table), rendered
-## UNDER the hull; ships rotate at runtime, so the sheet rotates together
-## with the hull around the token center and only the north family ever
-## exists.
+## ONE sheet per SHIP TYPE (all 16 `data/ship_types.json` ids — each wake
+## is authored around that ship's own hull silhouette), rendered UNDER the
+## hull; ships rotate at runtime, so the sheet rotates together with the
+## hull around the token center and only the north family ever exists.
 ## Pure lookups and closed-form arithmetic only: no scene nodes, no
 ## re-simulation, no I/O past the one table read (render-only; the day-tick
 ## budget is untouched).
 ##
 ## Sheet placement (the pack README's `anchor + offset` rule with the
-## anchor resolved into the size's token box at ingest): the sheet's
+## anchor resolved into the ship's token box at ingest): the sheet's
 ## top-left is `token_box_top_left + (anchor_sprite + clip_offset)` —
-## native scale, no reference rescale (each size's sheet is authored
-## around that size's representative hull: latin 32, caravel 48, galleass
-## 64). Sheet PNGs are horizontal-ish grids (`columns` per row) cut with
-## `atlas_region`; ids resolve through the registry's lazy raw-bytes
-## family (`fx_waterline_{size}`).
+## native scale, no reference rescale (each ship's sheet is authored
+## around that ship's own token). Sheet PNGs are horizontal-ish grids
+## (`columns` per row) cut with `atlas_region`; ids resolve through the
+## registry's lazy raw-bytes family (`fx_waterline_{ship}`).
 ##
-## The size key is the ship's token canvas width (the tier table baked
-## into the shipped files) — callers pass `texture.get_width()`; no data
-## read, no schema coupling.
+## The ship key is the fleet's ship type id (player = the flagship's
+## `ship_type_id`, NPC = the marker's `ship_type`); the box geometry lives
+## only in the table (the anchor is per-ship), so callers pass the id
+## string — no data read, no schema coupling.
 
 const TABLE_PATH := "res://assets/ui/fx/fx_waterline.json"
 
@@ -53,23 +53,23 @@ static func _reset_for_tests() -> void:
 	_table_path = TABLE_PATH
 
 
-static func has(size: int) -> bool:
-	return size > 0 and table().get("sizes", {}).has(str(size))
+static func has(ship: String) -> bool:
+	return not ship.is_empty() and table().get("ships", {}).has(ship)
 
 
-## One size's geometry: `{fps, frame_ms, frames, loop, anchor_sprite,
-## sheet: {file, frame, columns, offset}}` or {} when the size (or the
+## One ship's geometry: `{fps, frame_ms, frames, loop, anchor_sprite,
+## sheet: {file, frame, columns, offset}}` or {} when the ship (or the
 ## table) is absent — callers hide the fx for that fleet.
-static func geometry(size: int) -> Dictionary:
-	var d: Variant = table().get("sizes", {}).get(str(size), {})
+static func geometry(ship: String) -> Dictionary:
+	var d: Variant = table().get("ships", {}).get(ship, {})
 	return d if d is Dictionary else {}
 
 
 ## The closed-form frame index at `t_ms` (uniform frame_ms pinned at
 ## ingest — non-uniform packs fail the ingest, so integer division is
 ## exact). Phase offsets just shift `t_ms`.
-static func frame_at(size: int, t_ms: int) -> int:
-	var g := geometry(size)
+static func frame_at(ship: String, t_ms: int) -> int:
+	var g := geometry(ship)
 	if g.is_empty():
 		return -1
 	var frames := int(g.get("frames", 0))
@@ -80,8 +80,8 @@ static func frame_at(size: int, t_ms: int) -> int:
 
 
 ## One sheet cell: frame `i` in the `columns`-per-row grid.
-static func atlas_region(size: int, frame: int) -> Rect2:
-	var g := geometry(size)
+static func atlas_region(ship: String, frame: int) -> Rect2:
+	var g := geometry(ship)
 	if g.is_empty():
 		return Rect2()
 	var clip: Dictionary = g.get("sheet", {})
@@ -96,17 +96,17 @@ static func atlas_region(size: int, frame: int) -> Rect2:
 		w, h)
 
 
-## The registry id of the sheet (`fx_waterline_{size}`).
-static func sheet_id(size: int) -> String:
-	return "fx_waterline_%d" % size
+## The registry id of the sheet (`fx_waterline_{ship}`).
+static func sheet_id(ship: String) -> String:
+	return "fx_waterline_%s" % ship
 
 
 ## Box-local top-left of the sheet (native scale — the sheets are
-## authored per size; no reference rescale): the vector from the size-S
+## authored per ship; no reference rescale): the vector from the ship's
 ## token box's top-left to the sheet frame's top-left. Add the token
 ## box's position to place the rect under a marker/token node.
-static func sheet_offset_px(size: int) -> Vector2:
-	var g := geometry(size)
+static func sheet_offset_px(ship: String) -> Vector2:
+	var g := geometry(ship)
 	if g.is_empty():
 		return Vector2.ZERO
 	var clip: Dictionary = g.get("sheet", {})
@@ -121,8 +121,8 @@ static func sheet_offset_px(size: int) -> Vector2:
 
 
 ## The sheet's on-screen rect size (native scale).
-static func sheet_size_px(size: int) -> Vector2:
-	var g := geometry(size)
+static func sheet_size_px(ship: String) -> Vector2:
+	var g := geometry(ship)
 	var clip: Dictionary = g.get("sheet", {}) if not g.is_empty() else {}
 	var frame: Dictionary = clip.get("frame", {}) if not clip.is_empty() \
 		else {}
