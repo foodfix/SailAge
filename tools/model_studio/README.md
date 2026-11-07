@@ -62,9 +62,12 @@ token lands in `model_raw/pixellab_topdown/<label>/` (gitignored) and
 **snap is a byte-identical passthrough** into `snapped/north.png`. The
 card previews the 8 runtime rotations (PIL NEAREST — the same
 resampling family the game pins; the game rotates the token, so only
-the north family ever exists). Accept stages the WHOLE fleet's snapped
-north tokens as `hull_<ship>.png` and runs
-`build_ui_art --import-ships-north <stage>`; the gate is the ship's
+the north family ever exists). Accept passes the pixellab_topdown raw
+store straight to `build_ui_art --import-ships-north <raw_root>` (its
+`<ship>/snapped/north.png` + manifest layout is exactly what the
+ingestion walks — a fleet-completeness pre-check refuses the accept if
+any ship's snapped token is missing, since a gap would silently fall
+back to the generated token); the gate is the ship's
 `hull_<ship>` ledger token with `pennant: "raw"`. Cost ≈ $0.008/roll.
 
 ## Wake VFX family (pixellab v5 — the §4.8 2026-11-07 single-layer path)
@@ -217,10 +220,10 @@ and both are reported in `/api/status` → `registry.warnings` and
 
 **Accept** flows straight into the game build per family:
 
-1. **Top-down ships** (`td_<label>`): the WHOLE fleet's snapped north
-   tokens are staged as `hull_<ship>.png` (a partial stage would revoke
-   the other ships' ledger tokens) and the worker runs
-   `build_ui_art --import-ships-north <stage>`; the gate is the ship's
+1. **Top-down ships** (`td_<label>`): the pixellab_topdown raw store is
+   passed straight to `build_ui_art --import-ships-north` (after a
+   fleet-completeness pre-check — a missing snapped token would
+   silently fall back to the generated art); the gate is the ship's
    `hull_<ship>` token in `ingest_ledger.json` with `pennant: "raw"`.
 2. **Wake VFX** (`fx_<size>`): the staged size dir + manifest record are
    copied into `model_raw/pixellab_vfx/v5/` and the worker runs

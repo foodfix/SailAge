@@ -996,37 +996,38 @@ class Studio:
             + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
 
     def _td_ingest_order(self, order: dict) -> None:
-        """Accept→game for a top-down ship (§4.8 2026-11-07): stage the
-        WHOLE fleet's snapped north tokens as `hull_<ship>.png` (a partial
-        stage would revoke every other ship's ledger tokens), then run
-        build_ui_art --import-ships-north <stage>. Gate: this ship's
-        `hull_<ship>` ledger token with pennant 'raw' and the tier size."""
+        """Accept→game for a top-down ship (§4.8 2026-11-07): the
+        pixellab_topdown store IS the ingestion input (its layout is
+        `<ship>/snapped/north.png` + the manifest — what
+        run_ship_ingest_north walks; a flat hull_<ship>.png stage would
+        match NOTHING and the build would silently fall back to the
+        generated tokens). Pre-check fleet completeness (a gap would
+        revoke that ship's ledger token and fall back to generated art),
+        then run build_ui_art --import-ships-north <raw_root>. The whole
+        fleet re-lands. Gate: this ship's `hull_<ship>` ledger token
+        with pennant 'raw'."""
         job_id = order["job"]
         label = job_id[len("td_"):]
         ship = chain.td_ship_of(label)
         with self.lock:
             self.current = {"type": "ingest", "job": job_id,
-                            "stage": "staging",
+                            "stage": "pre-check",
                             "started_epoch": time.time()}
         log(f"ingesting {job_id} -> build_ui_art --import-ships-north")
         self._set_ingest_state(job_id, {"state": "running",
                                         "started_at": time.strftime(
                                             "%H:%M:%S")})
         t0 = time.time()
-        stage_dir = os.path.join(self.studio(), "td_stage")
+        raw_root = os.path.join(self.raw(), "pixellab_topdown")
         try:
-            staged, missing = 0, []
-            shutil.rmtree(stage_dir, ignore_errors=True)
-            os.makedirs(stage_dir, exist_ok=True)
-            for lab in chain.td_fleet_labels():
-                s = chain.td_ship_of(lab)
-                src = chain.td_north_path(lab)
-                if not os.path.isfile(src):
-                    missing.append(lab)
-                    continue
-                shutil.copyfile(src, os.path.join(stage_dir,
-                                                  f"hull_{s}.png"))
-                staged += 1
+            if not os.path.isfile(chain.td_north_path(label)):
+                raise RuntimeError(f"{label} has no snapped north token "
+                                   f"— re-roll first")
+            fleet = chain.td_fleet_labels()
+            if label not in fleet:
+                fleet.append(label)
+            missing = [lab for lab in fleet
+                       if not os.path.isfile(chain.td_north_path(lab))]
             if missing:
                 raise RuntimeError(f"missing snapped north tokens: "
                                    f"{missing[:8]}")
@@ -1035,7 +1036,7 @@ class Studio:
                     self.current["stage"] = "build-ladder"
             cmd = [sys.executable,
                    os.path.join(self.repo, "tools", "build_ui_art.py"),
-                   "--import-ships-north", stage_dir]
+                   "--import-ships-north", raw_root]
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   timeout=self.INGEST_TIMEOUT_S,
                                   cwd=self.repo)
@@ -1058,14 +1059,19 @@ class Studio:
                     ing = {"state": "in-game", "exit_code": 0,
                            "reason": f"raw north token "
                                      f"({rec.get('size')}px, "
-                                     f"{staged} staged)",
+                                     f"{len(tokens)} fleet tokens)",
                            "accepted_at": rec.get("accepted_at"),
                            "log_tail": tail,
                            "seconds": round(time.time() - t0, 1)}
                 else:
+                    rej = next((r for r in ledger.get("rejected", [])
+                                if r.get("job") == f"hull_{ship}"), None)
                     ing = {"state": "error", "exit_code": 0,
                            "reason": f"hull_{ship} did not land "
-                                     f"(pennant raw: {bool(rec)})",
+                                     f"(pennant raw: {bool(rec)})"
+                                     + (f" — {rej.get('reason')}: "
+                                        f"{rej.get('detail')}" if rej
+                                        else ""),
                            "log_tail": tail,
                            "seconds": round(time.time() - t0, 1)}
         except subprocess.TimeoutExpired:
@@ -1095,6 +1101,8 @@ class Studio:
                                    "reason": "fleet re-land (idempotent)",
                                    "finished_at": ing["finished_at"]})
                 self.save_state(st)
+        with self.lock:
+            self.current = None
         log(f"ingest {job_id}: {ing['state']}"
             + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
 

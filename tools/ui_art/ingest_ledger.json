@@ -14,9 +14,9 @@
       "skipped": 16
     },
     "pennant_auto_painted": 0,
-    "pruned_retired_grid": 128,
+    "pruned_retired_grid": 0,
     "rejected": 0,
-    "revoked_stale": 128,
+    "revoked_stale": 0,
     "shipped_files": 16,
     "terrain": {
       "accepted": 4,
@@ -1075,12 +1075,12 @@
       "pennant": "raw",
       "pixellab": {
         "description_sha": "2ce0d75f7d30f7ff",
-        "job_id": "8b9f5cfd-fb4f-41b8-938a-00c4caa95989",
-        "seed": 91000
+        "job_id": "6f33b5b3-88fc-4afb-a52b-baffcfa1551d",
+        "seed": 1331379590
       },
-      "seed": 91000,
+      "seed": 1331379590,
       "size": 64,
-      "snapped_sha": "9a429951a4ec59ed265b9afdda91f624c28d1092f10e3821ee6740d90c90b67d"
+      "snapped_sha": "a9d01cdd9ca3b2d8e96eea511ee2e93ba5b537e62383c747ae37e1f8ea208867"
     },
     "hull_galley": {
       "accepted_at": "2026-11-07",
