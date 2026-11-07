@@ -222,8 +222,10 @@ def run_topdown(ship: str, label: str | None = None,
            "label": dest, "bytes": {"north": len(png)},
            "usage": usage, "job_status": job.get("status")}
     os.makedirs(TOPDOWN_OUT_DIR, exist_ok=True)
-    with open(TOPDOWN_MANIFEST, encoding="utf-8") as fh:
-        manifest = json.load(fh)
+    manifest = {}
+    if os.path.isfile(TOPDOWN_MANIFEST):
+        with open(TOPDOWN_MANIFEST, encoding="utf-8") as fh:
+            manifest = json.load(fh)
     manifest[dest] = rec
     with open(TOPDOWN_MANIFEST, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=1, ensure_ascii=False)
@@ -257,6 +259,14 @@ def snap_topdown(ship: str) -> None:
 
 def run_topdown_fleet(ships: list[str]) -> None:
     for i, ship in enumerate(ships, 1):
+        raw = os.path.join(TOPDOWN_OUT_DIR, ship, "north.png")
+        if os.path.isfile(raw):
+            # resumable: the raw file IS the artifact — a re-roll deletes
+            # it (or names the ship explicitly on the CLI)
+            print(f"[pixellab-topdown {i}/{len(ships)}] {ship} already has "
+                  f"raw north.png — skipped (delete it to re-roll)",
+                  flush=True)
+            continue
         rec = run_topdown(ship)
         print(f"[pixellab-topdown {i}/{len(ships)}] {ship} saved "
               f"north.png ({rec['bytes']['north']} bytes)", flush=True)
