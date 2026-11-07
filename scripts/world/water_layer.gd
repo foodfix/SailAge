@@ -108,19 +108,18 @@ const DIST_DEEP_FACTOR := 0.6
 const DIST_BAND_TILES := 6.0
 const DIST_FULL_TILES := 10.0
 ## §6.7: the raster's tile grid (one texel per tile of `world.png`) and the
-## encode: texel = round(min(d, 16) / 16 * 255) ⇒ d = texel * 16.
+## 16-bit encode across R/G: enc = round(min(d, 16) / 16 * 65535),
+## R = enc>>8, G = enc&255 ⇒ d = (R*256 + G) / 4096 (the shader reads the
+## R high byte: d ≈ texel.r * 16).
 const DIST_MAP_TILES := Vector2(4320, 2160)
 const DIST_ENCODE_MAX_TILES := 16.0
 
 
-## The decoded §6.7 distance texture (one decode per process, cached; null
-## when the artifact is absent — the shader runs with u_dist_enable = 0 and
-## the water renders undarkened, never an error). Held via WeakRef: a
-## strong static Resource ref aborted Godot's teardown at exit (the
-## test_density exit-crash report) — a weak cache dies with the last owner
-## instead.
-static var _dist_texture_ref: WeakRef = null
-static var _dist_attempted := false
+## The decoded §6.7 distance raster (one decode per process; null when the
+## artifact is absent — the depth patch then bakes white (undarkened water,
+## never an error). Held via WeakRef: a strong static Resource ref aborted
+## Godot's teardown at exit (the test_density exit-crash report) — a weak
+## cache dies with the last owner instead.
 
 ## The registry id prefix of the §6.6/A.6 foam strips (`shore_{dir}`), baked
 ## into the coast-foam water variants at tile-set build time.
@@ -376,17 +375,24 @@ static func water_coords(mask: int, kind_column: int,
 
 
 
-## The decoded §6.7 distance texture (§4.8 2026-11-06 pixel-depth amendment)
+## The decoded §6.7 distance raster (§4.8 2026-11-06 pixel-depth amendment)
 ## — the world raster's bytes through the DATA-ARTIFACT pattern (the
 ## `world.png` contract: raw bytes + `load_png_from_buffer`, no import
-## pipeline). Cached per process; null when absent — the material then runs
-## with `u_dist_enable = 0` (undarkened water, never an error).
-static func load_dist_texture() -> Texture2D:
-	if _dist_attempted and _dist_texture_ref != null:
-		var cached = _dist_texture_ref.get_ref()
+## pipeline). Cached per process; null when absent — the depth patch then
+## bakes white (undarkened water, never an error).
+
+static var _dist_image_ref: WeakRef = null
+static var _dist_image_attempted := false
+
+## The DECODED §6.7 image (RGB8, 1 texel per tile, 16-bit encode across
+## R/G: d = (R*256 + G) / 4096 tiles). CPU-side decode has no precision
+## ceiling, so the patch reads the full 16-bit value.
+static func load_dist_image() -> Image:
+	if _dist_image_attempted and _dist_image_ref != null:
+		var cached = _dist_image_ref.get_ref()
 		if cached != null:
-			return cached as Texture2D
-	_dist_attempted = true
+			return cached as Image
+	_dist_image_attempted = true
 	if not FileAccess.file_exists(DIST_TEXTURE_PATH):
 		return null
 	var bytes := FileAccess.get_file_as_bytes(DIST_TEXTURE_PATH)
@@ -395,34 +401,79 @@ static func load_dist_texture() -> Texture2D:
 	var image := Image.new()
 	if image.load_png_from_buffer(bytes) != OK:
 		return null
-	var texture := ImageTexture.create_from_image(image)
-	_dist_texture_ref = weakref(texture)
-	return texture
+	_dist_image_ref = weakref(image)
+	return image
 
+## The shared multiply-blend material for the per-chunk depth patches
+## (§4.8 2026-11-07 amendment: gray patch × water color). Held via WeakRef —
+## the strong static Resource ref aborted Godot's teardown at exit (the
+## test_density exit-crash report; the same convention as the dist image
+## cache above). One instance, cached — blend modes carry no parameters.
+static var _multiply_material_ref: WeakRef = null
 
-## The water material for one WORLD chunk: the shared animated-sea material
-## with the §4.8 pixel-depth amendment layered on — `u_dist_enable` + the
-## chunk's map-pixel origin (each chunk duplicates the cached material; the
-## base cache stays shared with S10, which never enables the distance).
-## `null` when the base material is unavailable (flat tiles, no animation).
-static func build_chunk_material(origin_px: Vector2) -> ShaderMaterial:
-	var base := build_material()
-	if base == null:
-		return null
-	var material := base.duplicate() as ShaderMaterial
-	material.set_shader_parameter("u_dist_origin_px", origin_px)
-	material.set_shader_parameter("u_dist_map_px",
-		DIST_MAP_TILES * 64.0)
-	material.set_shader_parameter("u_dist_enable", 1.0)
-	material.set_shader_parameter("u_dist_deep", DIST_DEEP_FACTOR)
-	material.set_shader_parameter("u_dist_band", DIST_BAND_TILES)
-	material.set_shader_parameter("u_dist_full", DIST_FULL_TILES)
-	var dist_tex := load_dist_texture()
-	if dist_tex != null:
-		material.set_shader_parameter("u_dist_tex", dist_tex)
-	else:
-		material.set_shader_parameter("u_dist_enable", 0.0)
+static func multiply_material() -> CanvasItemMaterial:
+	if _multiply_material_ref != null:
+		var cached = _multiply_material_ref.get_ref()
+		if cached != null:
+			return cached as CanvasItemMaterial
+	var material := CanvasItemMaterial.new()
+	material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
+	_multiply_material_ref = weakref(material)
 	return material
+
+## The §4.8 pinned factor curve → 0..255 patch byte. The design factors are
+## LINEAR multipliers (§4.7.17 shader-era math multiplied COLOR in linear
+## space), and the Forward+ multiply blend also runs in linear space — so
+## the byte stores the sRGB ENCODING of the factor (0.6 → 203, not 153):
+## the blend decodes it back to the pinned linear factor. Measured
+## 2026-11-07 (probe west region): a raw 153 byte rendered as a linear
+## ≈0.32 darkening — the "double 0.6" signature.
+static func _factor_byte(dist_texel: int) -> int:
+	var d := dist_texel / 4096.0
+	var factor := 1.0 if d <= DIST_BAND_TILES else (
+		DIST_DEEP_FACTOR if d >= DIST_FULL_TILES else (
+			1.0 + (DIST_DEEP_FACTOR - 1.0)
+				* (d - DIST_BAND_TILES) / (DIST_FULL_TILES - DIST_BAND_TILES)))
+	var srgb := 1.055 * pow(factor, 1.0 / 2.4) - 0.055
+	return int(round(srgb * 255.0))
+
+## The per-chunk §4.8 depth patch (2026-11-07 amendment): a CHUNK_TILES×
+## CHUNK_TILES gray image, 1 px per tile — byte = the pinned factor curve
+## decoded from the §6.7 raster's FULL 16-bit value, land/reef/ice tiles
+## white (their art must not darken). Drawn multiply-blended over the
+## water; the GPU's linear filtering of the patch provides the sub-tile
+## continuity the fp16 varying path could not. Null (render nothing) when
+## the §6.7 raster is absent — undarkened water, never an error.
+const PATCH_TILES := 128
+
+static func build_depth_patch(origin_tiles: Vector2i, loader) -> Texture2D:
+	var dist := load_dist_image()
+	var width: int = loader.width
+	var height: int = loader.height
+	var bytes := PackedByteArray()
+	bytes.resize(PATCH_TILES * PATCH_TILES * 3)
+	var o := 0
+	for j in PATCH_TILES:
+		var ty := origin_tiles.y + j
+		var row_water := ty >= 0 and ty < height
+		for i in PATCH_TILES:
+			var level := 255
+			if row_water:
+				var tx := posmod(origin_tiles.x + i, width)
+				var kind: String = loader.kind_of_index(
+					loader.index_xy(tx, ty))
+				if KIND_COLUMNS.has(kind):
+					var px := dist.get_pixel(tx, ty)
+					var texel := int(round(px.r * 255.0)) * 256 \
+						+ int(round(px.g * 255.0))
+					level = _factor_byte(texel)
+			bytes[o] = level
+			bytes[o + 1] = level
+			bytes[o + 2] = level
+			o += 3
+	var img := Image.create_from_data(PATCH_TILES, PATCH_TILES, false,
+		Image.FORMAT_RGB8, bytes)
+	return ImageTexture.create_from_image(img)
 
 
 ## The animated-sea `ShaderMaterial` (§4.7.17) — the params are the pinned
@@ -509,9 +560,9 @@ static func build_layer(tile_px: int, shore_dirs: Array = []) -> TileMapLayer:
 	if not _tile_set_cache.has(tile_px):
 		_tile_set_cache[tile_px] = build_tile_set(tile_px, shore_dirs)
 	layer.tile_set = _tile_set_cache[tile_px]
-	var material := build_material()
-	if material != null:
-		layer.material = material
+	# 2026-11-07: no material — the animated-sea program is retired (80-*
+	# §4.7.17, user direction) and the §4.8 depth darkening moved to the
+	# per-chunk CPU-baked multiply patch (`build_depth_patch`, map_loader).
 	return layer
 
 

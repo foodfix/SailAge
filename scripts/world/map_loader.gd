@@ -1324,21 +1324,23 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 	# r5 foam wash/speckles are retired (user direction). No dirs ⇒ no
 	# variant columns; the layers stamp plain painted fills + wang corners.
 	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px)
-	# §4.8 2026-11-06 pixel-depth: the WORLD water layer enables the
-	# per-pixel distance darkening (the shared material duplicated per chunk
-	# with this chunk's map-pixel origin; S10's battle layer keeps the base
-	# material with the amendment disabled).
-	var chunk_origin_px := Vector2(key.x * CHUNK_TILES, key.y * CHUNK_TILES) \
-		* tile_size_px
-	var chunk_material := WaterLayerLib.build_chunk_material(chunk_origin_px)
-	if chunk_material != null:
-		water.material = chunk_material
-	elif water_material() != null:
-		water.material = water_material()
 	water.name = "Water"
 	var water_source := _water_source_id_of(water)
 	var base_x := key.x * CHUNK_TILES
 	var base_y := key.y * CHUNK_TILES
+	# §4.8 2026-11-07 pixel-depth: the darkening is a CPU-baked gray patch
+	# (1 px per tile from the §6.7 raster, land white) drawn multiply-blended
+	# over this chunk's water — the shader sampling path measured fp16-quantized
+	# and per-chunk biased (the "dark plateaus + light rectangles" report).
+	if WaterLayerLib.load_dist_image() != null:
+		var patch := Sprite2D.new()
+		patch.name = "DepthPatch"
+		patch.texture = WaterLayerLib.build_depth_patch(
+			Vector2i(base_x, base_y), self)
+		patch.centered = false
+		patch.scale = Vector2.ONE * tile_size_px
+		patch.material = WaterLayerLib.multiply_material()
+		water.add_child(patch)
 	for j in CHUNK_TILES:
 		var y := base_y + j
 		if y < 0 or y >= height:

@@ -242,8 +242,9 @@ func _test_water_layer() -> void:
 	var layer := WaterLayerLib.build_layer(32)
 	_check(layer != null and layer.tile_set != null,
 		"build_layer returns a TileMapLayer with the water TileSet")
-	_check(layer.material == material,
-		"the built layer carries the shared material")
+	_check(layer.material == null,
+		"the built layer carries NO material (the animated-sea program is "
+		+ "retired 2026-11-07, 80-* §4.7.17/§4.8)")
 	# The kind mapping is data-driven off the loader legend.
 	var loader = MapLoaderLib.new()
 	loader.load_map("res://data/maps/world.png", DataLoader.map_legend)

@@ -73,7 +73,9 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
   `data/maps/currents.png` (spec in `docs/10-DATA-SCHEMA.md` §6.5) and,
   since the 2026-11-06 PixelLab terrain amendment, the land-distance
   raster `data/maps/dist_land.png` (spec in `docs/10-DATA-SCHEMA.md`
-  §6.7 — the water shader's pixel-depth factor source).
+  §6.7 — the water depth-patch factor source (2026-11-07: baked per chunk
+  on the CPU, multiplied over the water; the shader sampling path was
+  fp16-quantized and is retired — 80-* §4.8).
   `world.png` is built by `tools/build_world.py` from vendored public-domain
   shorelines plus `tools/map_overrides.json`; the ocean rasters are built by
   `tools/build_ocean.py` from the ocean JSON sources; `dist_land.png` is

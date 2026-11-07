@@ -27,6 +27,12 @@ never materialized.
 
 Pure stdlib. Deterministic: fixed order, no randomness, no dict-order
 dependence — two runs are byte-identical.
+
+Usage: ``build_distance_field.py [--check] [--preview PATH]`` — ``--preview``
+writes a grayscale ``min(d,16)/16`` visualization PNG to PATH (eyeballing
+aid: the shipped RGB8 raster carries the 16-bit encode split R=high/G=low,
+which reads as banded noise in an image viewer; the preview does not).
+The shipped raster is byte-identical with or without the flag.
 """
 
 from __future__ import annotations
@@ -165,6 +171,13 @@ def encode_png(width: int, height: int, rgb: bytes) -> bytes:
 def main() -> int:
     argv = sys.argv[1:]
     check = "--check" in argv
+    preview_path: Path | None = None
+    if "--preview" in argv:
+        at = argv.index("--preview")
+        if at + 1 >= len(argv):
+            print("FAIL --preview needs an output path", file=sys.stderr)
+            return 1
+        preview_path = Path(argv[at + 1])
     width, height, indices = read_world_indices(WORLD_PNG)
     if (width, height) != (4320, 2160):
         print(f"FAIL world.png is {width}x{height}, expected 4320x2160",
@@ -200,6 +213,7 @@ def main() -> int:
     # Pass 2 — per column, streamed straight into the encoder.
     print("EDT pass 2 (columns) + encode …", flush=True)
     rgb = bytearray(width * height * 3)
+    gray = bytearray(width * height * 3) if preview_path is not None else None
     sat_enc = int(round(SATURATION_TILES / 16.0 * 65535))
     column = array("d", bytes(8 * height))
     for x in range(width):
@@ -217,7 +231,13 @@ def main() -> int:
             base = (y * width + x) * 3
             rgb[base] = (enc >> 8) & 255
             rgb[base + 1] = enc & 255
+            if gray is not None:
+                level = int(enc * 255 / 65535)
+                gray[base] = gray[base + 1] = gray[base + 2] = level
     rebuilt = encode_png(width, height, bytes(rgb))
+    if gray is not None:
+        preview_path.write_bytes(encode_png(width, height, bytes(gray)))
+        print(f"wrote preview {preview_path}")
     if check:
         committed = OUT_PNG.read_bytes() if OUT_PNG.is_file() else b""
         if committed != rebuilt:

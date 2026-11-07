@@ -44,8 +44,9 @@ extends Node
 ##     item whose `draw` signal fired (zero "Drawing is only allowed" calls).
 ##  13 Phase-10 W5-A: the §4.7.17 FX layer — the pinned timing constants,
 ##     the §4.8.6 heading8→dir / owner / hull-sprite mapping, the battle
-##     water layer (the shared `WaterLayer` build, 48×30 stamped cells, the
-##     ONE S3/S10 material), the sequencer's event mapping (cannon →
+##     water layer (the shared `WaterLayer` build, 48×30 stamped cells, no
+##     material — the animated-sea retirement), the sequencer's event
+##     mapping (cannon →
 ##     volley→flight→impact/splash + sink; ram → impact+smoke; board/hold →
 ##     nothing), instant mode (queue never fills, `busy()` false, no timers
 ##     or tweens anywhere in the layer — the source audit), the animate vs
@@ -61,7 +62,7 @@ const ScreenLib := preload("res://scenes/combat/battle_screen.gd")
 const ScreenScene := preload("res://scenes/combat/battle_screen.tscn")
 ## Phase-10 W5-A: the fx layer's own script (the pinned timing constants +
 ## the pure event mapping the section-13 checks read) and the shared water
-## builder (the S10/S3 one-material seam).
+## builder.
 const FxLib := preload("res://scenes/combat/battle_fx_layer.gd")
 const WaterLayerLib := preload("res://scripts/world/water_layer.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
@@ -1325,9 +1326,9 @@ func _test_phase10_fx_layer() -> void:
 		"a type-less hull maps to no sprite id (the placeholder fallback)")
 
 	# (d) The battle water: the shared WaterLayer build, every one of the
-	# 48×30 cells stamped with the flat sea column, and the ONE cached
-	# material S3's chunks carry (§4.7.17 "S10 battle water reuses the same
-	# shader"; the gate is UiMotion at build time, never the battle switch).
+	# 48×30 cells stamped with the flat sea column, and NO material (the
+	# animated-sea program retired 2026-11-07, 80-* §4.7.17 — the battle
+	# water is the flat painted fill).
 	_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
 	var screen = await _new_screen()
 	if screen == null:
@@ -1347,9 +1348,9 @@ func _test_phase10_fx_layer() -> void:
 			and water.get_cell_atlas_coords(Vector2i.ZERO)
 				== Vector2i(sea_column, 0),
 		"cell (0,0) carries the flat sea fill (the §4.8.5 water kind)")
-	_check(water.material != null
-			and water.material == WaterLayerLib.build_material(),
-		"the battle water carries the ONE cached S3/S10 shader material")
+	_check(water.material == null,
+		"the battle water carries NO material (the animated-sea program is "
+		+ "retired 2026-11-07 — water is the flat painted fill, 80-* §4.7.17)")
 
 	# (e) The fx layer node + the no-timers/no-tweens source audit (§5 Motion
 	# pin: "the battle FX sequencer in instant mode produces no timers" —

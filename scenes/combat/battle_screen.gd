@@ -1584,15 +1584,12 @@ func _wire_action_buttons() -> void:
 			_shot_buttons[str(button.get_meta("shot_id"))] = button
 
 
-# --- §4.7.17 animated battle water (Phase-10 W5-A) ---------------------------
+# --- §4.7.17 battle water (Phase-10 W5-A; retired material, 2026-11-07) ------
 
-## The 48×30 battle sea on the SHARED animated-water builder (§4.7.17 "S10
-## battle water reuses the same shader"): `WaterLayer.build_layer` stamps the
-## two flat water fills and attaches the ONE cached `ShaderMaterial` S3's
-## chunks carry (800 ms scroll, ×0.82 darkening). The gate is
-## `UiMotion.enabled` read once at build time — the GLOBAL motion gate, never
-## the battle animate/instant switch (that switch governs the FX sequencer's
-## durations only; the W5-A ledger note). A missing shader/mask/registry id
+## The 48×30 battle sea on the SHARED water builder (`WaterLayer.build_layer`
+## stamps the two flat painted fills). The animated-sea ShaderMaterial is
+## RETIRED (2026-11-07, user direction "remove everything", 80-* §4.7.17):
+## the layer carries no material — plain painted water. A missing registry id
 ## renders the locked palette fill exactly as the pre-Phase-10 sea did.
 func _build_battle_water() -> void:
 	_water_layer = WaterLayerLib.build_layer(int(TILE_PX))

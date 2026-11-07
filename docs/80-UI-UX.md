@@ -2217,11 +2217,25 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      factor that varies CONTINUOUSLY with its own Euclidean distance to
      land — factor 1.0 at ≤ **6 tiles** (the §6.2 coastal band), 0.6 at
      ≥ **10 tiles**, linear between; the factor source is the §6.7
-     distance raster (`data/maps/dist_land.png`, one R8 texel per tile,
-     linearly filtered) sampled by the water shader at the chunk's map
-     origin (§4.7.17 uniforms `u_dist_*`; the S10 battle grid keeps it
-     disabled). No blur pass, no tile-level steps — the continuity is the
-     continuous field itself. Reef, polar ice, ports and the shore-strip
+     distance raster (`data/maps/dist_land.png`, one R8 texel per tile).
+     **Amended 2026-11-07 (the fp16-varying report):** the darkening is a
+     CPU-BAKED per-chunk multiply patch, not a shader sample — Godot
+     4.7's canvas pipeline stores varyings at half precision (measured:
+     fp16-ulp steps on world-scale UVs) and per-chunk origin offsets
+     quantize/bias any shader-side sample past tile accuracy (uniform
+     dark plateaus + light rectangles; probe: `tools/probe_water.gd`).
+     At chunk spawn the loader bakes a 1-px-per-tile gray patch
+     (factor-encoded, land tiles white, full 16-bit raster decode,
+     x-wrap aware) and draws it over the water as a multiply-blended
+     sprite — the GPU's linear filtering of that patch IS the sub-tile
+     continuity (no blur pass, no tile-level steps, no shader coordinate
+     math). **Animated sea retired (2026-11-07, user direction "remove
+     everything"):** the §4.7.17 wave-dither scroll/mask/crest program no
+     longer renders on any water layer — water is the painted wang fill
+     plus the depth patch; `sea_water.gdshader`, `build_material` and the
+     mask/scroll constants stay as dormant machinery (the foam-strip
+     precedent) and `build_layer` attaches no material. Reef, polar ice,
+     ports and the shore-strip
      system are UNCHANGED this round (their tiles carry the pre-painting
      sea background — regenerating them against the painted water is the
      ledgered follow-up); when the wang ids are absent (registry empty,
