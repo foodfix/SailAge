@@ -46,7 +46,7 @@ studio cache (gitignored) until **Accept + rebuild**: the vendored trio
 `SOURCE_JSON` is repointed, and the builder regenerates the game tokens
 + ledger (byte-identical rebuild rules apply; git add/commit stays with
 the user). No depth tileset (retired — pro corner-API crash history),
-no per-tile cards; the legacy `terrain_*` texture jobs are unchanged.
+no per-tile cards; the legacy `terrain_*` texture jobs are HIDDEN entirely (2026-11-06 user direction — terrain re-rolls live on the coast tileset card; the retired texture chain is not re-rollable or visible).
 
 ## Ship family (pixellab — the §4.8 2026-11-06 ship path)
 

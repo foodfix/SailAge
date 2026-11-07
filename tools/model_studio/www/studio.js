@@ -435,7 +435,7 @@ async function refreshJobs() {
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `coast ${data.counts.coast || 0} · ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
+      `coast ${data.counts.coast || 0} · ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;

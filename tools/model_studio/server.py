@@ -50,8 +50,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 MIRROR_OF = {"e": "w", "ne": "nw", "se": "sw"}  # doc f6c00bb: mirror-derived
-FAMILIES = ("coast", "pxship", "hull", "sheet", "icon", "iconsheet",
-           "terrain")
+FAMILIES = ("coast", "pxship", "hull", "sheet", "icon", "iconsheet")
 STORES = ("prompts.json", "state.json", "accepted.json")
 
 
@@ -645,10 +644,12 @@ class Studio:
                 fam = chain.parse_job(job_id)[0]
             except KeyError:
                 fam = None
-            if fam in ("hull", "sheet"):
-                # the classic ship jobs are HIDDEN entirely (user
-                # direction, 2026-11-06): their retired local chain must
-                # not be re-rollable or visible
+            if fam in ("hull", "sheet", "terrain"):
+                # the classic ship jobs and the legacy terrain texture
+                # jobs are HIDDEN entirely (user direction, 2026-11-06):
+                # terrain re-rolls live on the coast tileset card now —
+                # the retired texture chain must not be re-rollable or
+                # visible
                 continue
             try:
                 jobs.append(self._job_entry(job_id, prog, report, prompts,
