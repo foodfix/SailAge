@@ -85,7 +85,7 @@ def init(repo: str) -> None:
     RAW = os.path.join(repo, "tools", "ui_art", "model_raw")
     STUDIO = os.path.join(RAW, "studio")
     _DRAFTS = os.path.join(RAW, "drafts")
-    for sub in ("gen", "snapped", "debg"):
+    for sub in ("gen", "snapped", "debg", "coast"):
         os.makedirs(os.path.join(STUDIO, sub), exist_ok=True)
     import types  # noqa: PLC0415 — stdlib
     tools_dir = os.path.join(repo, "tools")
@@ -1002,6 +1002,182 @@ def icon_sheet_prompt_from(dd: dict, group: str, ids: list[str]) -> str:
 # model_raw/pixellab/<label>/ store; snap is a byte-identical passthrough;
 # NO local-model edit/rembg, NO palette quantize, NO pennant snap, NO
 # masthead/band gates — all retired for this family.
+
+# --------------------------------------------------------------------------
+# Coast tileset family (§4.8 2026-11-06 — one card per tileset)
+# --------------------------------------------------------------------------
+COAST_CARD_ID = "coast"
+COAST_RAW_DIR_NAME = "tools/assets/pixellab_raw"
+COAST_LEDGER = "pixellab_coast_ledger.json"
+
+
+def coast_repo_raw_dir() -> str:
+    return os.path.join(REPO, COAST_RAW_DIR_NAME)
+
+
+def coast_ledger_path() -> str:
+    return os.path.join(coast_repo_raw_dir(), COAST_LEDGER)
+
+
+def coast_ledger() -> dict:
+    with open(coast_ledger_path(), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def coast_request_path(tileset_id: str) -> str:
+    return os.path.join(coast_repo_raw_dir(),
+                        f"tileset_coastline_{tileset_id}_request.json")
+
+
+def coast_defaults() -> dict:
+    """Re-roll defaults from the TRACKED provenance: descriptions/params
+    from the vendored request, seed from the ledger. Never the gitignored
+    api_key config."""
+    tid = coast_ledger()["pixellab"]["tileset_id"]
+    with open(coast_request_path(tid), encoding="utf-8") as fh:
+        req = json.load(fh)
+    return {"tileset_id": tid, "seed": coast_ledger()["pixellab"]["seed"],
+            "lower": req["lower_description"],
+            "upper": req["upper_description"],
+            "transition": req["transition_description"],
+            "boundary_seed": req.get("boundary_seed")}
+
+
+def coast_pending_path() -> str | None:
+    """Newest pending re-roll result in the studio cache, or None."""
+    d = studio_path("coast", "")
+    if not os.path.isdir(d):
+        return None
+    cands = [os.path.join(d, f) for f in os.listdir(d)
+             if f.startswith("tileset_coastline_") and f.endswith(".json")]
+    if not cands:
+        return None
+    return max(cands, key=os.path.getmtime)
+
+
+def coast_reroll(seed: int | None, style: str | None,
+                 poll_status=None) -> dict:
+    """One corner-tileset re-roll, in-process via pixellab_pass. `style`
+    is the user's free-text clause appended to all three vendored
+    descriptions; seed None → the ledger's pinned seed. The raw result
+    lands in the studio cache (gitignored) until Accept stages it into
+    the vendored store."""
+    defaults = coast_defaults()
+    px = _pixellab_pass()
+    rec = px.run_coast_tileset(
+        seed=seed,
+        lower=(f"{defaults['lower']}, {style}" if style else None),
+        upper=(f"{defaults['upper']}, {style}" if style else None),
+        transition=(f"{defaults['transition']}, {style}" if style
+                    else None),
+        poll_status=poll_status)
+    tid = rec["tileset_id"]
+    out = studio_path("coast", f"tileset_coastline_{tid}.json")
+    atomic_write(out, json.dumps(
+        {"tileset_id": tid, "job_id": rec["job_id"], "seed": rec["seed"],
+         "payload": rec["payload"], "result": rec["result"]},
+        indent=1).encode("utf-8"))
+    rec["studio_path"] = out
+    return rec
+
+
+def coast_tiles_of(result: dict) -> dict[int, dict]:
+    """wang index -> {corners, w, h, rows} — rows are hex-string pixels
+    (chain's decode semantics: "#rrggbb" or None), decoded from a tileset
+    result/ledger-shaped payload (tiles[].corners + image.base64)."""
+    out = {}
+    for tile in result.get("tileset", {}).get("tiles", []):
+        c = tile["corners"]
+        idx = ((1 if c["NW"] == "upper" else 0)
+               + (2 if c["NE"] == "upper" else 0)
+               + (4 if c["SW"] == "upper" else 0)
+               + (8 if c["SE"] == "upper" else 0))
+        w, h, rows = decode_rgba(base64.b64decode(tile["image"]["base64"]))
+        out[idx] = {"corners": c, "w": w, "h": h, "rows": rows}
+    return out
+
+
+def coast_strip_png(result: dict) -> bytes:
+    """The 16 wang tiles as an 8x2 strip (512x128) — the card thumbnail."""
+    tiles = coast_tiles_of(result)
+    cell = max(t["w"] for t in tiles.values()) if tiles else 64
+    cols, row_count = 8, 2
+    rows: list = [[None] * (cols * cell) for _ in range(row_count * cell)]
+    for idx, tile in sorted(tiles.items()):
+        ox = (idx % cols) * cell
+        oy = (idx // cols) * cell
+        for y, trow in enumerate(tile["rows"]):
+            for x, pxv in enumerate(trow):
+                rows[oy + y][ox + x] = pxv
+    return encode_png(cols * cell, row_count * cell, rows)
+
+
+def _png_palette(data: bytes) -> list[str]:
+    """Minimal chunk walk: the PLTE entries of an indexed PNG as
+    '#rrggbb' strings (the world raster's palette, index order)."""
+    pos = 8
+    while pos + 8 <= len(data):
+        length = int.from_bytes(data[pos:pos + 4], "big")
+        ctype = data[pos + 4:pos + 8]
+        if ctype == b"PLTE":
+            pl = data[pos + 8:pos + 8 + length]
+            return [f"#{pl[i]:02x}{pl[i + 1]:02x}{pl[i + 2]:02x}"
+                    for i in range(0, length, 3)]
+        pos += 12 + length
+    return []
+
+
+def coast_mock_png(result: dict) -> bytes:
+    """Wang map mock: a real 12x4-cell crop of the built world (Bay of
+    Biscay — north/west-facing coasts) rendered 1:1 with the provided
+    tiles through the water-flanking rule. 768x256. Water = wang_0; land
+    = the flanking index tile; index 0 (impossible on the built map)
+    draws the legacy flat land fill."""
+    tiles = coast_tiles_of(result)
+    map_path = os.path.join(REPO, "data", "maps", "world.png")
+    with open(map_path, "rb") as fh:
+        png_bytes = fh.read()
+    pal = _png_palette(png_bytes)
+    land_hex = pal[2] if len(pal) > 2 else "#7a5c2e"
+    mw, mh, map_rows = decode_rgba(png_bytes)
+    x0, y0, cw, ch = 2084, 400, 12, 4
+    cw = min(cw, mw)
+    ch = min(ch, mh)
+    rows: list = [[None] * (cw * 64) for _ in range(ch * 64)]
+    fallback = "#7a5c2e"
+    for cy in range(ch):
+        for cx in range(cw):
+            x, y = x0 + cx, y0 + cy
+
+            def land(ox: int, oy: int) -> bool:
+                yy = y + oy
+                if yy < 0 or yy >= mh:
+                    return False
+                pxv = map_rows[yy][(x + ox) % mw]
+                return pxv == land_hex
+
+            if land(0, 0):
+                n, s = (not land(0, -1)), (not land(0, 1))
+                w, e = (not land(-1, 0)), (not land(1, 0))
+                fnw = n or w or (not land(-1, -1))
+                fne = n or e or (not land(1, -1))
+                fsw = s or w or (not land(-1, 1))
+                fse = s or e or (not land(1, 1))
+                idx = ((int(not fnw) << 3) + (int(not fne) << 2)
+                       + (int(not fsw) << 1) + int(not fse))
+                tile = tiles.get(idx)
+                if tile is None:  # index 0: the legacy flat fallback
+                    for yy in range(64):
+                        for xx in range(64):
+                            rows[cy * 64 + yy][cx * 64 + xx] = fallback
+                    continue
+            else:
+                tile = tiles.get(0)
+            for yy, trow in enumerate(tile["rows"]):
+                for xx, pxv in enumerate(trow):
+                    rows[cy * 64 + yy][cx * 64 + xx] = pxv
+    return encode_png(cw * 64, ch * 64, rows)
+
 
 def px_dir() -> str:
     return os.path.join(RAW, "pixellab")

@@ -27,6 +27,27 @@ Then open <http://127.0.0.1:8010>.
 and the studio cache is written to `<repo>/tools/ui_art/model_raw/studio/`
 (gitignored). The canonical `gen/` and `snapped/` stores are never written.
 
+## Coast tileset family (pixellab — the §4.8 terrain path, 2026-11-06)
+
+ONE card per tileset (`coast`): the vendored 16-tile wang corner set the
+world's coastlines render from (`tools/build_terrain_pixellab.py` +
+`pixellab_coast_ledger.json` — the placement rule is the §4.8
+water-flanking rule). The card shows the shipped 16-tile strip (draft),
+the pending re-roll strip (raw), and the **wang mock preview** — a live
+12×4-cell crop of the built world (Bay of Biscay) rendered 1:1 with the
+tiles through the flanking rule (snapped). Re-roll = one
+`/create-tileset` pro-mode call via `tools/pixellab_pass.py
+run_coast_tileset` in-process (defaults from the vendored request
+wording; the prompt box is a free-text **style clause appended to all
+three descriptions**; seed = the tileset seed). The result stays in the
+studio cache (gitignored) until **Accept + rebuild**: the vendored trio
+(`tileset_coastline_<id>{,_request,_submit}.json`) is staged into
+`tools/assets/pixellab_raw/`, `build_terrain_pixellab.py`'s pinned
+`SOURCE_JSON` is repointed, and the builder regenerates the game tokens
++ ledger (byte-identical rebuild rules apply; git add/commit stays with
+the user). No depth tileset (retired — pro corner-API crash history),
+no per-tile cards; the legacy `terrain_*` texture jobs are unchanged.
+
 ## Ship family (pixellab — the §4.8 2026-11-06 ship path)
 
 One card per fleet ship, keyed by label (`px_<label>`; labels with

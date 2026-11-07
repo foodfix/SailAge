@@ -171,6 +171,83 @@ def _save_rotations(urls: dict, dest_dir: str) -> dict:
     return saved
 
 
+# The coastline tileset envelope — verbatim from the vendored request
+# (tools/assets/pixellab_raw/tileset_coastline_77f5cd00-…_request.json,
+# the accepted 2026-11-06 generation). Re-rolls may override the three
+# descriptions and the seeds; everything else stays pinned.
+COAST_DEFAULT_REQUEST = {
+    "lower_description": "calm shallow coastal sea, muted slate blue, "
+                         "semi-flat painterly water with sparse 2-3 pixel "
+                         "ripple dabs, 16-bit retro world map ocean tile in "
+                         "the style of Uncharted Waters 2, no wave crests, "
+                         "no foam",
+    "upper_description": "dry earth-brown coastal land, warm ochre shoreline "
+                         "rising to darker umber ground, Mediterranean "
+                         "16th-century coastline, 16-bit retro world map "
+                         "land tile in the style of Uncharted Waters 2",
+    "transition_description": "narrow wet sand beach with a thin broken "
+                              "foam line, Uncharted Waters 2 style shoreline "
+                              "transition",
+    "mode": "pro",
+    "tile_size": {"width": 64, "height": 64},
+    "view": "high top-down",
+    "transition_size": 0.25,
+    "roundness": 1,
+    "raggedness": 0.35,
+    "boundary_amplitude": 0.15,
+    "boundary_seed": 42,
+    "detail": "highly detailed",
+}
+COAST_DEFAULT_SEED = 20261106
+
+
+def run_coast_tileset(seed: int | None = None, lower: str | None = None,
+                      upper: str | None = None, transition: str | None = None,
+                      boundary_seed: int | None = None,
+                      poll_status=None) -> dict:
+    """One /create-tileset generation (pro corner mode) + raw download.
+    The studio (tools/model_studio) calls this in-process; payload shape is
+    the accepted vendored request, descriptions/seed overridable."""
+    payload = dict(COAST_DEFAULT_REQUEST)
+    if lower:
+        payload["lower_description"] = lower
+    if upper:
+        payload["upper_description"] = upper
+    if transition:
+        payload["transition_description"] = transition
+    payload["seed"] = COAST_DEFAULT_SEED if seed is None else int(seed)
+    if boundary_seed is not None:
+        payload["boundary_seed"] = int(boundary_seed)
+    print("[pixellab coast] POST /create-tileset ...", flush=True)
+    created = _post("/create-tileset", payload)
+    job_id, tileset_id = (created["background_job_id"],
+                          created["tileset_id"])
+    print(f"    job={job_id} tileset={tileset_id}", flush=True)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        raise RuntimeError(f"coast tileset: job {job_id} status="
+                           f"{job.get('status')!r} (last: {json.dumps(job)[:300]})")
+    result = _get(f"/tilesets/{tileset_id}")
+    tiles = result.get("tileset", {}).get("tiles", [])
+    print(f"    tileset {tileset_id}: {len(tiles)} tiles", flush=True)
+    return {"tileset_id": tileset_id, "job_id": job_id,
+            "seed": payload["seed"], "payload": payload,
+            "result": result}
+
+
 def run_ship(ship: str, label: str | None = None, description: str | None = None,
              seed: int | None = None, poll_status=None) -> dict:
     """One create-object-pro-flash generation + raw download. The studio

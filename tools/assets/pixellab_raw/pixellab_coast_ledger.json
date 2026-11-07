@@ -1,6 +1,6 @@
 {
   "generated_by": "tools/build_terrain_pixellab.py",
-  "note": "80-* \u00a74.8 2026-11-06 terrain family \u2014 the model's deliberate pixels ship as drawn (palette/budget waived in group 13 via this ledger, the raw-pixellab hull precedent). Corner semantics: upper = land, lower = water; water cells own indices {0,1,2,3,8,9,10,11}, land cells {4,5,6,7,12,13,14} + 15 interior.",
+  "note": "80-* \u00a74.8 2026-11-06 terrain family \u2014 the model's deliberate pixels ship as drawn (palette/budget waived in group 13 via this ledger, the raw-pixellab hull precedent). Corner semantics: upper = land, lower = water; water cells own indices {0..7}, land cells own {8..15} (15 = interior).",
   "pixellab": {
     "background_job_id": "47b40a28-b0b1-4f8a-88ac-55b0fb649a2d",
     "mode": "pro",

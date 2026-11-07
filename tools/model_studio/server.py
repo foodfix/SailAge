@@ -50,7 +50,8 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 MIRROR_OF = {"e": "w", "ne": "nw", "se": "sw"}  # doc f6c00bb: mirror-derived
-FAMILIES = ("pxship", "hull", "sheet", "icon", "iconsheet", "terrain")
+FAMILIES = ("coast", "pxship", "hull", "sheet", "icon", "iconsheet",
+           "terrain")
 STORES = ("prompts.json", "state.json", "accepted.json")
 
 
@@ -192,6 +193,61 @@ class Studio:
             "seconds": studio_rec.get("seconds"),
             "error": studio_rec.get("error"),
             "thumbs": {},
+        }
+
+    def _coast_entry(self, prompts, state, accepted) -> dict:
+        """The coast tileset card (§4.8 2026-11-06): ONE card per tileset.
+        draft = the shipped ledger strip; raw = the pending re-roll strip;
+        snapped = the wang mock preview (a live map crop rendered with the
+        pending tiles). Prompt = the free-text style clause appended to
+        all three vendored descriptions; seed = the tileset seed."""
+        job_id = chain.COAST_CARD_ID
+        led = chain.coast_ledger()
+        defaults = chain.coast_defaults()
+        pending = chain.coast_pending_path()
+        tileset_id = led["pixellab"]["tileset_id"]
+        st = state.get(job_id, {})
+        thumbs = {"draft": {"v": int(os.path.getmtime(
+            chain.coast_ledger_path()) * 1000)}}
+        pending_id = None
+        if pending:
+            m = re.search(r"tileset_coastline_([0-9a-f-]+)\.json$",
+                          os.path.basename(pending))
+            pending_id = m.group(1) if m else None
+            v = int(os.path.getmtime(pending) * 1000)
+            thumbs["raw"] = {"v": v}
+            thumbs["snapped"] = {"v": v}
+        return {
+            "id": job_id,
+            "family": "coast",
+            "subject": "coastline tileset",
+            "label": f"coast · {tileset_id[:8]} · seed "
+                     f"{led['pixellab']['seed']}",
+            "tileset_id": tileset_id,
+            "pending": bool(pending),
+            "pending_tileset_id": pending_id,
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": prompts.get(job_id),
+            "original_prompt": None,
+            "original_prompt_source": "none (style clause on vendored "
+                                     "wording)",
+            "custom_prompt": job_id in prompts,
+            "seed": st.get("seed", defaults["seed"]),
+            "canonical_seed": defaults["seed"],
+            "status": st.get("status", "re-rolled — pending accept"
+                             if pending else "canonical"),
+            "status_source": "studio" if st else "canonical",
+            "ingest": None,
+            "metrics": None,
+            "seconds": st.get("seconds"),
+            "error": st.get("error"),
+            "thumbs": thumbs,
         }
 
     def _sheet_entry(self, job_id, subject, prog, prompts, state, accepted,
@@ -455,6 +511,32 @@ class Studio:
             return data
         return None
 
+    def coast_thumb(self, kind: str) -> bytes | None:
+        """The coast card thumbnails: draft = the shipped 16-tile strip
+        (vendored result), raw = the pending re-roll strip, snapped = the
+        wang mock preview (a live world crop rendered with the pending
+        tiles — or the shipped tiles when nothing is pending)."""
+        led = chain.coast_ledger()
+        shipped = os.path.join(chain.coast_repo_raw_dir(),
+                               os.path.basename(led.get("source") or ""))
+        pending = chain.coast_pending_path()
+        source = pending if (kind in ("raw", "snapped") and pending) \
+            else shipped
+        if not os.path.isfile(source):
+            return None
+        key = (kind, source, int(os.path.getmtime(source) * 1000))
+        hit = self._thumb_cache_get(("coast",) + key)
+        if hit is not None:
+            return hit
+        with open(source, encoding="utf-8") as fh:
+            result = json.load(fh)
+        if kind == "snapped":
+            data = chain.coast_mock_png(result)
+        else:
+            data = chain.coast_strip_png(result)
+        self._thumb_cache_put(("coast",) + key, data)
+        return data
+
     def thumb_bytes(self, kind: str, job_id: str):
         """(bytes, mirrored_base | None, direct: bool) — flips through the
         in-memory cache keyed by source path+mtime so browser bursts don't
@@ -542,6 +624,12 @@ class Studio:
             except Exception as exc:  # noqa: BLE001 — degrade, never die
                 warnings.append(f"px_{label}: {type(exc).__name__}: {exc}")
                 log(f"registry SKIP px_{label}: {warnings[-1]}")
+        # The coast tileset card (§4.8 2026-11-06 — one card per tileset)
+        try:
+            jobs.append(self._coast_entry(prompts, state, accepted))
+        except Exception as exc:  # noqa: BLE001 — degrade, never die
+            warnings.append(f"coast: {type(exc).__name__}: {exc}")
+            log(f"registry SKIP coast: {warnings[-1]}")
         try:
             draft_names = sorted(os.listdir(drafts_dir))
         except OSError as exc:
@@ -796,6 +884,50 @@ class Studio:
 
     INGEST_TIMEOUT_S = 420   # the full ladder is ~1–2 min; margin for cold runs
     REJECT_RE = re.compile(r"^\s*REJECT (\S+): (\S+) — (.*)$", re.M)
+
+    def _generate_coast(self, order: dict) -> None:
+        """The coast tileset re-roll (§4.8 2026-11-06): one corner-tileset
+        call; the prompt is the free-text style clause appended to all
+        three vendored descriptions; the result stays in the studio cache
+        until Accept stages it into the vendored store + rebuild."""
+        job_id = chain.COAST_CARD_ID
+        style = order.get("prompt")
+        seed = order["seed"] if order.get("seed") is not None \
+            else chain.coast_defaults()["seed"]
+        with self.lock:
+            self.current = {"type": "generate", "job": job_id,
+                            "prompt": style, "seed": seed,
+                            "stage": "posting",
+                            "started_epoch": time.time()}
+        log(f"generating coast tileset seed={seed} style={style!r}")
+        rec = {"prompt": style, "seed": seed, "status": "running",
+               "started_at": time.strftime("%H:%M:%S")}
+        try:
+            def stage(name: str) -> None:
+                with self.lock:
+                    if self.current and self.current["job"] == job_id:
+                        self.current["stage"] = name
+            started = time.time()
+            out = chain.coast_reroll(seed=seed, style=style,
+                                     poll_status=stage)
+            rec.update({
+                "status": "done",
+                "tileset_id": out["tileset_id"],
+                "studio_path": out["studio_path"],
+                "seconds": round(time.time() - started, 1),
+                "finished_at": time.strftime("%H:%M:%S"),
+            })
+            log(f"coast re-roll done: tileset {out['tileset_id']} "
+                f"({rec['seconds']}s)")
+        except Exception as exc:  # noqa: BLE001 — named failure in state
+            rec.update({"status": "error", "error": f"{type(exc).__name__}: "
+                                                      f"{exc}"})
+            log(f"coast re-roll FAILED: {rec['error']}")
+        with self.lock:
+            st = self.state()
+            st.setdefault("jobs", {})[job_id] = rec
+            self.save_state(st)
+            self.current = None
 
     def _ingest_order(self, order: dict) -> None:
         """Accept→game: the canonical snapped dir is the ingestion input;
@@ -1052,6 +1184,9 @@ class Studio:
 
     def _generate_order(self, order: dict) -> None:
             job_id = order["job"]
+            if job_id == chain.COAST_CARD_ID:
+                self._generate_coast(order)
+                return
             prompt = self.prompts().get(job_id)
             if not prompt:
                 st = self.state().get("jobs", {}).get(job_id) or {}
@@ -1230,6 +1365,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         m = re.match(r"^/thumb/(draft|raw|snapped)/([a-z0-9_]+)\.png$",
                      path)
+        mc = re.match(r"^/thumb/(draft|raw|snapped)/coast\.png$", path)
+        if mc:
+            data = self.studio.coast_thumb(mc.group(1))
+            if data is None:
+                self._json(404, {"error": f"no coast thumb for "
+                                            f"{mc.group(1)}"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+            return
         if not m:
             self._json(404, {"error": "bad thumb path"})
             return
@@ -1268,6 +1418,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(500, {"error": str(exc)})
 
     def _job_ok(self, job_id: str) -> bool:
+        if job_id == chain.COAST_CARD_ID:
+            return True
         if job_id.startswith("px_") and JOB_RE.match(job_id):
             return chain.px_exists(job_id[len("px_"):])
         return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
@@ -1287,6 +1439,69 @@ class Handler(BaseHTTPRequestHandler):
             })
             return True
         return False
+
+    def _accept_coast(self) -> None:
+        """Accept the pending coast re-roll: stage the vendored trio into
+        tools/assets/pixellab_raw/, repoint build_terrain_pixellab.py's
+        pinned SOURCE_JSON, and run the rebuild (the game tokens + ledger
+        regenerate from the new raw). Git add/commit stays with the
+        user — this is a repo change, not a cache write."""
+        pending = chain.coast_pending_path()
+        if not pending:
+            self._json(409, {"error": "no pending coast re-roll to accept"})
+            return
+        with open(pending, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        tid = doc["tileset_id"]
+        raw_dir = chain.coast_repo_raw_dir()
+        files = {
+            f"tileset_coastline_{tid}.json": doc["result"],
+            f"tileset_coastline_{tid}_request.json": doc["payload"],
+            f"tileset_coastline_{tid}_submit.json": {
+                "usage": None, "background_job_id": doc["job_id"],
+                "tileset_id": tid, "status": "completed",
+            },
+        }
+        for fname, payload in files.items():
+            chain.atomic_write(os.path.join(raw_dir, fname),
+                               json.dumps(payload, indent=1,
+                                          ensure_ascii=False)
+                               .encode("utf-8"))
+        bp = os.path.join(chain.repo, "tools", "build_terrain_pixellab.py")
+        with open(bp, encoding="utf-8") as fh:
+            bp_text = fh.read()
+        new_text, n = re.subn(
+            r'tileset_coastline_[0-9a-f-]+\.json',
+            f"tileset_coastline_{tid}.json", bp_text)
+        if n == 0:
+            self._json(500, {"error": "SOURCE_JSON pin not found in "
+                                       "build_terrain_pixellab.py"})
+            return
+        chain.atomic_write(bp, new_text.encode("utf-8"))
+        proc = subprocess.run([sys.executable, bp], capture_output=True,
+                              text=True, timeout=300)
+        if proc.returncode != 0:
+            self._json(500, {"error": "build_terrain_pixellab FAILED",
+                             "stderr": proc.stderr[-800:]})
+            return
+        with self.lock:
+            st = self.state()
+            rec = st.setdefault("jobs", {}).setdefault(
+                chain.COAST_CARD_ID, {})
+            rec["status"] = "accepted"
+            rec["accepted_tileset_id"] = tid
+            self.save_state(st)
+            acc = self.accepted()
+            acc[chain.COAST_CARD_ID] = {
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "source": "studio",
+                "seed": rec.get("seed"),
+                "tileset_id": tid,
+            }
+            self.save_accepted(acc)
+        log(f"coast tileset accepted: {tid} (builder rebuilt tokens+ledger)")
+        self._json(200, {"ok": True, "job": chain.COAST_CARD_ID,
+                         "tileset_id": tid})
 
     def _reroll(self, data: dict) -> None:
         job_id = data.get("job", "")
@@ -1324,6 +1539,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _accept(self, data: dict) -> None:
         job_id = data.get("job", "")
+        if job_id == chain.COAST_CARD_ID:
+            self._accept_coast()
+            return
         if not self._job_ok(job_id):
             self._json(404, {"error": f"unknown job {job_id!r}"})
             return

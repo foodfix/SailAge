@@ -9,6 +9,8 @@ let filter = "all";
 let lastCurrent = null;
 
 const CAPTIONS = {
+  coast: { draft: "shipped ledger strip (16 tiles)", raw: "re-roll strip",
+           snapped: "wang mock preview · live map crop" },
   pxship: { strip: "8 native rotations · ship-as-drawn" },
   hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   sheet: { draft: "draft sheet (5 views)", raw: "raw sheet", snapped: "w crop 64" },
@@ -35,7 +37,9 @@ function thumbURL(job, kind) {
 }
 
 function bandBadge(job) {
-  if (job.family === "pxship") return "";  // no band gates on raw ships
+  if (job.family === "pxship" || job.family === "coast") {
+    return "";  // no band gates on raw ships / tilesets
+  }
   if (!job.band) return '<span class="badge">band —</span>';
   if (job.band.in_band === true) return '<span class="badge ok">band OK</span>';
   if (job.band.in_band === false) {
@@ -161,14 +165,19 @@ function buildCard(job) {
         thumbs.appendChild(ar);
       }
     };
-    mk("draft", "draft (read-only)");
-    mk("raw", "raw gen");
-    mk("snapped", "snapped 64");
+    const caps = CAPTIONS[job.family] || {};
+    mk("draft", caps.draft || "draft (read-only)");
+    mk("raw", caps.raw || "raw gen");
+    mk("snapped", caps.snapped || "snapped 64");
   }
   const taWrap = document.createElement("div");
   taWrap.className = "ta-wrap";
   const ta = document.createElement("textarea");
   ta.rows = 3;
+  if (job.family === "coast") {
+    ta.placeholder = "style clause — appended to the vendored sea/land/"
+      + "beach descriptions (empty = vendored wording only)";
+  }
   ta.spellcheck = false;
   ta.addEventListener("change", () => {
     ta.dataset.dirty = "1";
@@ -184,7 +193,8 @@ function buildCard(job) {
     <button class="orig small" title="Revert the prompt box to the stored original wording">↺ original</button>
     <input class="seed" placeholder="random" inputmode="numeric">
     <button class="reroll">Re-roll</button>
-    <button class="accept small">Accept</button>
+    <button class="accept small">${job.family === "coast"
+      ? "Accept + rebuild" : "Accept"}</button>
     <span class="spacer"></span>`;
   const supNote = document.createElement("div");
   supNote.className = "superseded-note";
@@ -295,6 +305,7 @@ function visible(job) {
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
   if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
+  if (filter === "terrain") return job.family === "terrain" || job.family === "coast";
   if (filter === "hull") return isPx(job);
   return job.family === filter;
 }
@@ -424,7 +435,7 @@ async function refreshJobs() {
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
+      `coast ${data.counts.coast || 0} · ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;
