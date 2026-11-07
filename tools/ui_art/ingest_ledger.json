@@ -1114,25 +1114,25 @@
       "pennant": "raw",
       "pixellab": {
         "description_sha": "c93a70aede39521e",
-        "job_id": "201b7bdc-69d4-459a-9bfd-57bd70ffa486",
-        "seed": 91000
+        "job_id": "54ff2804-0f1c-491e-a9ec-7afafee7491f",
+        "seed": 215823654
       },
-      "seed": 91000,
+      "seed": 215823654,
       "size": 32,
-      "snapped_sha": "144b8e3f4fb3b0358aba8ee426cd1a03809f6119e72a26302fcc554e50acad61"
+      "snapped_sha": "755efd57a93d262d755d2381bfe8f1232a3ab71d1f24afc91e98f431a7e62a7a"
     },
     "hull_nao": {
       "accepted_at": "2026-11-07",
       "job": "hull_nao",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "b6397a67f1971b99",
-        "job_id": "24726710-02a4-4f70-9013-06ab1abe91cd",
-        "seed": 91000
+        "description_sha": "5ce7d8776ceeba88",
+        "job_id": "e38f7ea6-2f0a-4380-8afe-5467bb881729",
+        "seed": 1917594666
       },
-      "seed": 91000,
+      "seed": 1917594666,
       "size": 64,
-      "snapped_sha": "84f54036e1b291363a46423d4cc7f205191ee846d5e102a0931eb242eca6e5fb"
+      "snapped_sha": "4744c04fe33a22ff4c9b0bba76d6fc3b5a29f571cc4c89034fa77a8dc4e9c1cf"
     },
     "hull_pinnace": {
       "accepted_at": "2026-11-07",
