@@ -1,6 +1,6 @@
 {
   "generated_by": "tools/build_terrain_pixellab.py",
-  "note": "80-* \u00a74.8 2026-11-06 terrain family \u2014 the model's deliberate pixels ship as drawn (palette/budget waived in group 13 via this ledger, the raw-pixellab hull precedent). Corner semantics: upper = land, lower = water; water cells own indices {0..7}, land cells own {8..15} (15 = interior).",
+  "note": "80-* \u00a74.8 2026-11-06 terrain family \u2014 the model's deliberate pixels ship as drawn (palette/budget waived in group 13 via this ledger, the raw-pixellab hull precedent). Placement (2026-11-06 evening contract): WATER cells always stamp plain wang_0 (never corner art); LAND cells stamp the water-flanking index \u2014 a corner is flanked when any of its three adjacent map neighbours is water, upper corners = non-flanked, index = NW\u00b78 + NE\u00b74 + SW\u00b72 + SE\u00b71 over {1..14}, baked at atlas columns 8..21; 15 = interior (the 8-dihedral pool); 0 (all corners flanked) = impossible on the built map (\u00a76.2 cleanup), legacy-variant fallback.",
   "pixellab": {
     "background_job_id": "47b40a28-b0b1-4f8a-88ac-55b0fb649a2d",
     "mode": "pro",

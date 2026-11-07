@@ -225,9 +225,15 @@ def main() -> int:
         "note": ("80-* §4.8 2026-11-06 terrain family — the model's "
                  "deliberate pixels ship as drawn (palette/budget waived "
                  "in group 13 via this ledger, the raw-pixellab hull "
-                 "precedent). Corner semantics: upper = land, lower = "
-                 "water; water cells own indices {0..7}, "
-                 "land cells own {8..15} (15 = interior)."),
+                 "precedent). Placement (2026-11-06 evening contract): "
+                 "WATER cells always stamp plain wang_0 (never corner "
+                 "art); LAND cells stamp the water-flanking index — a "
+                 "corner is flanked when any of its three adjacent map "
+                 "neighbours is water, upper corners = non-flanked, "
+                 "index = NW·8 + NE·4 + SW·2 + SE·1 over {1..14}, baked "
+                 "at atlas columns 8..21; 15 = interior (the 8-dihedral "
+                 "pool); 0 (all corners flanked) = impossible on the "
+                 "built map (§6.2 cleanup), legacy-variant fallback."),
         "tiles": ledger_tiles,
     }
     LEDGER_PATH.write_text(json.dumps(ledger, indent=2, sort_keys=True)
