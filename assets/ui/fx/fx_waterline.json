@@ -1,61 +1,16 @@
 {
- "dirs": {
-  "e": {
+ "generated_by": "tools/build_ui_art.py --import-fx-pixellab",
+ "sizes": {
+  "32": {
    "anchor_sprite": {
-    "match_rate": 0.725,
+    "match_rate": 0.776,
     "method": "template-match",
-    "x": 33,
-    "y": 57
+    "x": 16,
+    "y": 32
    },
    "canvas": {
-    "h": 66,
-    "w": 107
-   },
-   "fps": 7,
-   "frame_ms": 143,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_e.png",
-     "frame": {
-      "h": 24,
-      "w": 89
-     },
-     "frames": 8,
-     "offset": {
-      "x": -60,
-      "y": -20
-     },
-     "sha256": "e720c25c5f9f971907c9310c60e51f1d7aaa7e2940dfb0dda529a0f618288089"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_e.png",
-     "frame": {
-      "h": 15,
-      "w": 66
-     },
-     "frames": 8,
-     "offset": {
-      "x": -25,
-      "y": -15
-     },
-     "sha256": "ab78519cc1bc2245e6432575cf467506d3a9b5197504cc5dab091630001182a9"
-    }
-   },
-   "loop": true
-  },
-  "n": {
-   "anchor_sprite": {
-    "match_rate": 0.906,
-    "method": "template-match",
-    "x": 33,
-    "y": 60
-   },
-   "canvas": {
-    "h": 108,
-    "w": 104
+    "h": 72,
+    "w": 64
    },
    "fps": 8,
    "frame_ms": 125,
@@ -63,229 +18,93 @@
    "layers": {
     "back": {
      "columns": 3,
-     "file": "fx_waterline_back_n.png",
+     "file": "fx_waterline_back_32.png",
      "frame": {
-      "h": 45,
-      "w": 34
+      "h": 27,
+      "w": 17
      },
      "frames": 8,
      "offset": {
-      "x": -17,
-      "y": -19
+      "x": -8,
+      "y": -14
      },
-     "sha256": "39bad0fe4576a37564ff910844e7cebb64d92b36bde5a2af06e8ac8ad2b3cfae"
+     "sha256": "b911e1912fac109d0aa10fe5ddf0d7b3d5b137823139e2f944267c0d801a63a5"
     },
     "front": {
      "columns": 3,
-     "file": "fx_waterline_front_n.png",
+     "file": "fx_waterline_front_32.png",
      "frame": {
-      "h": 17,
-      "w": 33
+      "h": 14,
+      "w": 20
+     },
+     "frames": 8,
+     "offset": {
+      "x": -10,
+      "y": -14
+     },
+     "sha256": "9634fcff75166aca7cfdea243f748c5b7d845cd1c7360cbd3be9070ac5a65b12"
+    }
+   },
+   "loop": true,
+   "sprite": "hull_latin"
+  },
+  "48": {
+   "anchor_sprite": {
+    "match_rate": 0.754,
+    "method": "template-match",
+    "x": 25,
+    "y": 44
+   },
+   "canvas": {
+    "h": 68,
+    "w": 38
+   },
+   "fps": 8,
+   "frame_ms": 125,
+   "frames": 8,
+   "layers": {
+    "back": {
+     "columns": 3,
+     "file": "fx_waterline_back_48.png",
+     "frame": {
+      "h": 38,
+      "w": 32
      },
      "frames": 8,
      "offset": {
       "x": -16,
       "y": -16
      },
-     "sha256": "6dcae4a9a18a44710a0fcbf2aa3f2f41fc339a0da32e5a4fc1908e0fefd90d35"
-    }
-   },
-   "loop": true
-  },
-  "ne": {
-   "anchor_sprite": {
-    "match_rate": 0.829,
-    "method": "template-match",
-    "x": 34,
-    "y": 59
-   },
-   "canvas": {
-    "h": 128,
-    "w": 128
-   },
-   "fps": 8,
-   "frame_ms": 125,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_ne.png",
-     "frame": {
-      "h": 33,
-      "w": 64
-     },
-     "frames": 8,
-     "offset": {
-      "x": -40,
-      "y": -24
-     },
-     "sha256": "7eb59ef5103b29a015e8e41bd18207d8354e1139d2afde6e191b0b824e640961"
+     "sha256": "c18d697e6335dadb12e4fc655b4b6324370cf47dbd8eb457ae9962b20937ea8c"
     },
     "front": {
      "columns": 3,
-     "file": "fx_waterline_front_ne.png",
+     "file": "fx_waterline_front_48.png",
      "frame": {
-      "h": 26,
-      "w": 54
-     },
-     "frames": 8,
-     "offset": {
-      "x": -22,
-      "y": -26
-     },
-     "sha256": "b43caa57550852339f666b98357cafebf088d4dc26fc6f1c1f713d50e9224254"
-    }
-   },
-   "loop": true
-  },
-  "nw": {
-   "anchor_sprite": {
-    "match_rate": 0.834,
-    "method": "template-match",
-    "x": 30,
-    "y": 59
-   },
-   "canvas": {
-    "h": 132,
-    "w": 144
-   },
-   "fps": 8,
-   "frame_ms": 125,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_nw.png",
-     "frame": {
-      "h": 37,
-      "w": 77
-     },
-     "frames": 8,
-     "offset": {
-      "x": -24,
-      "y": -25
-     },
-     "sha256": "d5ee0b193e31893d4446e09a06571f24f14408ba7961c45f65e0a010a7ba4480"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_nw.png",
-     "frame": {
-      "h": 25,
-      "w": 50
-     },
-     "frames": 8,
-     "offset": {
-      "x": -27,
-      "y": -25
-     },
-     "sha256": "3a21d33cf6a838f87193ca694d33bb2225358e2f762b1d9fea00aa7e91a9f4f9"
-    }
-   },
-   "loop": true
-  },
-  "s": {
-   "anchor_sprite": {
-    "match_rate": 0.887,
-    "method": "template-match",
-    "x": 30,
-    "y": 64
-   },
-   "canvas": {
-    "h": 112,
-    "w": 112
-   },
-   "fps": 8,
-   "frame_ms": 125,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_s.png",
-     "frame": {
-      "h": 24,
-      "w": 50
-     },
-     "frames": 8,
-     "offset": {
-      "x": -25,
-      "y": -36
-     },
-     "sha256": "a814fce2b7513c8b6ee82aa6a5e1f9679b3390787e5ec3c39598733e70a13a25"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_s.png",
-     "frame": {
-      "h": 30,
-      "w": 30
-     },
-     "frames": 8,
-     "offset": {
-      "x": -15,
-      "y": -23
-     },
-     "sha256": "0de31ad0e36362cb143a14c8a0eada00ce189e5e4d4f1ef8c936fd6055d75588"
-    }
-   },
-   "loop": true
-  },
-  "se": {
-   "anchor_sprite": {
-    "match_rate": 0.85,
-    "method": "template-match",
-    "x": 32,
-    "y": 59
-   },
-   "canvas": {
-    "h": 112,
-    "w": 128
-   },
-   "fps": 8,
-   "frame_ms": 125,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_se.png",
-     "frame": {
-      "h": 37,
-      "w": 64
-     },
-     "frames": 8,
-     "offset": {
-      "x": -39,
-      "y": -35
-     },
-     "sha256": "d5fa107ee28f18692383268e62a5ae36b04d4661c78860524c367e258d4e3388"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_se.png",
-     "frame": {
-      "h": 13,
-      "w": 45
+      "h": 18,
+      "w": 29
      },
      "frames": 8,
      "offset": {
       "x": -14,
-      "y": -12
+      "y": -18
      },
-     "sha256": "7713370edf0f0e5d351f79f3563c626867c9e9c1bcaa8d4249690853125f9de5"
+     "sha256": "12b98974aead7170de60209b7f6b2287c401a54bfd553acca429739f242e2222"
     }
    },
-   "loop": true
+   "loop": true,
+   "sprite": "hull_caravel"
   },
-  "sw": {
+  "64": {
    "anchor_sprite": {
-    "match_rate": 0.87,
+    "match_rate": 0.817,
     "method": "template-match",
-    "x": 29,
-    "y": 59
+    "x": 32,
+    "y": 63
    },
    "canvas": {
-    "h": 67,
-    "w": 68
+    "h": 92,
+    "w": 54
    },
    "fps": 8,
    "frame_ms": 125,
@@ -293,82 +112,36 @@
    "layers": {
     "back": {
      "columns": 3,
-     "file": "fx_waterline_back_sw.png",
+     "file": "fx_waterline_back_64.png",
+     "frame": {
+      "h": 64,
+      "w": 34
+     },
+     "frames": 8,
+     "offset": {
+      "x": -17,
+      "y": -40
+     },
+     "sha256": "2259ce973bf14aecb00b32252987708c1e5ec0154d8ea27e36aa34c80b04b896"
+    },
+    "front": {
+     "columns": 3,
+     "file": "fx_waterline_front_64.png",
      "frame": {
       "h": 43,
-      "w": 58
+      "w": 24
      },
      "frames": 8,
      "offset": {
-      "x": -22,
-      "y": -41
+      "x": -12,
+      "y": -44
      },
-     "sha256": "351cbacb75c961737b4c3b570be45967538fb00fc9449f53d411a3ecdb3377f4"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_sw.png",
-     "frame": {
-      "h": 17,
-      "w": 41
-     },
-     "frames": 8,
-     "offset": {
-      "x": -26,
-      "y": -14
-     },
-     "sha256": "9684ebe92e3ceb7c06cd203fe3006649c15e0b42c342b3328ea82407c4af3cbc"
+     "sha256": "8be93d84fa7a5f8075368dcefda43e1ed88f76b05d9da5591e0761b1ecc9a0f6"
     }
    },
-   "loop": true
-  },
-  "w": {
-   "anchor_sprite": {
-    "match_rate": 0.764,
-    "method": "template-match",
-    "x": 30,
-    "y": 57
-   },
-   "canvas": {
-    "h": 112,
-    "w": 168
-   },
-   "fps": 8,
-   "frame_ms": 125,
-   "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_w.png",
-     "frame": {
-      "h": 29,
-      "w": 104
-     },
-     "frames": 8,
-     "offset": {
-      "x": -30,
-      "y": -26
-     },
-     "sha256": "9ffea98b7b5db896ef0ad2dea7588d0e67e1ca8eb5b7d839f684ce0bfe1cf1f8"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_w.png",
-     "frame": {
-      "h": 14,
-      "w": 57
-     },
-     "frames": 8,
-     "offset": {
-      "x": -33,
-      "y": -14
-     },
-     "sha256": "a4749513f1eefb0b2546e0cb2985b76ca6ed167f77d15a99c595c3709a7d3682"
-    }
-   },
-   "loop": true
+   "loop": true,
+   "sprite": "hull_galleass"
   }
  },
- "generated_by": "tools/build_ui_art.py --import-fx-pixellab",
- "version": 1
+ "version": 2
 }

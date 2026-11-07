@@ -2199,7 +2199,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      128-file 8-dir grid and the per-dir waterline sheets (see the
      same-day VFX revision below). The 2026-11-06 identity
      prefix, pennant scheme, raw rules and coast-tileset work are
-     NOT retired.
+     NOT retired. **Acceptance record (2026-11-07):** the 16 north
+     tokens generated at the pinned seed 91000 (4×32², 8×48²,
+     4×64² — every canvas exact); user review verdict "go straight
+     to ingest" (all 16 accepted on the first roll; the pre-screen's
+     two lean candidates latin/caravel shipped as drawn — hull-lean
+     is a review-sheet property by the amendment, not a gate); the
+     v4 wake families generated pro around
+     hull_galleass/hull_caravel/hull_latin (quotes 10 generations
+     each; effect ids d860e12e…/64882f43…/4e99cce9…; canvases
+     54×92, 38×68, 64×72; anchors template-matched into the size
+     boxes); ingest gates: `--check` byte-identical (270 files),
+     validator groups 1–13 green, 61/61 suites green.
 
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
