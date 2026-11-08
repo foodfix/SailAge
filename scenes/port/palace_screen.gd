@@ -664,7 +664,7 @@ func _bind_bounty_board() -> void:
 func _attach_role_badge(row: HBoxContainer, role: String) -> void:
 	if role.is_empty():
 		return
-	var texture := UiKitLib.icon_texture("role_%s" % role)
+	var texture := UiKitLib.hero_texture("role_%s" % role)
 	if texture == null:
 		return
 	var icon := TextureRect.new()
@@ -1075,13 +1075,15 @@ func _attach_commend_trophy() -> void:
 		"Center/Panel/Margin/Body") as VBoxContainer
 	if body == null or body.get_node_or_null("CommendTrophy") != null:
 		return
-	var texture := UiKitLib.icon_texture("trophy")
+	# The §4.8 hero-64 display rule: the commendation trophy renders its
+	# 64 hero 1:1 (an absent id adds nothing — the flat fallback).
+	var texture := UiKitLib.hero_texture("trophy")
 	if texture == null:
 		return
 	var icon := TextureRect.new()
 	icon.name = "CommendTrophy"
 	icon.texture = texture
-	icon.custom_minimum_size = Vector2(32, 32)
+	icon.custom_minimum_size = Vector2(64, 64)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	body.add_child(icon)

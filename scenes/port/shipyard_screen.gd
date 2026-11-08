@@ -887,9 +887,10 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 			_equipment_name(equipment_id),
 			I18n.fmt("shipyard.price", {"price": HudLib.format_thousands(price)}),
 		])
-		# §4.8 equipment icons (`eq_{id}`) through the kit registry — an
+		# §4.8 equipment icons (`eq_{id}`) through the kit registry — the
+		# hero-64 rule resolves the 64 hero (the button grows to it); an
 		# absent id leaves the text-only button (the flat fallback).
-		var icon := UiKitLib.icon_texture("eq_%s" % equipment_id)
+		var icon := UiKitLib.hero_texture("eq_%s" % equipment_id)
 		if icon != null:
 			buy.icon = icon
 		buy.name = "Buy_%s_%s" % [equipment_id,

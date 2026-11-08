@@ -38,7 +38,7 @@ const BAR_H := 8.0
 const BAR_GOOD_ABOVE := 0.6
 const BAR_WARN_ABOVE := 0.25
 ## Hull token cell (§4.8.8: tokens are 32×32, rendered 1× inline).
-const HULL_TOKEN_PX := 32
+const HULL_TOKEN_PX := 64
 
 ## Keys requested for the next `ui_strings.json` merge (the view must never
 ## print a raw "<key>", so each has a composed fallback below).

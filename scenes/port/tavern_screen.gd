@@ -1222,16 +1222,16 @@ func _build_rumor_row(discovery_id: String) -> Control:
 	return row
 
 
-## Prepends the §4.8 `scroll` icon to a rumor row head; an absent id adds
-## nothing (the flat fallback — the registry fills at W4-D).
+## Prepends the §4.8 `scroll` hero to a rumor row head (the hero-64 rule:
+## 1:1 64); an absent id adds nothing (the flat fallback).
 func _attach_scroll_badge(row: HBoxContainer) -> void:
-	var texture := UiKitLib.icon_texture("scroll")
+	var texture := UiKitLib.hero_texture("scroll")
 	if texture == null:
 		return
 	var icon := TextureRect.new()
 	icon.name = "ScrollBadge"
 	icon.texture = texture
-	icon.custom_minimum_size = Vector2(32, 32)
+	icon.custom_minimum_size = Vector2(64, 64)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	row.add_child(icon)
@@ -1243,7 +1243,7 @@ func _attach_scroll_badge(row: HBoxContainer) -> void:
 func _attach_role_badge(row: HBoxContainer, role: String) -> void:
 	if role.is_empty():
 		return
-	var texture := UiKitLib.icon_texture("role_%s" % role)
+	var texture := UiKitLib.hero_texture("role_%s" % role)
 	if texture == null:
 		return
 	var icon := TextureRect.new()

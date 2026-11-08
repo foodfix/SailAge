@@ -338,7 +338,7 @@ func _bind_captains() -> void:
 		# §4.8 role badges (§4.9 icon params): the sighting row carries the
 		# captain's role badge; an absent id renders nothing (the flat
 		# fallback — the registry fills at W4-D).
-		var badge := UiKitLib.icon_texture("role_%s" % str(entry["role"]))
+		var badge := UiKitLib.hero_texture("role_%s" % str(entry["role"]))
 		if badge != null:
 			var icon := TextureRect.new()
 			icon.name = "RoleBadge"

@@ -16,7 +16,9 @@ extends Control
 ## **Optional illustration slot** (Phase-10 W4-C contract): a dialog entry may
 ## carry `"icon_id"` (e.g. the discovery dialog's `marker_discovery_{category}`,
 ## `world_map.explore_here()`); the HUD funnel forwards it as `open_key`'s
-## third argument. When `UiKit.icon_texture(id)` resolves, the 32px icon
+## third argument. When `UiKit.hero_texture(id)` resolves, the 64px hero
+## renders 1:1 (the §4.8 hero-64 display rule; the inline 32 stays the
+## per-file fallback)
 ## renders beside the message (the §4.8.8 inline 1× cell; the wrap width
 ## yields the icon cell while it shows). An absent id or a registry miss ⇒
 ## exactly the text-only dialog.
@@ -38,7 +40,7 @@ const MAX_BODY_H := 400
 ## The illustration cell (§4.8.8: icons render 1× inline, 32px) and the row
 ## gap the wrap width yields while it shows (the engine-default container
 ## separation — the sweep keeps per-screen spacing overrides retired).
-const ICON_PX := 32
+const ICON_PX := 64
 const ICON_ROW_SEP := 4
 
 ## `{key: String, values: Dictionary, icon_id: String}`, or `{text: String}`.
@@ -145,7 +147,7 @@ func _bind() -> void:
 	# shows the 32px icon beside the message and yields the wrap width by
 	# that cell; an absent id or registry miss hides the icon and restores
 	# the full text-only width.
-	var icon_tex: Texture2D = UiKitLib.icon_texture(
+	var icon_tex: Texture2D = UiKitLib.hero_texture(
 		str(_source.get("icon_id", "")))
 	_icon.visible = icon_tex != null
 	if icon_tex != null:

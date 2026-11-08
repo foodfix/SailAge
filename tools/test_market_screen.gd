@@ -447,8 +447,8 @@ func _test_alignment_and_order() -> void:
 		"Layout/VBox/TableFrame/Margin/Table/ColumnHeader")
 	var col_good: Label = header.get_node("Col_good")
 	_check(int(col_good.custom_minimum_size.x)
-			== 56 + 4 + 32 + 4 + 124,
-		"the Good caption spans the badge slot + gap + icon slot + gap + name width (220, got %d)"
+			== 56 + 4 + 64 + 4 + 124,
+		"the Good caption spans the badge slot + gap + icon slot + gap + name width (248, got %d)"
 			% int(col_good.custom_minimum_size.x))
 	var col_qty: Label = header.get_node("Col_qty")
 	_check(int(col_qty.custom_minimum_size.x) == 72 + 3 * 40 + 56 + 4 * 4,

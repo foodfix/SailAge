@@ -2077,7 +2077,7 @@ func _sync_marker_nodes() -> void:
 ## the fleet's role is `treasure`; hidden otherwise (the §4.5.2 square rule).
 func _sync_marker_token(square: ColorRect, role: String) -> void:
 	var token: TextureRect = square.get_node_or_null("TokenSprite")
-	var texture := UiKitLib.icon_texture("marker_treasure") \
+	var texture := UiKitLib.hero_texture("marker_treasure") \
 		if role == NpcFleetsLib.TREASURE else null
 	if texture == null:
 		if token != null:
@@ -2331,7 +2331,7 @@ func _sync_wreck_nodes() -> void:
 		live[id] = true
 		var glyph: Control = _wreck_nodes.get(id, null)
 		if glyph == null:
-			var texture := UiKitLib.icon_texture("marker_wreck")
+			var texture := UiKitLib.hero_texture("marker_wreck")
 			if texture != null:
 				glyph = _world_marker_node("Wreck_%s" % id, "marker_wreck")
 			else:
@@ -2742,14 +2742,15 @@ func _draw_arrow_field() -> void:
 		var rotation_deg := 0.0
 		if not dir_id.is_empty():
 			if kind == "wind":
-				# The §4.8 runtime-rotation amendment (2026-11-08): the
-				# wind family ships ONE north texture; the eight dirs
-				# rotate it through the pinned heading8 map at draw time.
-				texture = UiKitLib.icon_texture("wind_arrow_n")
+				# The §4.8 runtime-rotation amendment + the hero-64 rule:
+				# the wind family ships ONE north hero texture; the eight
+				# dirs rotate it through the pinned heading8 map at draw
+				# time (64 1:1, NEAREST).
+				texture = UiKitLib.hero_texture("wind_arrow_n")
 				rotation_deg = ArrowFieldLib.rotation_degrees_of_dir(dir_id)
 			else:
-				texture = UiKitLib.icon_texture(
-					"%s_arrow_%s" % [kind, dir_id])
+				texture = UiKitLib.hero_texture(
+					"current_arrow_%s" % dir_id)
 		var half := float(_cell_pixels) * 0.5
 		if texture != null:
 			_arrow_layer.draw_set_transform(at,
@@ -2860,7 +2861,11 @@ func _world_marker_node(node_name: String, sprite_id: String) -> Control:
 	holder.name = node_name
 	holder.size = Vector2(_cell_pixels, _cell_pixels)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var texture := UiKitLib.icon_texture(sprite_id)
+	# The §4.8 hero-64 display rule: markers render their 64 hero 1:1 at
+	# the cell size (a hero miss keeps the inline 32 fallback, scaled).
+	var texture := UiKitLib.hero_texture(sprite_id)
+	if texture == null:
+		texture = UiKitLib.icon_texture(sprite_id)
 	if texture != null:
 		var sprite := TextureRect.new()
 		sprite.texture = texture

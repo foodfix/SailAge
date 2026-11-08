@@ -27,6 +27,10 @@ const TOAST_FADE_OUT_MS := 150
 const PRESS_FLASH_MS := 100
 ## Press-flash tint: white lifted 35% toward the ACCENT (§4.8 palette).
 const FLASH_LERP := 0.35
+## Icon-bearing row height (the §4.8 hero-64 display rule, 2026-11-08):
+## rows that carry a 64-generated icon are 64 high with the icon slot
+## flush 64; icon-less text rows keep `PaletteLib.ROW_H` (32).
+const ICON_ROW_H := 64
 ## Value-bar height inside its 32px row footprint (test_ui_kit pin).
 const BAR_H := 16
 ## Footer button separation (W2-C kit pin).
@@ -163,7 +167,9 @@ static func button(text_key: String, kind: String = "default",
 		_:
 			push_error("UiKit.button: unknown kind '%s'" % kind)
 	if icon_id != "":
-		var tex := icon_texture(icon_id)
+		# the hero-64 rule: generated icons resolve their 64 hero (the
+		# button grows to it); chrome ids keep the inline art
+		var tex := hero_texture(icon_id)
 		if tex != null:
 			btn.icon = tex
 	btn.button_down.connect(_flash.bind(btn, _flash_tint()))
@@ -235,6 +241,28 @@ static func row(cols: int, height: int = PaletteLib.ROW_H) -> HBoxContainer:
 		cells.append(cell)
 	hbox.set_meta(META_CELLS, cells)
 	return hbox
+
+
+## The icon-bearing row (§4.8 hero-64 display rule, 2026-11-08): the same
+## cell layout as [method row] at the 64px height. Icons inside resolve
+## through [method hero_texture] so the 64 art renders 1:1.
+static func row_icon(cols: int) -> HBoxContainer:
+	if cols < 1:
+		push_error("UiKit.row_icon: cols must be >= 1 (got %d)" % cols)
+		cols = 1
+	return row(cols, ICON_ROW_H)
+
+
+## The hero texture for a generated icon id (§4.8 hero-64 display rule):
+## tries the 64 hero families in order (`icon64_`, `marker64_`,
+## `facility64_`) and falls back to the inline 32 (`icon_texture`) — so
+## chrome/kit ids without heroes resolve exactly as before.
+static func hero_texture(id: String) -> Texture2D:
+	for prefix in ["icon64_", "marker64_", "facility64_"]:
+		var tex := icon_texture("%s%s" % [prefix, id])
+		if tex != null:
+			return tex
+	return icon_texture(id)
 
 
 # --- Atom: footer -----------------------------------------------------------

@@ -99,7 +99,7 @@ const CELL_SEP := 4
 ## name; the Good cell's total width is unchanged (the name gives the 32px
 ## icon slot its room).
 const COL_BADGE_W := 56
-const COL_GOOD_ICON_W := 32
+const COL_GOOD_ICON_W := 64
 const COL_NAME_W := 124
 const COL_STOCK_W := 56
 const COL_TREND_W := 96
@@ -613,7 +613,10 @@ func _build_column_header() -> void:
 func _build_good_row(good_id: String) -> Dictionary:
 	var row := HBoxContainer.new()
 	row.name = "Row_%s" % good_id
-	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
+	# §4.8 hero-64 display rule: icon-bearing rows are 64 high (the good
+	# icon renders its 64 hero 1:1; the info strip below the table keeps
+	# its own hero slot).
+	row.custom_minimum_size = Vector2(0, float(UiKitLib.ICON_ROW_H))
 	row.set_meta("good_id", good_id)
 	# Clicking anywhere on the row selects it (docs/30 §4.8 info strip).
 	# PASS, so the row's own buttons and field still get their clicks.
@@ -640,19 +643,20 @@ func _build_good_row(good_id: String) -> Dictionary:
 				# variation.
 				badge_label.theme_type_variation = "Accent"
 				name_cell.add_child(badge_label)
-				# The good's §4.8 icon (`good_{id}`): 32px inline in the
-				# 32px row while the registry carries the id; absent ⇒ the
-				# slot collapses (the flat fallback, zero layout shift).
+				# The good's §4.8 icon (`good_{id}`): the 64 hero at 1:1 in
+				# the 64px row (the hero-64 display rule) while the
+				# registry carries the id; absent ⇒ the slot collapses
+				# (the flat fallback, zero layout shift).
 				var good_icon := TextureRect.new()
 				good_icon.name = "GoodIcon"
 				good_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				good_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 				good_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				var good_tex := UiKitLib.icon_texture("good_%s" % good_id)
+				var good_tex := UiKitLib.hero_texture("good_%s" % good_id)
 				if good_tex != null:
 					good_icon.texture = good_tex
 					good_icon.custom_minimum_size = Vector2(
-						float(COL_GOOD_ICON_W), float(PaletteLib.ROW_H))
+						float(COL_GOOD_ICON_W), float(UiKitLib.ICON_ROW_H))
 				name_cell.add_child(good_icon)
 				var name_label := Label.new()
 				name_label.name = "Name"
@@ -1141,10 +1145,11 @@ func _refresh_stock_cells(good_id: String, refs: Dictionary) -> void:
 			trend_label.text = I18n.t_key("market.stock.trend_down")
 		else:
 			trend_label.text = ""
-	var texture := UiKitLib.icon_texture(mark) if not mark.is_empty() else null
+	# The hero-64 rule: the trend mark renders its 64 hero at 1:1.
+	var texture := UiKitLib.hero_texture(mark) if not mark.is_empty() else null
 	trend_icon.texture = texture
 	trend_icon.visible = texture != null
-	trend_icon.custom_minimum_size = Vector2(32, 32) if texture != null \
+	trend_icon.custom_minimum_size = Vector2(64, 64) if texture != null \
 		else Vector2(0, 0)
 
 
@@ -1413,7 +1418,7 @@ func _refresh_captains() -> void:
 func _attach_role_badge(row: HBoxContainer, role: String) -> void:
 	if role.is_empty():
 		return
-	var texture := UiKitLib.icon_texture("role_%s" % role)
+	var texture := UiKitLib.hero_texture("role_%s" % role)
 	if texture == null:
 		return
 	var icon := TextureRect.new()

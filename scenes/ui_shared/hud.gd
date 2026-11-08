@@ -93,9 +93,9 @@ const CURRENT_CAPTION_OFFSET := Vector2(120, 0)
 const ARROW_LENGTH := 14.0
 ## The wind/current arrow *sprites* are 32×32 (§4.8.8: icons render 1× inline);
 ## the drawn fallback below keeps its own pinned ARROW_LENGTH geometry.
-const ARROW_SPRITE_PX := 32
+const ARROW_SPRITE_PX := 64
 ## Resource icons ride their 32px bar rows flush (§4.8.8: 1× inline).
-const RESOURCE_ICON_PX := 32
+const RESOURCE_ICON_PX := 64
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
@@ -223,6 +223,8 @@ func _ready() -> void:
 	_attach_resource_icon("morale", _morale_label)
 	_attach_resource_icon("provisions", _provisions_label)
 	_attach_resource_icon("crew", _crew_label)
+	# durability has no HUD slot (see above); the icon renders 64 via the
+	# hero rule where it does appear (provisioning).
 	# The bars/minimap swallow clicks so a click on the HUD never steps the
 	# fleet; the root stays IGNORE so the rest of the map receives clicks.
 	_minimap.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -280,7 +282,11 @@ func _on_process_frame() -> void:
 ## bar row (HBox). Registry miss ⇒ nothing is added — the text-only readout
 ## is the fallback (§4.9 icon params; the registry fills at the W4 merges).
 func _attach_resource_icon(icon_id: String, label: Control) -> void:
-	var tex := UiKitLib.icon_texture(icon_id)
+	# §4.8 hero-64 display rule: the resource icon renders the 64 hero
+	# 1:1 (a hero miss keeps the inline 32 — the flat fallback chain).
+	var tex := UiKitLib.hero_texture(icon_id)
+	if tex == null:
+		tex = UiKitLib.icon_texture(icon_id)
 	if tex == null:
 		return
 	var icon := TextureRect.new()
@@ -1177,10 +1183,10 @@ func _draw() -> void:
 	# placeholder exactly as before — wind `TEXT`, current `ACCENT`. The
 	# current arrow renders only while the fleet stands on a current tile.
 	var wind_centre := _weather_label.position + WIND_ARROW_OFFSET
-	# The §4.8 runtime-rotation amendment (2026-11-08): ONE north wind
-	# texture, rotated through the pinned heading8 map (the hull-token
-	# precedent); a registry miss keeps the drawn placeholder.
-	var wind_sprite := UiKitLib.icon_texture("wind_arrow_n")
+	# The §4.8 runtime-rotation amendment (2026-11-08) + the hero-64 rule:
+	# ONE north wind hero texture (icons64), rotated through the pinned
+	# heading8 map; a registry miss keeps the drawn placeholder.
+	var wind_sprite := UiKitLib.hero_texture("wind_arrow_n")
 	if wind_sprite != null:
 		var wind_rect := _arrow_sprite_rect(wind_centre)
 		draw_set_transform(wind_rect.get_center(),
@@ -1194,22 +1200,16 @@ func _draw() -> void:
 	if current_arrow_visible():
 		var current_centre := _minimap_title.position + CURRENT_ARROW_OFFSET
 		var current_dir := str(_current_displayed.get("dir", ""))
-		var current_sprite := _arrow_sprite("current_arrow_", current_dir)
+		# The hero-64 rule: the per-dir current arrow renders from its
+		# icons64 hero at 1:1 64 (a hero miss keeps the drawn placeholder).
+		var current_sprite := UiKitLib.hero_texture(
+			"current_arrow_%s" % current_dir)
 		if current_sprite != null:
 			draw_texture_rect(current_sprite,
 				_arrow_sprite_rect(current_centre), false)
 		else:
 			_draw_compass_arrow(current_centre, current_dir, PaletteLib.ACCENT)
 
-
-## The arrow sprite for a drawn-fallback dir id (`""` when the dir is outside
-## the 8-dir domain or the registry has no texture yet — §4.8.10 pins the
-## ids; the registry fills at the W4 merges).
-func _arrow_sprite(prefix: String, dir_id: String) -> Texture2D:
-	var index := SailingSimLib.heading_index(dir_id)
-	if index < 0:
-		return null
-	return UiKitLib.icon_texture("%s%s" % [prefix, dir_id.to_lower()])
 
 
 ## Screen rect centred on the drawn-fallback anchor for a 32px sprite.
