@@ -21,7 +21,7 @@ __pycache__/
 # load_png_from_buffer at runtime, so a scan-regenerated sidecar there is
 # local noise — never committed.
 /data/maps/*.import
-/assets/ui/tokens/*.import
+/assets/ui/hulls/*.import
 /assets/ui/tokens64/*.import
 /assets/ui/icons64/*.import
 /assets/ui/markers64/*.import

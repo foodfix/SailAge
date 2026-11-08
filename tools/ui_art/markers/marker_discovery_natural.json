@@ -1,50 +1,8 @@
 {
- "id": "marker_discovery_natural",
- "class": "markers",
- "file": "assets/ui/markers/marker_discovery_natural.png",
- "mode": "string-map",
- "png": "rgba",
- "width": 32,
- "height": 32,
- "palette": {
-  ".": "transparent",
-  "D": "#5e4720",
-  "H": "#8f6d3a",
-  "K": "#101010"
- },
- "rows": [
-  "................................",
-  "................................",
-  "................................",
-  "................................",
-  "................................",
-  "................................",
-  "..............K.................",
-  "..............KK................",
-  ".............KKK................",
-  ".............KKDK...............",
-  "............KHKDK...............",
-  "............KHKDDK..............",
-  "...........KHHKDDK..............",
-  "...........KHHKDDDK....K........",
-  "..........KHHHKDDDK....KK.......",
-  "..........KHHHKDDDDK..KDK.......",
-  ".........KHHHHKDDDDK..KDDK......",
-  ".........KHHHHKDDDDDKKDDDK......",
-  "........KHHHHHKDDDDDKKDDDDK.....",
-  "........KHHHHHKDDDDDDKDDDDK.....",
-  ".......KHHHHHHKDDDDDDKDDDDDK....",
-  ".......KHHHHHHKDDDDDDDKDDDDK....",
-  "......KKKKKKKKKKKKKKKKKKKKKK....",
-  ".........HHH....................",
-  ".........HDHK...................",
-  "............KHHH................",
-  "............KHDH................",
-  "................................",
-  "................................",
-  "................................",
-  "................................",
-  "................................"
- ],
- "silhouette": "peak motif (LAND_HI NW face / LAND_LO SE face on PORT_INK edges) over a small LAND_HI leaf sprig"
+  "sprites": [
+    {
+      "id": "marker_discovery_natural",
+      "note": "ships via markers64/<bare>.png (the hero-64 display rule, 2026-11-08)"
+    }
+  ]
 }

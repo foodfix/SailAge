@@ -1084,7 +1084,7 @@
   "terrain_rejected": [],
   "tokens": {
     "hull_brigantine": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_brigantine",
       "pennant": "raw",
       "pixellab": {
@@ -1097,7 +1097,7 @@
       "snapped_sha": "8c3a948e2792bcbbeb8ee186757d61f655df7650c5a8a938902add128f7bda06"
     },
     "hull_caravel": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_caravel",
       "pennant": "raw",
       "pixellab": {
@@ -1110,7 +1110,7 @@
       "snapped_sha": "cc0d06eed8096e23ac4b95e8ed76c917866bc7f052bc7fd9cfd631fc70e3d1e3"
     },
     "hull_caravela_redonda": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_caravela_redonda",
       "pennant": "raw",
       "pixellab": {
@@ -1123,7 +1123,7 @@
       "snapped_sha": "6c20f5342a9156d79cb13d7366fe15e1b7ad67a757282865cf737104f42384ce"
     },
     "hull_carrack": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_carrack",
       "pennant": "raw",
       "pixellab": {
@@ -1136,7 +1136,7 @@
       "snapped_sha": "c6304370a1964ab9582d7935ba2694cf1db9d262eefb2320913d5ba740591159"
     },
     "hull_dhow": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_dhow",
       "pennant": "raw",
       "pixellab": {
@@ -1149,7 +1149,7 @@
       "snapped_sha": "26aaa44a428eca2dc24a641da06bb9b66fadb769d305cecdb3087f45f3a037fa"
     },
     "hull_fluyt": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_fluyt",
       "pennant": "raw",
       "pixellab": {
@@ -1162,7 +1162,7 @@
       "snapped_sha": "a94921ae8e7a7c036267a9e041f82b6c4aa3d405ca63eaf47dbb0d8b6241def5"
     },
     "hull_galiot": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_galiot",
       "pennant": "raw",
       "pixellab": {
@@ -1175,7 +1175,7 @@
       "snapped_sha": "423734ad666d7e47c7eafbb7bd725e5f72294e1a329f6c3049987ae0af20860c"
     },
     "hull_galleass": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_galleass",
       "pennant": "raw",
       "pixellab": {
@@ -1188,7 +1188,7 @@
       "snapped_sha": "728fa4d4abe63b277a53a4aeeb7cb3f6ab3b5a7e79fbdc4ef86af177b66f5c2a"
     },
     "hull_galleon": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_galleon",
       "pennant": "raw",
       "pixellab": {
@@ -1201,7 +1201,7 @@
       "snapped_sha": "b82472c7032f62670a7af0e905d872463c5e6d0655b0d1639fb7922b18080401"
     },
     "hull_galley": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_galley",
       "pennant": "raw",
       "pixellab": {
@@ -1214,7 +1214,7 @@
       "snapped_sha": "c850856a98f8319ef57aaafb64746ce1c2064ce91b3b0f12a66025042f005195"
     },
     "hull_junk": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_junk",
       "pennant": "raw",
       "pixellab": {
@@ -1227,7 +1227,7 @@
       "snapped_sha": "c056d5db1e25ef3e068248703cfd5cf8bde5739312fec32efc5192938f58850e"
     },
     "hull_latin": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_latin",
       "pennant": "raw",
       "pixellab": {
@@ -1240,7 +1240,7 @@
       "snapped_sha": "755efd57a93d262d755d2381bfe8f1232a3ab71d1f24afc91e98f431a7e62a7a"
     },
     "hull_nao": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_nao",
       "pennant": "raw",
       "pixellab": {
@@ -1253,7 +1253,7 @@
       "snapped_sha": "4744c04fe33a22ff4c9b0bba76d6fc3b5a29f571cc4c89034fa77a8dc4e9c1cf"
     },
     "hull_pinnace": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_pinnace",
       "pennant": "raw",
       "pixellab": {
@@ -1266,7 +1266,7 @@
       "snapped_sha": "79cb9845640a6c8718789f5d3e65501de06802c4817aeb4e7e7b12ed732fc83c"
     },
     "hull_sloop": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_sloop",
       "pennant": "raw",
       "pixellab": {
@@ -1279,7 +1279,7 @@
       "snapped_sha": "4d878d378f19b052825735e3c74f501564b14d0ea70b98e104157180047f8cdc"
     },
     "hull_xebec": {
-      "accepted_at": "2026-11-07",
+      "accepted_at": "2026-11-08",
       "job": "hull_xebec",
       "pennant": "raw",
       "pixellab": {

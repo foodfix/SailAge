@@ -9040,6 +9040,12 @@ def _g13_check_manifests(class_name: str, class_dir: Path, decls: dict,
             # the transform relation is checked against its base). Master
             # reconciliation 2026-11-04, ledgered.
             continue
+        if not decl.get("file") and "note" in decl and "rows" not in decl:
+            # Id-only inventory declaration (the hero-64 display rule,
+            # 2026-11-08): the marker/facility glyphs ship via their *64
+            # hero families — the manifest stays as the id authority and
+            # carries no render output.
+            continue
         file = decl.get("file")
         if not isinstance(file, str) or not file:
             fail("art-manifest", label, "file: required output path", 13)
@@ -9319,7 +9325,7 @@ def _g13_check_vfx_family(sprites: dict) -> None:
              f"expected 8 dirs, table has {len(groups)}", 13)
     for d, entry in sorted(groups.items()):
         if v4:
-            token = ART_ROOT / "assets" / "ui" / "tokens" / f"hull_{d}.png"
+            token = ART_ROOT / "assets" / "ui" / "hulls" / f"hull_{d}.png"
             if not token.is_file():
                 fail("vfx-anchor", f"fx_waterline[{d}]",
                      f"the ship's north token is missing: {token}", 13)
@@ -9605,8 +9611,12 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
              "registry owners != nations ∪ {player, neutral, pirate} "
              "(§8.8 item 6, pennant remap coverage)", 13)
     raw_grid = _g13_raw_pixellab_ingest()
-    want_tmpl = ("assets/ui/tokens/hull_{ship_type}_{dir}.png" if raw_grid
-                 else "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
+    if _g13_north_ingest():
+        # North mode (the live grid): ONE tier-sized north file per ship.
+        want_tmpl = "assets/ui/hulls/hull_{ship_type}.png"
+    else:
+        want_tmpl = ("assets/ui/hulls/hull_{ship_type}_{dir}.png" if raw_grid
+                     else "assets/ui/hulls/hull_{ship_type}_{owner}_{dir}.png")
     if rdoc.get("path_template") != want_tmpl:
         fail("hull-inventory", str(rpath),
              f"registry path_template != the pinned hull token path "
@@ -10076,32 +10086,9 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
                 fail("art-ingest", f"{family}.{iid}",
                      f"source {rec.get('source')!r} is not "
                      "'pixellab_glyphs'", 13)
-            p = (ASSETS_UI / fam_dirs[family] / f"{iid}.png")
-            if not p.is_file():
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     "ingested glyph file missing from the shipped grid "
-                     "(ledger + file commit together)", 13)
-            try:
-                w, h, px = decode_ui_png(p.read_bytes())
-            except (OSError, PngFormatError) as exc:
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     f"ingested glyph does not decode: {exc}", 13)
-            if (w, h) != (32, 32):
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     f"ingested glyph is {w}x{h}, the glyph canvas is "
-                     "32x32", 13)
-            got = {c for row in px for c in row if c is not None}
-            off = sorted(got - (fam_blocks[family] | BLOCK_LOCKED))
-            if off:
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     f"off-block hex(es) {off} — the {family} class checks "
-                     "against its owning §4.8.4 block", 13)
-            if len(got) > fam_caps[family]:
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     f"{len(got)} distinct colors > the 32px cap "
-                     f"{fam_caps[family]} (§4.8.3)", 13)
-            # the hero 64 (the hero-64 display rule, 2026-11-08): BOTH
-            # glyph families ship heroes now — the icons64 pattern
+            # The 32 inline family retired with the hero-64 display rule
+            # (2026-11-08): the glyph record audits its HERO only
+            # (presence / 64 canvas / owning block / exactness).
             hero = (ASSETS_UI / fam_hero_dirs[family]
                     / f"{iid[len(fam_hero_prefixes[family]):]}.png")
             if not hero.is_file():
@@ -10145,12 +10132,6 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
             q = [[None if c is None else _g13_nearest_hex(c,
                                                          fam_blocks[family])
                   for c in row] for row in spx]
-            want = _g13_halve64(q)
-            if px != want:
-                fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     "is not the exact re-quantize + 2:1 nearest halving "
-                     "of its snapped source — re-run "
-                     "build_ui_art --import-glyphs", 13)
             if hpx != q:
                 fail("art-ingest", str(hero.relative_to(ART_ROOT)),
                      "is not the exact re-quantize of its snapped source "
@@ -10419,14 +10400,14 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
             fail("art-ingest", tid,
                  f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
         if north:
-            p = ASSETS_UI / "tokens" / f"{tid}.png"
+            p = ASSETS_UI / "hulls" / f"{tid}.png"
             if not p.is_file():
                 fail("art-ingest", str(p.relative_to(ART_ROOT)),
                      "ingested north token file missing from the shipped "
                      "grid (one tier-sized file per ship; the runtime "
                      "rotates it)", 13)
         elif _g13_raw_pixellab_ingest():
-            p = ASSETS_UI / "tokens" / f"hull_{ship}_{d}.png"
+            p = ASSETS_UI / "hulls" / f"hull_{ship}_{d}.png"
             if not p.is_file():
                 fail("art-ingest", str(p.relative_to(ART_ROOT)),
                      "ingested base token file missing from the shipped "
@@ -10434,14 +10415,14 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
                      "artifact every owner id resolves onto)", 13)
         else:
             for owner in sorted(owners):
-                p = ASSETS_UI / "tokens" / f"hull_{ship}_{owner}_{d}.png"
+                p = ASSETS_UI / "hulls" / f"hull_{ship}_{owner}_{d}.png"
                 if not p.is_file():
                     fail("art-ingest", str(p.relative_to(ART_ROOT)),
                          "ingested base token file missing from the shipped grid",
                          13)
 
     # derived records: exact h-flips, base-referenced, group-coherent
-    tokens_dir = ASSETS_UI / "tokens"
+    tokens_dir = ASSETS_UI / "hulls"
     flip_pairs = 0
     for fid, rec in sorted(derived.items()):
         if not isinstance(fid, str) or not fid.startswith("hull_") \
@@ -10533,7 +10514,7 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
             # source's pixels — any pipeline pixel edit (remap, quantize,
             # recolor) fails here. Compare PIXELS, not bytes: the import
             # re-encodes the container by design.
-            tp = ASSETS_UI / "tokens" / f"{tid}.png"
+            tp = ASSETS_UI / "hulls" / f"{tid}.png"
             if tp.is_file():
                 try:
                     got = decode_ui_png(tp.read_bytes())
@@ -10918,9 +10899,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 except (OSError, ValueError):
                     reg_tmpl = None
             tmpl = reg_tmpl or (
-                "assets/ui/tokens/hull_{ship_type}_{dir}.png"
+                "assets/ui/hulls/hull_{ship_type}_{dir}.png"
                 if _g13_raw_pixellab_ingest() else
-                "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
+                "assets/ui/hulls/hull_{ship_type}_{owner}_{dir}.png")
             uw2_ships = {decl.get("ship_type")
                          for decl, _p in decls.values()
                          if isinstance(decl, dict) and decl.get("maps")
@@ -10941,7 +10922,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     s_px = G13_NORTH_TIER_SIZE[tier_of[ship["id"]]]
                     entries_h.append(
                         (sid, {"id": sid, "width": s_px, "height": s_px,
-                               "file": f"assets/ui/tokens/{sid}.png"}))
+                               "file": f"assets/ui/hulls/{sid}.png"}))
             elif raw_dedupe_grid:
                 # Raw dedupe (80-* §4.8 2026-11-06): the shipped grid is
                 # the owner-less 16 × 8 — the runtime falls owner ids onto
@@ -10982,14 +10963,17 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                                              else sid_ne),
                                     "op": op}
                             entries_h.append((sid, decl_c))
-            for sid, (decl_c, _p) in decls.items():
-                if sid.startswith("facility_"):
-                    entries_h.append((sid, decl_c))
-            declared.setdefault("assets/ui/tokens", entries_h)
+            # The facility id-only decls do NOT join the hull asset
+            # inventory: their tokens64 heroes are audited by the glyph
+            # family checks (the hero-64 display rule, 2026-11-08).
+            declared.setdefault("assets/ui/hulls", entries_h)
             for sid, decl_c in entries_h:
                 check_decls.setdefault(sid, (decl_c, None))
         else:
             for sprite_id, (decl, _path) in decls.items():
+                if not decl.get("file") and "note" in decl \
+                        and "rows" not in decl:
+                    continue  # id-only inventory decl (the hero-64 rule)
                 parent = str(Path(decl["file"]).parent)
                 declared.setdefault(parent, []).append((sprite_id, decl))
             # §4.8 2026-11-06 — the PixelLab coast family: the vendored
@@ -11076,7 +11060,8 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                       f"({len(entries)} declared sprites staged)")
                 continue
             expected_names = {Path(decl["file"]).name
-                              for _sid, decl in entries}
+                              for _sid, decl in entries
+                              if decl.get("file")}
             missing = sorted(set(expected_names) - set(present))
             extra = sorted(set(present) - set(expected_names) - sheets)
             if missing or extra:
@@ -11084,6 +11069,11 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                      f"artifact set != manifest ids (missing {missing[:6]}…, "
                      f"extra/undeclared {extra[:6]}…; §8.8 item 1)", 13)
             for sprite_id, decl in entries:
+                if not decl.get("file") and "note" in decl \
+                        and "rows" not in decl:
+                    # id-only inventory declaration (the hero-64 display
+                    # rule) — no shipped 32 artifact to audit
+                    continue
                 sprite = _g13_decode_artifact(decl, ART_ROOT / decl["file"])
                 if block is not None:
                     if class_name == "hulls" and _g13_raw_pixellab_ingest():
@@ -11355,7 +11345,7 @@ def _g13_run_probes() -> None:
         # are retired for the pixellab family — same amendment).
         hull_decl = {
             "id": "hull_sloop_england_e",
-            "file": "assets/ui/tokens/hull_sloop_england_e.png",
+            "file": "assets/ui/hulls/hull_sloop_england_e.png",
             "width": 8, "height": 8,
             "mode": "string-map", "png": "indexed",
             "palette": {".": "transparent", "b3191f": "#b3191f"},
@@ -11526,6 +11516,8 @@ def main(argv: list[str]) -> int:
             print(f"FAIL {exc.check_id} {exc.filename} {exc.details}")
             return exc.code
         except Exception as exc:  # defensive: never leak a traceback as exit 0
+            import traceback
+            traceback.print_exc()
             print(f"FAIL internal group{group_id} tools/validate_data.py {exc!r}")
             return 3
 

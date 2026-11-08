@@ -51,8 +51,6 @@ const UiKitLib := preload("res://scripts/ui_kit.gd")
 ## `shore_{dir}` already).
 const SCAN_DIRS: Array[String] = [
 	"res://assets/ui/icons",
-	"res://assets/ui/tokens",
-	"res://assets/ui/markers",
 	"res://assets/ui/terrain",
 	"res://assets/ui/shore",
 	"res://assets/ui/fx",
@@ -65,8 +63,11 @@ const SCAN_DIRS: Array[String] = [
 ## suite re-points it at a `user://` fixture dir to prove the raw-byte load
 ## (and the file-replace→new-art swap) without touching `assets/` — the
 ## same seam shape as `PortraitComposer._override_dir`.
-const TOKENS_DIR := "res://assets/ui/tokens"
-static var _token_dir := TOKENS_DIR
+## The hull north tokens (the tier-native master family — 32/48/64 by
+## tier, the 2026-11-08 hulls move out of the retired tokens/ dir).
+## `_token_dir` stays the suite's test seam (production never re-points it).
+const HULLS_DIR := "res://assets/ui/hulls"
+static var _token_dir := HULLS_DIR
 
 ## The fx family's dir (90-* §9.2 2026-11-07): resolved LAZILY through the
 ## same miss resolver after the tokens dir — the sheets have no `.import`
@@ -105,7 +106,7 @@ static func ensure_registered() -> void:
 	UiKitLib.register_token_loader(_load_token_texture)
 	var map: Dictionary = {}
 	for dir_path in SCAN_DIRS:
-		if dir_path == TOKENS_DIR:
+		if dir_path == HULLS_DIR:
 			continue  # the raw-bytes family — lazy loads only (§9.2)
 		map.merge(_scan_dir(dir_path), true)
 	UiKitLib.register_textures(map)

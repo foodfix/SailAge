@@ -421,7 +421,7 @@ static func _dismiss_toast(panel: Control, host: Control,
 # --- Icon registry ----------------------------------------------------------
 
 ## The miss resolver (90-* §9.2, token data-artifact family): consulted when
-## `icon_texture` misses the map, so `assets/ui/tokens/` ids load LAZILY —
+## `icon_texture` misses the map, so `assets/ui/hulls/` ids load LAZILY —
 ## raw file bytes + `Image.load_png_from_buffer`, no `.import` sidecar and
 ## no import refresh for a token update. Installed once by
 ## `TextureRegistry.ensure_registered` (production never sets it elsewhere).

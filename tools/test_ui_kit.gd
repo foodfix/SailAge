@@ -377,9 +377,9 @@ func _test_ingested_token_flips() -> void:
 			all_flip = false
 			continue
 		var rec: Dictionary = rec_v
-		var img_d := _load_token_png("res://assets/ui/tokens/" + fid)
+		var img_d := _load_token_png("res://assets/ui/hulls/" + fid)
 		var img_b := _load_token_png(
-			"res://assets/ui/tokens/" + String(rec.get("derived_from", "")))
+			"res://assets/ui/hulls/" + String(rec.get("derived_from", "")))
 		if img_d == null or img_b == null:
 			_check(false, "derived+base token files load: " + fid)
 			all_flip = false
@@ -406,7 +406,7 @@ func _restore_no_registry_state() -> void:
 	TextureRegistryLib._reset_for_tests()
 	UiKitLib.clear_textures()
 	UiKitLib.register_token_loader(Callable())
-	TextureRegistryLib._token_dir = TextureRegistryLib.TOKENS_DIR
+	TextureRegistryLib._token_dir = TextureRegistryLib.HULLS_DIR
 
 
 func _test_token_raw_bytes_load() -> void:
@@ -433,7 +433,7 @@ func _test_token_raw_bytes_load() -> void:
 	var shared_id := "hull_galleon"
 	var expected := Image.new()
 	var bytes := FileAccess.get_file_as_bytes(
-		"res://assets/ui/tokens/%s.png" % shared_id)
+		"res://assets/ui/hulls/%s.png" % shared_id)
 	var decoded := expected.load_png_from_buffer(bytes) == OK
 	_check(decoded, "the shared owner-less token file decodes via load_png_from_buffer")
 	if decoded and token_tex.get_image() != null:
