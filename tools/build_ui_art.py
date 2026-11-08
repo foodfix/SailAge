@@ -451,6 +451,9 @@ ICON_BLOCK = {
     # UW2 parchment-chrome appends (2026-11-08, §4.8 amended, append-only):
     # the texture-mode flat fill/highlight/shadow steps + the panel ink.
     "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",
+    # Night revision (2026-11-08, blue-chart-panels amendment):
+    # PANEL_BLUE — pale sky-blue chart paper, the texture-mode flat fill.
+    "#b7cfe0",
 }
 CHROME_COLOR_CAP = 8  # per-tile distinct-color discipline (§4.8.3 16px tier)
 # Stretch-safety (80-* §4.8 UW2 chrome-skin note, amended 2026-11-04, master
@@ -503,7 +506,9 @@ TILE = 16
 CHROME_WANG = {"corner": 1, "edge": 3, "fill": 15}
 CHROME_WANG_INV = {"corner": 8, "edge": 12}
 CHROME_GREEN_MARGIN = 32     # key: g ≥ r+32 and g ≥ b+32 → transparent
-CHROME_HOVER_LIFT = 0.18     # c' = c + round((255−c)×lift), opaque px
+CHROME_HOVER_RIM_BAND = 2    # band px: distance to the keyed outside ≤ 2
+CHROME_HOVER_RIM_LIFT = 0.35  # band: c' = c + round((255−c)×lift)
+CHROME_HOVER_FACE_LIFT = 0.05  # interior: faint warmth (the same lift)
 CHROME_PRESS_DARKEN = 0.80   # c' = round(c×darken), opaque px
 CHROME_FIELD_RECESS = 0.62   # field interior darken (inset parchment)
 CHROME_FOCUS_RING = "#d9a441"  # ACCENT — the silhouette focus ring
@@ -3693,13 +3698,53 @@ def _chrome_load_masters(family: str) -> tuple[dict, dict]:
     return masters, pixel_ids
 
 
+def _chrome_band_mask(px: list) -> list[bool]:
+    """BFS distance-to-outside over the keyed 16×16 tile: True for opaque
+    pixels within CHROME_HOVER_RIM_BAND of a transparent pixel (the keyed
+    outside wraps the silhouette). A tile with NO keyed pixels (the fill
+    source, wang_15) has no outside — all-face, so the assembled hover
+    sheet never paints a false glow ring at the fill-cell boundary."""
+    import collections  # noqa: PLC0415
+    band = [False] * (TILE * TILE)
+    if not any(p[3] == 0 for p in px):
+        return band
+    queue = collections.deque()
+    for y in range(TILE):
+        for x in range(TILE):
+            i = x + y * TILE
+            if px[i][3] == 0:
+                continue
+            near_outside = False
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if not (0 <= nx < TILE and 0 <= ny < TILE) \
+                        or px[nx + ny * TILE][3] == 0:
+                    near_outside = True
+            if near_outside:
+                band[i] = True
+                queue.append((x, y, 0))
+    while queue:
+        x, y, d = queue.popleft()
+        if d >= CHROME_HOVER_RIM_BAND:
+            continue
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < TILE and 0 <= ny < TILE:
+                i = nx + ny * TILE
+                if px[i][3] and not band[i]:
+                    band[i] = True
+                    queue.append((nx, ny, d + 1))
+    return band
+
+
 def _chrome_derive(px: list, op: str) -> list:
     """One derivation op (80-* §4.8 2026-11-08): base = as keyed;
     invert = rot_180 (the bevel light flips TL→BR — the sunken rim);
     press = invert + every opaque pixel ×PRESS_DARKEN; recess =
     every opaque pixel ×FIELD_RECESS (no rotate — the inset-paper
-    interior); lift = the hover glow
-    c' = c + round((255−c)×HOVER_LIFT); ring = the 1px ACCENT
+    interior); lift = the rim-weighted hover glow (the brass band
+    within HOVER_RIM_BAND of the keyed outside flares at 0.35, the
+    face warms at 0.05); ring = the 1px ACCENT
     silhouette ring (opaque pixels 4-adjacent to transparent)."""
     if op == "base":
         return list(px)
@@ -3715,10 +3760,23 @@ def _chrome_derive(px: list, op: str) -> list:
         return [((round(p[0] * f), round(p[1] * f), round(p[2] * f), 255)
                  if p[3] else p) for p in px]
     if op == "lift":
-        return [((round(p[0] + (255 - p[0]) * CHROME_HOVER_LIFT),
-                  round(p[1] + (255 - p[1]) * CHROME_HOVER_LIFT),
-                  round(p[2] + (255 - p[2]) * CHROME_HOVER_LIFT), 255)
-                 if p[3] else p) for p in px]
+        # Rim-weighted hover (§4.8, 2026-11-08 night): the brass band
+        # flares, the face warms faintly. Band membership = BFS distance
+        # to the keyed transparent outside ≤ HOVER_RIM_BAND (the band IS
+        # the silhouette-adjacent zone — no palette knowledge needed,
+        # ship-as-drawn stays honest).
+        band = _chrome_band_mask(px)
+        out = []
+        for i, p in enumerate(px):
+            if not p[3]:
+                out.append(p)
+                continue
+            lift = (CHROME_HOVER_RIM_LIFT if band[i]
+                    else CHROME_HOVER_FACE_LIFT)
+            out.append((round(p[0] + (255 - p[0]) * lift),
+                        round(p[1] + (255 - p[1]) * lift),
+                        round(p[2] + (255 - p[2]) * lift), 255))
+        return out
     if op == "ring":
         ring = _hex_px(CHROME_FOCUS_RING)
         out = []

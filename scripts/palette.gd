@@ -134,6 +134,10 @@ const PARCH_HI := Color("#f2e6c8")
 const PARCH_LO := Color("#c6b183")
 ## UW2 parchment chrome: texture-mode panel text ink (the §4.9 ink seam).
 const INK_WARM := Color("#3a2a16")
+## UW2 blue-chart chrome (80-* §4.8 amended 2026-11-08 night, append-only):
+## pale sky-blue chart paper — the texture-mode flat panel fill
+## (`surface_fill()` re-points here).
+const PANEL_BLUE := Color("#b7cfe0")
 
 # --- Hull block (docs/80-UI-UX.md §4.8) -------------------------------------
 # Amended 2026-11-04 (the shared-hull pennant scheme): every owner draws the

@@ -1042,3 +1042,28 @@ _Waves ledger entries are appended here by the master as merges land
   `tools/run_tests.py` **62/62 GREEN** (442.1s, -j4).
 - Studio: `chrome_click` card replaces `chrome_button` (registry,
   chain, mock, README).
+
+### W7.2 — blue chart panels, parchment buttons (2026-11-08 night) — COMPLETE
+
+- User direction (frame/click too similar — both were parchment):
+  BOTH tilesets re-prompted for material differentiation. `frame`
+  (seed 20261112) = faded blue nautical-chart paper + carved wood rim
+  (rosettes dropped — they rendered as white specks); `click`
+  (seed 20261111) = aged cream parchment + bright brass band. Old
+  trios removed; new trios vendored (frame 4d7b6210, click 7164d350).
+- Hover lift op re-pinned (rim-weighted): the whole-plate +18% lift
+  was invisible on light plates — `lift` now flares the brass band
+  (opaque px within HOVER_RIM_BAND 2 of the keyed outside,
+  +HOVER_RIM_LIFT 0.35) and warms the face (+HOVER_FACE_LIFT 0.05);
+  the fill tile (wang_15, no keyed outside) is all-face — no false
+  glow ring at the fill-cell boundary. Pressed/focus/disabled
+  unchanged.
+- Palette: `PANEL_BLUE #b7cfe0` appended (blue chart paper —
+  `surface_fill()` re-points; ink `INK_WARM` ≈ 8.6:1); `PARCH*` stay
+  pinned (parchment-plate constants). Button ink stays `INK_WARM`
+  (face #e7c89c, ≈7:1).
+- Gates: validator **groups 1–13 OK**; `build_ui_art --check`
+  **271 files byte-identical** (double run); full
+  `tools/run_tests.py` **62/62 GREEN** (420.1s, -j4).
+- Review render verdict: blue chart panels + wood rims vs parchment
+  buttons + brass bands — the affordance contrast is unmistakable.

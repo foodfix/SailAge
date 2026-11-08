@@ -1841,7 +1841,10 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    bevel); `PARCH_LO #c6b183` — parchment shadow step; `INK_WARM
    #3a2a16` — texture-mode panel text ink (the §4.9 ink seam). The
    chrome tilesets' green chroma-key is authoring-only and never
-   ships (the 2026-11-08 amendment block).
+   ships (the 2026-11-08 amendment block). Night revision (same day,
+   blue-chart-panels amendment): `PANEL_BLUE #b7cfe0` — pale sky-blue
+   chart paper, the texture-mode flat panel fill (`surface_fill()`
+   re-points); `PARCH*` stay pinned as the parchment-plate constants.
 
    Goods-category color mapping (A.2 motif families; no new hexes): food
    `GOOD`, material `ACCENT_LO`, textile `COAST_SEA`, luxury `ACCENT`.
@@ -1989,12 +1992,12 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    **Derived families (deterministic tile ops, zero extra
    generations):** `panel` = frame {1,3,15}; `field` = frame
    inverted bevel (corner = rot_180(wang_8), edge = rot_180(wang_12))
-   + interior ×FIELD_RECESS 0.62 — reads as inset parchment;
-   `button` = button {1,3,15}; `button_focus` = button + a 1px
+   + interior ×FIELD_RECESS 0.62 — reads as inset paper;
+   `button` = click {1,3,15}; `button_focus` = click + a 1px
    `ACCENT` silhouette ring (opaque pixels 4-adjacent to transparent
-   → #d9a441); `button_hover` = button with every opaque pixel
-   lifted `c' = c + round((255−c)×HOVER_LIFT 0.18)`;
-   `button_pressed` = button with the rim rotated 180° (corner =
+   → #d9a441); `button_hover` = click with the rim-weighted lift
+   (the night revision — see the hover op above);
+   `button_pressed` = click with the rim rotated 180° (corner =
    rot_180(wang_8), edge = rot_180(wang_12) — the bevel light flips
    TL→BR, the classic sunken plate) and every opaque pixel
    ×PRESS_DARKEN 0.80. The sheet inventory grows to SEVEN (§4.8.8):
@@ -2051,6 +2054,44 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    was child Labels resolving the panel ink on a dark plate); the flat
    fallback keeps cream-on-navy; disabled text = `INK_WARM` at 0.55
    alpha in texture mode.
+
+   **Blue chart panels, parchment buttons (amended 2026-11-08 night,
+   user direction — frame/click too similar, the material-differentiation
+   revision):** BOTH tilesets' material descriptions re-pinned (the
+   prior click and frame wordings superseded; the envelope, green key
+   and derivation ops unchanged). **`frame`** — seed 20261112: "raised
+   rectangular panel plate for a 16-bit strategy game menu: faded blue
+   nautical-chart paper face, pale sky-blue with sparse subtle fiber
+   grain and faint weathered blotches, framed by a carved warm brown
+   wood rim with a 1px dark outline just inside it, light from
+   top-left: the top-left bevel slope lit warm, the bottom-right slope
+   in deep shadow, retro 16-bit UI in the style of classic 1990s naval
+   adventure games like Uncharted Waters 2 / New Horizons, crisp
+   deliberate pixels, flat color fills, no text, no icons" (the
+   rosettes are dropped — at 16px they rendered as white specks).
+   **`click`** — seed 20261111: "raised rectangular parchment click
+   plate for a 16-bit strategy game menu: aged cream-tan parchment
+   paper face with sparse fiber grain, framed by a bright polished
+   brass band around the edge with a 1px dark outline just outside it,
+   strong raised bevel lit from the top-left with a deep shadow on the
+   bottom-right, retro 16-bit UI button in the style of classic 1990s
+   naval adventure games like Uncharted Waters 2 / New Horizons, crisp
+   deliberate pixels, flat color fills, no text". Differentiation =
+   material + value + rim metal (blue chart paper + wood vs cream
+   parchment + brass); the double-line and rosette cues the model
+   under-rendered are gone. **Hover lift op re-pinned (rim-weighted):**
+   the whole-plate +18% lift is nearly invisible on light parchment —
+   the `lift` derivation now computes each opaque pixel's distance to
+   the plate's transparent outside (BFS on the 16×16 keyed tile): band
+   pixels (distance ≤ HOVER_RIM_BAND 2) flare
+   `c' = c + round((255−c)×HOVER_RIM_LIFT 0.35)` (the brass band lights
+   up), interior pixels a faint warmth `×HOVER_FACE_LIFT 0.05` of the
+   same lift. Pressed/focus/disabled unchanged (sunken rim / ACCENT
+   ring / modulate dim). **Palette:** the icon block appends
+   `PANEL_BLUE #b7cfe0` (pale sky-blue chart paper — the texture-mode
+   flat panel fill; `surface_fill()` re-points, ink `INK_WARM` ≈ 8.6:1
+   on it); `PARCH` stays pinned (the parchment-plate constant).
+   Seeds frame 20261112 / click 20261111.
 
    **NPC world-fleet tokens (amended 2026-11-05, user direction —
    UW2 ships-in-sight):** world-map NPC fleets render the same 8-dir

@@ -107,11 +107,11 @@ static func texture_mode() -> bool:
 
 
 ## The chrome fill for plain ColorRect surfaces (§4.8 band vocabulary):
-## the parchment `PARCH` in texture mode (the 2026-11-08 chrome amendment —
-## the PixelLab plates are parchment), the pinned `PANEL_BG` navy in the
-## reduced-graphics fallback (flat-mode pins intact).
+## the pale sky-blue `PANEL_BLUE` in texture mode (the 2026-11-08 night
+## amendment — blue chart-paper panels), the pinned `PANEL_BG` navy in
+## the reduced-graphics fallback (flat-mode pins intact).
 static func surface_fill() -> Color:
-	return PaletteLib.PARCH if texture_mode() else PaletteLib.PANEL_BG
+	return PaletteLib.PANEL_BLUE if texture_mode() else PaletteLib.PANEL_BG
 
 
 # --- Nine-patch sheet variants (§4.9 layering rule) ---------------------------

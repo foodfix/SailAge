@@ -549,8 +549,8 @@ func _texture_states(ttheme: Theme) -> void:
 	var line_edit := ttheme.get_color("font_color", "LineEdit")
 	_check(line_edit == PaletteLib.INK_WARM,
 		"texture mode: LineEdit text is the warm ink (inset parchment)")
-	_check(UiThemeLib.surface_fill() == PaletteLib.PARCH,
-		"texture mode: surface_fill() is the parchment PARCH")
+	_check(UiThemeLib.surface_fill() == PaletteLib.PANEL_BLUE,
+		"texture mode: surface_fill() is the chart-paper PANEL_BLUE")
 	var panel_box := ttheme.get_stylebox("panel", "Panel") as StyleBoxTexture
 	_check(panel_box != null
 		and panel_box.axis_stretch_horizontal \
