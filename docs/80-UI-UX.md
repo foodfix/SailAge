@@ -2333,7 +2333,36 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      hero slot for the selected `eq_*`. Other surfaces keep the 32
      inline art until a future amendment pins more hosts. The
      arrow-family ingest policy and the `ICON_ARROW_*` guards are
-     unchanged (§9b).
+     unchanged (§9b). **Acceptance record (2026-11-08):** the pilot 9
+     (5 HUD + 4 goods, one per category motif family) generated first
+     roll at the pinned seed and were accepted on the contact sheet —
+     the suffix frozen as pinned; the fleet of 108 fired across 3
+     parallel workers (disjoint slices, disjoint manifests) hit
+     `HTTP 402` (account credits) at 109/117; after the top-up the run
+     resumed (resumable loop, +8 incl. `wind_arrow_n`) → **117/117
+     raws**. Verdicts: everything accepted as drawn except
+     `wind_arrow_ne` — gold (seed 92000), tan (seed 92001), both
+     REJECTED on review and preserved under
+     `tools/ui_art/model_raw/pixellab_icons_rejects/` (outside the
+     ingest scan); the descriptor hardened to "colored ONLY in pale
+     grey and off-white like a paper ink mark — no gold, no brown, no
+     tan, no warm tones" and the seed-92002 roll accepted
+     (family-consistent with the n base).
+     `marker_discovery_natural` is an icon-pass sibling note: its
+     model-added small red X was user-accepted as drawn. Ingest: the
+     union runs (`--import-icons` with BOTH caches — studio
+     `model_raw/snapped` + `model_raw/pixellab_icons`, later dirs win
+     per id) — final counts 117 accepted + 12 derivation-only skipped,
+     `hero_64` 117. The **§8.8 item 5 refresh path was IMPLEMENTED this
+     round** (the build re-derives each ingested arrow family's six
+     siblings from the shipped ingested base — the validator caught its
+     absence); the wind family closed: all four bases pass the pointing
+     gates. Gates: `--check` 405 files byte-identical, validator groups
+     1–13 PASS, 61/61 suites green (one interim fleet run tripped
+     `test_captain_lifecycle`'s 80 ms day-tick gate at the filled cap —
+     96.9 ms under parallel-suite contention on a warm box; green in
+     isolation at 72 ms and on the clean full-fleet re-run; the tick
+     code path was untouched by the pass).
 
      **PixelLab glyph pass — markers & facility tokens (amended
      2026-11-08, user direction — the marker and facility families join
@@ -2417,7 +2446,26 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      this run:** `wind_arrow_ne` landing and passing the
      NE-pointing gate admits both wind bases; the §8.8 item 5
      refresh path re-derives the six wind siblings from the
-     ingested sources automatically.
+     ingested sources automatically. **Acceptance record
+     (2026-11-08):** 12/12 first roll at the pinned seed, prompt-only,
+     no reference images; the user verdict accepted all as drawn
+     (`marker_discovery_natural` keeps the model's small red X).
+     Ingest: markers 6 (terrain block), facility 6 (hull block) —
+     every facility id also carries its hero 64 in
+     `assets/ui/tokens64/` (the same-day user direction "facility
+     icon should be 64x64 as well" retired this family's no-hero
+     pin; markers stay hero-less). The port hub facility cards
+     render the hero at 1:1 64 — the full-height left emblem with
+     name + status stacked beside it, and a missing hero id falls
+     back to the halved 32 token at 32
+     (`facility64_<id>` through the kit registry's lazy raw-bytes
+     branch). The pipeline was dry-run verified end-to-end with a
+     synthetic snapped cache (12/12 ingested, 12/12 exactness
+     chains green) BEFORE the real generation, then reverted to the
+     staged state — the committed ledger carries only the real
+     model provenance. Gates: `--check` 405 files byte-identical,
+     validator groups 1–13 PASS (marker/facility sections +
+     facility-hero exactness), 61/61 suites green.
 
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
