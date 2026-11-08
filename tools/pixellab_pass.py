@@ -420,6 +420,325 @@ _ICON_DESCRIPTORS: dict[str, str] = {
         "A bold straight arrow pointing to the top-right corner at 45 "
         "degrees, thick shaft with slightly rounded ends, large "
         "triangular head, flat slate-blue water fill",
+    # --- weather/nav (2026-11-08 fleet) ---
+    "compass":
+        "A round brass ship's compass seen face-on, an eight-point rose "
+        "engraved on the pale dial, one red north pointer",
+    "calm":
+        "A single short pale wind swoosh curling gently to the right "
+        "above one small flat wave line, faint and thin",
+    "fair":
+        "Two moderate pale wind swoosh lines streaming to the right, "
+        "one small wave line beneath",
+    "strong":
+        "Three bold pale wind swoosh lines streaming hard to the right "
+        "with small curled ends, a choppy wave line beneath",
+    "storm":
+        "A dark heavy thundercloud with a bright yellow lightning bolt "
+        "beneath it and two thin rain strokes",
+    # --- battle (2026-11-08 fleet) ---
+    "cannon":
+        "A short bronze cannon barrel on a dark wooden carriage with "
+        "one small wheel, muzzle pointing right",
+    "shot_round":
+        "A single heavy black iron cannonball with one white highlight "
+        "dot",
+    "shot_chain":
+        "Two black iron cannonball spheres joined by a short chain "
+        "with three links",
+    "shot_armor_piercing":
+        "A long pointed dark-steel bolt with a wide collar near the "
+        "rear and two short fins",
+    "shot_grape":
+        "A cluster of seven small black iron balls bursting from an "
+        "open pale canvas sack",
+    "hook":
+        "A boarding grappling hook with three curved dark-iron flukes "
+        "on a short rope coil",
+    "ram":
+        "A ship's bow prow rising from a short wave line, a pointed "
+        "bronze waterline ram protruding forward at the center",
+    "surrender_flag":
+        "A plain white rectangular cloth flag on a short wooden pole "
+        "tilted left, one soft fold",
+    # --- economy/port (2026-11-08 fleet) ---
+    "chest":
+        "A sturdy wooden treasure chest with dark iron bands and a "
+        "brass lock plate, lid closed",
+    "scroll":
+        "A partially unrolled parchment scroll with two wooden "
+        "rollers, warm aged paper",
+    "hammer":
+        "A shipwright's mallet with a dark iron head and a smooth "
+        "wooden handle angled up to the right",
+    "bell":
+        "A polished brass ship's bell with a dark leather strap and a "
+        "small clapper",
+    # --- meta/status (2026-11-08 fleet) ---
+    "anchor":
+        "A classic admiralty anchor with a ring at the top and curved "
+        "flukes at the bottom, dark iron",
+    "hourglass":
+        "A wooden-framed hourglass with pale sand pooling in the "
+        "lower bulb",
+    "save":
+        "A small leather-bound logbook with a brass clasp and a pale "
+        "page edge",
+    "skull":
+        "A white human skull facing forward with dark eye sockets",
+    "crown":
+        "A golden king's crown with three points and small red gem "
+        "studs",
+    # --- nation flags (2026-11-08 fleet) ---
+    "flag_portugal":
+        "A rectangular green cloth flag with a small red roundel at "
+        "the center, on a short pole tilted left, one soft wind fold",
+    "flag_spain":
+        "A rectangular deep-red cloth flag bearing a gold diagonal "
+        "cross, on a short pole tilted left, one soft wind fold",
+    "flag_england":
+        "A rectangular navy-blue cloth flag with a simple red upright "
+        "cross, on a short pole tilted left, one soft wind fold",
+    "flag_holland":
+        "A rectangular flag with three horizontal stripes of red, "
+        "white and blue, on a short pole tilted left, one soft wind "
+        "fold",
+    "flag_ottoman":
+        "A rectangular deep-red cloth flag with a white crescent moon "
+        "and a small star, on a short pole tilted left, one soft wind "
+        "fold",
+    "flag_italy":
+        "A rectangular flag with three vertical stripes of green, "
+        "white and red, on a short pole tilted left, one soft wind "
+        "fold",
+    "flag_neutral":
+        "A plain white rectangular cloth flag with a thin grey "
+        "border, on a short pole tilted left, one soft wind fold",
+    # --- NPC role badges (2026-11-08 fleet) ---
+    "role_trader":
+        "A neat stack of two wooden cargo crates bound with dark "
+        "straps, a small gold coin resting on top",
+    "role_coaster":
+        "A small single-mast sailing skiff in flat side view with one "
+        "square sail, riding on a short wave line",
+    "role_courier":
+        "A sealed parchment letter with a red wax seal at the fold",
+    "role_patrol":
+        "A brass spyglass extended horizontally with a leather grip "
+        "band",
+    "role_privateer":
+        "A curved cutlass blade angled up to the right behind a "
+        "sealed parchment with a red wax seal",
+    "role_pirate":
+        "A black pirate flag with a small white skull marking, on a "
+        "short pole tilted left",
+    "role_hunter":
+        "A bold gold crosshair mark: a ring with four short notch "
+        "strokes and a small dot at the center",
+    # --- formations (2026-11-08 fleet) ---
+    "formation_line_ahead":
+        "Four small dark ship silhouettes following one another in a "
+        "diagonal line from lower-left to upper-right",
+    "formation_column":
+        "Four small dark ship silhouettes in a straight vertical "
+        "line, bow to stern",
+    "formation_screen":
+        "Four small dark ship silhouettes spread in a wide horizontal "
+        "line abreast",
+    "formation_swarm":
+        "Six small dark ship silhouettes clustered loosely around the "
+        "center at mixed angles",
+    # --- trends / trophy (2026-11-08 fleet) ---
+    "trend_up":
+        "A bold upward-pointing arrow in warm green, thick shaft, "
+        "large triangular head",
+    "trend_down":
+        "A bold downward-pointing arrow in deep red, thick shaft, "
+        "large triangular head",
+    "event_demand":
+        "A bold warm-gold exclamation mark with a square dot",
+    "trophy":
+        "A golden champion's cup with two curved handles on a small "
+        "pedestal, one bright highlight arc",
+    # --- remaining goods (2026-11-08 fleet) ---
+    "good_olive_oil":
+        "a stoneware amphora jug with two small handles and a cork "
+        "stopper, pale olive glaze",
+    "good_wine":
+        "a dark green glass bottle with a long neck and a cork, one "
+        "white highlight streak",
+    "good_wool":
+        "a plump tied bale of creamy white wool with a few loose "
+        "curls on top",
+    "good_silk":
+        "three rolled bolts of shimmering pale-ivory silk stacked "
+        "sideways, one loose end draping",
+    "good_sugar":
+        "a tall white sugar cone wrapped at the bottom in dark blue "
+        "paper, standing on a small wooden plate",
+    "good_salt":
+        "a small wooden bowl heaped with coarse white salt crystals",
+    "good_dried_fish":
+        "three slim dried fish tied together at the tails, hanging "
+        "tail-up, pale grey-brown",
+    "good_timber":
+        "a neat stack of four cut logs with pale sawn ends, bark "
+        "still on",
+    "good_copper":
+        "a neat stack of three reddish-copper ingots with one bright "
+        "highlight line",
+    "good_glassware":
+        "two pale blue-green glass goblets, one nested inside the "
+        "other, thin bright rims",
+    "good_leather":
+        "a tightly rolled brown hide with a leather tie, one curled "
+        "loose edge",
+    "good_ceramics":
+        "a stack of two glazed blue-and-white bowls with a covered "
+        "jar beside them",
+    "good_perfume":
+        "a small elegant glass flask with a slender neck and a round "
+        "stopper, pale rose liquid inside",
+    "good_carpet":
+        "a rolled red carpet with a gold pattern band visible at the "
+        "open end, tied with a cord",
+    "good_amber":
+        "a rounded lump of warm golden amber with one bright "
+        "highlight facet",
+    "good_cheese":
+        "a whole pale-yellow cheese wheel with one wedge cut out, "
+        "the wedge leaning against it",
+    "good_rice":
+        "an open burlap sack heaped with white rice grains, a few "
+        "spilled in front",
+    "good_pitch":
+        "a small wooden barrel with thick black tar dripping over "
+        "one hoop",
+    "good_linen":
+        "a neat folded stack of pale cream linen cloth, three "
+        "layers",
+    "good_furs":
+        "a stack of two brown fur pelts with tails visible, soft "
+        "shaggy edges",
+    "good_dye_wood":
+        "two short log sections split open showing deep red "
+        "heartwood",
+    "good_indigo":
+        "a stack of three deep-blue rectangular dye cakes with a "
+        "lighter blue dusting",
+    "good_ivory":
+        "a single curved white ivory tusk with a polished tip, "
+        "lying at a slight angle",
+    "good_sandalwood":
+        "two short log sections split open showing rich red-brown "
+        "heartwood",
+    "good_coffee":
+        "an open burlap sack heaped with dark brown coffee beans, a "
+        "few spilled in front",
+    "good_tobacco":
+        "a bundle of broad dried brown leaves tied with a cord at "
+        "the stems",
+    "good_tea":
+        "a small lidded ceramic tea jar in pale green glaze",
+    "good_rhubarb":
+        "a bundle of dried brownish rhubarb roots tied with cord, "
+        "fine root threads visible",
+    "good_raw_silk":
+        "two loose skeins of pale ivory silk thread stacked, one "
+        "strand looping free",
+    "good_porcelain":
+        "a single white porcelain vase with a blue painted band and "
+        "a flared lip",
+    "good_pearls":
+        "an open grey oyster shell holding three round white pearls",
+    "good_gems":
+        "a small pile of four cut gemstones in red, green and blue, "
+        "faceted tops catching the light",
+    "good_musk":
+        "a small round brown scent pouch tied at the neck with a "
+        "cord tassel",
+    "good_lacquerware":
+        "a black lacquered box with a gold painted rim, lid slightly "
+        "ajar",
+    "good_silver":
+        "a neat stack of three bright silver ingots with one "
+        "highlight line",
+    "good_gold":
+        "a small pile of gold coins beside two stacked gold ingots, "
+        "bright yellow",
+    # --- equipment (2026-11-08 fleet; en names ride the composer) ---
+    "eq_cutlass":
+        "a curved single-edged cutlass blade with a simple curved "
+        "guard, angled up to the right",
+    "eq_rapier":
+        "a slender straight rapier blade with an ornate round guard, "
+        "angled up to the right",
+    "eq_backsword":
+        "a single-edged straight backsword with a knuckle guard, "
+        "angled up to the right",
+    "eq_main_gauche":
+        "a short slim parrying dagger with a wide guard, angled up "
+        "to the right",
+    "eq_zweihander":
+        "a very large two-handed greatsword with a long double blade "
+        "and a wide crossguard, angled up to the right",
+    "eq_khair_scimitar":
+        "a deeply curved scimitar blade with a flared tip, angled up "
+        "to the right",
+    "eq_breastplate":
+        "a rounded steel breastplate seen from the front, a central "
+        "ridge and two shoulder plates",
+    "eq_lucky_charm":
+        "a small golden four-leaf clover pendant hanging from a "
+        "short cord",
+    "eq_brigandine":
+        "a leather-and-steel brigandine torso front with two rows of "
+        "exposed steel rivet studs",
+    "eq_saint_medallion":
+        "a round silver medallion on a short chain, a simple engraved "
+        "cross at the center",
+    "eq_three_quarter_armor":
+        "an upper-body steel armor: breastplate with two shoulder "
+        "pauldrons and a visored helm above",
+    "eq_bloodhand_cuirass":
+        "a dark red-lacquered cuirass with a black hand emblem on "
+        "the chest",
+    "eq_mermaid_figurehead":
+        "a carved wooden mermaid figurehead bust with flowing hair "
+        "and a scaled tail",
+    "eq_eagle_figurehead":
+        "a carved wooden eagle head figurehead with a hooked golden "
+        "beak",
+    "eq_dragon_figurehead":
+        "a carved wooden dragon head figurehead with an open jaw and "
+        "small horns",
+    "eq_albatross_figurehead":
+        "a carved white albatross figurehead with spread wings and a "
+        "pale beak",
+    "eq_angel_figurehead":
+        "a carved pale angel figurehead bust with folded wings and a "
+        "gold halo",
+    "eq_golden_dragon_figurehead":
+        "a gilded golden dragon head figurehead with an open jaw and "
+        "spread wings",
+    "eq_cotton_sails":
+        "a folded square sail of plain pale cotton cloth with two "
+        "horizontal seam bands",
+    "eq_matting_sails":
+        "a folded sail of coarse woven mat fiber with a visible "
+        "basket-weave pattern",
+    "eq_storm_sails":
+        "a small tightly folded storm sail of heavy dark-grey canvas "
+        "with reinforcing bands",
+    "eq_flemish_linen_sails":
+        "a folded sail of fine cream linen with a fine vertical weave "
+        "and a pale sheen",
+    "eq_brocade_sails":
+        "a folded sail of rich red brocade cloth with a gold pattern "
+        "band along the edge",
+    "eq_red_sail":
+        "a folded sail of deep crimson-red cloth with a darker red "
+        "border band",
 }
 # Full-variant replacements (whole description; none yet — the pinnace
 # precedent).
@@ -454,7 +773,9 @@ def _icon_desc(icon_id: str) -> str:
     if icon_id.startswith("good_"):
         return f"{_good_en_name(icon_id[5:])}, {base}{ICON_SUFFIX}"
     if icon_id.startswith("eq_"):
-        return f"{_eq_en_name(icon_id[3:])}, {base}{ICON_SUFFIX}"
+        # equipment data ids carry the eq_ prefix themselves (unlike
+        # goods) — no strip
+        return f"{_eq_en_name(icon_id)}, {base}{ICON_SUFFIX}"
     return f"{base}{ICON_SUFFIX}"
 
 
@@ -518,10 +839,21 @@ def run_icon(icon_id: str, label: str | None = None,
            "label": dest, "bytes": {"icon": len(png)},
            "usage": usage, "job_status": job.get("status")}
     os.makedirs(ICON_OUT_DIR, exist_ok=True)
-    manifest = {}
-    if os.path.isfile(ICON_MANIFEST):
-        with open(ICON_MANIFEST, encoding="utf-8") as fh:
-            manifest = json.load(fh)
+    # Merge-retry write (multi-worker safe): parallel --icons workers
+    # finish jobs independently; each write re-reads the latest manifest
+    # so a sibling's record survives (last-writer-wins on the SAME id is
+    # impossible — slices are disjoint per worker).
+    for attempt in range(4):
+        manifest = {}
+        if os.path.isfile(ICON_MANIFEST):
+            try:
+                with open(ICON_MANIFEST, encoding="utf-8") as fh:
+                    manifest = json.load(fh)
+                break
+            except ValueError:
+                time.sleep(0.5 * (attempt + 1))
+        else:
+            break
     manifest[dest] = rec
     with open(ICON_MANIFEST, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=1, ensure_ascii=False)
@@ -554,7 +886,16 @@ def snap_icon(icon_id: str) -> None:
 
 
 def run_icon_fleet(ids: list[str], seed: int | None = None) -> None:
-    for i, icon_id in enumerate(ids, 1):
+    # The doc-first guard applies per id: derived-only arrow dirs and any
+    # id without a pinned descriptor are never generated.
+    todo = [i for i in ids
+            if i in _ICON_DESCRIPTORS or i in _ICON_VARIANTS]
+    skipped = len(ids) - len(todo)
+    if skipped:
+        print(f"[pixellab-icons] {skipped} id(s) without a pinned "
+              f"descriptor or derivation-only — not sent to the API",
+              flush=True)
+    for i, icon_id in enumerate(todo, 1):
         raw = os.path.join(ICON_OUT_DIR, icon_id, "icon.png")
         if os.path.isfile(raw):
             # resumable: the raw file IS the artifact — a re-roll deletes

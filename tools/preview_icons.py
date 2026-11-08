@@ -17,6 +17,8 @@ import json
 import os
 import sys
 
+from PIL import Image  # noqa: PLC0415
+
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 RAW = os.path.join(REPO, "tools", "ui_art", "model_raw", "pixellab_icons")
 OUT_DEFAULT = os.path.join(REPO, "art_review", "icons_review.png")
@@ -48,7 +50,7 @@ def main() -> None:
         with open(mpath, encoding="utf-8") as fh:
             manifest = json.load(fh)
 
-    from PIL import Image, ImageDraw  # noqa: PLC0415
+    from PIL import ImageDraw  # noqa: PLC0415
 
     ids = sorted(set(manifest) |
                  {n for n in os.listdir(RAW)
