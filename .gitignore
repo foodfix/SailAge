@@ -22,6 +22,7 @@ __pycache__/
 # local noise — never committed.
 /data/maps/*.import
 /assets/ui/tokens/*.import
+/assets/ui/icons64/*.import
 /tools/contact_sheet.png.import
 /tools/yoyopixel/**/*.import
 

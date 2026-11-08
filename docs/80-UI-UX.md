@@ -2258,6 +2258,83 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      Ingest gates: `--check` byte-identical (257 files),
      validator groups 1–13 green, 61/61 suites green.
 
+     **PixelLab semantic-icon pass (amended 2026-11-08, user direction —
+     the 129 A.2 semantic icons move to the PixelLab backend,
+     prompt-only, on the 64 canvas; the authored string-map manifests
+     remain the committed fallback and the 32 inline source for any id
+     that has not ingested yet):**
+     `tools/pixellab_pass.py --icons` generates icons via
+     `POST /v2/generate-image-v2` (Pro; async background job, polled to
+     completion — the top-down hull envelope; per-call ~$0.008 at 64²).
+     **Envelope, pinned verbatim — exactly four fields, never a
+     style_image or reference_images:** `{"description",
+     "image_size": {64, 64}, "no_background": true, "seed": 92000}` —
+     every icon generates on the **64×64 canvas** regardless of its
+     authored 32 grid (the 64 serves both the exact 2:1 halve to the
+     inline 32 and the hero display). **Icon prompt rewrite (user
+     direction — NO hull heritage):** the description = per-icon
+     object descriptor + the pinned shared suffix, comma-joined;
+     descriptors are REWRITTEN as object specs (material + color +
+     pose), never adapted from the ship vocabulary. **Shared icon
+     suffix, pinned verbatim (the 129-icon consistency anchor;
+     strictly flat front-facing view for EVERY id — user direction;
+     the UW2 style anchor kept — user direction):**
+     `single centered game UI icon, flat front-facing view, the object
+     fills about 70% of the canvas and stays fully inside the frame,
+     bold readable silhouette, flat cel shading with two or three
+     shading bands, dark 1-pixel silhouette outline on the outer edge
+     only, no scenery, no background elements, no cropping, no text,
+     no gradients, limited retro palette in warm midtones, retro
+     16-bit pixel-art game icon in the style of classic 1990s naval
+     adventure games like Uncharted Waters 2 / New Horizons,
+     transparent background.` **Descriptor rules:** per-icon
+     descriptors are pinned verbatim in `tools/pixellab_pass.py`
+     `_ICON_DESCRIPTORS` (goods/equipment carry their en name from the
+     data JSONs as the identity prefix; pure glyph ids carry a
+     rewritten object spec; a full-variant dict replaces the whole
+     description where the suffix would fight the object). **Arrow
+     families keep the derivation-only policy:** only the `n`/`ne`
+     bases generate (a bold top-pointing-arrow object spec); the six
+     derived dirs per family are never sent to the API and the build
+     re-derives them as today. **Raw files:** gitignored under
+     `tools/ui_art/model_raw/pixellab_icons/<id>/icon.png` + a manifest
+     (job id/seed/description/sha) — **raw model output is never
+     committed** (§9.2); API key handling unchanged (gitignored
+     `tools/pixellab_config.json`, env `PIXELLAB_API_KEY` overrides).
+     **Snap:** raw passthrough into `<id>/snapped/icon.png` with a
+     canvas-fit gate (exact 64×64) — the ship-as-drawn rule; the
+     icon-block quantization, binary alpha and the 2:1 halve happen at
+     INGEST (the §9b build contract), never in the pass. **Acceptance
+     flow (pilot first — user direction):** a pilot batch — the 5 HUD
+     resources (`coin`, `crew`, `provisions`, `morale`, `durability`)
+     plus 4 goods, one per category motif family (`good_wheat` food,
+     `good_iron` material, `good_cotton_cloth` textile, `good_spices`
+     luxury) — is reviewed on a contact sheet (64 raw + the halved 32
+     side by side); user approval freezes the suffix, then the
+     remaining ~120 fire at the pinned seed. **Ingestion contract
+     (extends §9b):** `build_ui_art --import-icons` accepts the
+     `model_raw/pixellab_icons/<id>/snapped` cache alongside the
+     studio caches (precedence rules unchanged); per ingested id it
+     emits BOTH the halved 32 inline asset (existing contract:
+     icon-block quantize, 20-color cap, binary alpha, exact 2:1
+     origin-anchored halve) AND the hero 64 asset
+     `assets/ui/icons64/<id>.png` (1:1, same quantize + alpha, no
+     halve) — **the hero-64 deferral of the 64-canvas upgrade is
+     retired** (user direction 2026-11-08). **Hero-64 display
+     contract:** `assets/ui/icons64/` load lazily through the
+     token-loader id `icon64_<id>` (raw file bytes, no `.import`
+     sidecar — the token family rule; a miss stays the null fallback);
+     the inline 32 assets and every 32px row/layout pin are untouched.
+     **Hero hosts (pinned, the Phase-1 wiring — swap-only, no
+     row/layout changes):** (a) S5 market — the selected-row info
+     strip below the goods table gains a 64px hero slot for the
+     selected `good_*` (the trend mark stays 32 inline); (b) S6
+     shipyard — the refit picker's bottom detail area gains a 64px
+     hero slot for the selected `eq_*`. Other surfaces keep the 32
+     inline art until a future amendment pins more hosts. The
+     arrow-family ingest policy and the `ICON_ARROW_*` guards are
+     unchanged (§9b).
+
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
      Standard 48-Tile Auto-Tile Set per terrain PAIR (center 1,

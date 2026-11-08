@@ -8715,7 +8715,7 @@ G13_MASTHEAD_TOP_FRAC = 0.45  # in the top 45% of the opaque bbox
 # ramp with the authored phase-0 ring (the validator re-derives the whole
 # file from the gitignored sheet).  Sources stay gitignored — provenance
 # rides the committed ledger sha when the cache is absent (90-* §9.2).
-G13_ICON_CACHE_DIRS = ("snapped", "studio/snapped")
+G13_ICON_CACHE_DIRS = ("snapped", "studio/snapped", "pixellab_icons")
 G13_ICON_INLINE = 32
 G13_ICON_CAP_32 = 20
 G13_TERRAIN_CACHE_SUBDIR = "gen"
@@ -8744,6 +8744,20 @@ def _g13_halve64(pixels) -> list[list[str]]:
     """The exact 2:1 nearest halving of a 64-grid hex matrix (out(x, y) =
     src(2x, 2y)) — the pinned inline-icon derivation."""
     return [row[::2] for row in pixels[::2]]
+
+
+def _g13_upscale2x(pixels) -> list[list[str]]:
+    """The exact ×2 nearest upscale of a 32-grid hex matrix (every source
+    pixel becomes a 2×2 block) — the pinned hero-64 fallback derivation
+    (the mirror of `_g13_halve64`'s convention)."""
+    out: list[list[str]] = []
+    for row in pixels:
+        block_row: list[str] = []
+        for c in row:
+            block_row.extend([c, c])
+        out.append(list(block_row))
+        out.append(list(block_row))
+    return out
 
 
 def _g13_land_ring_hex(x: int, y: int) -> str:
@@ -9897,22 +9911,46 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
                  f"{len(got)} distinct colors > the 32px cap "
                  f"{G13_ICON_CAP_32} (§4.8.3)", 13)
-        # the halving assert, re-derived from the gitignored source
-        sp = UI_ART_DIR / "model_raw" / src / f"icon_{iid}.png"
+        # the hero 64 asset (the 2026-11-08 amendment): committed beside
+        # the 32, decoded + block-checked for every ledger id
+        hero = ASSETS_UI / "icons64" / f"{iid}.png"
+        if not hero.is_file():
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 "ingested icon's hero 64 asset missing (ledger + 32 + "
+                 "hero commit together) — re-run "
+                 "build_ui_art --import-icons", 13)
+        try:
+            hw, hh, hpx = decode_ui_png(hero.read_bytes())
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 f"hero asset does not decode: {exc}", 13)
+        if (hw, hh) != (64, 64):
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 f"hero asset is {hw}x{hh}, the hero canvas is 64x64", 13)
+        hgot = {c for row in hpx for c in row if c is not None}
+        hoff = sorted(hgot - (BLOCK_ICON | BLOCK_LOCKED))
+        if hoff:
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 f"hero off-block hex(es) {hoff} — the icon class checks "
+                 "against the §4.8.4 icon block", 13)
+        # the halving + hero asserts, re-derived from the gitignored source
+        sp = (UI_ART_DIR / "model_raw" / "pixellab_icons" / iid
+              / "snapped" / "icon.png") if src == "pixellab_icons" \
+            else UI_ART_DIR / "model_raw" / src / f"icon_{iid}.png"
         if not sp.is_file():
             continue
         verified += 1
         if hashlib.sha256(sp.read_bytes()).hexdigest() != sha:
-            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+            fail("art-ingest", str(sp.relative_to(ART_ROOT)),
                  "ledger snapped_sha drifts from the local snapped source — "
                  "re-run build_ui_art --import-icons", 13)
         try:
             sw, sh, spx = decode_ui_png(sp.read_bytes())
         except (OSError, PngFormatError) as exc:
-            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+            fail("art-ingest", str(sp.relative_to(ART_ROOT)),
                  f"snapped source does not decode: {exc}", 13)
         if (sw, sh) != (64, 64):
-            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+            fail("art-ingest", str(sp.relative_to(ART_ROOT)),
                  f"snapped source is {sw}x{sh}, the model icon grid is "
                  "64x64", 13)
         q = [[None if c is None else _g13_nearest_hex(c, BLOCK_ICON)
@@ -9922,7 +9960,40 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
                  "is not the exact re-quantize + 2:1 nearest halving of its "
                  "snapped source — re-run build_ui_art --import-icons", 13)
-    return verified
+        if hpx != q:
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 "is not the exact re-quantize of its snapped source "
+                 "(hero 64 1:1) — re-run build_ui_art --import-icons", 13)
+    # the hero-64 fallback sweep (the 2026-11-08 amendment): every
+    # generated (non-ingested) icon id ships its hero as the exact ×2
+    # nearest upscale of the shipped 32 art
+    fallback = 0
+    for iid in sorted(icon_ids - set(icons)):
+        p32 = ASSETS_UI / "icons" / f"{iid}.png"
+        hero = ASSETS_UI / "icons64" / f"{iid}.png"
+        if not p32.is_file():
+            continue  # the shipped-grid check owns 32 presence
+        if not hero.is_file():
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 "hero 64 asset missing for a generated icon (the "
+                 "fallback is the exact ×2 upscale of the shipped 32) — "
+                 "re-run the build", 13)
+        try:
+            w, h, px32 = decode_ui_png(p32.read_bytes())
+            hw, hh, hpx = decode_ui_png(hero.read_bytes())
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 f"hero/inline pair does not decode: {exc}", 13)
+        if (w, h) != (32, 32) or (hw, hh) != (64, 64):
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 f"hero/inline canvases {hw}x{hh}/{w}x{h} violate the "
+                 "64-hero-of-32 pair (64x64 / 32x32)", 13)
+        if hpx != _g13_upscale2x(px32):
+            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                 "is not the exact ×2 nearest upscale of the shipped "
+                 "32 art — re-run the build", 13)
+        fallback += 1
+    return verified + fallback
 
 
 def _g13_check_ingest_terrain_family(doc: dict) -> int:

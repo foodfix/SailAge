@@ -346,20 +346,25 @@ def _paint_pennant(px, w, h, mast_x, bbox_top, d):
 # snapped 64-grid RGBA to the ICON block and halves 64→32 (exact 2:1
 # nearest, origin-anchored).  The committed assets/ui/icons/<id>.png is
 # the primary art; the string-map generator is the per-file fallback
-# (the same override ladder as the hull tokens).  64 hero variants are
-# DEFERRED — no 64px icon display surface exists yet (ledger counts
-# record the skip). ----
+# (the same override ladder as the hull tokens).  Since the 2026-11-08
+# amendment the ingest ALSO emits the hero 64 asset per id (the
+# deferral is retired): assets/ui/icons64/<id>.png, the quantized 64
+# grid 1:1; the generator's per-file fallback is the exact ×2 nearest
+# upscale of the shipped 32 (§4.8 64-canvas fallback rule). ----
 ICON_INGEST_PREFIX = "icon_"
-ICON_INGEST_SOURCES = ("snapped", "studio/snapped")  # canonical cache dirs
-# (precedence order; later CLI dirs win per id)
+ICON_INGEST_SOURCES = ("snapped", "studio/snapped",
+                       "pixellab_icons")  # canonical cache dirs
+# (precedence order; later CLI dirs win per id). "pixellab_icons" is the
+# tools/pixellab_pass.py --icons cache: <dir>/<id>/snapped/icon.png per
+# id (the per-id nested layout), not the flat icon_<id>.png caches.
 ICON_SOURCE_DIR_KEY = "source"   # ledger record: the cache dir of the sha
 ICON_ALPHA_THRESHOLD = 128       # snap alpha is binary; the threshold only
 # guards a partial-alpha re-roll (below → transparent, else opaque)
 ICON_INLINE = 32                 # the inline UI canvas (§4.8 render rules)
 ICON_INLINE_CAP = 20             # §4.8.3 32px tier color cap
-ICON_HERO_NOTE = ("hero 64 variants deferred — no 64px icon display "
-                  "surface yet (80-* §4.8 render rules: icons inline keep "
-                  "the 32 art)")
+ICON_HERO_DIR = "icons64"        # assets/ui/<dir>/ — the hero 64 family
+ICON_HERO_CAP = 25               # §4.8.3 48px+ tier color cap (informative:
+# the quantized 64 art draws from the 22-color icon block)
 # ---- arrow-family ingest policy (fix 2026-11-05): the wind_arrow_*/
 # current_arrow_* families are derivation-only (§8.8 item 5) — e/s/w are
 # rot_cw/rot_180/rot_ccw of the n icon and nw/se/sw mirror/rot of ne, so
@@ -940,13 +945,19 @@ def resolve_artifact_overrides(root: Path = ROOT):
     ingested art is the PRIMARY shipped artifact, the generator is the
     per-file fallback): a ledger entry whose committed artifact file
     exists serves that shipped file from the committed ingested artifact.
-    Returns {"icons": {id: path}, "terrain": {file name: path}}."""
-    out = {"icons": {}, "terrain": {}}
+    The icon family resolves BOTH display surfaces per id — the 32 inline
+    asset and the hero 64 asset (2026-11-08; the generator's hero
+    fallback is the ×2 upscale of the 32).  Returns {"icons": {id: path},
+    "icons64": {id: path}, "terrain": {file name: path}}."""
+    out = {"icons": {}, "icons64": {}, "terrain": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
         if p.is_file():
             out["icons"][iid] = p
+        ph = root / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png"
+        if ph.is_file():
+            out["icons64"][iid] = ph
     for fname in (doc.get("terrain") or {}):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
@@ -1460,7 +1471,9 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
 def _seed_lookup(snapped_dir: Path, job: str):
     """The provenance seed for a job: the source dir's own state/progress
     file first (the studio re-roll state), then the model_raw root
-    progress; null when neither records it (provenance rides the sha)."""
+    progress; the pixellab_icons manifest last (tools/pixellab_pass.py
+    --icons records the pinned seed per icon id); null when nothing
+    records it (provenance rides the sha)."""
     for cand in (snapped_dir.parent / "state.json",
                  snapped_dir.parent / "progress.json"):
         if not cand.is_file():
@@ -1471,6 +1484,16 @@ def _seed_lookup(snapped_dir: Path, job: str):
             continue
         if job in jobs:
             return (jobs[job] or {}).get("seed")
+    mf = snapped_dir.parent.parent / "pixellab_icons.json"
+    if mf.is_file():
+        try:
+            doc = json.loads(mf.read_text())
+            iid = job[len(ICON_INGEST_PREFIX):]
+            seed = (doc.get(iid) or {}).get("seed")
+            if isinstance(seed, int):
+                return seed
+        except ValueError:
+            pass
     return None
 
 
@@ -1622,8 +1645,10 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     (the studio ship snaps quantize to the hull block — never trusted for
     icons), halve 64→32 (exact 2:1 nearest), gate on the §4.8.3 32px
     color cap, and write assets/ui/icons/<id>.png as the PRIMARY inline
-    art (per-file override ladder: the string-map generator fills any
-    gap).  Derivation-only ids (manifest derive ops — the wind/current
+    art plus the hero 64 asset assets/ui/icons64/<id>.png (the
+    2026-11-08 amendment — the quantized 64 grid 1:1; per-file override
+    ladder: the string-map generator / ×2 upscale fills any gap).
+    Derivation-only ids (manifest derive ops — the wind/current
     arrow families' e/s/w/nw/se/sw) are NEVER ingested: the build derives
     them from their n/ne sources, and an independently generated sibling
     breaks the §8.8 item 5 transform pin — skipped with a ledger note.
@@ -1638,6 +1663,14 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     candidates: dict[str, tuple[Path, str]] = {}
     for d in source_dirs:
         src_rel = _icon_source_key(d)
+        if src_rel == "pixellab_icons":
+            # the pixellab pass cache: <dir>/<id>/snapped/icon.png per id
+            # (80-* §4.8 2026-11-08); the id is the subdir name
+            for sub in sorted(p for p in d.iterdir() if p.is_dir()):
+                sp = sub / "snapped" / "icon.png"
+                if sp.is_file():
+                    candidates[sub.name] = (sp, src_rel)
+            continue
         for p in sorted(d.glob(f"{ICON_INGEST_PREFIX}*.png")):
             iid = p.stem[len(ICON_INGEST_PREFIX):]
             if iid:
@@ -1706,6 +1739,10 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
         hw, hh, hpx = _halve64(w, h, q)
         write_png(ROOT / "assets" / "ui" / "icons" / f"{iid}.png",
                   hw, hh, hpx)
+        # The hero 64 asset (2026-11-08 amendment — the deferral is
+        # retired): the quantized 64 grid 1:1, same binary alpha.
+        write_png(ROOT / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png",
+                  w, h, q)
         written += 1
         sha = hashlib.sha256(raw).hexdigest()
         prev_rec = prev_icons.get(iid) or {}
@@ -1717,17 +1754,20 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
                     "snapped_sha": sha,
                     "accepted_at": accepted_at or today}
         print(f"  icon {iid}: {w}x{h} -> {hw}x{hh}, {len(colors)} colors "
-              f"(re-quantize touched {changed} px), sha {sha[:12]}… OK")
+              f"(re-quantize touched {changed} px), hero 64, "
+              f"sha {sha[:12]}… OK")
     revoked = 0
     for iid in sorted(prev_icons):
         if iid not in led:
             (ROOT / "assets" / "ui" / "icons" / f"{iid}.png").unlink(
                 missing_ok=True)
+            (ROOT / "assets" / "ui" / ICON_HERO_DIR
+             / f"{iid}.png").unlink(missing_ok=True)
             revoked += 1
     counts = {"icons": {"candidates": len(candidates),
                         "accepted": len(led), "rejected": len(rejected),
                         "skipped": len(skipped),
-                        "files": written, "hero_64": 0}}
+                        "files": written, "hero_64": len(led)}}
     _write_ledger(prev, "icons", {
         "counts": counts,
         "icons_generated_by": "tools/build_ui_art.py --import-icons",
@@ -1738,8 +1778,7 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     report["icons_ingest"] = {
         "candidates": len(candidates), "accepted": len(led),
         "rejected": rejected, "skipped": skipped, "files": written,
-        "revoked": revoked,
-        "hero_64": "skipped — " + ICON_HERO_NOTE,
+        "revoked": revoked, "hero_64": len(led),
     }
     return report["icons_ingest"]
 
@@ -2271,24 +2310,27 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
 
 def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                        artifacts: dict | None = None):
-    """Render + derive + outline + the terrain 64-canvas upscale, then the
-    §4.8 override ladder for the icon/terrain families: a ledger entry
-    with a committed ingested artifact replaces the generator's file
+    """Render + derive + outline + the terrain 64-canvas upscale + the
+    icon hero-64 fallback (the ×2 upscale of the shipped 32), then the
+    §4.8 override ladder for the icon/icons64/terrain families: a ledger
+    entry with a committed ingested artifact replaces the generator's file
     (per-file presence — the generator still runs and stays validated;
     the ingested art is the PRIMARY shipped bytes).  Applied before the
     seam-ring verify so the ring reads the shipped canvases."""
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
-              "icons_ingested": 0, "terrain_ingested": 0}
+              "icons_ingested": 0, "icons64_ingested": 0,
+              "terrain_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
     # clobber them.  Stash the ingested bytes first; the ladder restores
     # them after the passes (a temp rebuild copies instead — the override
     # points at the committed tree, the dest at the temp dir).
     stash: dict[Path, bytes] = {}
-    for family in (("icons", "icons"), ("terrain", "terrain")):
-        for key, override in sorted(((artifacts or {}).get(family[0]) or {}).items()):
-            dest = (outroot / "assets" / "ui" / family[0] /
-                    (f"{key}.png" if family[0] == "icons" else key))
+    for family, dirname in (("icons", "icons"), ("icons64", ICON_HERO_DIR),
+                            ("terrain", "terrain")):
+        for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
+            fname = key if family == "terrain" else f"{key}.png"
+            dest = outroot / "assets" / "ui" / dirname / fname
             if override == dest and dest.is_file():
                 stash[dest] = dest.read_bytes()
     counts["rendered"] = run_node(m.render_files, outroot)
@@ -2356,6 +2398,37 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
         counts["icons_ingested"] += 1
+    # §4.8 hero-64 fallback (the 2026-11-08 icon amendment): every shipped
+    # 32px icon asset (render.js writes the multi-sprite manifests; the
+    # derive pass the singles) gets a hero 64 canvas — the exact ×2
+    # nearest upscale of the FINAL shipped 32 art (never hand-drawn at
+    # 64); an ingested id's committed hero replaces it in the ladder
+    # below.  Runs after the icons ladder so the upscale reads the
+    # ingested bytes where they exist.
+    hero_fallbacks = 0
+    icons_root = outroot / "assets" / "ui" / "icons"
+    if icons_root.is_dir():
+        for p in sorted(icons_root.glob("*.png")):
+            w, h, px = read_png(p)
+            if (w, h) != (ICON_INLINE, ICON_INLINE):
+                continue  # a non-32 icon-class render (none today) passes through
+            hw, hh, hpx = upscale_nearest(w, h, px, 2)
+            dest = outroot / "assets" / "ui" / ICON_HERO_DIR / p.name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            write_png(dest, hw, hh, hpx)
+            hero_fallbacks += 1
+    counts["icons_hero_fallback"] = hero_fallbacks
+    heroes = (artifacts or {}).get("icons64") or {}
+    for iid in sorted(heroes):
+        override = heroes[iid]
+        dest = outroot / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png"
+        if override.is_file() and override != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(override, dest)
+        elif dest in stash:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(stash[dest])
+        counts["icons64_ingested"] += 1
     terr = (artifacts or {}).get("terrain") or {}
     for fname in sorted(terr):
         override = terr[fname]
@@ -3625,9 +3698,15 @@ def main() -> None:
                     help="ingest the model-pass snapped icons (64-grid "
                          "RGBA) from one or more SRC_DIRs (later dirs win "
                          "per id) — re-quantize to the icon block, exact "
-                         "2:1 nearest halving to the 32px inline art, "
-                         "committed provenance ledger; the string-map "
-                         "generator is the per-file fallback")
+                         "2:1 nearest halving to the 32px inline art PLUS "
+                         "the hero 64 asset (assets/ui/icons64/<id>.png, "
+                         "2026-11-08), committed provenance ledger; the "
+                         "string-map generator / ×2 upscale is the "
+                         "per-file fallback; SRC_DIRs are the flat "
+                         "icon_<id>.png caches (model_raw/snapped, "
+                         "model_raw/studio/snapped) or the pixellab "
+                         "per-id tree (tools/pixellab_pass.py --icons: "
+                         "model_raw/pixellab_icons)")
     ap.add_argument("--import-terrain", metavar="GEN_DIR",
                     help="crop the model plains_uniform sheet to the 4 "
                          "uniform land variants (land-ramp quantize, "

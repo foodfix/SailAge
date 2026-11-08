@@ -531,14 +531,14 @@ func _test_info_strip_interactions() -> void:
 	var screen2 := _instantiate_market()
 	screen2.type_qty("wine", "10")
 	_check(screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
+		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
 		"typing a quantity selects the row and shows the strip")
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	(screen2.row("salt")["node"] as Control).gui_input.emit(click)
 	_check(not screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
+		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
 		"clicking another row moves the selection; its empty qty hides the strip")
 	screen2.select_good("wine")
 	_check(screen2.info_strip_text().contains(I18n.t(
@@ -793,7 +793,7 @@ func _test_tax_lines() -> void:
 	_check(screen.tax_line_texts("wine").is_empty(),
 		"no tax lines without payload tax fields (pre-L)")
 	var strip: Label = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStrip")
+		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip")
 	_check(strip.visible and screen.info_strip_text()
 		== I18n.fmt("market.total.buy", {
 			"qty": 10,
@@ -820,7 +820,7 @@ func _test_tax_lines() -> void:
 		{"rate": 5, "gold": "24"}), "sell line (%s)" % str(texts[1]))
 	screen2.type_qty("wine", "10")
 	_check(screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
+		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
 		"the strip shows once a taxed row is selected")
 	_check(screen2.info_strip_text().contains(str(texts[0])),
 		"the tax lines render beneath the totals (%s)"

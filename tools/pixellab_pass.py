@@ -14,6 +14,15 @@ Usage:
   python3 tools/pixellab_pass.py --topdown snap [ship ...]
   python3 tools/pixellab_pass.py --topdown status
 
+Icon mode (2026-11-08, 80-* §4.8 semantic-icon amendment): prompt-only
+generate-image-v2, one 64x64 job per icon id, seed 92000, rewritten
+object-spec prompts (no hull heritage). Raws land gitignored under
+model_raw/pixellab_icons/<id>/ plus a manifest; only ids with a pinned
+_ICON_DESCRIPTORS entry may generate (doc-first guard).
+  python3 tools/pixellab_pass.py --icons run [id ...]
+  python3 tools/pixellab_pass.py --icons snap [id ...]
+  python3 tools/pixellab_pass.py --icons status
+
 Legacy Pro-Flash 8-dir hull mode (RETIRED by the 2026-11-07 top-down
 amendment — kept only for history/re-download of the old raws):
   python3 tools/pixellab_pass.py run [ship ...]
@@ -327,6 +336,249 @@ def status_topdown() -> None:
         print(f"{ship:18s} size={e['size']} seed={e['seed']} "
               f"job={e['job_id'][:12]}…")
     print(f"{len(m)} ships")
+
+
+# ---- icon pass pins (80-* §4.8, the 2026-11-08 semantic-icon
+# amendment) -------------------------------------------------------------
+# Prompt-only generate-image-v2, one 64x64 job per icon id, seed distinct
+# from the hulls' 91000. Descriptors are REWRITTEN object specs — no hull
+# vocabulary. Goods/equipment carry their en name (data JSONs) as the
+# identity prefix, prepended by the composer; pure glyph ids carry the
+# whole object spec. A full-variant replacement exists for objects the
+# suffix would fight (none yet).
+ICON_SEED = 92000
+ICON_SIZE = 64
+ICON_OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw",
+                            "pixellab_icons")
+ICON_MANIFEST = os.path.join(ICON_OUT_DIR, "pixellab_icons.json")
+# Shared icon suffix, pinned verbatim (80-* §4.8, 2026-11-08; strictly
+# flat front-facing for EVERY id — user direction; UW2 anchor kept —
+# user direction; NO hull heritage).
+ICON_SUFFIX = (
+    ", single centered game UI icon, flat front-facing view, the object "
+    "fills about 70% of the canvas and stays fully inside the frame, "
+    "bold readable silhouette, flat cel shading with two or three "
+    "shading bands, dark 1-pixel silhouette outline on the outer edge "
+    "only, no scenery, no background elements, no cropping, no text, "
+    "no gradients, limited retro palette in warm midtones, retro "
+    "16-bit pixel-art game icon in the style of classic 1990s naval "
+    "adventure games like Uncharted Waters 2 / New Horizons, "
+    "transparent background.")
+
+# Per-icon object descriptors (identity payload), pinned verbatim;
+# amendment = edit here + docs. Pilot batch: the 5 HUD resources + 4
+# goods (one per category motif family) + the 4 arrow bases. The
+# remaining ~120 fill in after the pilot review freezes the suffix.
+_ICON_DESCRIPTORS: dict[str, str] = {
+    # --- HUD resources (pilot) ---
+    "coin":
+        "Round brass coin seen face-on, a simple embossed ship-wheel "
+        "stamp in the center, one bright highlight arc on the "
+        "upper-left rim, darker bronze shading toward the lower-right",
+    "crew":
+        "A single sailor's head-and-shoulders bust facing forward, "
+        "ruddy warm skin, red knit cap, short dark beard, simple "
+        "friendly face",
+    "provisions":
+        "Stout wooden barrel with two dark iron hoops, a tied "
+        "cloth-wrapped bread bundle resting on the flat barrel top",
+    "morale":
+        "Bright golden fanfare trumpet angled up to the right, small "
+        "round bell, tiny spark glints around the bell",
+    "durability":
+        "Thick grey armor-plate slab with four rivet dots at the "
+        "corners and a lighter bevel along the top edge",
+    # --- goods pilot (one per category motif family) ---
+    "good_wheat":
+        "a tied burlap sack of golden wheat grain, two loose wheat "
+        "ears leaning against the sack, a few grains scattered in "
+        "front of it",
+    "good_iron":
+        "a neat stack of three dark grey iron ingots, the top ingot "
+        "shifted slightly forward, cool blue-grey sheen with one "
+        "bright highlight line",
+    "good_cotton_cloth":
+        "a rolled bolt of pale cream cotton cloth standing upright, "
+        "the loose end draping forward with one soft fold",
+    "good_spices":
+        "a small open wooden bowl heaped with red-orange spice "
+        "powder, a tiny wooden scoop resting beside it",
+    # --- arrow bases (derivation-only families; only n/ne generate) ---
+    "wind_arrow_n":
+        "A bold straight arrow pointing straight up to the top edge of "
+        "the canvas, thick pale shaft, large triangular head, flat "
+        "pale ink fill",
+    "wind_arrow_ne":
+        "A bold straight arrow pointing to the top-right corner at 45 "
+        "degrees, thick pale shaft, large triangular head, flat pale "
+        "ink fill",
+    "current_arrow_n":
+        "A bold straight arrow pointing straight up to the top edge of "
+        "the canvas, thick shaft with slightly rounded ends, large "
+        "triangular head, flat slate-blue water fill",
+    "current_arrow_ne":
+        "A bold straight arrow pointing to the top-right corner at 45 "
+        "degrees, thick shaft with slightly rounded ends, large "
+        "triangular head, flat slate-blue water fill",
+}
+# Full-variant replacements (whole description; none yet — the pinnace
+# precedent).
+_ICON_VARIANTS: dict[str, str] = {}
+
+
+def _good_en_name(good_id: str) -> str:
+    with open(os.path.join(REPO, "data", "goods.json"),
+              encoding="utf-8") as fh:
+        goods = {g["id"]: g for g in json.load(fh)["goods"]}
+    return str(goods[good_id]["name"]["en"])
+
+
+def _eq_en_name(eq_id: str) -> str:
+    with open(os.path.join(REPO, "data", "equipment.json"),
+              encoding="utf-8") as fh:
+        eqs = {e["id"]: e for e in json.load(fh)["equipment"]}
+    return str(eqs[eq_id]["name"]["en"])
+
+
+def _icon_desc(icon_id: str) -> str:
+    """Composed description: {Name-en}, {object spec}{ICON_SUFFIX} for
+    goods/equipment; {object spec}{ICON_SUFFIX} for pure glyphs; a
+    full-variant replacement wins outright (80-* §4.8 2026-11-08)."""
+    if icon_id in _ICON_VARIANTS:
+        return _ICON_VARIANTS[icon_id]
+    if icon_id not in _ICON_DESCRIPTORS:
+        raise SystemExit(
+            f"{icon_id}: no pinned descriptor in _ICON_DESCRIPTORS — "
+            f"the doc-first rule forbids sending an unpinned prompt")
+    base = _ICON_DESCRIPTORS[icon_id]
+    if icon_id.startswith("good_"):
+        return f"{_good_en_name(icon_id[5:])}, {base}{ICON_SUFFIX}"
+    if icon_id.startswith("eq_"):
+        return f"{_eq_en_name(icon_id[3:])}, {base}{ICON_SUFFIX}"
+    return f"{base}{ICON_SUFFIX}"
+
+
+def _icons() -> list[str]:
+    """The full 129-id inventory, read from the authored manifests (the
+    committed string-map files stay the id authority)."""
+    import glob  # noqa: PLC0415
+    ids: list[str] = []
+    for path in sorted(glob.glob(os.path.join(REPO, "tools", "ui_art",
+                                              "icons", "*.json"))):
+        with open(path, encoding="utf-8") as fh:
+            ids.extend(s["id"] for s in json.load(fh)["sprites"])
+    return ids
+
+
+def run_icon(icon_id: str, label: str | None = None,
+             description: str | None = None, seed: int | None = None,
+             poll_status=None) -> dict:
+    """One prompt-only generate-image-v2 generation on the pinned 64x64
+    canvas (the 2026-11-08 icon envelope — never a style_image or
+    reference_images) + raw download to <id>/icon.png."""
+    payload = {
+        "description": description or _icon_desc(icon_id),
+        "image_size": {"width": ICON_SIZE, "height": ICON_SIZE},
+        "no_background": True,
+        "seed": ICON_SEED if seed is None else int(seed),
+    }
+    print(f"[pixellab-icons {icon_id}] POST generate-image-v2 "
+          f"({ICON_SIZE}x{ICON_SIZE}) ...", flush=True)
+    created = _post("/generate-image-v2", payload)
+    job_id = created["background_job_id"]
+    usage = created.get("usage") or {}
+    print(f"    job={job_id} usage={json.dumps(usage)}", flush=True)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        raise RuntimeError(f"{icon_id}: job {job_id} status="
+                           f"{job.get('status')!r} "
+                           f"(last: {json.dumps(job)[:300]})")
+
+    dest = label or icon_id
+    dest_dir = os.path.join(ICON_OUT_DIR, dest)
+    os.makedirs(dest_dir, exist_ok=True)
+    png = _job_image_bytes(job)
+    with open(os.path.join(dest_dir, "icon.png"), "wb") as fh:
+        fh.write(png)
+    rec = {"job_id": job_id, "description": payload["description"],
+           "seed": payload["seed"], "size": ICON_SIZE, "icon": icon_id,
+           "label": dest, "bytes": {"icon": len(png)},
+           "usage": usage, "job_status": job.get("status")}
+    os.makedirs(ICON_OUT_DIR, exist_ok=True)
+    manifest = {}
+    if os.path.isfile(ICON_MANIFEST):
+        with open(ICON_MANIFEST, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    manifest[dest] = rec
+    with open(ICON_MANIFEST, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=1, ensure_ascii=False)
+    return rec
+
+
+def snap_icon(icon_id: str) -> None:
+    """Icon-as-drawn passthrough: the RAW icon copies BYTE-IDENTICAL
+    into <id>/snapped/icon.png for ingest naming. Gate: canvas fit
+    (exact 64x64). No resize, no quantize — the model's pixels are the
+    review pixels; quantize + halve happen at ingest (80-* §4.8
+    2026-11-08)."""
+    from PIL import Image  # noqa: PLC0415
+    src_dir = os.path.join(ICON_OUT_DIR, icon_id)
+    src = os.path.join(src_dir, "icon.png")
+    if not os.path.exists(src):
+        raise SystemExit(f"{icon_id}: no raw icon at {src} — "
+                         f"run --icons run first")
+    img = Image.open(src)
+    w, h = img.size
+    fit = (w, h) == (ICON_SIZE, ICON_SIZE)
+    dst_dir = os.path.join(src_dir, "snapped")
+    os.makedirs(dst_dir, exist_ok=True)
+    with open(src, "rb") as fh:
+        data = fh.read()
+    with open(os.path.join(dst_dir, "icon.png"), "wb") as fh:
+        fh.write(data)
+    print(f"  {icon_id}: raw copy {w}x{h} want={ICON_SIZE}x{ICON_SIZE} "
+          f"fit={fit}", flush=True)
+
+
+def run_icon_fleet(ids: list[str], seed: int | None = None) -> None:
+    for i, icon_id in enumerate(ids, 1):
+        raw = os.path.join(ICON_OUT_DIR, icon_id, "icon.png")
+        if os.path.isfile(raw):
+            # resumable: the raw file IS the artifact — a re-roll deletes
+            # it (or names the id explicitly on the CLI)
+            print(f"[pixellab-icons {i}/{len(ids)}] {icon_id} already has "
+                  f"raw icon.png — skipped (delete it to re-roll)",
+                  flush=True)
+            continue
+        rec = run_icon(icon_id, seed=seed)
+        print(f"[pixellab-icons {i}/{len(ids)}] {icon_id} saved "
+              f"icon.png ({rec['bytes']['icon']} bytes)", flush=True)
+    print(f"[pixellab-icons] manifest -> {ICON_MANIFEST}", flush=True)
+
+
+def status_icons() -> None:
+    if not os.path.exists(ICON_MANIFEST):
+        print("no icon manifest yet")
+        return
+    with open(ICON_MANIFEST, encoding="utf-8") as fh:
+        m = json.load(fh)
+    for icon_id, e in m.items():
+        print(f"{icon_id:24s} size={e['size']} seed={e['seed']} "
+              f"job={e['job_id'][:12]}…")
+    print(f"{len(m)} icons")
 
 
 def _ships() -> list[str]:
@@ -726,8 +978,22 @@ if __name__ == "__main__":
     topdown = bool(args) and args[0] == "--topdown"
     if topdown:
         args = args[1:]
+    icons = bool(args) and args[0] == "--icons"
+    if icons:
+        args = args[1:]
     cmd = args[0] if args else "status"
-    if topdown:
+    if icons:
+        if cmd == "run":
+            run_icon_fleet(args[1:] or _icons(), seed=seed_override)
+        elif cmd == "snap":
+            for icon_id in (args[1:] or _icons()):
+                if icon_id in _ICON_DESCRIPTORS or icon_id in _ICON_VARIANTS:
+                    snap_icon(icon_id)
+            print("[pixellab-icons] derived-only arrow dirs and "
+                  "descriptor-less ids are never generated/ingested")
+        else:
+            status_icons()
+    elif topdown:
         if cmd == "run":
             run_topdown_fleet(args[1:] or _ships(), seed=seed_override)
         elif cmd == "snap":

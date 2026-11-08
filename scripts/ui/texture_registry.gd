@@ -74,6 +74,14 @@ static var _token_dir := TOKENS_DIR
 const FX_DIR := "res://assets/ui/fx"
 static var _fx_dir := FX_DIR
 
+## The hero-64 icon family (80-* §4.8 2026-11-08): resolved LAZILY through
+## the same miss resolver under the `icon64_` id prefix — raw bytes, no
+## `.import` sidecars (the token family rule), so an ingest reaches the
+## game by file replace + restart.
+const ICONS64_DIR := "res://assets/ui/icons64"
+static var _icons64_dir := ICONS64_DIR
+const ICONS64_PREFIX := "icon64_"
+
 static var _registered := false
 ## Ids registered by the last successful pass (the suite/report read seam).
 ## Tokens are not in this count — they resolve lazily on first render.
@@ -136,6 +144,17 @@ static func _load_token_texture(id: String) -> Texture2D:
 				FileAccess.get_file_as_bytes(fx_path)) != OK:
 			return null
 		return ImageTexture.create_from_image(fx_image)
+	# The hero-64 icon family (80-* §4.8 2026-11-08): id `icon64_<icon>`
+	# reads `assets/ui/icons64/<icon>.png` raw — same lazy family rules.
+	if id.begins_with(ICONS64_PREFIX):
+		var icon64_path := "%s/%s.png" % [_icons64_dir,
+				id.substr(ICONS64_PREFIX.length())]
+		if FileAccess.file_exists(icon64_path):
+			var icon64_image := Image.new()
+			if icon64_image.load_png_from_buffer(
+					FileAccess.get_file_as_bytes(icon64_path)) != OK:
+				return null
+			return ImageTexture.create_from_image(icon64_image)
 	return null
 
 

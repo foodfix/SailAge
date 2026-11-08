@@ -842,6 +842,20 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 	heading.custom_minimum_size.x = 90
 	row.add_child(heading)
 
+	# The §4.8 hero-64 host (2026-11-08): the worn item at 1:1 64 through
+	# the `icon64_eq_` lazy id — an absent id hides the slot (the flat
+	# fallback); the 32px buy buttons below stay untouched.
+	var hero := TextureRect.new()
+	hero.name = "WornHero"
+	hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	hero.custom_minimum_size = Vector2(64, 64)
+	if not worn_id.is_empty():
+		hero.texture = UiKitLib.icon_texture("icon64_eq_%s" % worn_id)
+	hero.visible = hero.texture != null
+	hero.tooltip_text = _equipment_name(worn_id)
+	row.add_child(hero)
+
 	var worn := _label(
 		_equipment_name(worn_id) if not worn_id.is_empty() else I18n.t_key("ui.empty"),
 		worn_id.is_empty()

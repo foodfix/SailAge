@@ -231,6 +231,9 @@ var _selected_good: String = ""
 var _specialty_header: Label = null
 var _tax_badge: Label = null
 var _info_strip: Label = null
+## The strip's hero-64 slot (§4.8 2026-11-08): the selected `good_*` at
+## 1:1 64 through the `icon64_` lazy id.
+var _hero_slot: TextureRect = null
 ## Per-section render caches: the captains section rebuilds only when its
 ## docked-fleet fingerprint moves, the intel section only when its rows'
 ## data moves — the seeded sighting rolls are visit-stable (docs/80 §4.7.8),
@@ -947,14 +950,30 @@ func tax_badge_state() -> Dictionary:
 ## `market.total.sell`, the §4.4 `buy_cost` / `sell_gain` queries) with the
 ## per-side tax lines (`market.tax.buy_line` / `market.tax.sell_line`,
 ## §4.10) beneath. Hidden until a row is selected and one of the lines
-## applies.
+## applies. The §4.8 hero-64 host (2026-11-08): the strip carries a 64px
+## hero slot for the selected `good_*` (id `icon64_good_<id>` through the
+## kit registry — an absent id hides the slot, the flat fallback); the
+## rows' trend marks stay 32 inline.
 func _build_info_strip() -> void:
 	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
+	var strip_row := HBoxContainer.new()
+	strip_row.name = "InfoStripRow"
+	strip_row.add_theme_constant_override("separation", 12)
 	_info_strip = Label.new()
 	_info_strip.name = "InfoStrip"
 	_info_strip.theme_type_variation = "Dim"
 	_info_strip.visible = false
-	table.add_child(_info_strip)
+	_info_strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hero_slot = TextureRect.new()
+	_hero_slot.name = "GoodHero"
+	_hero_slot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_hero_slot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_hero_slot.custom_minimum_size = Vector2(64, 64)
+	_hero_slot.visible = false
+	_hero_slot.tooltip_text = ""
+	strip_row.add_child(_hero_slot)
+	strip_row.add_child(_info_strip)
+	table.add_child(strip_row)
 
 
 ## The two tax lines for `good_id`'s engine payload: `market.tax.buy_line` /
@@ -1024,6 +1043,13 @@ func _refresh_info_strip() -> void:
 		lines.append_array(tax_line_texts(_selected_good))
 	_info_strip.visible = not lines.is_empty()
 	_info_strip.text = "\n".join(PackedStringArray(lines))
+	# The §4.8 hero-64 host (2026-11-08): the selected good at 1:1 64 —
+	# a null texture hides the slot (the flat fallback rule).
+	if _hero_slot != null:
+		var tex := UiKitLib.icon_texture("icon64_good_%s" % _selected_good) \
+			if not _selected_good.is_empty() else null
+		_hero_slot.texture = tex
+		_hero_slot.visible = tex != null
 
 
 ## The info strip's current text (the suite's seam, captains-pattern).
