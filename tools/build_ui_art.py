@@ -151,6 +151,7 @@ docs/IMPLEMENT-Phase10.md decisions 5/9.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -447,6 +448,9 @@ ICON_BLOCK = {
     "#a87a28", "#4e9e4e", "#74c26e", "#b3341f", "#d4573c", "#2f6f9e",
     "#9a9a9a", "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a",
     "#c9a227",
+    # UW2 parchment-chrome appends (2026-11-08, §4.8 amended, append-only):
+    # the texture-mode flat fill/highlight/shadow steps + the panel ink.
+    "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",
 }
 CHROME_COLOR_CAP = 8  # per-tile distinct-color discipline (§4.8.3 16px tier)
 # Stretch-safety (80-* §4.8 UW2 chrome-skin note, amended 2026-11-04, master
@@ -478,10 +482,51 @@ PINNED_DERIVE = {
 DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
 
 # nine-patch assembly spec (A.1 of IMPLEMENT-Phase10.md; step 5 above)
-NINEPATCH_SETS = ("panel", "button", "button_focus", "field")
+# 2026-11-08: +button_hover / +button_pressed (the PixelLab chrome
+# amendment's derived state sheets — the 2026-11-04 dimming-only mapping
+# remains the missing-sheet fallback, §4.9).
+NINEPATCH_SETS = ("panel", "button", "button_hover", "button_pressed",
+                  "button_focus", "field")
 BAR_PARTS = ("left", "right", "line")  # A.1 chrome ids: bar_left/bar_right/bar_line (master reconciliation)
 SHEET = 48   # 16px margins -> exactly one 16px middle tile (§4.8.8)
 TILE = 16
+
+# ---- PixelLab chrome tileset ingestion pins (80-* §4.8, 2026-11-08) ----
+# Wang→nine-patch slot mapping (upper = plate material, bit
+# NW·8+NE·4+SW·2+SE·1): the singles stay "TOP-LEFT corner / TOP edge"
+# (the FRAME_OPS convention), so TL corner = wang_1 (material SE),
+# top edge = wang_3 (material S half), fill = wang_15 (all material,
+# self-tiling by Wang construction). The inverted-bevel sources for the
+# pressed/field rims are the opposite ring tiles (8 = BR corner,
+# 12 = bottom edge) run through rot_180 — the bevel light flips TL→BR,
+# the classic sunken plate.
+CHROME_WANG = {"corner": 1, "edge": 3, "fill": 15}
+CHROME_WANG_INV = {"corner": 8, "edge": 12}
+CHROME_GREEN_MARGIN = 32     # key: g ≥ r+32 and g ≥ b+32 → transparent
+CHROME_HOVER_LIFT = 0.18     # c' = c + round((255−c)×lift), opaque px
+CHROME_PRESS_DARKEN = 0.80   # c' = round(c×darken), opaque px
+CHROME_FIELD_RECESS = 0.62   # field interior darken (inset parchment)
+CHROME_FOCUS_RING = "#d9a441"  # ACCENT — the silhouette focus ring
+CHROME_RAW_DIR = ROOT / "tools" / "assets" / "pixellab_raw"
+# frame = parchment panel plate; button = chestnut leather plate.
+# Derivations: family -> (source tileset, per-part (wang, op)) where op ∈
+# {"base", "ring", "lift", "invert", "press", "recess"} — "invert" =
+# rot_180 only, "press" = rot_180 + darken, "recess" = darken only.
+CHROME_DERIVATIONS = {
+    "panel": ("frame", {"corner": (1, "base"), "edge": (3, "base"),
+                        "fill": (15, "base")}),
+    "field": ("frame", {"corner": (8, "invert"), "edge": (12, "invert"),
+                        "fill": (15, "recess")}),
+    "button": ("button", {"corner": (1, "base"), "edge": (3, "base"),
+                          "fill": (15, "base")}),
+    "button_hover": ("button", {"corner": (1, "lift"), "edge": (3, "lift"),
+                                "fill": (15, "lift")}),
+    "button_pressed": ("button", {"corner": (8, "press"),
+                                  "edge": (12, "press"),
+                                  "fill": (15, "press")}),
+    "button_focus": ("button", {"corner": (1, "ring"), "edge": (3, "ring"),
+                                "fill": (15, "base")}),
+}
 
 
 def fail(msg: str) -> None:
@@ -964,7 +1009,7 @@ def resolve_artifact_overrides(root: Path = ROOT):
     path}, "icons64": {id: path}, "markers": {id: path}, "facility": {id:
     path}, "terrain": {file name: path}}."""
     out = {"icons": {}, "icons64": {}, "markers": {}, "markers64": {},
-           "facility": {}, "facility64": {}, "terrain": {}}
+           "facility": {}, "facility64": {}, "terrain": {}, "chrome": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
@@ -987,6 +1032,12 @@ def resolve_artifact_overrides(root: Path = ROOT):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
             out["terrain"][fname] = p
+    # chrome (2026-11-08): the ledger-owned singles serve their committed
+    # ingested bytes — the generator's string-map art is the fallback.
+    for sid in (_chrome_ledger().get("tiles") or {}):
+        p = root / "assets" / "ui" / "chrome" / f"{sid}.png"
+        if p.is_file():
+            out["chrome"][sid] = p
     return out
 
 
@@ -1158,6 +1209,7 @@ _GLYPH_SECTIONS = _GLYPH_FAMILY_SECTIONS["markers"] \
     + _GLYPH_FAMILY_SECTIONS["facility"]
 _TERRAIN_SECTIONS = ("terrain_generated_by", "terrain_rejected", "terrain",
                      "terrain_note")
+_CHROME_SECTIONS = ("chrome_generated_by", "chrome_rejected", "chrome")
 
 
 def _read_ledger(where: str) -> dict:
@@ -1179,7 +1231,8 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
     values; every other family's sections pass through untouched; counts
     merge per family sub-object."""
     owned = {"ships": _SHIP_SECTIONS, "icons": _ICON_SECTIONS,
-             "terrain": _TERRAIN_SECTIONS, "glyphs": _GLYPH_SECTIONS}[family]
+             "terrain": _TERRAIN_SECTIONS, "glyphs": _GLYPH_SECTIONS,
+             "chrome": _CHROME_SECTIONS}[family]
     counts = dict(prev.get("counts") or {})
     counts.update(sections.get("counts", {}))
     doc = {"version": INGEST_VERSION, "contract": INGEST_CONTRACT,
@@ -1189,6 +1242,7 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
             continue
         if any(key in own for own in
                (_SHIP_SECTIONS, _ICON_SECTIONS, _TERRAIN_SECTIONS,
+                _CHROME_SECTIONS,
                 *_GLYPH_FAMILY_SECTIONS.values())) \
                 and key not in owned:
             doc[key] = val  # another family's section — preserve verbatim
@@ -2131,7 +2185,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
               "icons_ingested": 0, "icons64_ingested": 0,
               "markers64_ingested": 0, "facility64_ingested": 0,
-              "terrain_ingested": 0}
+              "terrain_ingested": 0, "chrome_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
     # clobber them.  Stash the ingested bytes first; the ladder restores
@@ -2142,7 +2196,8 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                                    ("icons64", ICON_HERO_DIR, True),
                                    ("markers64", "markers64", True),
                                    ("facility64", "tokens64", True),
-                                   ("terrain", "terrain", False)):
+                                   ("terrain", "terrain", False),
+                                   ("chrome", "chrome", True)):
         for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
             fname = key if not keyed else f"{key}.png"
             if family in ("markers64", "facility64"):
@@ -2284,6 +2339,21 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
         counts["terrain_ingested"] += 1
+    # chrome ladder (2026-11-08): the ledger-owned singles — the string-map
+    # generator still runs for the authored fallback, then the ingested
+    # bytes win per id. Runs before run_ninepatch, which assembles the
+    # sheets from exactly these singles.
+    chrom = (artifacts or {}).get("chrome") or {}
+    for sid in sorted(chrom):
+        override = chrom[sid]
+        dest = outroot / "assets" / "ui" / "chrome" / f"{sid}.png"
+        if override.is_file() and override != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(override, dest)
+        elif dest in stash:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(stash[dest])
+        counts["chrome_ingested"] += 1
     return counts
 
 
@@ -2479,7 +2549,12 @@ SKIN_PINS = {
 
 def _audit_chrome_tile(label: str, w, h, px) -> None:
     """Chrome tile color audit (§4.8.4 membership + the per-tile color
-    discipline; parity with the hull color audit, step 7)."""
+    discipline; parity with the hull color audit, step 7). The PixelLab
+    chrome families (2026-11-08) are ship-as-drawn — the ledger-owned
+    ids are waived here (group 13 audits their provenance instead), the
+    authored bar tiles stay audited."""
+    if label in _chrome_ledger_tile_ids():
+        return
     colors = {("#%02x%02x%02x" % p[:3]) for p in px if p[3]}
     off = sorted(c for c in colors if c not in ICON_BLOCK)
     if off:
@@ -2490,10 +2565,18 @@ def _audit_chrome_tile(label: str, w, h, px) -> None:
              f"colors > the {CHROME_COLOR_CAP} per-tile cap")
 
 
-def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
+def _verify_ninepatch_sheet(name, tiles, sheet,
+                            pixellab: bool = False) -> None:
     """Pixel-exact self-verification of one assembled sheet — any mismatch
     is a build FAIL (§4.8.8; makes the misaligned-sheet class of bug
-    impossible to ship: the committed 04373ef sheets failed rules 1, 3)."""
+    impossible to ship: the committed 04373ef sheets failed rules 1, 3).
+    pixellab=True (the 2026-11-08 chrome amendment): rule 1 stays (every
+    cell byte-equals its oriented source tile — the anti-misalignment
+    guarantee), and the authored flat-art pins (rules 2–5: opaque content
+    areas, the border/fill hex anchors, the SKIN_PINS, the gold map) are
+    replaced by the keyed-plate alpha geometry — the fill cell fully
+    opaque, the ring cells carrying their keyed transparent outside, and
+    the sheet's far corners transparent (the plate silhouette)."""
     # 1. every 16x16 cell byte-equals the oriented source tile.
     for (dx, dy), (part, op) in FRAME_OPS.items():
         want = _oriented_px(tiles[part][2], op)
@@ -2504,6 +2587,26 @@ def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
                 fail(f"ninepatch {name}: self-verify — cell ({dx},{dy}) pixel "
                      f"({dx + x},{dy + y}) = {g} != oriented {part}"
                      f"{' ' + op if op else ''} {w}")
+    if pixellab:
+        _, _, fill_px = tiles["fill"]
+        if any(p[3] != 255 for p in fill_px):
+            fail(f"ninepatch {name}: self-verify — the fill tile carries "
+                 "transparent pixels (the keyed plate interior must be "
+                 "fully opaque)")
+        for (dx, dy), (part, _) in FRAME_OPS.items():
+            cell = _cell_pixels(sheet, dx, dy)
+            if part in ("corner", "edge") \
+                    and all(p[3] == 255 for p in cell):
+                fail(f"ninepatch {name}: self-verify — the {part} cell at "
+                     f"({dx},{dy}) carries no keyed transparent pixels "
+                     "(a ring tile without the plate silhouette outside)")
+        for (dx, dy) in ((0, 0), (SHEET - 1, 0),
+                         (0, SHEET - 1), (SHEET - 1, SHEET - 1)):
+            if sheet[dx + dy * SHEET][3] != 0:
+                fail(f"ninepatch {name}: self-verify — the sheet corner "
+                     f"({dx},{dy}) is not transparent (the plate "
+                     "silhouette must stay outside the control corners)")
+        return
     # 2. content areas (edge + fill cells) fully opaque — transparent pixels
     #    live ONLY in the corner cells, exactly where the corner tiles carry
     #    the authored outer rounding.
@@ -2600,6 +2703,7 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
         for part, img in tiles.items():
             _audit_chrome_tile(f"{s}_{part}", img[0], img[1], img[2])
         sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
+        ledger_tiles = _chrome_ledger_tile_ids()
         for (dx, dy), (part, op) in FRAME_OPS.items():
             _, _, px = tiles[part]
             if op is not None:
@@ -2607,7 +2711,9 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
             for r in range(TILE):
                 for c in range(TILE):
                     sheet[(dx + c) + (dy + r) * SHEET] = px[c + r * TILE]
-        _verify_ninepatch_sheet(s, tiles, sheet)
+        pixellab_family = all(f"{s}_{p}" in ledger_tiles
+                              for p in ("corner", "edge", "fill"))
+        _verify_ninepatch_sheet(s, tiles, sheet, pixellab=pixellab_family)
         write_png(outroot / f"assets/ui/chrome/ninepatch_{s}.png", SHEET, SHEET, sheet)
         made += 1
     caps = {}
@@ -3486,6 +3592,203 @@ def run_import_fx_mode(raw_root: Path) -> None:
     print(f"build_ui_art: fx ledger -> {FX_LEDGER.relative_to(ROOT)}")
 
 
+# ---- PixelLab chrome tileset ingestion (--import-chrome-pixellab;
+# ---- 80-* §4.8, 2026-11-08 parchment amendment) -------------------------
+
+def _chrome_ledger() -> dict:
+    """The chrome{} ledger section (empty when the chrome families are
+    generator-authored — the fallback)."""
+    doc = _read_ledger("_chrome_ledger")
+    return doc.get("chrome") or {}
+
+
+def _chrome_ledger_tile_ids() -> set:
+    """The ledger-owned chrome single ids (ship-as-drawn; the authored
+    chrome audits are waived for exactly these)."""
+    return set(_chrome_ledger().get("tiles") or {})
+
+
+def _chrome_find_tileset(family: str) -> Path:
+    """The vendored tileset trio for a chrome family — exactly ONE
+    tileset_chrome_<family>_<id>.json may exist (the filename is the
+    pointer; a re-generation stages the new trio and deletes the old,
+    the coast convention)."""
+    matches = sorted(p for p in CHROME_RAW_DIR.glob(
+        f"tileset_chrome_{family}_*.json")
+        if not p.name.endswith(("_request.json", "_submit.json")))
+    if len(matches) != 1:
+        fail(f"--import-chrome-pixellab: expected exactly one vendored "
+             f"tileset_chrome_{family}_*.json under {CHROME_RAW_DIR}, "
+             f"found {len(matches)}")
+    return matches[0]
+
+
+def _chrome_green_key(px: list) -> list:
+    """The authoring-only green chroma key → alpha: a pixel goes
+    transparent iff g ≥ r+MARGIN and g ≥ b+MARGIN (GREEN_KEY_MARGIN).
+    Wood / parchment / brass are warm (r-dominant) and never
+    false-positive; the rule is deterministic on the vendored bytes.
+    Surviving pixels are forced opaque (the model ships no partial
+    alpha; crisp sheets only)."""
+    m = CHROME_GREEN_MARGIN
+    out = []
+    for p in px:
+        r, g, b = p[0], p[1], p[2]
+        if g >= r + m and g >= b + m:
+            out.append((0, 0, 0, 0))
+        else:
+            out.append((r, g, b, 255))
+    return out
+
+
+def _chrome_load_masters(family: str) -> tuple[dict, dict]:
+    """Decode one vendored chrome tileset → ({wang_index: keyed px},
+    {wang_index: pixel_id}), verifying the name↔corners bit consistency
+    (bit = NW·8+NE·4+SW·2+SE·1, upper = 1), the 16×16 canvas, and the
+    green-key sanity (every ring tile carries keyed-out pixels; the
+    fill source wang_15 is fully opaque — the plate interior must never
+    leak the key)."""
+    path = _chrome_find_tileset(family)
+    doc = json.loads(path.read_text())
+    tiles = (doc.get("tileset") or doc).get("tiles") or []
+    if len(tiles) != 16:
+        fail(f"{path.name}: expected 16 wang tiles, got {len(tiles)}")
+    masters: dict[int, list] = {}
+    pixel_ids: dict[int, str] = {}
+    for tile in tiles:
+        name = str(tile.get("name", ""))
+        if not name.startswith("wang_"):
+            fail(f"{path.name}: unexpected tile name {name!r}")
+        i = int(name.split("_", 1)[1])
+        corners = tile.get("corners") or {}
+        bits = 0
+        for shift, ck in ((8, "NW"), (4, "NE"), (2, "SW"), (1, "SE")):
+            if str(corners.get(ck, "")).lower() == "upper":
+                bits |= shift
+        if bits != i:
+            fail(f"{path.name}: {name} corners {corners} != bit value "
+                 f"{i} (upper = plate material)")
+        png = base64.b64decode((tile.get("image") or {}).get("base64") or "")
+        w, h, px = decode_png(png)
+        if (w, h) != (TILE, TILE):
+            fail(f"{path.name}: {name} is {w}x{h}, expected "
+                 f"{TILE}x{TILE} (the chrome envelope pins 16px tiles)")
+        px = _chrome_green_key(px)
+        opaque = sum(1 for p in px if p[3])
+        if i == CHROME_WANG["fill"]:
+            if opaque != TILE * TILE:
+                fail(f"{path.name}: wang_15 (the fill source) is not "
+                     f"fully opaque after the green key ({opaque}/"
+                     f"{TILE * TILE}) — the lower material leaked into "
+                     "the plate interior")
+        elif i in (1, 2, 3, 4, 5, 8, 10, 12):
+            if opaque == TILE * TILE:
+                fail(f"{path.name}: {name} has no green-keyed pixels — "
+                     "the lower material never appears on a ring tile; "
+                     "is this the chrome tileset?")
+        masters[i] = px
+        pixel_ids[i] = str(tile.get("id", ""))
+    return masters, pixel_ids
+
+
+def _chrome_derive(px: list, op: str) -> list:
+    """One derivation op (80-* §4.8 2026-11-08): base = as keyed;
+    invert = rot_180 (the bevel light flips TL→BR — the sunken rim);
+    press = invert + every opaque pixel ×PRESS_DARKEN; recess =
+    every opaque pixel ×FIELD_RECESS (no rotate — the inset-paper
+    interior); lift = the hover glow
+    c' = c + round((255−c)×HOVER_LIFT); ring = the 1px ACCENT
+    silhouette ring (opaque pixels 4-adjacent to transparent)."""
+    if op == "base":
+        return list(px)
+    if op == "invert":
+        return _transform(TILE, TILE, px, "rot_180")[2]
+    if op == "press":
+        rot = _transform(TILE, TILE, px, "rot_180")[2]
+        f = CHROME_PRESS_DARKEN
+        return [((round(p[0] * f), round(p[1] * f), round(p[2] * f), 255)
+                 if p[3] else p) for p in rot]
+    if op == "recess":
+        f = CHROME_FIELD_RECESS
+        return [((round(p[0] * f), round(p[1] * f), round(p[2] * f), 255)
+                 if p[3] else p) for p in px]
+    if op == "lift":
+        return [((round(p[0] + (255 - p[0]) * CHROME_HOVER_LIFT),
+                  round(p[1] + (255 - p[1]) * CHROME_HOVER_LIFT),
+                  round(p[2] + (255 - p[2]) * CHROME_HOVER_LIFT), 255)
+                 if p[3] else p) for p in px]
+    if op == "ring":
+        ring = _hex_px(CHROME_FOCUS_RING)
+        out = []
+        for y in range(TILE):
+            for x in range(TILE):
+                p = px[x + y * TILE]
+                if p[3] and any(
+                        not (0 <= x + dx < TILE and 0 <= y + dy < TILE)
+                        or px[(x + dx) + (y + dy) * TILE][3] == 0
+                        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                    out.append(ring)
+                else:
+                    out.append(p)
+        return out
+    fail(f"chrome derivation: unknown op {op!r}")
+
+
+def run_import_chrome_mode(raw_root: Path | None = None) -> None:
+    """--import-chrome-pixellab (80-* §4.8, 2026-11-08): decode the two
+    vendored chrome tilesets (frame + button), green-key the lower
+    material to alpha, derive the six chrome families' singles
+    (panel/field from the frame plate; button/hover/pressed/focus from
+    the button plate), write them to assets/ui/chrome/, and record the
+    committed chrome{} ledger section (tileset ids + per-tile pixel ids
+    + derivations + output sha). Ship-as-drawn: no quantize, no color
+    cap — group 13 waives the authored-chrome audits for these ids via
+    this ledger. Rebuilds are byte-identical from the vendored bytes;
+    the API is never contacted."""
+    del raw_root  # the vendored trios live at CHROME_RAW_DIR (the pointer)
+    masters_by_source: dict[str, tuple[dict, dict]] = {}
+    tileset_ids: dict[str, str] = {}
+    tiles_doc: dict[str, dict] = {}
+    written = 0
+    out_dir = ROOT / "assets" / "ui" / "chrome"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for family, (source, parts) in CHROME_DERIVATIONS.items():
+        if source not in masters_by_source:
+            masters_by_source[source] = _chrome_load_masters(source)
+            tid_path = _chrome_find_tileset(source)
+            submit_p = tid_path.with_name(tid_path.stem + "_submit.json")
+            tileset_ids[source] = \
+                json.loads(submit_p.read_text()).get("tileset_id", "?") \
+                if submit_p.is_file() else tid_path.stem.rsplit("_", 1)[-1]
+        masters, pixel_ids = masters_by_source[source]
+        for part, (wang, op) in parts.items():
+            sid = f"{family}_{part}"
+            px = _chrome_derive(masters[wang], op)
+            out = out_dir / f"{sid}.png"
+            write_png(out, TILE, TILE, px)
+            tiles_doc[sid] = {
+                "family": family, "part": part, "from": source,
+                "wang": wang, "derivation": op,
+                "pixel_id": pixel_ids[wang],
+                "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+            }
+            written += 1
+    prev = _read_ledger("--import-chrome-pixellab")
+    _write_ledger(prev, "chrome", {
+        "chrome_generated_by": "build_ui_art --import-chrome-pixellab",
+        "chrome_rejected": [],
+        "chrome": {
+            "tilesets": {s: {"tileset_id": t}
+                         for s, t in sorted(tileset_ids.items())},
+            "tiles": tiles_doc,
+        },
+        "counts": {"chrome_ingested": written},
+    })
+    print(f"chrome ingest: {written} singles written to assets/ui/chrome "
+          f"({', '.join(f'{s}={t[:8]}…' for s, t in sorted(tileset_ids.items()))}); "
+          "ledger chrome{} updated")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Phase-10 UI art governor (docs/IMPLEMENT-Phase10.md decision 5/9, 80-* §4.8)")
     ap.add_argument("--check", action="store_true",
@@ -3536,14 +3839,28 @@ def main() -> None:
     ap.add_argument("--fx-legacy", action="store_true",
                     help="with --import-fx-pixellab: ingest the RETIRED "
                          "per-dir v3 waterline family instead of v5")
+    ap.add_argument("--import-chrome-pixellab", nargs="?", const="auto",
+                    metavar="RAW_ROOT",
+                    help="ingest the PixelLab chrome tilesets (80-* §4.8 "
+                         "2026-11-08): decode the vendored frame+button "
+                         "Wang sets, green-key the lower material to "
+                         "alpha, derive the six chrome families' singles "
+                         "(panel/field/button/hover/pressed/focus), "
+                         "write assets/ui/chrome/ + the committed chrome{} "
+                         "ledger; ship-as-drawn, byte-identical rebuilds "
+                         "(the vendored trios live at "
+                         "tools/assets/pixellab_raw/ — the pointer is the "
+                         "filename)")
     args = ap.parse_args()
     modes = [args.check, args.contact_sheet,
              args.import_icons, args.import_ships_north,
-             args.import_fx_pixellab, args.import_glyphs]
+             args.import_fx_pixellab, args.import_glyphs,
+             args.import_chrome_pixellab]
     if sum(1 for m in modes if m) > 1:
         fail("--check, --contact-sheet, --import-icons, "
-             "--import-ships-north, --import-fx-pixellab and "
-             "--import-glyphs are mutually exclusive modes")
+             "--import-ships-north, --import-fx-pixellab, "
+             "--import-glyphs and --import-chrome-pixellab are mutually "
+             "exclusive modes")
     if args.check:
         run_check()
         return
@@ -3577,6 +3894,11 @@ def main() -> None:
         if args.import_glyphs != "auto":
             root = Path(args.import_glyphs)
         run_import_glyphs_mode([root])
+        return
+    if args.import_chrome_pixellab:
+        run_import_chrome_mode(
+            None if args.import_chrome_pixellab == "auto"
+            else Path(args.import_chrome_pixellab))
         return
     m, report = build_into(ROOT, resolve_ingest_overrides(),
                            resolve_artifact_overrides())

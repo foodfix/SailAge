@@ -24,6 +24,7 @@ API:
   GET  /thumb/<kind>/<job>   draft | raw | snapped PNG (cache-busting ?v=)
   GET  /thumb/td/<l>/<deg>   top-down rotation previews (NEAREST)
   GET  /thumb/fx/<ship>/<kind>  wake previews: anim.gif | comp.png | shipped.png
+  GET  /thumb/<kind>/chrome_<family>.png  chrome strip/mock previews
 
 Launch:
   python3 tools/model_studio/server.py --port 8010 --repo /home/weidong/repo/SailAge
@@ -50,7 +51,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
-FAMILIES = ("topdown", "fx", "coast", "icons", "glyphs")
+FAMILIES = ("topdown", "fx", "coast", "chrome", "icons", "glyphs")
 # draft-file prefixes that are NEVER listed (the retired ship families —
 # 2026-11-07 user direction — and the hidden terrain texture chain)
 HIDDEN_PREFIXES = ("hull_", "sheet_", "terrain_", "px_")
@@ -429,6 +430,68 @@ class Studio:
             "thumbs": thumbs,
         }
 
+    def _chrome_entry(self, family, prompts, state, accepted) -> dict:
+        """One chrome tileset card (§4.8 2026-11-08): frame (parchment
+        panel plate) / button (chestnut leather plate), ONE card per
+        family. draft = the canonical vendored strip; raw = the pending
+        re-roll strip; snapped = the nine-patch mock preview (the pending
+        tiles when one is staged, else the canonical tiles). Prompt = the
+        free-text style clause appended to all three pinned descriptions;
+        seed = the tileset seed."""
+        job_id = chain.chrome_card_id(family)
+        defaults = chain.chrome_defaults(family)
+        pending = chain.chrome_pending_path(family)
+        tid = defaults["tileset_id"]
+        st = state.get(job_id, {})
+        trio = chain.chrome_canonical_trio(family)
+        thumbs = {}
+        canon_v = int(os.path.getmtime(trio[".json"]) * 1000) \
+            if trio and os.path.isfile(trio[".json"]) else None
+        if canon_v is not None:
+            thumbs["draft"] = {"v": canon_v}
+            if not pending:
+                thumbs["snapped"] = {"v": canon_v}
+        pending_id = None
+        if pending:
+            m = re.search(rf"tileset_chrome_{family}_([0-9a-f-]+)\.json$",
+                          os.path.basename(pending))
+            pending_id = m.group(1) if m else None
+            v = int(os.path.getmtime(pending) * 1000)
+            thumbs["raw"] = {"v": v}
+            thumbs["snapped"] = {"v": v}
+        return {
+            "id": job_id,
+            "family": "chrome",
+            "subject": f"{family} tileset",
+            "label": f"chrome {family} · {(tid or '?')[:8]} · seed "
+                     f"{defaults['seed']}",
+            "tileset_id": tid,
+            "pending": bool(pending),
+            "pending_tileset_id": pending_id,
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": prompts.get(job_id),
+            "original_prompt": None,
+            "original_prompt_source": "none (style clause on the pinned "
+                                     "CHROME_TILESETS wording)",
+            "custom_prompt": job_id in prompts,
+            "seed": st.get("seed", defaults["seed"]),
+            "canonical_seed": defaults["seed"],
+            "status": st.get("status", "re-rolled — pending accept"
+                             if pending else "canonical"),
+            "status_source": "studio" if st else "canonical",
+            "ingest": None,
+            "metrics": None,
+            "seconds": st.get("seconds"),
+            "error": st.get("error"),
+            "thumbs": thumbs,
+        }
+
     def thumb_candidates(self, kind: str, job_id: str):
         """Ordered file candidates for one thumb slot. Never 404 on a
         listed job's thumbs."""
@@ -525,6 +588,40 @@ class Studio:
         self._thumb_cache_put(("coast",) + key, data)
         return data
 
+    def chrome_thumb(self, kind: str, family: str) -> bytes | None:
+        """The chrome card thumbnails: draft = the canonical vendored
+        strip, raw = the pending re-roll strip, snapped = the nine-patch
+        mock preview (the pending tiles when one is staged, else the
+        canonical tiles). Cached by source+mtime like the other thumbs."""
+        trio = chain.chrome_canonical_trio(family)
+        pending = chain.chrome_pending_path(family)
+        canon = trio.get(".json") if trio else None
+        if kind == "draft":
+            source = canon
+        elif kind == "raw":
+            source = pending
+        else:  # snapped — the mock: pending tiles when staged, else canon
+            source = pending if pending else canon
+        if not source or not os.path.isfile(source):
+            return None
+        key = ("chrome", family, kind, source,
+               int(os.path.getmtime(source) * 1000))
+        hit = self._thumb_cache_get(key)
+        if hit is not None:
+            return hit
+        with open(source, encoding="utf-8") as fh:
+            result = json.load(fh)
+        try:
+            if kind == "snapped":
+                data = chain.chrome_mock_png(result, family)
+            else:
+                data = chain.chrome_strip_png(result)
+        except Exception as exc:  # noqa: BLE001 — never kill a request
+            log(f"chrome thumb failed for {family}/{kind}: {exc}")
+            return None
+        self._thumb_cache_put(key, data)
+        return data
+
     def fx_thumb(self, ship: str, kind: str):
         """(bytes, content_type | None) — the wake card's previews:
         anim = the staged re-roll's API gif; comp = the staged pack's
@@ -615,6 +712,15 @@ class Studio:
         except Exception as exc:  # noqa: BLE001 — degrade, never die
             warnings.append(f"coast: {type(exc).__name__}: {exc}")
             log(f"registry SKIP coast: {warnings[-1]}")
+        # The chrome tileset cards (§4.8 2026-11-08 — one per family):
+        # frame (parchment panel plate) + button (leather button plate)
+        for fam in chain.CHROME_FAMILIES:
+            try:
+                jobs.append(self._chrome_entry(fam, prompts, state,
+                                               accepted))
+            except Exception as exc:  # noqa: BLE001 — degrade, never die
+                warnings.append(f"chrome_{fam}: {type(exc).__name__}: {exc}")
+                log(f"registry SKIP chrome_{fam}: {warnings[-1]}")
         # The prompt-only icon family (§4.8 2026-11-08): one card per id
         # (the doc-first guard list enumerates them — no drafts).
         for iid in chain.icon_ids():
@@ -749,6 +855,53 @@ class Studio:
             rec.update({"status": "error", "error": f"{type(exc).__name__}: "
                                                       f"{exc}"})
             log(f"coast re-roll FAILED: {rec['error']}")
+        with self.lock:
+            st = self.state()
+            st.setdefault("jobs", {})[job_id] = rec
+            self.save_state(st)
+            self.current = None
+
+    def _generate_chrome(self, order: dict) -> None:
+        """The chrome tileset re-roll (§4.8 2026-11-08): one
+        create-tileset call per family; the prompt is the free-text style
+        clause appended to all three pinned descriptions; the result
+        stays in the studio cache until Accept stages the trio into the
+        vendored store + re-runs the ingest."""
+        family = order["job"][len(chain.CHROME_CARD_PREFIX):]
+        job_id = chain.chrome_card_id(family)
+        style = order.get("prompt")
+        seed = order["seed"] if order.get("seed") is not None \
+            else chain.chrome_defaults(family)["seed"]
+        with self.lock:
+            self.current = {"type": "generate", "job": job_id,
+                            "prompt": style, "seed": seed,
+                            "stage": "posting",
+                            "started_epoch": time.time()}
+        log(f"generating chrome {family} tileset seed={seed} "
+            f"style={style!r}")
+        rec = {"prompt": style, "seed": seed, "status": "running",
+               "started_at": time.strftime("%H:%M:%S")}
+        try:
+            def stage(name: str) -> None:
+                with self.lock:
+                    if self.current and self.current["job"] == job_id:
+                        self.current["stage"] = name
+            started = time.time()
+            out = chain.chrome_reroll(family, seed=seed, style=style,
+                                      poll_status=stage)
+            rec.update({
+                "status": "done",
+                "tileset_id": out["tileset_id"],
+                "studio_path": out["studio_path"],
+                "seconds": round(time.time() - started, 1),
+                "finished_at": time.strftime("%H:%M:%S"),
+            })
+            log(f"chrome {family} re-roll done: tileset "
+                f"{out['tileset_id']} ({rec['seconds']}s)")
+        except Exception as exc:  # noqa: BLE001 — named failure in state
+            rec.update({"status": "error", "error": f"{type(exc).__name__}: "
+                                                      f"{exc}"})
+            log(f"chrome {family} re-roll FAILED: {rec['error']}")
         with self.lock:
             st = self.state()
             st.setdefault("jobs", {})[job_id] = rec
@@ -1101,6 +1254,11 @@ class Studio:
             if job_id == chain.COAST_CARD_ID:
                 self._generate_coast(order)
                 return
+            if job_id.startswith(chain.CHROME_CARD_PREFIX) \
+                    and job_id[len(chain.CHROME_CARD_PREFIX):] \
+                    in chain.CHROME_FAMILIES:
+                self._generate_chrome(order)
+                return
             prompt = self.prompts().get(job_id)
             if not prompt:
                 st = self.state().get("jobs", {}).get(job_id) or {}
@@ -1316,11 +1474,28 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/thumb/(draft|raw|snapped)/([a-z0-9_]+)\.png$",
                      path)
         mc = re.match(r"^/thumb/(draft|raw|snapped)/coast\.png$", path)
+        mch = re.match(r"^/thumb/(draft|raw|snapped)/chrome_"
+                       r"(frame|button)\.png$", path)
         if mc:
             data = self.studio.coast_thumb(mc.group(1))
             if data is None:
                 self._json(404, {"error": f"no coast thumb for "
                                             f"{mc.group(1)}"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+            return
+        if mch:
+            data = self.studio.chrome_thumb(mch.group(1), mch.group(2))
+            if data is None:
+                self._json(404, {"error": f"no chrome thumb for "
+                                          f"{mch.group(2)} "
+                                          f"({mch.group(1)})"})
                 return
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
@@ -1368,6 +1543,10 @@ class Handler(BaseHTTPRequestHandler):
     def _job_ok(self, job_id: str) -> bool:
         if job_id == chain.COAST_CARD_ID:
             return True
+        if job_id.startswith(chain.CHROME_CARD_PREFIX) \
+                and JOB_RE.match(job_id):
+            return job_id[len(chain.CHROME_CARD_PREFIX):] \
+                in chain.CHROME_FAMILIES
         if job_id.startswith(HIDDEN_PREFIXES):
             return False  # the retired ship families + hidden terrain
         if job_id.startswith("fx_") and JOB_RE.match(job_id):
@@ -1443,6 +1622,109 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "job": chain.COAST_CARD_ID,
                          "tileset_id": tid})
 
+    def _accept_chrome(self, family: str) -> None:
+        """Accept the pending chrome re-roll (§4.8 2026-11-08): copy the
+        staged trio into tools/assets/pixellab_raw/ under its canonical
+        name, DELETE the previous canonical trio for the family (the
+        ingest requires exactly ONE tileset_chrome_<family>_*.json —
+        _chrome_find_tileset), re-run build_ui_art
+        --import-chrome-pixellab (the 18 derived singles + chrome{}
+        ledger regenerate from the new raw), and gate on the fresh
+        chrome{} section listing the new tileset id. Git add/commit
+        stays with the user — this is a repo change, not a cache
+        write."""
+        job_id = chain.chrome_card_id(family)
+        pending = chain.chrome_pending_path(family)
+        if not pending:
+            self._json(409, {"error": f"no pending chrome {family} "
+                                      "re-roll to accept"})
+            return
+        m = re.search(rf"tileset_chrome_{family}_([0-9a-f-]+)\.json$",
+                      os.path.basename(pending))
+        if not m:
+            self._json(500, {"error": "staged trio has a malformed name"})
+            return
+        tid = m.group(1)
+        base = pending[:-len(".json")]
+        staged = {"": pending, "_request": f"{base}_request.json",
+                  "_submit": f"{base}_submit.json"}
+        for path in staged.values():
+            if not os.path.isfile(path):
+                self._json(500, {"error": f"staged trio file missing: "
+                                          f"{os.path.basename(path)}"})
+                return
+        raw_dir = chain.chrome_raw_dir()
+        try:
+            # stage-swap: the new trio lands first, then every older trio
+            # file for the family is deleted (copy-first keeps exactly one
+            # trio in place for the builder). The tid is PARSED out of each
+            # name — a substring test would eat the new trio's own
+            # _request/_submit siblings (they carry "_<tid>_request.json",
+            # which never contains "_<tid>.json").
+            prefix = f"tileset_chrome_{family}_"
+            for ext, path in staged.items():
+                with open(path, "rb") as fh:
+                    chain.atomic_write(
+                        os.path.join(raw_dir, f"{prefix}{tid}{ext}.json"),
+                        fh.read())
+            for name in sorted(os.listdir(raw_dir)):
+                if not name.startswith(prefix) or not name.endswith(".json"):
+                    continue
+                stem = name[len(prefix):-len(".json")]
+                for suffix in ("_request", "_submit"):
+                    if stem.endswith(suffix):
+                        stem = stem[:-len(suffix)]
+                        break
+                if stem != tid:
+                    os.remove(os.path.join(raw_dir, name))
+        except Exception as exc:  # noqa: BLE001 — surface in the UI
+            self._json(500, {"error": f"chrome stage-swap failed: "
+                                      f"{type(exc).__name__}: {exc}"})
+            return
+        proc = subprocess.run(
+            [sys.executable,
+             os.path.join(self.studio.repo, "tools", "build_ui_art.py"),
+             "--import-chrome-pixellab"],
+            capture_output=True, text=True, timeout=300,
+            cwd=self.studio.repo)
+        tail = ((proc.stdout or "") + "\n" + (proc.stderr or "")
+                ).strip()[-700:]
+        if proc.returncode != 0:
+            self._json(500, {"error": "build_ui_art "
+                                      "--import-chrome-pixellab FAILED",
+                             "stderr": tail[-800:]})
+            return
+        # gate: the fresh chrome{} ledger section lists the new tileset id
+        ledger = self.studio._read_json(
+            os.path.join(self.studio.repo, "tools", "ui_art",
+                         "ingest_ledger.json"), {})
+        rec = ((ledger.get("chrome") or {}).get("tilesets") or {}) \
+            .get(family) or {}
+        if rec.get("tileset_id") != tid:
+            self._json(500, {"error": f"chrome gate failed: ledger lists "
+                                      f"{family}="
+                                      f"{rec.get('tileset_id')!r}, "
+                                      f"expected {tid!r}",
+                             "log_tail": tail})
+            return
+        with self.studio.lock:
+            st = self.studio.state()
+            srec = st.setdefault("jobs", {}).setdefault(job_id, {})
+            srec["status"] = "accepted"
+            srec["accepted_tileset_id"] = tid
+            self.studio.save_state(st)
+            acc = self.studio.accepted()
+            acc[job_id] = {
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "source": "studio",
+                "seed": srec.get("seed"),
+                "tileset_id": tid,
+            }
+            self.studio.save_accepted(acc)
+        log(f"chrome {family} tileset accepted: {tid} (ingest re-landed "
+            f"the chrome singles)")
+        self._json(200, {"ok": True, "job": job_id, "tileset_id": tid})
+
     def _reroll(self, data: dict) -> None:
         job_id = data.get("job", "")
         if not self._job_ok(job_id):
@@ -1479,6 +1761,11 @@ class Handler(BaseHTTPRequestHandler):
         job_id = data.get("job", "")
         if job_id == chain.COAST_CARD_ID:
             self._accept_coast()
+            return
+        if job_id.startswith(chain.CHROME_CARD_PREFIX) \
+                and job_id[len(chain.CHROME_CARD_PREFIX):] \
+                in chain.CHROME_FAMILIES:
+            self._accept_chrome(job_id[len(chain.CHROME_CARD_PREFIX):])
             return
         if not self._job_ok(job_id):
             self._json(404, {"error": f"unknown job {job_id!r}"})

@@ -49,6 +49,41 @@ studio cache (gitignored) until **Accept + rebuild**: the vendored trio
 the user). No depth tileset (retired — pro corner-API crash history),
 no per-tile cards; the legacy `terrain_*` texture jobs are HIDDEN entirely (2026-11-06 user direction — terrain re-rolls live on the coast tileset card; the retired texture chain is not re-rollable or visible).
 
+## Chrome tilesets family (pixellab — the §4.8 2026-11-08 path)
+
+TWO cards, one per family (`chrome_frame` = the parchment panel plate,
+`chrome_button` = the chestnut leather button plate — the pinned
+descriptions/seeds live in `tools/pixellab_pass.py CHROME_TILESETS` /
+80-* §4.8, seeds 20261108 / 20261109). ONE `/v2/create-tileset` pro
+tileset per re-roll via `run_chrome_tileset` **in-process**; defaults are
+read from the vendored canonical trio (tileset id + seed from the
+`_submit.json`, the three descriptions from the `_request.json`;
+fallback = the pinned spec when the trio is missing). The prompt box
+edits ONLY the free-text **style clause appended to all three
+descriptions** (the coast convention — descriptions are pinned, never
+edited); seed user-settable (blank → the pinned default seed). Re-rolls
+STAGE the fresh vendored trio into the studio cache
+(`model_raw/studio/chrome/` — the coast pattern: a discarded or failed
+re-roll never leaves a second trio in the canonical raw dir). The card
+shows the shipped vendored strip (draft), the pending re-roll strip
+(raw), and the **nine-patch mock preview** (snapped): the 16
+keyed-unaware wang tiles green-keyed and assembled through the §4.8
+mapping (upper = material; TL = wang_1, T = wang_3, fill = wang_15, the
+other cells dihedral mirrors/rotations — exactly `build_ui_art`'s
+`FRAME_OPS` relations) into the 48×48 sheet, rendered as the sheet
+itself plus a 160×64 panel rect (corners + tiled edges/fill) — the
+button family adds a 96×28 button rect — on the muted review backdrop,
+NEAREST-upscaled 3×. **Accept + rebuild**: the staged trio is copied
+into `tools/assets/pixellab_raw/` under its canonical
+`tileset_chrome_<family>_<id>{,_request,_submit}.json` names, the
+previous canonical trio for the family is deleted (the ingest requires
+exactly ONE `tileset_chrome_<family>_*.json` — `_chrome_find_tileset`),
+and `build_ui_art --import-chrome-pixellab` re-lands the 18 derived
+singles (panel/field from frame; button/hover/pressed/focus from
+button) + the `chrome{}` ledger. The gate is the fresh `chrome{}`
+section of `tools/ui_art/ingest_ledger.json` listing the new tileset id
+for the family. Git add/commit stays with the user.
+
 ## Ship family (top-down north tokens — the §4.8 2026-11-07 path)
 
 One card per fleet ship, keyed by label (`td_<label>`; the 16 accepted

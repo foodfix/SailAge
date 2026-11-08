@@ -78,10 +78,10 @@ static func build_theme(use_textures: bool = true) -> Theme:
 	_setup_button(theme, sheets)
 	_setup_scrollbars(theme)
 	_setup_panels(theme, sheets)
-	_setup_fields(theme, sheets)
+	_setup_fields(theme, sheets, use_textures)
 	_setup_sliders(theme)
 	_setup_tooltips(theme)
-	_setup_labels(theme)
+	_setup_labels(theme, use_textures, sheets)
 	return theme
 
 
@@ -107,20 +107,25 @@ static func texture_mode() -> bool:
 
 
 ## The chrome fill for plain ColorRect surfaces (§4.8 band vocabulary):
-## the walnut `PANEL_WOOD` in texture mode, the pinned `PANEL_BG` navy in
-## the reduced-graphics fallback (flat-mode pins intact).
+## the parchment `PARCH` in texture mode (the 2026-11-08 chrome amendment —
+## the PixelLab plates are parchment), the pinned `PANEL_BG` navy in the
+## reduced-graphics fallback (flat-mode pins intact).
 static func surface_fill() -> Color:
-	return PaletteLib.PANEL_WOOD if texture_mode() else PaletteLib.PANEL_BG
+	return PaletteLib.PARCH if texture_mode() else PaletteLib.PANEL_BG
 
 
 # --- Nine-patch sheet variants (§4.9 layering rule) ---------------------------
 
 ## 48x48 sheets assembled by the governor from the 16x16 tiles, 16px margins
-## (80-* §4.8.8); the stylebox stretches the center and repeats the edges.
+## (80-* §4.8.8); the stylebox tiles the middle regions (§4.9, the 2026-11-08
+## tile-mode amendment — the prompted parchment/leather texture repeats
+## instead of smearing) and the edges stay margin-fixed.
 const SHEET_MARGIN := 16
 const SHEET_PATHS := {
 	"panel": "res://assets/ui/chrome/ninepatch_panel.png",
 	"button": "res://assets/ui/chrome/ninepatch_button.png",
+	"button_hover": "res://assets/ui/chrome/ninepatch_button_hover.png",
+	"button_pressed": "res://assets/ui/chrome/ninepatch_button_pressed.png",
 	"button_focus": "res://assets/ui/chrome/ninepatch_button_focus.png",
 	"field": "res://assets/ui/chrome/ninepatch_field.png",
 }
@@ -153,6 +158,12 @@ static func _texture_box(tex: Texture2D, pad: int = 0,
 	sb.texture_margin_top = SHEET_MARGIN
 	sb.texture_margin_right = SHEET_MARGIN
 	sb.texture_margin_bottom = SHEET_MARGIN
+	# §4.9 tile-mode amendment (2026-11-08): the middle regions TILE so the
+	# prompted parchment/leather texture repeats instead of smearing (the
+	# wang fill tile self-tiles by construction; the authored-flat sheets
+	# tile identically).
+	sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+	sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	sb.set_content_margin_all(pad)
 	sb.modulate_color = Color(factor, factor, factor, 1.0)
 	return sb
@@ -195,14 +206,18 @@ static func _focus_ring(accent: Color) -> StyleBoxFlat:
 
 
 static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
-	# §4.9 Button row + state matrix, with the amended 2026-11-04 texture-mode
-	# state mapping: normal = button sheet (unmodulated); hover = focus sheet
-	# (the ACCENT ring, ×1.0); momentary pressed = button sheet ×PRESS_MODULATE;
-	# disabled = button sheet ×DISABLED_MODULATE (+ the PANEL_LINE disabled
-	# text); keyboard focus = focus sheet. Every state box keeps the CONTENT_PAD
-	# margins, so a state flip can never change a button's measured size.
-	# The variations keep their flat boxes — the sheet family has no
-	# Danger/Quiet variants, and their identity IS the colored border.
+	# §4.9 Button row + state matrix, with the amended 2026-11-08
+	# PixelLab-chrome mapping: normal = button sheet; hover = button_hover
+	# sheet (the baked glow); momentary pressed = button_pressed sheet (the
+	# baked 180°-rim sunken plate — modulate-free); hover∩pressed =
+	# button_pressed; disabled = button sheet ×DISABLED_MODULATE (+ the
+	# PANEL_LINE disabled text); keyboard focus = button_focus sheet. A
+	# missing hover/pressed sheet falls back to the 2026-11-04 ladder
+	# (hover = focus sheet; pressed = button ×PRESS_MODULATE), which remains
+	# the degraded mode. Every state box keeps the CONTENT_PAD margins, so a
+	# state flip can never change a button's measured size. The variations
+	# keep their flat boxes — the sheet family has no Danger/Quiet variants,
+	# and their identity IS the colored border.
 	var normal_box: StyleBox = null
 	var hover_box: StyleBox = null
 	var pressed_box: StyleBox = null
@@ -210,17 +225,24 @@ static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
 	var hover_pressed_box: StyleBox = null
 	if sheets.has("button"):
 		normal_box = _texture_box(sheets["button"], CONTENT_PAD)
-		pressed_box = _texture_box(sheets["button"], CONTENT_PAD,
-			PRESS_MODULATE)
 		disabled_box = _texture_box(sheets["button"], CONTENT_PAD,
 			DISABLED_MODULATE)
+		if sheets.has("button_pressed"):
+			pressed_box = _texture_box(sheets["button_pressed"],
+				CONTENT_PAD)
+		else:
+			# 2026-11-04 degraded ladder: the dimmed plain sheet.
+			pressed_box = _texture_box(sheets["button"], CONTENT_PAD,
+				PRESS_MODULATE)
 		# Pressed under the mouse draws the pressed cell too (the matrix has
 		# no separate hover∩pressed cell).
 		hover_pressed_box = pressed_box
-		if sheets.has("button_focus"):
+		if sheets.has("button_hover"):
+			hover_box = _texture_box(sheets["button_hover"], CONTENT_PAD)
+		elif sheets.has("button_focus"):
 			hover_box = _texture_box(sheets["button_focus"], CONTENT_PAD)
 		else:
-			# Focus-sheet absent ⇒ hover keeps the plain sheet (the W3
+			# Both absent ⇒ hover keeps the plain sheet (the W3
 			# fallback rule: absent id ⇒ flat/nearest fallback, no crash).
 			hover_box = normal_box
 	else:
@@ -353,9 +375,17 @@ static func _setup_panels(theme: Theme, sheets: Dictionary = {}) -> void:
 	theme.set_stylebox("panel", "PanelContainer", panel_box)
 
 
+## The §4.9 ink seam (2026-11-08 chrome amendment): true when the texture
+## theme is actually shipping sheets — panel-surface text rides `INK_WARM`
+## (parchment contrast) instead of the flat-mode cream pins.
+static func _ink_mode(use_textures: bool, sheets: Dictionary) -> bool:
+	return use_textures and sheets.has("panel")
+
+
 # --- LineEdit / TextEdit -------------------------------------------------------
 
-static func _setup_fields(theme: Theme, sheets: Dictionary = {}) -> void:
+static func _setup_fields(theme: Theme, sheets: Dictionary = {},
+		use_textures: bool = true) -> void:
 	# §4.9 LineEdit/TextEdit row: bg PANEL_BG, border PANEL_LINE (the 1px
 	# inset look), focus border ACCENT; text + caret TEXT. The W3 texture
 	# variant swaps the normal box to ninepatch_field (focus/read_only keep
@@ -378,8 +408,12 @@ static func _setup_fields(theme: Theme, sheets: Dictionary = {}) -> void:
 		var read_only := _flat(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE, FIELD_BORDER_W)
 		read_only.set_content_margin_all(FIELD_PAD)
 		theme.set_stylebox("read_only", type_name, read_only)
-		theme.set_color("font_color", type_name, PaletteLib.TEXT)
-		theme.set_color("caret_color", type_name, PaletteLib.TEXT)
+		# §4.9 ink seam (2026-11-08): the field sheet is inset parchment in
+		# texture mode — ink text; flat mode keeps cream on navy.
+		var field_ink: Color = (PaletteLib.INK_WARM
+				if _ink_mode(use_textures, sheets) else PaletteLib.TEXT)
+		theme.set_color("font_color", type_name, field_ink)
+		theme.set_color("caret_color", type_name, field_ink)
 	# The uneditable-text item name differs between the two classes (verified
 	# against this Godot release).
 	theme.set_color("font_uneditable_color", "LineEdit", PaletteLib.PANEL_LINE)
@@ -417,21 +451,33 @@ static func _setup_tooltips(theme: Theme) -> void:
 
 # --- Label (+ Dim variation) ---------------------------------------------------
 
-static func _setup_labels(theme: Theme) -> void:
+static func _setup_labels(theme: Theme, use_textures: bool = true,
+		sheets: Dictionary = {}) -> void:
 	# §4.9 Label row: TEXT, plus the `Dim` variation (PANEL_LINE) for
-	# secondary row text.
-	theme.set_color("font_color", "Label", PaletteLib.TEXT)
+	# secondary row text. §4.9 ink seam (2026-11-08 chrome amendment): in
+	# texture mode the panels are parchment — Label/Dim ride the warm ink
+	# (`Dim` = ink at 0.75 alpha) and `Accent`/`Warn` swap to `ACCENT_LO`
+	# for parchment contrast; `Good`/`Bad` keep their semantic hexes (both
+	# read on parchment); flat mode keeps the cream pins.
+	var ink: bool = _ink_mode(use_textures, sheets)
+	var label_ink: Color = PaletteLib.INK_WARM if ink else PaletteLib.TEXT
+	var dim_ink: Color = Color(PaletteLib.INK_WARM, 0.75) if ink \
+			else PaletteLib.PANEL_LINE
+	var accent_ink: Color = PaletteLib.ACCENT_LO if ink \
+			else PaletteLib.ACCENT
+	theme.set_color("font_color", "Label", label_ink)
 	theme.set_type_variation("Dim", "Label")
-	theme.set_color("font_color", "Dim", PaletteLib.PANEL_LINE)
+	theme.set_color("font_color", "Dim", dim_ink)
 	# Semantic Label variations (Phase-10 W4 master adjudication, ledgered):
 	# the doc-pinned tier/accent TEXT colors (80-* §4.8.1 status lines, the
 	# §4.5/§4.6.1 tier-colored readouts, market/§4.7 accent marks) ride
 	# theme_type_variation assignments — a plain property, gate-compliant
 	# (no add_theme_* override). WARN == ACCENT by hex (palette).
 	theme.set_type_variation("Accent", "Label")
-	theme.set_color("font_color", "Accent", PaletteLib.ACCENT)
+	theme.set_color("font_color", "Accent", accent_ink)
 	theme.set_type_variation("Warn", "Label")
-	theme.set_color("font_color", "Warn", PaletteLib.WARN)
+	theme.set_color("font_color", "Warn",
+			PaletteLib.ACCENT_LO if ink else PaletteLib.WARN)
 	theme.set_type_variation("Good", "Label")
 	theme.set_color("font_color", "Good", PaletteLib.GOOD)
 	theme.set_type_variation("Bad", "Label")
@@ -445,4 +491,4 @@ static func _setup_labels(theme: Theme) -> void:
 	theme.set_color("font_color", "CardStatusGood", PaletteLib.GOOD)
 	theme.set_type_variation("CardStatusDim", "Label")
 	theme.set_font_size("font_size", "CardStatusDim", 12)
-	theme.set_color("font_color", "CardStatusDim", PaletteLib.PANEL_LINE)
+	theme.set_color("font_color", "CardStatusDim", dim_ink)

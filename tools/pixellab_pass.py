@@ -31,6 +31,15 @@ heritage); raws land gitignored under model_raw/pixellab_glyphs/<id>/.
   python3 tools/pixellab_pass.py --glyphs snap [id ...]
   python3 tools/pixellab_pass.py --glyphs status
 
+Chrome tileset mode (2026-11-08, 80-* §4.8 parchment amendment): two
+pro-mode Wang corner tilesets (16px) — `frame` (parchment panel plate)
+and `button` (chestnut leather plate); the lower material is the
+authoring-only green chroma key. Vendored trios land in
+tools/assets/pixellab_raw/; ingest = build_ui_art
+--import-chrome-pixellab.
+  python3 tools/pixellab_pass.py --chrome run [frame|button]
+  python3 tools/pixellab_pass.py --chrome status
+
 Legacy Pro-Flash 8-dir hull mode (RETIRED by the 2026-11-07 top-down
 amendment — kept only for history/re-download of the old raws):
   python3 tools/pixellab_pass.py run [ship ...]
@@ -1324,6 +1333,173 @@ def run_coast_tileset(seed: int | None = None, lower: str | None = None,
             "result": result}
 
 
+# ---- chrome tileset mode (80-* §4.8, 2026-11-08 parchment amendment) ----
+# Two pro-mode Wang corner tilesets: `frame` (the parchment panel plate)
+# and `button` (the dark chestnut leather plate). The lower material is
+# the authoring-only green chroma key (keyed to alpha at import — the
+# hull-pennant precedent: an intermediate, never ships). Envelope pinned
+# verbatim in 80-* §4.8; descriptions are free-text overridable (the
+# studio appends a style clause to all three), everything else stays
+# pinned. Vendored trios land in tools/assets/pixellab_raw/ (the coast
+# naming); the ingest is build_ui_art --import-chrome-pixellab.
+
+CHROME_RAW_DIR = os.path.join(REPO, "tools", "assets", "pixellab_raw")
+
+CHROME_SHARED_REQUEST = {
+    "mode": "pro",
+    "tile_size": {"width": 16, "height": 16},
+    "view": "high top-down",
+    "transition_size": 0.25,
+    "roundness": 0,
+    "raggedness": 0,
+    "boundary_amplitude": 0,
+    "step_slope": 0,
+    "detail": "medium detail",
+    "shading": "basic shading",
+}
+
+CHROME_TILESETS: dict[str, dict] = {
+    "frame": {
+        "upper_description":
+            "raised rectangular parchment panel plate for a 16-bit "
+            "strategy game menu: aged warm cream-tan paper face with "
+            "sparse subtle fiber grain and faint faded blotches, framed "
+            "by a carved warm brown wood rim with a thin inlaid brass "
+            "line just inside it, small brass square rosette at each "
+            "inner corner, light from top-left: the top-left bevel slope "
+            "lit warm, the bottom-right slope in deep shadow, retro "
+            "16-bit UI in the style of classic 1990s naval adventure "
+            "games like Uncharted Waters 2 / New Horizons, crisp "
+            "deliberate pixels, flat color fills, no text, no icons",
+        "lower_description":
+            "flat solid bright green chroma-key color, one uniform "
+            "green, no texture, no shading, no dithering",
+        "transition_description":
+            "low raised wood rim ending in a crisp straight edge with "
+            "square corners and a 1px dark outline at the plate "
+            "silhouette, Uncharted Waters 2 beveled parchment panel "
+            "edge",
+        "seed": 20261108,
+    },
+    "button": {
+        "upper_description":
+            "small raised button plate of dark chestnut-brown polished "
+            "leather for a 16-bit strategy game menu: smooth warm brown "
+            "face with a faint stitched groove just inside the edge, "
+            "bright crisp bevel lit from the top-left, dark undercut on "
+            "the bottom-right, thin gold rim line around the edge, "
+            "retro 16-bit UI button in the style of classic 1990s naval "
+            "adventure games like Uncharted Waters 2 / New Horizons, "
+            "crisp deliberate pixels, flat color fills, light from "
+            "top-left, no text",
+        "lower_description":
+            "flat solid bright green chroma-key color, one uniform "
+            "green, no texture, no shading, no dithering",
+        "transition_description":
+            "bright raised leather edge with square corners and a 1px "
+            "dark outline at the silhouette, gold rim light on top, "
+            "Uncharted Waters 2 button edge",
+        "seed": 20261109,
+    },
+}
+
+
+def run_chrome_tileset(family: str, seed: int | None = None,
+                       style: str | None = None,
+                       poll_status=None) -> dict:
+    """One /create-tileset generation for a chrome family + vendored trio.
+    The studio (tools/model_studio) calls this in-process (seed/style
+    overridable; `style` is appended verbatim to all three descriptions,
+    the coast convention). Vendored files:
+    tools/assets/pixellab_raw/tileset_chrome_{family}_{tileset_id}
+    {,_request,_submit}.json."""
+    if family not in CHROME_TILESETS:
+        raise ValueError(f"chrome family {family!r} not in "
+                         f"{sorted(CHROME_TILESETS)}")
+    spec = CHROME_TILESETS[family]
+    payload = dict(CHROME_SHARED_REQUEST)
+    for key in ("lower_description", "upper_description",
+                "transition_description"):
+        text = spec[key]
+        if style:
+            text = f"{text}, {style}"
+        payload[key] = text
+    payload["seed"] = spec["seed"] if seed is None else int(seed)
+    print(f"[pixellab chrome {family}] POST /create-tileset ...",
+          flush=True)
+    created = _post("/create-tileset", payload)
+    job_id, tileset_id = (created["background_job_id"],
+                          created["tileset_id"])
+    print(f"    job={job_id} tileset={tileset_id}", flush=True)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        raise RuntimeError(f"chrome {family}: job {job_id} status="
+                           f"{job.get('status')!r} "
+                           f"(last: {json.dumps(job)[:300]})")
+
+    result = _get(f"/tilesets/{tileset_id}")
+    tiles = result.get("tileset", {}).get("tiles", [])
+    print(f"    tileset {tileset_id}: {len(tiles)} tiles", flush=True)
+
+    os.makedirs(CHROME_RAW_DIR, exist_ok=True)
+    base = os.path.join(CHROME_RAW_DIR, f"tileset_chrome_{family}_{tileset_id}")
+    with open(f"{base}.json", "w", encoding="utf-8") as fh:
+        json.dump(result, fh, indent=1, ensure_ascii=False)
+    with open(f"{base}_request.json", "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=1, ensure_ascii=False)
+    with open(f"{base}_submit.json", "w", encoding="utf-8") as fh:
+        json.dump({"tileset_id": tileset_id, "background_job_id": job_id,
+                   "seed": payload["seed"], "status": job.get("status")},
+                  fh, indent=1, ensure_ascii=False)
+    print(f"    vendored -> {base}.json (+_request/_submit)", flush=True)
+    return {"family": family, "tileset_id": tileset_id, "job_id": job_id,
+            "seed": payload["seed"], "payload": payload,
+            "result": result}
+
+
+def chrome_status() -> None:
+    """List the vendored chrome trios (family, tileset id, seed, tiles)."""
+    found = 0
+    if os.path.isdir(CHROME_RAW_DIR):
+        for name in sorted(os.listdir(CHROME_RAW_DIR)):
+            if not (name.startswith("tileset_chrome_")
+                    and name.endswith(".json")
+                    and not name.endswith(("_request.json",
+                                           "_submit.json"))):
+                continue
+            base = name[:-len(".json")]
+            submit_p = os.path.join(CHROME_RAW_DIR, f"{base}_submit.json")
+            try:
+                with open(submit_p, encoding="utf-8") as fh:
+                    sub = json.load(fh)
+            except (OSError, ValueError):
+                sub = {}
+            try:
+                with open(os.path.join(CHROME_RAW_DIR, name),
+                          encoding="utf-8") as fh:
+                    n = len(json.load(fh).get("tileset", {}).get("tiles", []))
+            except (OSError, ValueError):
+                n = "?"
+            family = base[len("tileset_chrome_"):].rsplit("_", 1)[0]
+            print(f"  {family:6s} tileset={sub.get('tileset_id', '?')[:12]}… "
+                  f"seed={sub.get('seed', '?')} tiles={n}")
+            found += 1
+    print(f"{found} vendored chrome tileset(s)")
+
+
 def run_ship(ship: str, label: str | None = None, description: str | None = None,
              seed: int | None = None, poll_status=None) -> dict:
     """One create-object-pro-flash generation + raw download. The studio
@@ -1566,8 +1742,17 @@ if __name__ == "__main__":
     glyphs = bool(args) and args[0] == "--glyphs"
     if glyphs:
         args = args[1:]
+    chrome = bool(args) and args[0] == "--chrome"
+    if chrome:
+        args = args[1:]
     cmd = args[0] if args else "status"
-    if glyphs:
+    if chrome:
+        if cmd == "run":
+            for family in (args[1:] or sorted(CHROME_TILESETS)):
+                run_chrome_tileset(family, seed=seed_override)
+        else:
+            chrome_status()
+    elif glyphs:
         if cmd == "run":
             run_glyph_fleet(args[1:] or _glyphs(), seed=seed_override)
         elif cmd == "snap":

@@ -371,43 +371,21 @@ func _test_texture_mode() -> void:
 		_texture_sheet_pixels(tex, sheet_id, specs[sheet_id])
 
 
-## Per-sheet anchor spec mirroring the governor's SKIN_PINS
-## (tools/build_ui_art.py §4.8 amended): `outline` is the hex the frame's
-## outermost px carries on all four sides, `bevel` the px just inside it,
-## `fill` the sheet center, `gold` the per-sheet trim anchors [x, y, hex,
-## label].
+## Per-sheet contract for the PixelLab chrome (§4.8 amended 2026-11-08):
+## ship-as-drawn — the model's hexes are pinned by the chrome{} ledger
+## (group 13 provenance), so the suite pins the KEYED-PLATE ALPHA GEOMETRY
+## (the load-bearing orientation/aspect traps), not authored colors:
+## `fill_opaque` (the plate interior never leaks the key), `rim_clear`
+## (each ring cell carries its keyed transparent outside on the OUTER
+## half), `corners_clear` (the silhouette clears the sheet corners).
 func _sheet_specs() -> Dictionary:
 	return {
-		"panel": {
-			"outline": PaletteLib.PANEL_WOOD_LO,
-			"bevel": PaletteLib.PANEL_WOOD_HI,
-			"fill": PaletteLib.PANEL_WOOD,
-			"gold": [
-				[24, 3, PaletteLib.ACCENT, "gold inner line (inset 3px)"],
-				[3, 3, PaletteLib.ACCENT_HI, "brass rosette center"],
-				[2, 2, PaletteLib.ACCENT_LO, "brass rosette base"],
-			],
-		},
-		"button": {
-			"outline": PaletteLib.PANEL_WOOD_HI,
-			"bevel": PaletteLib.PANEL_WOOD,
-			"fill": PaletteLib.PANEL_WOOD,
-			"gold": [],
-		},
-		"button_focus": {
-			"outline": PaletteLib.ACCENT,
-			"bevel": PaletteLib.PANEL_WOOD,
-			"fill": PaletteLib.PANEL_WOOD,
-			"gold": [
-				[3, 3, PaletteLib.ACCENT_HI, "gold rosette center"],
-			],
-		},
-		"field": {
-			"outline": PaletteLib.PANEL_WOOD_LO,
-			"bevel": PaletteLib.ACCENT_LO,
-			"fill": PaletteLib.ICON_BG_LO,
-			"gold": [],
-		},
+		"panel": {"pixellab": true},
+		"button": {"pixellab": true},
+		"button_hover": {"pixellab": true},
+		"button_pressed": {"pixellab": true},
+		"button_focus": {"pixellab": true},
+		"field": {"pixellab": true},
 	}
 
 
@@ -451,14 +429,15 @@ func _texture_boxes(ttheme: Theme) -> void:
 		"texture mode: TextEdit samples the same field sheet")
 
 
-## §4.9 texture-mode state mapping (amended 2026-11-04, user feedback: the
-## first texture theme reused one sheet for normal/hover/pressed, leaving
-## hover and toggle-selection invisible): normal = button sheet unmodulated;
-## hover = focus sheet (ACCENT ring) ×1.0; momentary pressed = button sheet
-## ×PRESS_MODULATE; disabled = button sheet ×DISABLED_MODULATE; keyboard
+## §4.9 texture-mode state mapping (amended 2026-11-08, the PixelLab
+## chrome amendment — dedicated hover/pressed sheets; the 2026-11-04
+## dimming ladder remains the missing-sheet fallback): normal = button
+## sheet unmodulated; hover = button_hover sheet (the baked glow) ×1.0;
+## momentary pressed = button_pressed sheet (the baked sunken plate,
+## modulate-free); disabled = button sheet ×DISABLED_MODULATE; keyboard
 ## focus = focus sheet; toggle-pressed (held/selected card) = focus sheet
-## ×TOGGLE_MODULATE via the `Toggle` variation. Every state box carries the
-## CONTENT_PAD margins so a state flip can never change measured sizes.
+## ×TOGGLE_MODULATE via the `Toggle` variation. Every state box carries
+## the CONTENT_PAD margins so a state flip can never change measured sizes.
 func _texture_states(ttheme: Theme) -> void:
 	_check(UiThemeLib.PRESS_MODULATE == 0.82
 		and UiThemeLib.TOGGLE_MODULATE == 0.88
@@ -470,21 +449,28 @@ func _texture_states(ttheme: Theme) -> void:
 	var pressed := ttheme.get_stylebox("pressed", "Button") as StyleBoxTexture
 	var disabled := ttheme.get_stylebox("disabled", "Button") as StyleBoxTexture
 	var focus := ttheme.get_stylebox("focus", "Button") as StyleBoxTexture
+	var hover_sheet := load(UiThemeLib.SHEET_PATHS["button_hover"]) as Texture2D
+	var pressed_sheet := load(
+		UiThemeLib.SHEET_PATHS["button_pressed"]) as Texture2D
 	_check(normal != null and normal.modulate_color == Color(1, 1, 1, 1),
 		"texture mode: Button normal stays unmodulated on the button sheet")
-	_check(hover != null and hover.texture == focus.texture
+	_check(hover != null and hover_sheet != null
+		and hover.texture == hover_sheet
 		and hover.modulate_color == Color(1, 1, 1, 1),
-		"texture mode: Button hover is the focus sheet (ACCENT ring) at ×1.0")
-	_check(pressed != null and pressed.texture == normal.texture
-		and pressed.modulate_color == Color(UiThemeLib.PRESS_MODULATE,
-			UiThemeLib.PRESS_MODULATE, UiThemeLib.PRESS_MODULATE, 1.0),
-		"texture mode: Button pressed is the button sheet ×PRESS_MODULATE")
+		"texture mode: Button hover is the button_hover sheet (baked glow) "
+		+ "at ×1.0")
+	_check(pressed != null and pressed_sheet != null
+		and pressed.texture == pressed_sheet
+		and pressed.modulate_color == Color(1, 1, 1, 1),
+		"texture mode: Button pressed is the button_pressed sheet "
+		+ "(baked sunken plate, modulate-free)")
 	_check(disabled != null and disabled.texture == normal.texture
 		and disabled.modulate_color == Color(UiThemeLib.DISABLED_MODULATE,
 			UiThemeLib.DISABLED_MODULATE, UiThemeLib.DISABLED_MODULATE, 1.0),
 		"texture mode: Button disabled is the button sheet ×DISABLED_MODULATE")
-	_check(focus != null and focus.texture == hover.texture,
-		"texture mode: Button keyboard focus is the focus sheet (as hover)")
+	_check(focus != null and focus.texture != null
+		and focus.texture != pressed.texture,
+		"texture mode: Button keyboard focus is the button_focus sheet")
 	# Flat parity on every state box: a state flip must not change measured
 	# margins (the pixel-stable steppers contract, test_creation).
 	var margins_ok := true
@@ -506,7 +492,7 @@ func _texture_states(ttheme: Theme) -> void:
 		and t_pressed.modulate_color == Color(UiThemeLib.TOGGLE_MODULATE,
 			UiThemeLib.TOGGLE_MODULATE, UiThemeLib.TOGGLE_MODULATE, 1.0),
 		"texture mode: Toggle pressed is the focus sheet ×TOGGLE_MODULATE "
-		+ "(distinct from hover ×1.0 and press ×0.82)")
+		+ "(distinct from the hover sheet and the baked press sheet)")
 	_check(t_hover_pressed != null
 		and t_hover_pressed.modulate_color == t_pressed.modulate_color,
 		"texture mode: a selected card under the mouse keeps the toggle dim")
@@ -538,12 +524,41 @@ func _texture_states(ttheme: Theme) -> void:
 	_check(plain.get_combined_minimum_size() == plain_min,
 		"texture mode: a Button's minimum size is state-independent "
 		+ "(%s under disable)" % str(plain_min))
+	# §4.9 ink seam (2026-11-08): parchment panels ride the warm ink; button
+	# text stays cream (the plates are dark); surface_fill is PARCH; the
+	# styleboxes tile their middle regions.
+	_check(ttheme.get_color("font_color", "Label") == PaletteLib.INK_WARM,
+		"texture mode: Label text is the warm ink (parchment panels)")
+	_check(ttheme.get_color("font_color", "Dim")
+		== Color(PaletteLib.INK_WARM, 0.75),
+		"texture mode: Dim text is the ink at 0.75 alpha")
+	_check(ttheme.get_color("font_color", "Accent") == PaletteLib.ACCENT_LO,
+		"texture mode: Accent text swaps to ACCENT_LO (parchment contrast)")
+	_check(ttheme.get_color("font_color", "Good") == PaletteLib.GOOD
+		and ttheme.get_color("font_color", "Bad") == PaletteLib.BAD,
+		"texture mode: Good/Bad keep their semantic hexes")
+	_check(ttheme.get_color("font_color", "Button") == PaletteLib.TEXT,
+		"texture mode: Button text stays TEXT cream (dark plates)")
+	var line_edit := ttheme.get_color("font_color", "LineEdit")
+	_check(line_edit == PaletteLib.INK_WARM,
+		"texture mode: LineEdit text is the warm ink (inset parchment)")
+	_check(UiThemeLib.surface_fill() == PaletteLib.PARCH,
+		"texture mode: surface_fill() is the parchment PARCH")
+	var panel_box := ttheme.get_stylebox("panel", "Panel") as StyleBoxTexture
+	_check(panel_box != null
+		and panel_box.axis_stretch_horizontal \
+			== StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+		and panel_box.axis_stretch_vertical \
+			== StyleBoxTexture.AXIS_STRETCH_MODE_TILE,
+		"texture mode: the panel stylebox tiles its middle regions "
+		+ "(the prompted texture must not smear)")
 
 
-## Pixel-exact sheet samples at the nine-patch layout anchors. `spec` carries
-## the sheet family's UW2 chrome-skin hexes (§4.8 amended 2026-11-04): the
-## frame outline the outermost px carries on all four sides, the bevel/lip
-## line just inside it, the center fill, and the per-sheet gold trim anchors.
+## Pixel-exact sheet samples at the nine-patch layout anchors — the
+## PixelLab chrome contract (§4.8 amended 2026-11-08): the keyed plate's
+## ALPHA geometry, which is what the misalignment/mis-orientation class of
+## bug would break (the model hexes themselves are group-13 ledger
+## provenance, never re-pinned here).
 func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 		spec: Dictionary) -> void:
 	var img := tex.get_image()
@@ -551,42 +566,57 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 		"texture mode: %s sheet image is 48x48" % sheet_id)
 	if img == null:
 		return
-	var outline: Color = spec["outline"]
-	var bevel: Color = spec["bevel"]
-	var fill: Color = spec["fill"]
-	_check(_px_is(img, 4, 0, outline) and _px_is(img, 0, 4, outline),
-		"texture mode: %s corner frame == outline hex (past the authored outer rounding)"
+	# The fill cell is the fully-opaque plate interior (wang_15 — the key
+	# must never leak into the prompted texture).
+	var fill_opaque := true
+	for y in range(16, 32):
+		for x in range(16, 32):
+			if img.get_pixel(x, y).a < 0.99:
+				fill_opaque = false
+	_check(fill_opaque,
+		"texture mode: %s fill cell fully opaque (the keyed interior)"
 		% sheet_id)
-	_check(_px_is(img, 24, 24, fill),
-		"texture mode: %s sheet center == fill" % sheet_id)
-	# Side orientations — the load-bearing traps: every side must carry the
-	# frame on its OUTER px (a sheet blitted from un-oriented tiles puts
-	# fill there and the frame mid-strip instead).
-	_check(_px_is(img, 24, 0, outline) and _px_is(img, 0, 24, outline)
-		and _px_is(img, 47, 24, outline) and _px_is(img, 24, 47, outline),
-		"texture mode: %s all four side centers == outline on the outer px (oriented)"
-		% sheet_id)
-	# The px just inside the frame: the bevel/lip line on all four sides (the
-	# mirrored assembly keeps it symmetric around the sheet).
-	_check(_px_is(img, 24, 1, bevel) and _px_is(img, 1, 24, bevel)
-		and _px_is(img, 46, 24, bevel) and _px_is(img, 24, 46, bevel),
-		"texture mode: %s px inside the frame == the bevel/lip line (authored design)"
-		% sheet_id)
-	# Per-sheet UW2 trim anchors: the gold inner line at its pinned inset,
-	# the corner rosettes, the button corner ticks.
-	for anchor: Array in spec["gold"]:
-		_check(_px_is(img, anchor[0], anchor[1], anchor[2]),
-			"texture mode: %s %s == gold trim anchor" % [sheet_id, anchor[3]])
-	# Transparency ONLY at the authored outer corner rounding (the source
-	# corner tiles' own transparent pixels) — content areas opaque.
+	# Rim orientation — the load-bearing trap: every edge strip must carry
+	# the keyed transparent OUTSIDE on its outer half and the opaque plate
+	# on its inner half (a sheet blitted from un-oriented tiles puts the
+	# plate band on the wrong side and the key mid-strip instead).
+	var rim_clear := true
+	var rim_inner := true
+	# top/bottom strips sample the middle column; left/right the middle
+	# row — "carries the keyed outside" = at least one transparent px in
+	# the strip's outer half (the organic key boundary may sit at row 6 or
+	# 7; only the INNER half is pinned fully opaque).
+	var top_clear := false
+	var bottom_clear := false
+	var left_clear := false
+	var right_clear := false
+	for i in range(8):
+		if img.get_pixel(24, i).a < 0.01:
+			top_clear = true
+		if img.get_pixel(24, 47 - i).a < 0.01:
+			bottom_clear = true
+		if img.get_pixel(i, 24).a < 0.01:
+			left_clear = true
+		if img.get_pixel(47 - i, 24).a < 0.01:
+			right_clear = true
+	rim_clear = top_clear and bottom_clear and left_clear and right_clear
+	if not (img.get_pixel(24, 8).a > 0.99 and img.get_pixel(24, 15).a > 0.99
+			and img.get_pixel(24, 39).a > 0.99 and img.get_pixel(24, 32).a > 0.99
+			and img.get_pixel(8, 24).a > 0.99 and img.get_pixel(15, 24).a > 0.99
+			and img.get_pixel(39, 24).a > 0.99 and img.get_pixel(32, 24).a > 0.99):
+		rim_inner = false
+	_check(rim_clear,
+		("texture mode: %s edge strips carry the keyed transparent outside "
+			+ "on the outer half (oriented ring)") % sheet_id)
+	_check(rim_inner,
+		("texture mode: %s edge strips carry the opaque plate inside on all "
+			+ "four sides (oriented ring)") % sheet_id)
+	# Transparency at the sheet corners — the plate silhouette stays
+	# outside the control rect's corner pixels.
 	_check(img.get_pixel(0, 0).a < 0.01 and img.get_pixel(47, 0).a < 0.01
 		and img.get_pixel(0, 47).a < 0.01 and img.get_pixel(47, 47).a < 0.01,
-		"texture mode: %s transparent only at the authored outer rounding"
-		% sheet_id)
-	_check(_px_is(img, 8, 24, fill)
-		and _px_is(img, 24, 8, fill),
-		"texture mode: %s content areas opaque fill (no frame bleed)"
-		% sheet_id)
+		("texture mode: %s transparent at the four sheet corners "
+			+ "(the keyed plate silhouette)") % sheet_id)
 
 
 ## Exact 8-bit pixel compare (the sheets import lossless: compress/mode=0).

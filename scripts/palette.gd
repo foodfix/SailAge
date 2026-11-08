@@ -125,6 +125,15 @@ const PANEL_WOOD := Color("#2e2014")
 const PANEL_WOOD_HI := Color("#6a4e28")
 ## UW2 chrome skin: bevel shadow (bottom/right) / frame dark line.
 const PANEL_WOOD_LO := Color("#14100a")
+## UW2 parchment chrome (80-* §4.8 amended 2026-11-08, append-only):
+## texture-mode flat panel fill (`surface_fill()` seam).
+const PARCH := Color("#e3d2a4")
+## UW2 parchment chrome: parchment highlight step (flat-fallback bevel).
+const PARCH_HI := Color("#f2e6c8")
+## UW2 parchment chrome: parchment shadow step.
+const PARCH_LO := Color("#c6b183")
+## UW2 parchment chrome: texture-mode panel text ink (the §4.9 ink seam).
+const INK_WARM := Color("#3a2a16")
 
 # --- Hull block (docs/80-UI-UX.md §4.8) -------------------------------------
 # Amended 2026-11-04 (the shared-hull pennant scheme): every owner draws the

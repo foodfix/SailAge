@@ -11,6 +11,8 @@ let lastCurrent = null;
 const CAPTIONS = {
   coast: { draft: "shipped ledger strip (16 tiles)", raw: "re-roll strip",
            snapped: "wang mock preview · live map crop" },
+  chrome: { draft: "shipped vendored strip (16 tiles)", raw: "re-roll strip",
+            snapped: "nine-patch mock preview" },
   fx: { anim: "staged re-roll (API gif)", comp: "staged wake · frame 0 under the ship",
         shipped: "shipped — in game now" },
   icons: { raw: "staged re-roll (pending accept)", snapped: "canonical raw 64 — the shipped pixels" },
@@ -164,6 +166,9 @@ function buildCard(job) {
   if (job.family === "coast") {
     ta.placeholder = "style clause — appended to the vendored sea/land/"
       + "beach descriptions (empty = vendored wording only)";
+  } else if (job.family === "chrome") {
+    ta.placeholder = "style clause — appended to the pinned frame/button "
+      + "tileset descriptions (empty = vendored wording only)";
   }
   ta.spellcheck = false;
   ta.addEventListener("change", () => {
@@ -181,7 +186,7 @@ function buildCard(job) {
     <input class="seed" placeholder="random" inputmode="numeric">
     <button class="reroll">Re-roll</button>
     <button class="accept small">${job.family === "coast"
-      ? "Accept + rebuild" : "Accept"}</button>
+      || job.family === "chrome" ? "Accept + rebuild" : "Accept"}</button>
     <span class="spacer"></span>`;
   if (isFxCard) {
     // the /v2/vfx envelope has no seed — hide the field
@@ -290,6 +295,7 @@ function visible(job) {
   if (filter === "icons") return job.family === "icons";
   if (filter === "glyphs") return job.family === "glyphs";
   if (filter === "coast") return job.family === "coast";
+  if (filter === "chrome") return job.family === "chrome";
   if (filter === "ships") return isTd(job);
   return job.family === filter;
 }
@@ -408,6 +414,11 @@ function updateCard(job) {
   els.status.className = `status ${st.cls}`;
   els.status.textContent = st.html;
   els.metrics.textContent = metricsLine(job);
+  // disabled states while this card's job runs or waits in the queue
+  const busy = (current && current.job === job.id) || queue.includes(job.id);
+  for (const b of els.controls.querySelectorAll("button")) {
+    b.disabled = !!busy;
+  }
   els.seed.placeholder = job.canonical_seed != null
     ? `random (canon ${job.canonical_seed})` : "random";
 }
@@ -422,7 +433,8 @@ async function refreshJobs() {
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `coast ${data.counts.coast || 0} · top-down ${data.counts.topdown || 0}`
+      `coast ${data.counts.coast || 0} · chrome ${data.counts.chrome || 0}`
+      + ` · top-down ${data.counts.topdown || 0}`
       + ` · wake ${data.counts.fx || 0} · icons ${data.counts.icons || 0}`
       + ` · glyphs ${data.counts.glyphs || 0} — flagged`
       + ` ${data.flagged.length} · in game ${data.counts.ingame || 0}`;

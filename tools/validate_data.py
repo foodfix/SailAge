@@ -8538,6 +8538,9 @@ BLOCK_ICON = frozenset({
     "#2e2014", "#6a4e28", "#14100a",  # UW2 chrome skin (§4.8 amended
     # 2026-11-04, ledgered): walnut fill + bevel wood for the nine-patch
     # chrome tiles (PANEL_WOOD / PANEL_WOOD_HI / PANEL_WOOD_LO)
+    "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",  # UW2 parchment chrome
+    # (§4.8 amended 2026-11-08, append-only): PARCH / PARCH_HI / PARCH_LO /
+    # INK_WARM — the texture-mode flat fill ramp + the panel ink
 })
 # Amended §4.8 hull block (2026-11-04, the shared-hull pennant scheme): 16
 # distinct hexes — ink, wood ×3, sail ×3, HULL_GOLD, 9 PENNANT_* owner values.
@@ -8641,15 +8644,35 @@ G13_DERIVE_OPS = {
 # IMPLEMENT-Phase10.md). Data-driven families (goods/equipment/flags/hulls)
 # join these from the data files at machine scope.
 G13_DIR_IDS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
-G13_CHROME_TILES = tuple(
+# A.1 chrome tiles — two contract shapes (80-* §4.8, 2026-11-08 chrome
+# amendment): authored (the four string-map families, the fallback tree)
+# and pixellab (the chrome{} ledger tree — +button_hover/button_pressed,
+# the derived state families that have no authored manifests). Data-driven
+# families (goods/equipment/flags/hulls) join these from the data files at
+# machine scope.
+G13_CHROME_STEMS_AUTHORED = ("panel", "button", "button_focus", "field")
+G13_CHROME_STEMS_PIXELLAB = ("panel", "button", "button_hover",
+                             "button_pressed", "button_focus", "field")
+G13_CHROME_TILES_AUTHORED = tuple(
     f"{stem}_{tile}"
-    for stem in ("panel", "button", "button_focus", "field")
+    for stem in G13_CHROME_STEMS_AUTHORED
     for tile in ("corner", "edge", "fill")
 ) + ("bar_left", "bar_right", "bar_line")
-G13_CHROME_SHEETS = tuple(
+G13_CHROME_TILES_PIXELLAB = tuple(
+    f"{stem}_{tile}"
+    for stem in G13_CHROME_STEMS_PIXELLAB
+    for tile in ("corner", "edge", "fill")
+) + ("bar_left", "bar_right", "bar_line")
+G13_CHROME_TILES = G13_CHROME_TILES_PIXELLAB  # legacy alias (doc references)
+G13_CHROME_SHEETS_AUTHORED = tuple(
     f"ninepatch_{stem}.png"
-    for stem in ("panel", "button", "button_focus", "field", "bar")
+    for stem in G13_CHROME_STEMS_AUTHORED + ("bar",)
 )
+G13_CHROME_SHEETS_PIXELLAB = tuple(
+    f"ninepatch_{stem}.png"
+    for stem in G13_CHROME_STEMS_PIXELLAB + ("bar",)
+)
+G13_CHROME_SHEETS = G13_CHROME_SHEETS_PIXELLAB  # legacy alias
 G13_ICON_PINNED = (
     "coin", "crew", "provisions", "morale", "durability",
     "compass", "calm", "fair", "strong", "storm",
@@ -9241,6 +9264,33 @@ def _g13_vfx_ledger() -> dict:
     return doc
 
 
+def _g13_chrome_ledger() -> dict:
+    """The chrome ingest ledger section (80-* §4.8 2026-11-08): the
+    build_ui_art --import-chrome-pixellab output inside the committed
+    ingest ledger (tools/ui_art/ingest_ledger.json). Empty dict when
+    absent/unparseable — the chrome families are then generator-authored
+    (the string-map fallback contract shape)."""
+    path = DATA_DIR.parent / "tools" / "ui_art" / "ingest_ledger.json"
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    chrome = doc.get("chrome")
+    if not isinstance(chrome, dict) \
+            or not isinstance(chrome.get("tiles"), dict) \
+            or not chrome["tiles"]:
+        return {}
+    return chrome
+
+
+def _g13_chrome_pixellab_mode() -> bool:
+    """True when the chrome families ship from the PixelLab tilesets (the
+    chrome{} ledger exists) — selects the pixellab contract shape."""
+    return bool(_g13_chrome_ledger())
+
+
 def _g13_fx_ship_ids() -> list[str]:
     """The 16 ship type ids (data/ship_types.json) — the per-ship wake
     family's key set (80-* §4.8 2026-11-08)."""
@@ -9502,8 +9552,16 @@ def _g13_check_relations(class_name: str, decls: dict,
 def _g13_check_chrome_seams(sprites: dict) -> None:
     """§8.8 item 8 (chrome part): edge tiles are torus-safe along the
     horizontal repeat axis (column 0 == column 15 pattern); bar_line also
-    wraps vertically (row 0 == row 15). Corners do not repeat."""
+    wraps vertically (row 0 == row 15). Corners do not repeat. The PixelLab
+    chrome families (2026-11-08) are exempt — their edge tiles are the
+    keyed Wang straight-border tiles whose continuity is the tileset's own
+    corner-vertex geometry (the coast-family ruling), and the runtime
+    tiles the middle regions (§4.9 tile-mode amendment); the authored bar
+    stays checked."""
+    waived = _g13_chrome_ledger().get("tiles", {})
     for sprite_id, sprite in sorted(sprites.items()):
+        if sprite_id in waived:
+            continue
         if sprite_id.endswith("_edge"):
             col0 = [row[0] for row in sprite.pixels]
             col15 = [row[sprite.w - 1] for row in sprite.pixels]
@@ -10823,12 +10881,16 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
 
         # Contract reconciliation where the doc pins the inventory.
         if class_name == "chrome":
+            # The authored manifests always declare the 15 string-map tiles
+            # (the fallback source); in pixellab mode the derived state
+            # families join at the ARTIFACT level through the chrome{}
+            # ledger synthesis below (80-* §4.8 2026-11-08).
             got = set(decls)
-            if got != set(G13_CHROME_TILES):
+            if got != set(G13_CHROME_TILES_AUTHORED):
                 fail("chrome-inventory", "tools/ui_art/chrome/",
-                     f"manifest ids != the 15 A.1 tiles (missing "
-                     f"{sorted(set(G13_CHROME_TILES) - got)[:6]}…, extra "
-                     f"{sorted(got - set(G13_CHROME_TILES))[:6]}…)", 13)
+                     f"manifest ids != the authored A.1 tile contract "
+                     f"(missing {sorted(set(G13_CHROME_TILES_AUTHORED) - got)[:6]}…, "
+                     f"extra {sorted(got - set(G13_CHROME_TILES_AUTHORED))[:6]}…)", 13)
         elif class_name == "icons":
             got = set(decls)
             if got != icon_expected:
@@ -11017,6 +11079,31 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                         check_decls.setdefault(sid_f, (decl_f, None))
                 fx_entries = declared.setdefault("assets/ui/fx", [])
                 fx_entries.extend(entries_f)
+            # §4.8 2026-11-08 — the PixelLab chrome tilesets: the six chrome
+            # families' singles enter the inventory through the ingest
+            # ledger's chrome{} section (the coast-family precedent,
+            # ship-as-drawn — palette/budget/seam waived; the committed
+            # bytes are the ledger's, the string-map generator is the
+            # fallback). Ledger decls REPLACE the authored manifest decls
+            # for the superseded ids and ADD the derived state families.
+            chrome_led = _g13_chrome_ledger() if class_name == "chrome" \
+                else {}
+            if chrome_led:
+                chrome_dir = "assets/ui/chrome"
+                manifest_c = declared.get(chrome_dir, [])
+                kept_c = [(sid, d) for sid, d in manifest_c
+                          if sid not in chrome_led.get("tiles", {})]
+                declared[chrome_dir] = kept_c
+                entries_ch: list = []
+                for sid_ch, rec_ch in sorted(
+                        chrome_led.get("tiles", {}).items()):
+                    decl_ch = {"id": sid_ch, "class": "chrome",
+                               "file": f"{chrome_dir}/{sid_ch}.png",
+                               "width": 16, "height": 16,
+                               "pixellab": rec_ch}
+                    entries_ch.append((sid_ch, decl_ch))
+                    check_decls[sid_ch] = (decl_ch, None)
+                declared.setdefault(chrome_dir, []).extend(entries_ch)
         sprites: dict[str, _G13Sprite] = {}
         for parent, entries in sorted(declared.items()):
             dir_path = ART_ROOT / parent
@@ -11024,7 +11111,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 if dir_path.is_dir() else []
             sheets = set()
             if parent == "assets/ui/chrome":
-                sheets = set(G13_CHROME_SHEETS)
+                sheets = set(G13_CHROME_SHEETS_PIXELLAB
+                             if _g13_chrome_pixellab_mode()
+                             else G13_CHROME_SHEETS_AUTHORED)
             if not present:
                 print(f"INFO group 13 {parent}: artifacts not generated yet "
                       f"({len(entries)} declared sprites staged)")
@@ -11054,6 +11143,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     elif class_name == "fx" and \
                             isinstance(decl, dict) and decl.get("pixellab"):
                         pass  # waterline family: same raw ruling
+                    elif class_name == "chrome" and \
+                            isinstance(decl, dict) and decl.get("pixellab"):
+                        pass  # chrome tilesets: same raw ruling (2026-11-08)
                     else:
                         mask = isinstance(decl, dict) and \
                             decl.get("class") == "terrain_pattern"
@@ -11359,15 +11451,19 @@ def _g13_run_probes() -> None:
             "invalid-shore-index", "shore-raster", shore_check))
 
         # (6) Seam violation: a chrome edge tile with column 0 != column 15.
+        # The fixture id is a non-ledger chrome edge (2026-11-08: the
+        # PixelLab chrome families are seam-waived via the chrome{} ledger —
+        # their continuity is the Wang corner-vertex geometry — so the
+        # authored-tree edge path is what must stay red).
         bad_edge = []
         for y in range(8):
             inner = "x" if y in (2, 3) else "."
             bad_edge.append("z" + "." * 6 + inner)  # col 0 fixed, col 7 varies
         bad_palette = {".": "transparent", "x": _G13_PROBE_GOOD_HEX,
                        "z": _G13_PROBE_GOOD_HEX}
-        edge_decl = decl("panel_edge", bad_edge, bad_palette)
+        edge_decl = decl("probe_edge", bad_edge, bad_palette)
         write_manifest([edge_decl])
-        render_probe_png("panel_edge", bad_edge, bad_palette)
+        render_probe_png("probe_edge", bad_edge, bad_palette)
 
         def seam_check():
             edge_decls = _g13_load_class(icons_dir)

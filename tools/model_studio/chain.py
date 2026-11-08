@@ -54,7 +54,7 @@ def init(repo: str) -> None:
     RAW = os.path.join(repo, "tools", "ui_art", "model_raw")
     STUDIO = os.path.join(RAW, "studio")
     _DRAFTS = os.path.join(RAW, "drafts")
-    for sub in ("gen", "snapped", "debg", "coast"):
+    for sub in ("gen", "snapped", "debg", "coast", "chrome"):
         os.makedirs(os.path.join(STUDIO, sub), exist_ok=True)
     import types  # noqa: PLC0415 — stdlib
     tools_dir = os.path.join(repo, "tools")
@@ -85,7 +85,10 @@ def init(repo: str) -> None:
 
 
 def studio_path(kind: str, job_id: str) -> str:
-    return os.path.join(STUDIO, kind, job_id + ".png")
+    """A staged file's path in the studio cache — the caller supplies the
+    full file NAME (extension included); the coast/chrome tileset trios
+    stage as `.json` files, so no suffix is appended here."""
+    return os.path.join(STUDIO, kind, job_id)
 
 
 
@@ -379,6 +382,322 @@ def coast_mock_png(result: dict) -> bytes:
                 for xx, pxv in enumerate(trow):
                     rows[cy * 64 + yy][cx * 64 + xx] = pxv
     return encode_png(cw * 64, ch * 64, rows)
+
+
+# ---------- chrome tileset family (§4.8 2026-11-08, one card per family) -
+# The studio's chrome path drives tools/pixellab_pass.py
+# run_chrome_tileset IN-PROCESS: ONE /v2/create-tileset pro tileset per
+# family ("frame" = parchment panel plate, "button" = chestnut leather
+# button plate — the pinned descriptions/seeds live in
+# px.CHROME_TILESETS / 80-* §4.8, seeds 20261108 / 20261109). Re-rolls
+# STAGE into the studio cache (the coast pattern): the pass tool vendors
+# the trio into its pinned CHROME_RAW_DIR (tools/assets/pixellab_raw/),
+# and chrome_reroll immediately MOVES the fresh trio into the cache — a
+# discarded re-roll leaves the canonical raw dir untouched. Accept
+# copies the staged trio back under the canonical names, deletes the
+# previous canonical trio for the family (the ingest requires exactly
+# ONE tileset_chrome_<family>_*.json — build_ui_art
+# _chrome_find_tileset), and runs build_ui_art --import-chrome-pixellab
+# (green-key + the 18 derived singles + the chrome{} ledger gate).
+
+CHROME_FAMILIES = ("frame", "button")
+CHROME_CARD_PREFIX = "chrome_"
+CHROME_TILE = 16           # px — the pinned tile size (px.CHROME_SHARED_REQUEST)
+CHROME_SHEET = 48          # px — the 3x3 nine-patch sheet (build_ui_art SHEET)
+CHROME_GREEN_MARGIN = 32   # key: g ≥ r+32 and g ≥ b+32 → keyed
+#                          (build_ui_art CHROME_GREEN_MARGIN, 80-* §4.8)
+CHROME_REVIEW_BG = "#343a44"  # muted review backdrop behind keyed pixels
+CHROME_MOCK_SCALE = 3      # the mock's NEAREST upscale (the review convention)
+
+
+def chrome_raw_dir() -> str:
+    """The canonical vendored-trio dir (the pass tool's CHROME_RAW_DIR)."""
+    return os.path.join(REPO, "tools", "assets", "pixellab_raw")
+
+
+def chrome_card_id(family: str) -> str:
+    return f"{CHROME_CARD_PREFIX}{family}"
+
+
+def chrome_is_main_name(name: str, family: str) -> bool:
+    """True for a tileset_chrome_<family>_<tid>.json MAIN trio file (the
+    _request/_submit siblings excluded)."""
+    return (name.startswith(f"tileset_chrome_{family}_")
+            and name.endswith(".json")
+            and not name.endswith(("_request.json", "_submit.json")))
+
+
+def chrome_canonical_trio(family: str) -> dict | None:
+    """The vendored canonical trio on disk — {".json", "_request.json",
+    "_submit.json"} paths — or None. Exactly ONE main file may exist
+    (the filename is the pointer; build_ui_art _chrome_find_tileset
+    fails on any other count)."""
+    root = chrome_raw_dir()
+    try:
+        mains = [f for f in sorted(os.listdir(root))
+                 if chrome_is_main_name(f, family)]
+    except OSError:
+        return None
+    if len(mains) != 1:
+        return None
+    base = os.path.join(root, mains[0][:-len(".json")])
+    return {ext: f"{base}{ext}"
+            for ext in (".json", "_request.json", "_submit.json")}
+
+
+def chrome_defaults(family: str) -> dict:
+    """Re-roll defaults from the vendored canonical trio: tileset id +
+    seed from the _submit.json, the three pinned descriptions from the
+    _request.json. Trio missing → the pinned CHROME_TILESETS spec.
+    Never the gitignored api_key config."""
+    trio = chrome_canonical_trio(family)
+    if trio and os.path.isfile(trio["_request.json"]) \
+            and os.path.isfile(trio["_submit.json"]):
+        with open(trio["_request.json"], encoding="utf-8") as fh:
+            req = json.load(fh)
+        with open(trio["_submit.json"], encoding="utf-8") as fh:
+            sub = json.load(fh)
+        return {"tileset_id": sub.get("tileset_id"),
+                "seed": sub.get("seed"),
+                "lower": req.get("lower_description"),
+                "upper": req.get("upper_description"),
+                "transition": req.get("transition_description")}
+    spec = _px_mod().CHROME_TILESETS[family]
+    return {"tileset_id": None, "seed": spec["seed"],
+            "lower": spec["lower_description"],
+            "upper": spec["upper_description"],
+            "transition": spec["transition_description"]}
+
+
+def chrome_stage_dir() -> str:
+    return os.path.join(STUDIO, "chrome")
+
+
+def chrome_pending_path(family: str) -> str | None:
+    """Newest pending re-roll trio (its main file) in the studio cache,
+    or None — the coast pending convention."""
+    d = chrome_stage_dir()
+    if not os.path.isdir(d):
+        return None
+    cands = [os.path.join(d, f) for f in os.listdir(d)
+             if chrome_is_main_name(f, family)]
+    if not cands:
+        return None
+    return max(cands, key=os.path.getmtime)
+
+
+def chrome_reroll(family: str, seed: int | None, style: str | None,
+                  poll_status=None) -> dict:
+    """One chrome tileset re-roll, in-process via pixellab_pass. `style`
+    is the user's free-text clause appended to all three PINNED
+    descriptions (the coast convention — the descriptions themselves are
+    not editable); seed None → the family's pinned default seed. The
+    pass tool vendors the trio into the canonical raw dir (its pinned
+    CHROME_RAW_DIR); this stages the fresh trio straight into the studio
+    cache so a discarded re-roll never leaves a second trio in the
+    canonical store (the brief both-trios window is safe: the ingest
+    runs only on Accept, through the same single worker)."""
+    px = _px_mod()
+    rec = px.run_chrome_tileset(family, seed=seed, style=style,
+                                poll_status=poll_status)
+    tid = rec["tileset_id"]
+    src = os.path.join(chrome_raw_dir(), f"tileset_chrome_{family}_{tid}")
+    out = studio_path("chrome", f"tileset_chrome_{family}_{tid}.json")
+    base = out[:-len(".json")]
+    os.makedirs(chrome_stage_dir(), exist_ok=True)
+    for ext in ("", "_request", "_submit"):
+        os.replace(f"{src}{ext}.json", f"{base}{ext}.json")
+    rec["studio_path"] = out
+    return rec
+
+
+def chrome_tiles_of(result: dict) -> dict[int, dict]:
+    """wang index -> {w, h, rows} — rows are hex-string pixels (chain's
+    decode semantics: "#rrggbb" or None), decoded from a tileset-result
+    payload. Keyed-UNAWARE (the raw vendored pixels). The index is the
+    tile's own wang_<i> name — build_ui_art _chrome_load_masters' key
+    (corners bits NW·8+NE·4+SW·2+SE·1 are verified against the name by
+    the ingest; upper = plate material)."""
+    out = {}
+    for tile in result.get("tileset", {}).get("tiles", []):
+        name = str(tile.get("name", ""))
+        if not name.startswith("wang_"):
+            continue
+        idx = int(name.split("_", 1)[1])
+        w, h, rows = decode_rgba(base64.b64decode(tile["image"]["base64"]))
+        out[idx] = {"w": w, "h": h, "rows": rows}
+    return out
+
+
+def chrome_strip_png(result: dict) -> bytes:
+    """The 16 wang tiles as an 8x2 strip (512x128) — the card thumbnail;
+    keyed-unaware (the raw vendored pixels, green lower material
+    included — the coast draft convention)."""
+    tiles = chrome_tiles_of(result)
+    cell = max(t["w"] for t in tiles.values()) if tiles else CHROME_TILE
+    cols, row_count = 8, 2
+    rows: list = [[None] * (cols * cell) for _ in range(row_count * cell)]
+    for idx, tile in sorted(tiles.items()):
+        ox = (idx % cols) * cell
+        oy = (idx // cols) * cell
+        for y, trow in enumerate(tile["rows"]):
+            for x, pxv in enumerate(trow):
+                rows[oy + y][ox + x] = pxv
+    return encode_png(cols * cell, row_count * cell, rows)
+
+
+def _chrome_green_key(rows: list[list]) -> list[list]:
+    """The ingest's green chroma key as a preview filter: g ≥ r+MARGIN
+    and g ≥ b+MARGIN → the muted review backdrop (build_ui_art
+    _chrome_green_key's rule; the chrome materials are warm r-dominant
+    and never false-positive)."""
+    m = CHROME_GREEN_MARGIN
+    out = []
+    for trow in rows:
+        orow = []
+        for pxv in trow:
+            r, g, b = int(pxv[1:3], 16), int(pxv[3:5], 16), int(pxv[5:7], 16)
+            orow.append(CHROME_REVIEW_BG if (g >= r + m and g >= b + m)
+                        else pxv)
+        out.append(orow)
+    return out
+
+
+def _chrome_orient(rows: list[list], op: str | None) -> list[list]:
+    """One FRAME_OPS orientation (build_ui_art _oriented_px semantics)
+    on a square 16x16 hex-row grid."""
+    n = len(rows)
+    if op is None:
+        return rows
+
+    def f(x: int, y: int) -> str:
+        if op == "mirror_x":
+            return rows[y][n - 1 - x]
+        if op == "mirror_y":
+            return rows[n - 1 - y][x]
+        if op == "mirror_xy":
+            return rows[n - 1 - y][n - 1 - x]
+        if op == "rot_ccw":
+            return rows[x][n - 1 - y]
+        if op == "rot_cw":
+            return rows[y][n - 1 - x]
+        raise ValueError(f"unknown chrome orientation {op!r}")
+
+    return [[f(x, y) for x in range(n)] for y in range(n)]
+
+
+# per-sheet cell (in TILE units) -> (wang index, orientation op) —
+# build_ui_art FRAME_OPS with CHROME_WANG {corner: 1, edge: 3, fill: 15}
+# substituted in (upper = material; the tiles are authored TOP-LEFT
+# corner / TOP edge only, every other cell is a lossless orientation of
+# those — the same dihedral relations the ingest assembles with).
+_CHROME_SHEET_OPS = {
+    (0, 0): (1, None),         # TL corner — as authored
+    (2, 0): (1, "mirror_x"),   # TR
+    (0, 2): (1, "mirror_y"),   # BL
+    (2, 2): (1, "mirror_xy"),  # BR
+    (1, 0): (3, None),         # top edge — as authored
+    (1, 2): (3, "mirror_y"),   # bottom
+    (0, 1): (3, "rot_ccw"),    # left
+    (2, 1): (3, "rot_cw"),     # right
+    (1, 1): (15, None),        # fill
+}
+
+
+def chrome_sheet_rows(result: dict) -> list[list]:
+    """The 48x48 nine-patch sheet (hex rows) assembled from the 16
+    keyed-unaware wang tiles: green-keyed, then the §4.8 mapping via
+    _CHROME_SHEET_OPS. Keyed-out pixels carry the review backdrop."""
+    tiles = chrome_tiles_of(result)
+    t = CHROME_TILE
+    cells = {}
+    for (cx, cy), (wang, op) in _CHROME_SHEET_OPS.items():
+        cells[(cx, cy)] = _chrome_orient(_chrome_green_key(tiles[wang]["rows"]),
+                                         op)
+    n = CHROME_SHEET
+    rows: list = [[None] * n for _ in range(n)]
+    for (cx, cy), crows in cells.items():
+        for y, trow in enumerate(crows):
+            rows[cy * t + y][cx * t:(cx + 1) * t] = trow
+    return rows
+
+
+def _chrome_panel_rows(sheet: list[list], w: int, h: int) -> list[list]:
+    """A wxh nine-patch rect cut from the assembled sheet: 16px corners
+    at the four corners, the edge tiles tiled along each side, wang_15
+    fill tiled in the interior (margin-16 slicing, tile-aligned sizes).
+    When h < 32 the bottom band overdraws the top band's lower rows —
+    the naive nine-patch squeeze (review aid only; never shipped)."""
+    t = CHROME_TILE
+    rows: list = [[None] * w for _ in range(h)]
+
+    def cell(cx: int, cy: int) -> list[list]:
+        return [sheet[cy * t + y][cx * t:(cx + 1) * t] for y in range(t)]
+
+    def put(crows: list[list], ox: int, oy: int) -> None:
+        for y, trow in enumerate(crows):
+            ty = oy + y
+            if 0 <= ty < h:
+                drow = rows[ty]
+                for x, pxv in enumerate(trow):
+                    tx = ox + x
+                    if 0 <= tx < w:
+                        drow[tx] = pxv
+
+    tl, top, tr = cell(0, 0), cell(1, 0), cell(2, 0)
+    lf, fill, rt = cell(0, 1), cell(1, 1), cell(2, 1)
+    bl, bot, br = cell(0, 2), cell(1, 2), cell(2, 2)
+    put(tl, 0, 0)
+    put(tr, w - t, 0)
+    put(bl, 0, h - t)
+    put(br, w - t, h - t)
+    for ox in range(t, w - t, t):
+        put(top, ox, 0)
+        put(bot, ox, h - t)
+        for oy in range(t, h - t, t):
+            put(fill, ox, oy)
+    for oy in range(t, h - t, t):
+        put(lf, 0, oy)
+        put(rt, w - t, oy)
+    return rows
+
+
+def _nearest_upscale(rows: list[list], k: int) -> list[list]:
+    """Integer NEAREST upscale of a hex-row grid (the review convention)."""
+    out = []
+    for trow in rows:
+        orow = []
+        for pxv in trow:
+            orow.extend([pxv] * k)
+        for _ in range(k):
+            out.append(list(orow))
+    return out
+
+
+def chrome_mock_png(result: dict, family: str) -> bytes:
+    """The nine-patch review mock: the assembled 48x48 sheet itself plus
+    a sample 160x64 panel rect (corners + tiled edges/fill) — and, for
+    the button family, a 96x28 button rect — on the muted review
+    backdrop, composed 1:1 then NEAREST-upscaled 3x."""
+    sheet = chrome_sheet_rows(result)
+    panels = [(sheet, CHROME_SHEET, CHROME_SHEET),
+              (_chrome_panel_rows(sheet, 160, 64), 160, 64)]
+    if family == "button":
+        panels.append((_chrome_panel_rows(sheet, 96, 28), 96, 28))
+    pad, gap = 8, 12
+    lw = pad + sum(pw for _r, pw, _ph in panels) + gap * (len(panels) - 1) \
+        + pad
+    lh = pad + max(ph for _r, _pw, ph in panels) + pad
+    rows: list = [[CHROME_REVIEW_BG] * lw for _ in range(lh)]
+    ox = pad
+    for prows, pw, _ph in panels:
+        for y, trow in enumerate(prows):
+            drow = rows[pad + y]
+            for x, pxv in enumerate(trow):
+                drow[ox + x] = pxv
+        ox += pw + gap
+    return encode_png(lw * CHROME_MOCK_SCALE, lh * CHROME_MOCK_SCALE,
+                      _nearest_upscale(rows, CHROME_MOCK_SCALE))
 
 
 def _px_mod():

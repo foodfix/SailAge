@@ -979,3 +979,43 @@ _Waves ledger entries are appended here by the master as merges land
   ComfyUI-style generation plan, discovery reveal pics ×30 (model pass
   via `art_prompts.json`), sail-state hull variants, named-pirate ship
   variant, world-map wake, animations beyond the pinned set).
+
+### W7 — PixelLab chrome tilesets amendment (2026-11-08) — COMPLETE
+
+- User-direction amendment (80-* §4.8/§4.9 amended first, the doc-first
+  rule): the chrome families' art source moves to the PixelLab tileset
+  API — two pro-mode 16px Wang corner tilesets (`frame` = parchment
+  panel plate, seed 20261108; `button` = chestnut leather plate, seed
+  20261109), the lower material the authoring-only green chroma key;
+  the authored string maps remain the deterministic fallback; `bar`
+  stays authored.
+- Generation: `pixellab_pass.py --chrome run` — vendored trios
+  `tileset_chrome_frame_b95672e0…` / `tileset_chrome_button_dc0c6ad6…`
+  (16 tiles each, name↔corners bits verified at import).
+- Ingest: `build_ui_art --import-chrome-pixellab` — green-key
+  (g ≥ r+32 ∧ g ≥ b+32) → 18 derived singles (panel/field from frame;
+  button/hover/pressed/focus from button; pressed = 180° rim +
+  ×0.80, hover = +18% lift, field = inverted rim + ×0.62 recess,
+  focus = ACCENT silhouette ring), seven sheets (self-verified
+  pixel-exact), the committed `chrome{}` ledger section; import
+  idempotent (ledger byte-identical across runs).
+- Runtime: `ui_theme.gd` gains the hover/pressed sheet slots (the
+  2026-11-04 dimming ladder = the missing-sheet fallback), the
+  §4.9 tile-mode amendment (middle regions AXIS_STRETCH_MODE_TILE),
+  and the ink seam (Label/Dim/LineEdit → INK_WARM, Accent/Warn →
+  ACCENT_LO, Button stays TEXT, `surface_fill()` → PARCH);
+  `palette.gd` appends PARCH/PARCH_HI/PARCH_LO/INK_WARM (append-only).
+- Gates: validator **groups 1–13 OK** (chrome inventory 15 authored /
+  21 shipped, ledger synthesis = the coast precedent, seam waiver for
+  the keyed Wang tiles, g13 probes 8/8); `build_ui_art --check`
+  **271 files byte-identical** (double run); full
+  `tools/run_tests.py` **62/62 GREEN** (432.1s, -j4) incl.
+  `test_ui_theme` (amended to the keyed-geometry pins), `test_ui_kit`,
+  `test_ui_styling_audit` (allowlist still empty).
+- Studio: `chrome_frame` / `chrome_button` cards (the coast-card
+  pattern) — re-roll in-process with the style clause as the only
+  prompt edit, staged in the gitignored cache, accept = trio swap +
+  re-import gated on the fresh ledger.
+- Pending user review: the contact sheet (regenerated) + the studio
+  card previews; a re-roll of either tileset is a card action, not a
+  code change.
