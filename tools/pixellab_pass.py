@@ -1347,64 +1347,79 @@ CHROME_RAW_DIR = os.path.join(REPO, "tools", "assets", "pixellab_raw")
 
 CHROME_SHARED_REQUEST = {
     "mode": "pro",
-    "tile_size": {"width": 16, "height": 16},
+    "tile_size": {"width": 32, "height": 32},
     "view": "high top-down",
-    "transition_size": 0.25,
+    "transition_size": 0,
     "roundness": 0,
     "raggedness": 0,
     "boundary_amplitude": 0,
     "step_slope": 0,
-    "detail": "medium detail",
+    "detail": "highly detailed",
     "shading": "basic shading",
 }
 
 CHROME_TILESETS: dict[str, dict] = {
+    # 32px ornate ocean-chart panel (2026-11-09 user direction — the
+    # frame carries detail too): ocean-blue textured interior, carved
+    # walnut boundary, brass pinstripe + corner rosettes.
     "frame": {
         "upper_description":
-            "raised rectangular panel plate for a 16-bit strategy game "
-            "menu: faded blue nautical-chart paper face, pale sky-blue "
-            "with sparse subtle fiber grain and faint weathered "
-            "blotches, framed by a carved warm brown wood rim with a "
-            "1px dark outline just inside it, light from top-left: the "
-            "top-left bevel slope lit warm, the bottom-right slope in "
-            "deep shadow, retro 16-bit UI in the style of classic 1990s "
-            "naval adventure games like Uncharted Waters 2 / New "
-            "Horizons, crisp deliberate pixels, flat color fills, no "
-            "text, no icons",
+            "square chart panel plate for a 16-bit strategy game menu: "
+            "the whole interior face is light cerulean ocean-blue water "
+            "with rich detail — small repeating wave crest lines, "
+            "subtle darker depth blotches and gentle ripple shading "
+            "across the blue, framed by a richly carved dark walnut "
+            "wood boundary with visible wood grain strokes, a wide "
+            "bevel lit warm from the top-left and in deep shadow on "
+            "the bottom-right, a thin brass inner pinstripe where the "
+            "wood meets the blue, and a small round brass rosette "
+            "pinned at each inner corner of the wood, retro 16-bit UI "
+            "in the style of classic 1990s naval adventure games like "
+            "Uncharted Waters 2 / New Horizons, crisp deliberate "
+            "pixels, flat color fills, no text, no icons",
         "lower_description":
             "flat solid bright green chroma-key color, one uniform "
             "green, no texture, no shading, no dithering",
         "transition_description":
-            "low raised wood rim ending in a crisp straight edge with "
-            "square corners and a 1px dark outline at the plate "
-            "silhouette, Uncharted Waters 2 beveled chart-panel edge",
-        "seed": 20261112,
+            "carved dark walnut wood rim with visible grain ending in "
+            "a crisp straight edge, a thin brass pinstripe at the "
+            "wood-to-water boundary, Uncharted Waters 2 wood-bound "
+            "ocean-chart panel edge",
+        "seed": 20261116,
     },
     # The light click plate (80-* §4.8, 2026-11-08 evening revision,
     # night re-pin: parchment face + brass band; the 2026-11-09 fence
-    # fix pins a repeat-safe face — tile-mode repetition turned the
-    # rolled crease marks into a fence on large pressed buttons).
+    # fix pins a repeat-safe face; the 2026-11-09 face re-pin (user
+    # direction — lines/dots inside large buttons) flattens the face to
+    # ONE uniform color — zero interior texture; the 2026-11-09 32px
+    # ornate re-pin moves the detail budget into the frame: wide brass
+    # band, inner pinstripe, corner studs).
     "click": {
         "upper_description":
             "raised rectangular parchment click plate for a 16-bit "
             "strategy game menu: aged cream-tan parchment paper face, "
-            "a flat even repeat-safe texture with no fold lines, no "
-            "creases, no knots, no stitching and no distinct marks, "
-            "framed by a bright polished brass band around the edge "
-            "with a 1px dark outline just outside it, strong raised "
-            "bevel lit from the top-left with a deep shadow on the "
-            "bottom-right, retro 16-bit UI button in the style of "
-            "classic 1990s naval adventure games like Uncharted Waters "
-            "2 / New Horizons, crisp deliberate pixels, flat color "
-            "fills, no text",
+            "ONE perfectly uniform flat cream-tan color across the "
+            "whole face, absolutely zero texture: no fiber grain, no "
+            "specks, no dots, no lines, no dashes, no rivets, no "
+            "stitches, no inner borders, no creases, no blotches, no "
+            "shading variation inside the plate, all detail strictly "
+            "in the ornate outer frame: a wide bright polished brass "
+            "band around the edge inlaid with a darker brass inner "
+            "pinstripe and a small square brass stud pinned into the "
+            "band at each corner, strong raised bevel lit from the "
+            "top-left with a deep shadow on the bottom-right, retro "
+            "16-bit UI button in the style of classic 1990s naval "
+            "adventure games like Uncharted Waters 2 / New Horizons, "
+            "crisp deliberate pixels, flat color fills, no text",
         "lower_description":
             "flat solid bright green chroma-key color, one uniform "
             "green, no texture, no shading, no dithering",
         "transition_description":
-            "raised polished brass rim ending in a crisp straight edge "
-            "with square corners, a 1px dark outline at the silhouette, "
-            "Uncharted Waters 2 brass-bound parchment button edge",
-        "seed": 20261113,
+            "raised polished brass rim with an inlaid darker brass "
+            "pinstripe and square corner studs, ending in a crisp "
+            "straight edge, Uncharted Waters 2 brass-bound parchment "
+            "button edge",
+        "seed": 20261115,
     },
 }
 

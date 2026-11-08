@@ -1,175 +1,553 @@
 {
   "chrome": {
     "tiles": {
-      "button_corner": {
+      "button_bl": {
         "derivation": "base",
         "family": "button",
         "from": "click",
-        "part": "corner",
-        "pixel_id": "1",
-        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
-        "wang": 1
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "5b4b788258926fe19ccb3c3cd6fd9630c326e9f3a704b30232fa13b14aa4c117",
+        "size": 32,
+        "wang": 4
       },
-      "button_edge": {
+      "button_bottom": {
         "derivation": "base",
         "family": "button",
         "from": "click",
-        "part": "edge",
-        "pixel_id": "3",
-        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
-        "wang": 3
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "957e8a71618ffc4d7f0438c2842722a0a58f4184c9b3da4d8c85ffb3343283e7",
+        "size": 32,
+        "wang": 12
+      },
+      "button_br": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "e39d1cd95da0474178a24041c64c3e87f7d0bba13b701f3a1052f1e21c2ff5c6",
+        "size": 32,
+        "wang": 8
       },
       "button_fill": {
         "derivation": "base",
         "family": "button",
         "from": "click",
         "part": "fill",
-        "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "233d849d2c8e53ea8419c1c3bc7c363d663466d0a3beacfcaf0c5851565ea2c5",
+        "size": 32,
         "wang": 15
       },
-      "button_focus_corner": {
+      "button_focus_bl": {
         "derivation": "base",
         "family": "button_focus",
         "from": "click",
-        "part": "corner",
-        "pixel_id": "1",
-        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
-        "wang": 1
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "5b4b788258926fe19ccb3c3cd6fd9630c326e9f3a704b30232fa13b14aa4c117",
+        "size": 32,
+        "wang": 4
       },
-      "button_focus_edge": {
+      "button_focus_bottom": {
         "derivation": "base",
         "family": "button_focus",
         "from": "click",
-        "part": "edge",
-        "pixel_id": "3",
-        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
-        "wang": 3
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "957e8a71618ffc4d7f0438c2842722a0a58f4184c9b3da4d8c85ffb3343283e7",
+        "size": 32,
+        "wang": 12
+      },
+      "button_focus_br": {
+        "derivation": "base",
+        "family": "button_focus",
+        "from": "click",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "e39d1cd95da0474178a24041c64c3e87f7d0bba13b701f3a1052f1e21c2ff5c6",
+        "size": 32,
+        "wang": 8
       },
       "button_focus_fill": {
         "derivation": "base",
         "family": "button_focus",
         "from": "click",
         "part": "fill",
-        "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "233d849d2c8e53ea8419c1c3bc7c363d663466d0a3beacfcaf0c5851565ea2c5",
+        "size": 32,
         "wang": 15
       },
-      "button_hover_corner": {
+      "button_focus_left": {
         "derivation": "base",
-        "family": "button_hover",
+        "family": "button_focus",
         "from": "click",
-        "part": "corner",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "b21773ab1bba8856ef56628ba8600eacaad6eba49bfcf466c10426b5e6cd36a9",
+        "size": 32,
+        "wang": 5
+      },
+      "button_focus_right": {
+        "derivation": "base",
+        "family": "button_focus",
+        "from": "click",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "ef8478db03a7c2a9ee10d47c349a0cb3c496f8d3e87af7d56ff1e6bd095fc1a3",
+        "size": 32,
+        "wang": 10
+      },
+      "button_focus_tl": {
+        "derivation": "base",
+        "family": "button_focus",
+        "from": "click",
+        "part": "tl",
         "pixel_id": "1",
-        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
+        "sha256": "6d91835e27dde0c6a90e0f467804f378ae0d57f8b7b0ea8841aa796640d33e27",
+        "size": 32,
         "wang": 1
       },
-      "button_hover_edge": {
+      "button_focus_top": {
+        "derivation": "base",
+        "family": "button_focus",
+        "from": "click",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "1d25f4901893704ba5273312f2887c1dd775acd9303ce948c9ca4f2c14bf8cbe",
+        "size": 32,
+        "wang": 3
+      },
+      "button_focus_tr": {
+        "derivation": "base",
+        "family": "button_focus",
+        "from": "click",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "cbea4f62249c3ca209185f90b1ea6adbb26d173235d5a2d7d7f3c78170edae82",
+        "size": 32,
+        "wang": 2
+      },
+      "button_hover_bl": {
         "derivation": "base",
         "family": "button_hover",
         "from": "click",
-        "part": "edge",
-        "pixel_id": "3",
-        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
-        "wang": 3
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "5b4b788258926fe19ccb3c3cd6fd9630c326e9f3a704b30232fa13b14aa4c117",
+        "size": 32,
+        "wang": 4
+      },
+      "button_hover_bottom": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "957e8a71618ffc4d7f0438c2842722a0a58f4184c9b3da4d8c85ffb3343283e7",
+        "size": 32,
+        "wang": 12
+      },
+      "button_hover_br": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "e39d1cd95da0474178a24041c64c3e87f7d0bba13b701f3a1052f1e21c2ff5c6",
+        "size": 32,
+        "wang": 8
       },
       "button_hover_fill": {
         "derivation": "base",
         "family": "button_hover",
         "from": "click",
         "part": "fill",
-        "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "233d849d2c8e53ea8419c1c3bc7c363d663466d0a3beacfcaf0c5851565ea2c5",
+        "size": 32,
         "wang": 15
       },
-      "button_pressed_corner": {
+      "button_hover_left": {
         "derivation": "base",
-        "family": "button_pressed",
+        "family": "button_hover",
         "from": "click",
-        "part": "corner",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "b21773ab1bba8856ef56628ba8600eacaad6eba49bfcf466c10426b5e6cd36a9",
+        "size": 32,
+        "wang": 5
+      },
+      "button_hover_right": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "ef8478db03a7c2a9ee10d47c349a0cb3c496f8d3e87af7d56ff1e6bd095fc1a3",
+        "size": 32,
+        "wang": 10
+      },
+      "button_hover_tl": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "tl",
         "pixel_id": "1",
-        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
+        "sha256": "6d91835e27dde0c6a90e0f467804f378ae0d57f8b7b0ea8841aa796640d33e27",
+        "size": 32,
         "wang": 1
       },
-      "button_pressed_edge": {
+      "button_hover_top": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "1d25f4901893704ba5273312f2887c1dd775acd9303ce948c9ca4f2c14bf8cbe",
+        "size": 32,
+        "wang": 3
+      },
+      "button_hover_tr": {
+        "derivation": "base",
+        "family": "button_hover",
+        "from": "click",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "cbea4f62249c3ca209185f90b1ea6adbb26d173235d5a2d7d7f3c78170edae82",
+        "size": 32,
+        "wang": 2
+      },
+      "button_left": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "b21773ab1bba8856ef56628ba8600eacaad6eba49bfcf466c10426b5e6cd36a9",
+        "size": 32,
+        "wang": 5
+      },
+      "button_pressed_bl": {
         "derivation": "base",
         "family": "button_pressed",
         "from": "click",
-        "part": "edge",
-        "pixel_id": "3",
-        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
-        "wang": 3
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "5b4b788258926fe19ccb3c3cd6fd9630c326e9f3a704b30232fa13b14aa4c117",
+        "size": 32,
+        "wang": 4
+      },
+      "button_pressed_bottom": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "957e8a71618ffc4d7f0438c2842722a0a58f4184c9b3da4d8c85ffb3343283e7",
+        "size": 32,
+        "wang": 12
+      },
+      "button_pressed_br": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "e39d1cd95da0474178a24041c64c3e87f7d0bba13b701f3a1052f1e21c2ff5c6",
+        "size": 32,
+        "wang": 8
       },
       "button_pressed_fill": {
         "derivation": "base",
         "family": "button_pressed",
         "from": "click",
         "part": "fill",
-        "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "233d849d2c8e53ea8419c1c3bc7c363d663466d0a3beacfcaf0c5851565ea2c5",
+        "size": 32,
         "wang": 15
       },
-      "field_corner": {
-        "derivation": "invert",
-        "family": "field",
-        "from": "frame",
-        "part": "corner",
-        "pixel_id": "8",
-        "sha256": "8a129f388483813e9d52311ce1c37396ed6e166557e206934f069c8e70800098",
-        "wang": 8
+      "button_pressed_left": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "b21773ab1bba8856ef56628ba8600eacaad6eba49bfcf466c10426b5e6cd36a9",
+        "size": 32,
+        "wang": 5
       },
-      "field_edge": {
-        "derivation": "invert",
+      "button_pressed_right": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "ef8478db03a7c2a9ee10d47c349a0cb3c496f8d3e87af7d56ff1e6bd095fc1a3",
+        "size": 32,
+        "wang": 10
+      },
+      "button_pressed_tl": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "tl",
+        "pixel_id": "1",
+        "sha256": "6d91835e27dde0c6a90e0f467804f378ae0d57f8b7b0ea8841aa796640d33e27",
+        "size": 32,
+        "wang": 1
+      },
+      "button_pressed_top": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "1d25f4901893704ba5273312f2887c1dd775acd9303ce948c9ca4f2c14bf8cbe",
+        "size": 32,
+        "wang": 3
+      },
+      "button_pressed_tr": {
+        "derivation": "base",
+        "family": "button_pressed",
+        "from": "click",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "cbea4f62249c3ca209185f90b1ea6adbb26d173235d5a2d7d7f3c78170edae82",
+        "size": 32,
+        "wang": 2
+      },
+      "button_right": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "ef8478db03a7c2a9ee10d47c349a0cb3c496f8d3e87af7d56ff1e6bd095fc1a3",
+        "size": 32,
+        "wang": 10
+      },
+      "button_tl": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "tl",
+        "pixel_id": "1",
+        "sha256": "6d91835e27dde0c6a90e0f467804f378ae0d57f8b7b0ea8841aa796640d33e27",
+        "size": 32,
+        "wang": 1
+      },
+      "button_top": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "1d25f4901893704ba5273312f2887c1dd775acd9303ce948c9ca4f2c14bf8cbe",
+        "size": 32,
+        "wang": 3
+      },
+      "button_tr": {
+        "derivation": "base",
+        "family": "button",
+        "from": "click",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "cbea4f62249c3ca209185f90b1ea6adbb26d173235d5a2d7d7f3c78170edae82",
+        "size": 32,
+        "wang": 2
+      },
+      "field_bl": {
+        "derivation": "base",
         "family": "field",
         "from": "frame",
-        "part": "edge",
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "99759368f7a21a2b3ad924d40cbddb72738e759e077f38974c807e026146ff40",
+        "size": 32,
+        "wang": 4
+      },
+      "field_bottom": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "bottom",
         "pixel_id": "12",
-        "sha256": "5e13560e8d45a8d581ce7cf81a4e36edcd495e3ef98e6b620edd0dab7ad7a4c6",
+        "sha256": "8ae31bfd307604aaf124dbd2502ec443034d260f30ee234d97f45e4a4579c47a",
+        "size": 32,
         "wang": 12
+      },
+      "field_br": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "29f90717a5b1272df8781a1de1f214456eac9a5d5ea64ab21087efb07ae8c001",
+        "size": 32,
+        "wang": 8
       },
       "field_fill": {
         "derivation": "recess",
         "family": "field",
         "from": "frame",
         "part": "fill",
-        "pixel_id": "811be5e7-77d7-4d9b-b9d7-7bcea6e546d3",
-        "sha256": "869d86197ddfa96133a523c25f1a8aaa2def2e0875cc48c6d2253acffee55aad",
+        "pixel_id": "1cf37d81-050c-4331-bb7e-d8805dfc9da5",
+        "sha256": "e23bfc3d9678409d37c4e57a1e7d683f4853d35bcdaf26cb6cf2cbe9c0e5ae64",
+        "size": 32,
         "wang": 15
       },
-      "panel_corner": {
+      "field_left": {
         "derivation": "base",
-        "family": "panel",
+        "family": "field",
         "from": "frame",
-        "part": "corner",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "0796e010cbb4e4e18080b0a683345bf48b852f9ec4d473d9528bb359d4d6a786",
+        "size": 32,
+        "wang": 5
+      },
+      "field_right": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "8473114948553865b21c9880e62b4d7352eab0c2d09cb845635606fd83ed57b5",
+        "size": 32,
+        "wang": 10
+      },
+      "field_tl": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "tl",
         "pixel_id": "1",
-        "sha256": "aa3fb4da7e40233f60a3e75debe04acacae2d66355e7de9433f26b2bd050e769",
+        "sha256": "4c1654593a60b3eb4f5332fc608025263d286350c69f422281addcbabc0383e1",
+        "size": 32,
         "wang": 1
       },
-      "panel_edge": {
+      "field_top": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "235b107085901b9046577542a727926b64acdcd063af0a14f2252daa6a6fe9d4",
+        "size": 32,
+        "wang": 3
+      },
+      "field_tr": {
+        "derivation": "base",
+        "family": "field",
+        "from": "frame",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "4ea5fd914d980a33ad47f5e607d4664cfa6d5569f0be52c304ded7871b06d167",
+        "size": 32,
+        "wang": 2
+      },
+      "panel_bl": {
         "derivation": "base",
         "family": "panel",
         "from": "frame",
-        "part": "edge",
-        "pixel_id": "3",
-        "sha256": "85578b7c80136572599b27c6b658d099a7d49711ad7fe147f271a3f0607a0db2",
-        "wang": 3
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "99759368f7a21a2b3ad924d40cbddb72738e759e077f38974c807e026146ff40",
+        "size": 32,
+        "wang": 4
+      },
+      "panel_bottom": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "8ae31bfd307604aaf124dbd2502ec443034d260f30ee234d97f45e4a4579c47a",
+        "size": 32,
+        "wang": 12
+      },
+      "panel_br": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "29f90717a5b1272df8781a1de1f214456eac9a5d5ea64ab21087efb07ae8c001",
+        "size": 32,
+        "wang": 8
       },
       "panel_fill": {
         "derivation": "base",
         "family": "panel",
         "from": "frame",
         "part": "fill",
-        "pixel_id": "811be5e7-77d7-4d9b-b9d7-7bcea6e546d3",
-        "sha256": "3d9496b6b4694ca3d818e00ff3759221b8a47ceb7bddec2c69a75a53b216d3dc",
+        "pixel_id": "1cf37d81-050c-4331-bb7e-d8805dfc9da5",
+        "sha256": "4efce162558e8735e90654db683e2ef4b71334f7cced8b8d0ac3d4e3cc0b4c2b",
+        "size": 32,
         "wang": 15
+      },
+      "panel_left": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "0796e010cbb4e4e18080b0a683345bf48b852f9ec4d473d9528bb359d4d6a786",
+        "size": 32,
+        "wang": 5
+      },
+      "panel_right": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "8473114948553865b21c9880e62b4d7352eab0c2d09cb845635606fd83ed57b5",
+        "size": 32,
+        "wang": 10
+      },
+      "panel_tl": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "tl",
+        "pixel_id": "1",
+        "sha256": "4c1654593a60b3eb4f5332fc608025263d286350c69f422281addcbabc0383e1",
+        "size": 32,
+        "wang": 1
+      },
+      "panel_top": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "235b107085901b9046577542a727926b64acdcd063af0a14f2252daa6a6fe9d4",
+        "size": 32,
+        "wang": 3
+      },
+      "panel_tr": {
+        "derivation": "base",
+        "family": "panel",
+        "from": "frame",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "4ea5fd914d980a33ad47f5e607d4664cfa6d5569f0be52c304ded7871b06d167",
+        "size": 32,
+        "wang": 2
       }
     },
     "tilesets": {
       "click": {
-        "tileset_id": "b6ebbdb4-5959-44dc-b2ad-f89806335fa2"
+        "tileset_id": "d8fc7f1c-99d7-4176-9794-f1fe61d7eb2d"
       },
       "frame": {
-        "tileset_id": "4d7b6210-77aa-480d-9486-282cbe525a11"
+        "tileset_id": "5e1fad83-04a7-43b8-9215-f254a6b44798"
       }
     }
   },
@@ -180,7 +558,7 @@
     "accepted_base": 16,
     "accepted_derived": 0,
     "candidates": 16,
-    "chrome_ingested": 18,
+    "chrome_ingested": 54,
     "facility": {
       "accepted": 6,
       "candidates": 6,

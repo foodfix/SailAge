@@ -402,9 +402,10 @@ func _texture_boxes(ttheme: Theme) -> void:
 	if normal == null:
 		return
 	var tex := normal.texture as Texture2D
-	_check(tex != null and tex.get_width() == 48 and tex.get_height() == 48,
-		"texture mode: Button sheet texture region is 48x48 (got %s)"
-		% (tex.get_size() if tex != null else Vector2.ZERO))
+	_check(tex != null and tex.get_width() == UiThemeLib.SHEET_MARGIN * 3
+		and tex.get_height() == UiThemeLib.SHEET_MARGIN * 3,
+		"texture mode: Button sheet texture region is %dx%d"
+		% [UiThemeLib.SHEET_MARGIN * 3, UiThemeLib.SHEET_MARGIN * 3])
 	_check(normal.region_rect == Rect2(),
 		"texture mode: Button region_rect default (full texture)")
 	_check(normal.texture_margin_left == UiThemeLib.SHEET_MARGIN
@@ -575,15 +576,18 @@ func _texture_states(ttheme: Theme) -> void:
 func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 		spec: Dictionary) -> void:
 	var img := tex.get_image()
-	_check(img != null and img.get_width() == 48 and img.get_height() == 48,
-		"texture mode: %s sheet image is 48x48" % sheet_id)
+	var s := img.get_width() if img != null else 0
+	var m := s / 3  # the texture margin (32 on the 96 sheets)
+	_check(img != null and s == UiThemeLib.SHEET_MARGIN * 3
+		and img.get_height() == s,
+		"texture mode: %s sheet image is %dx%d" % [sheet_id, s, s])
 	if img == null:
 		return
 	# The fill cell is the fully-opaque plate interior (wang_15 — the key
 	# must never leak into the prompted texture).
 	var fill_opaque := true
-	for y in range(16, 32):
-		for x in range(16, 32):
+	for y in range(m, 2 * m):
+		for x in range(m, 2 * m):
 			if img.get_pixel(x, y).a < 0.99:
 				fill_opaque = false
 	_check(fill_opaque,
@@ -597,26 +601,31 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 	var rim_inner := true
 	# top/bottom strips sample the middle column; left/right the middle
 	# row — "carries the keyed outside" = at least one transparent px in
-	# the strip's outer half (the organic key boundary may sit at row 6 or
-	# 7; only the INNER half is pinned fully opaque).
+	# the strip's outer half (the organic key boundary may sit at row
+	# m/2 or deeper; only the INNER half is pinned fully opaque).
+	var mid := s / 2
 	var top_clear := false
 	var bottom_clear := false
 	var left_clear := false
 	var right_clear := false
-	for i in range(8):
-		if img.get_pixel(24, i).a < 0.01:
+	for i in range(m / 2):
+		if img.get_pixel(mid, i).a < 0.01:
 			top_clear = true
-		if img.get_pixel(24, 47 - i).a < 0.01:
+		if img.get_pixel(mid, s - 1 - i).a < 0.01:
 			bottom_clear = true
-		if img.get_pixel(i, 24).a < 0.01:
+		if img.get_pixel(i, mid).a < 0.01:
 			left_clear = true
-		if img.get_pixel(47 - i, 24).a < 0.01:
+		if img.get_pixel(s - 1 - i, mid).a < 0.01:
 			right_clear = true
 	rim_clear = top_clear and bottom_clear and left_clear and right_clear
-	if not (img.get_pixel(24, 8).a > 0.99 and img.get_pixel(24, 15).a > 0.99
-			and img.get_pixel(24, 39).a > 0.99 and img.get_pixel(24, 32).a > 0.99
-			and img.get_pixel(8, 24).a > 0.99 and img.get_pixel(15, 24).a > 0.99
-			and img.get_pixel(39, 24).a > 0.99 and img.get_pixel(32, 24).a > 0.99):
+	if not (img.get_pixel(mid, m).a > 0.99
+			and img.get_pixel(mid, m + m / 2 - 1).a > 0.99
+			and img.get_pixel(mid, 2 * m).a > 0.99
+			and img.get_pixel(mid, 2 * m + m / 2 - 1).a > 0.99
+			and img.get_pixel(m, mid).a > 0.99
+			and img.get_pixel(m + m / 2 - 1, mid).a > 0.99
+			and img.get_pixel(2 * m + m / 2 - 1, mid).a > 0.99
+			and img.get_pixel(2 * m, mid).a > 0.99):
 		rim_inner = false
 	_check(rim_clear,
 		("texture mode: %s edge strips carry the keyed transparent outside "
@@ -626,8 +635,9 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 			+ "four sides (oriented ring)") % sheet_id)
 	# Transparency at the sheet corners — the plate silhouette stays
 	# outside the control rect's corner pixels.
-	_check(img.get_pixel(0, 0).a < 0.01 and img.get_pixel(47, 0).a < 0.01
-		and img.get_pixel(0, 47).a < 0.01 and img.get_pixel(47, 47).a < 0.01,
+	_check(img.get_pixel(0, 0).a < 0.01 and img.get_pixel(s - 1, 0).a < 0.01
+		and img.get_pixel(0, s - 1).a < 0.01
+		and img.get_pixel(s - 1, s - 1).a < 0.01,
 		("texture mode: %s transparent at the four sheet corners "
 			+ "(the keyed plate silhouette)") % sheet_id)
 	# Boundary-distinct pin (§4.8 raw-plate rule, 2026-11-09): on the
@@ -639,13 +649,13 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 	# Alpha geometry above; color RELATION here — no hexes.
 	if spec.get("ring_distinct", false):
 		var ring_distinct := true
-		for cell_x in [0, 16, 32]:
-			for cell_y in [0, 16, 32]:
-				if cell_x == 16 and cell_y == 16:
+		for cell_x in [0, m, 2 * m]:
+			for cell_y in [0, m, 2 * m]:
+				if cell_x == m and cell_y == m:
 					continue  # the fill cell is all-face by design
 				var seen := {}
-				for y in range(cell_y, cell_y + 16):
-					for x in range(cell_x, cell_x + 16):
+				for y in range(cell_y, cell_y + m):
+					for x in range(cell_x, cell_x + m):
 						var c := img.get_pixel(x, y)
 						if c.a > 0.99:
 							seen[c] = true

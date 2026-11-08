@@ -1,0 +1,19 @@
+{
+ "mode": "pro",
+ "tile_size": {
+  "width": 32,
+  "height": 32
+ },
+ "view": "high top-down",
+ "transition_size": 0,
+ "roundness": 0,
+ "raggedness": 0,
+ "boundary_amplitude": 0,
+ "step_slope": 0,
+ "detail": "highly detailed",
+ "shading": "basic shading",
+ "lower_description": "flat solid bright green chroma-key color, one uniform green, no texture, no shading, no dithering",
+ "upper_description": "square chart panel plate for a 16-bit strategy game menu: the whole interior face is light cerulean ocean-blue water with rich detail — small repeating wave crest lines, subtle darker depth blotches and gentle ripple shading across the blue, framed by a richly carved dark walnut wood boundary with visible wood grain strokes, a wide bevel lit warm from the top-left and in deep shadow on the bottom-right, a thin brass inner pinstripe where the wood meets the blue, and a small round brass rosette pinned at each inner corner of the wood, retro 16-bit UI in the style of classic 1990s naval adventure games like Uncharted Waters 2 / New Horizons, crisp deliberate pixels, flat color fills, no text, no icons",
+ "transition_description": "carved dark walnut wood rim with visible grain ending in a crisp straight edge, a thin brass pinstripe at the wood-to-water boundary, Uncharted Waters 2 wood-bound ocean-chart panel edge",
+ "seed": 20261116
+}

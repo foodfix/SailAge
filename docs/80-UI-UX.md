@@ -2086,7 +2086,16 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    click upper_description re-pins the face as "a flat even
    repeat-safe texture with no fold lines, no creases, no knots, no
    stitching and no distinct marks", seed 20261113 (the 7164d350 trio
-   retired). **The raw-plate rule (2026-11-09, user direction — ship
+   retired). **The face re-pin (2026-11-09, user direction — lines and
+   dots inside large buttons):** seed 20261113 still drew interior
+   marks — sparse fiber strokes and rivet dashes that tile into lines
+   and dot lattices on large buttons. The click face re-pins to ONE
+   perfectly uniform flat cream-tan color across the whole face —
+   absolutely zero texture: no fiber grain, no specks, no dots, no
+   lines, no dashes, no rivets, no stitches, no inner borders, no
+   creases, no blotches, no shading variation inside the plate; all
+   detail strictly at the outer edge (the brass band + dark outline),
+   seed 20261114 (the b6ebbdb4 trio retired). **The raw-plate rule (2026-11-09, user direction — ship
    the raw tile):** the click-derived families
    (button/button_hover/button_pressed/button_focus) ship the RAW
    keyed click tiles — the green authoring background keyed to alpha
@@ -2098,9 +2107,81 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    sunken rim, no ACCENT ring; the boundary is the model's own drawn
    outline). The nine-patch assembler still places the tiles
    pixel-exact (FRAME_OPS orientation mirroring) and the stylebox
-   TILEs the middle regions — tiles are placed, never scaled. The
-   frame family keeps its chart-paper speckle (the weathered look is
-   intended). **Palette:** the icon block appends
+   TILEs the middle regions — tiles are placed, never scaled. **The
+   32px ornate re-pin (2026-11-09, user direction — both chrome
+   tilesets regenerate at 32×32, high detail):** the click plate keeps
+   the ONE uniform flat face (zero interior texture) and moves the
+   detail budget into the frame — wide polished brass band, darker
+   brass inner pinstripe, a square brass stud pinned into the band at
+   each corner; 2026-11-09: the 1px dark outline clause removed at
+   user direction; seed 20261115 (the 2209b8dd
+   trio retired); the frame plate re-skins to an ocean-chart panel —
+   light cerulean ocean-blue water interior with rich wave-line /
+   ripple detail, richly carved dark walnut wood boundary with visible
+   grain, brass inner pinstripe at the wood-to-water line and a round
+   brass rosette at each inner corner, seed 20261116 (the 4d7b6210
+   trio retired). **transition_size 0 (2026-11-09, user direction):**
+   the chrome requests drop the inherited 0.25 terrain transition
+   band — at 32px it doubled to a ~8px blend zone and the model
+   painted its transition rim well past the plate quadrant (the
+   non-green lower spill). A tight boundary keeps the keyed
+   silhouette at the quadrant line for both tilesets; at 0 the frame
+   authoring comes out generator-snapped (silhouette depths uniform
+   12–13) — NO snap pass exists for the pixellab chrome: the tiles
+   are placed as authored. **The native
+   nine-slot rule (2026-11-09, user
+   direction — the Wang tileset has ALL the pieces):** the PixelLab
+   tilesets ship every orientation as-authored (wang_1 TL corner,
+   wang_2 TR, wang_4 BL, wang_8 BR, wang_3 top edge, wang_12 bottom,
+   wang_5 left, wang_10 right, wang_15 fill) — the chrome assembly
+   therefore blits each sheet cell from ITS OWN tile with NO transform;
+   the authored-era mirror/rotate FRAME_OPS remain only for the retired
+   generator fallback. The ingest accordingly writes NINE singles per
+   family (slot-suffixed) instead of three. **NO snap pass (2026-11-09,
+   user direction — pixellab output is already snapped):** an earlier
+   ring-boundary snap (pooled-median membership re-pin) is RETIRED —
+   with transition_size 0 the generator pins the keyed silhouette at
+   the quadrant line itself; the tiles are placed as authored and no
+   pass re-measures or shifts anything.
+   **The ring degreen pass (2026-11-09, user direction — non-green
+   lower terrain survives the key):** the chroma key only catches the
+   promised bright green; the model's lower material also survives as
+   dark olive (93,113,19 — g−r below the key margin) and dark teal
+   (3,41,43) hugging the plate edge inside the ring tiles. Each ring
+   master therefore replaces every contaminated opaque pixel with the
+   nearest clean opaque pixel (4-conn BFS, first-seen ties): a pixel is
+   contaminated when it is green-dominant (g > r and g > b), and — in
+   WARM families (the wang_15 modal face has r > b, the parchment
+   click plate) — also when it is cool-cast (b ≥ r); the frame family
+   (cool ocean) only degreens green-dominant pixels. The fill master
+   passes through untouched — the frame's wave texture is intended
+   detail. **The junk clip (2026-11-09, user direction — junk
+   patterns outside the frame):** opaque pixels lying BEYOND a ring
+   tile's own median silhouette boundary are lower-material spill the
+   chroma key could not catch (brass/brown/olive terrain bits). For
+   each silhouette side, the median of the per-column/row
+   first-opaque profile fences the plate: every opaque pixel between
+   the tile edge and that fence goes transparent — pure removal,
+   nothing inside the fence is touched, nothing is filled, nothing
+   shifts. Runs after degreen; the silhouette erosion follows on the
+   clipped tiles.
+   detail. **The silhouette erosion (2026-11-09, user direction —
+   remove the leftover 1px outer line):** after degreen, each ring
+   master still carries the model's dark outline hugging its
+   silhouette. Erase the outermost opaque line on each SILHOUETTE
+   side — the keyed-outside side, i.e. the side NOT reached by the
+   tile's material bits: no N reach (bits&12 unset) erases the
+   TOPMOST opaque row, no S reach (bits&3) the BOTTOMMOST, no W reach
+   (bits&10) the LEFTMOST column, no E reach (bits&5) the RIGHTMOST —
+   the whole extreme line goes transparent, IN PLACE: replace-to-
+   transparent only, NO re-measuring, NO shifting, nothing filled
+   back. Band tiles (wang_3/12/5/10) carry one silhouette side
+   (wang_3: one line off the top); corner tiles (wang_1/2/4/8) two.
+   Runs AFTER degreen and is the LAST chrome pass. Tile-internal
+   sides keep their pixels — the plate continues into the
+   neighboring cells. The fill master passes through.
+   The value-bar band is authored art and stays 16px.
+   **Palette:** the icon block appends
    `PANEL_BLUE #b7cfe0` (pale sky-blue chart paper — the texture-mode
    flat panel fill; `surface_fill()` re-points, ink `INK_WARM` ≈ 8.6:1
    on it); `PARCH` stays pinned (the parchment-plate constant).
@@ -3176,7 +3257,13 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    (port/fleet/shipyard cards) at 1:1, nearest only; chrome tiles 16×16
    assembled into 48×48 nine-patch
    sheets (16px margins, edge tiles in tile-repeat mode — frames render
-   at any size at runtime); FX cannonball/smoke 16×16, splash/impact
+   at any size at runtime); **the chrome at 32×32 (amended
+   2026-11-09, user direction — frame detail headroom):** BOTH chrome
+   tilesets (frame + click) regenerate as 32×32 Wang tiles assembled
+   into 96×96 nine-patch sheets with 32px texture margins (the
+   `ui_theme.gd` sheet margin re-points to 32); the authored bar tiles
+   stay 16×16/48×48 (the value-bar band pin); FX cannonball/smoke
+   16×16, splash/impact
    32×32; portraits 72×96 (3:4 bust); discoveries 64×64;
    `sea_pattern.png` 64×64.
 9. **LOD pins.** world-map NPC fleets stay colored squares (§4.5.2); S10

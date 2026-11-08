@@ -11091,15 +11091,21 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             if chrome_led:
                 chrome_dir = "assets/ui/chrome"
                 manifest_c = declared.get(chrome_dir, [])
+                # §4.8.8 2026-11-09 32px + native nine-slot amendment: in
+                # pixellab mode the authored plate decls (corner/edge/fill
+                # per family) are RETIRED — the ledger's slot singles
+                # replace them wholesale; only the authored bar band
+                # remains generator-owned.
                 kept_c = [(sid, d) for sid, d in manifest_c
-                          if sid not in chrome_led.get("tiles", {})]
+                          if sid.startswith("bar_")]
                 declared[chrome_dir] = kept_c
                 entries_ch: list = []
                 for sid_ch, rec_ch in sorted(
                         chrome_led.get("tiles", {}).items()):
                     decl_ch = {"id": sid_ch, "class": "chrome",
                                "file": f"{chrome_dir}/{sid_ch}.png",
-                               "width": 16, "height": 16,
+                               "width": rec_ch.get("size", 32),
+                               "height": rec_ch.get("size", 32),
                                "pixellab": rec_ch}
                     entries_ch.append((sid_ch, decl_ch))
                     check_decls[sid_ch] = (decl_ch, None)
@@ -11161,10 +11167,15 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     except PngFormatError as exc:
                         fail("art-artifact", f"{parent}/{sheet}",
                              f"assembled sheet does not decode: {exc}", 13)
-                    if (width, height) != (48, 48):
+                    # §4.8.8 (2026-11-09 32px amendment): the six chrome
+                    # sheets assemble from 32px tiles → 96x96 (32px
+                    # margins); the authored bar band keeps 48x48/16px.
+                    want_size = (48, 48) if sheet.endswith("bar.png") \
+                        else (96, 96)
+                    if (width, height) != want_size:
                         fail("art-size", f"{parent}/{sheet}",
                              f"nine-patch sheet is {width}x{height}, pinned "
-                             "48x48 with 16px margins (§4.8.8)", 13)
+                             f"{want_size[0]}x{want_size[1]} (§4.8.8)", 13)
         sprite_cache[class_name] = sprites
         if sprites:
             _g13_check_relations(class_name, check_decls, sprites)

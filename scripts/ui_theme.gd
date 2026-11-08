@@ -116,11 +116,14 @@ static func surface_fill() -> Color:
 
 # --- Nine-patch sheet variants (§4.9 layering rule) ---------------------------
 
-## 48x48 sheets assembled by the governor from the 16x16 tiles, 16px margins
-## (80-* §4.8.8); the stylebox tiles the middle regions (§4.9, the 2026-11-08
+## 96x96 sheets assembled by the governor from the 32x32 tiles, 32px
+## margins (80-* §4.8.8, the 2026-11-09 32px amendment — both PixelLab
+## chrome tilesets are 32px; the authored 16px bar band keeps its own
+## 48x16 sheet outside the theme); the stylebox tiles the middle regions
+## (§4.9, the 2026-11-08
 ## tile-mode amendment — the prompted parchment/leather texture repeats
 ## instead of smearing) and the edges stay margin-fixed.
-const SHEET_MARGIN := 16
+const SHEET_MARGIN := 32
 const SHEET_PATHS := {
 	"panel": "res://assets/ui/chrome/ninepatch_panel.png",
 	"button": "res://assets/ui/chrome/ninepatch_button.png",
