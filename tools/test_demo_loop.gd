@@ -99,8 +99,8 @@ func _step1_title() -> void:
 		"step 1: S19 carries the only language toggle")
 	var proj: Variant = ProjectSettings.get_setting("display/window/size/viewport_width")
 	var proj_h: Variant = ProjectSettings.get_setting("display/window/size/viewport_height")
-	_check(int(proj) == 1280 and int(proj_h) == 720,
-		"step 1: logical window is 1280×720")
+	_check(int(proj) == 1920 and int(proj_h) == 1080,
+		"step 1: logical window is 1920×1080")
 	title.queue_free()
 	await get_tree().process_frame
 

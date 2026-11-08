@@ -1568,12 +1568,12 @@ func _test_dialogs() -> void:
 		"Center/Panel/Margin/Body/Scroll/IconRow/Icon")
 	_check(icon.visible and icon.texture == marker_tex,
 		"an entry icon_id with a registered texture shows the illustration")
-	_check(is_equal_approx(icon.size.x, 32.0) or is_equal_approx(
-			icon.custom_minimum_size.x, 32.0),
-		"the illustration rides the 32px inline cell (§4.8.8)")
+	_check(is_equal_approx(icon.size.x, 64.0) or is_equal_approx(
+			icon.custom_minimum_size.x, 64.0),
+		"the illustration rides the 64px hero cell (§4.8 hero-64 rule)")
 	_check((iconed.get_node(
 			"Center/Panel/Margin/Body/Scroll/IconRow/Message")
-		as Label).custom_minimum_size.x == 448.0 - 36.0,
+		as Label).custom_minimum_size.x == 448.0 - 68.0,
 		"the message wrap width yields the icon cell while it shows")
 	iconed.close()
 	iconed.queue_free()

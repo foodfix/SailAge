@@ -876,9 +876,9 @@ func _test_world_zoom() -> void:
 		"the world boots at the near zoom level (1.0, 64 px tiles)")
 	var near_rect: Rect2 = world.visible_world_rect()
 	var tile := float(world._cell_pixels)
-	_check(absf(near_rect.size.x / tile - 20.0) < 1.0
-		and absf(near_rect.size.y / tile - 12.0) < 1.0,
-		"the near view is 20×12 tiles at the 64 px tile (got %.1f×%.1f)"
+	_check(absf(near_rect.size.x / tile - 30.0) < 1.0
+		and absf(near_rect.size.y / tile - 17.0) < 1.0,
+		"the near view is 30×17 tiles at the 64 px tile (got %.1f×%.1f)"
 		% [near_rect.size.x / tile, near_rect.size.y / tile])
 	# Toggle wide: camera 0.5, the visible window doubles to ~40×23, and the
 	# chunk spawn follows (zero void at the wide view's edges).
@@ -888,9 +888,9 @@ func _test_world_zoom() -> void:
 		and world.world_zoom_wide(),
 		"the toggle lands the camera on the wide 0.5 level (32 px effective)")
 	var wide_rect: Rect2 = world.visible_world_rect()
-	_check(absf(wide_rect.size.x / tile - 40.0) < 1.0
-		and absf(wide_rect.size.y / tile - 23.0) < 1.5,
-		"the wide view is 40×23 tiles (got %.1f×%.1f)"
+	_check(absf(wide_rect.size.x / tile - 60.0) < 1.0
+		and absf(wide_rect.size.y / tile - 34.0) < 1.5,
+		"the wide view is 60×34 tiles (got %.1f×%.1f)"
 		% [wide_rect.size.x / tile, wide_rect.size.y / tile])
 	_check(loader.covers_rect_world(wide_rect),
 		"the wide view renders zero void (the chunk spawn follows the zoom)")

@@ -807,16 +807,16 @@ func _test_layout_geometry() -> void:
 				+ "directly under the rows area"
 			_check(gap_ok, (gap_text % [locale, side]) + gap_note)
 
-		# The three §4.7.16 regions stay inside the 1280×720 design surface.
+		# The three §4.7.16 regions stay inside the 1920×1080 design surface.
 		var in_screen := true
 		for region in [sandbox.player_panel(), sandbox.enemy_panel(),
 				sandbox.conditions_panel()]:
 			if region.global_position.x < 0.0 or region.global_position.y < 0.0 \
-					or region.global_position.x + region.size.x > 1280.0 \
-					or region.global_position.y + region.size.y > 720.0:
+					or region.global_position.x + region.size.x > 1920.0 \
+					or region.global_position.y + region.size.y > 1080.0:
 				in_screen = false
 		_check(in_screen,
-			"[%s] the three §4.7.16 regions stay inside the 1280×720 surface"
+			"[%s] the three §4.7.16 regions stay inside the 1920×1080 surface"
 			% locale)
 
 		sandbox.queue_free()
@@ -854,12 +854,12 @@ func _layout_problems(sandbox) -> Array[String]:
 	var problems: Array[String] = []
 	var regions: Array = [
 		{"name": "player panel", "panel": sandbox.player_panel(),
-			"right": 1280.0, "bottom": 720.0},
+			"right": 1920.0, "bottom": 1080.0},
 		{"name": "enemy panel", "panel": sandbox.enemy_panel(),
-			"right": 1280.0, "bottom": 720.0},
+			"right": 1920.0, "bottom": 1080.0},
 		{"name": "conditions", "panel": sandbox.conditions_panel(),
-			"right": 1280.0, "bottom": 720.0},
-		{"name": "screen", "panel": sandbox, "right": 1280.0, "bottom": 720.0},
+			"right": 1920.0, "bottom": 1080.0},
+		{"name": "screen", "panel": sandbox, "right": 1920.0, "bottom": 1080.0},
 	]
 	for region in regions:
 		var panel: Control = region["panel"]
