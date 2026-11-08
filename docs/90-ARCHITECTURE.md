@@ -22,7 +22,7 @@ autoload, no new signal, no save-format change.
 
 | Path | Contents |
 |---|---|
-| `project.godot` | Godot 4.x project file; window 1280×720 (see §6) |
+| `project.godot` | Godot 4.x project file; window 1920×1080 (see §6) |
 | `autoload/*.gd` | Singleton scripts (§5) |
 | `scenes/*/*.tscn` | All scenes (§4) |
 | `scripts/*.gd` | Non-autoload logic (§4) |
@@ -417,7 +417,7 @@ marked •):
 | Autoloads | EventBus, DataLoader, I18n, GameState, SaveSystem, FleetSim (in that order; FleetSim added 2026-11-02) |
 | Input | keyboard+mouse only; no joypad actions in Phase 1 |
 
-UI scales up from 1280×720 via stretch; no per-screen responsive logic.
+UI is authored at the 1920×1080 design canvas (`canvas_items` stretch, keep aspect); no per-screen responsive logic.
 
 ## 7. Scene Flow Patterns
 

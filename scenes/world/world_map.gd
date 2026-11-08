@@ -327,11 +327,12 @@ var _arrow_samples: Array = []
 var _arrow_month := 0
 var _arrow_camera_tile := Vector2i(-2, -2)
 
-## World zoom-out (§4.8 as amended 2026-11-04, commit 613ddbf): exactly two
-## camera levels — 1.0 near (64 px tiles, 20×12 view) and 0.5 wide (32 px
-## effective, the pre-upgrade 40×23 view). Integer halving keeps pixels
-## crisp; no fractional zoom. Session-local, default near, persisted nowhere
-## (the same convention as the wind/current field toggles).
+## World zoom-out (§4.8 as amended 2026-11-04, commit 613ddbf; view counts
+## re-pinned by the 2026-11-08 resolution bump): exactly two camera levels —
+## 1.0 near (64 px tiles, 30×17 view) and 0.5 wide (32 px effective, 60×33).
+## Integer halving keeps pixels crisp; no fractional zoom. Session-local,
+## default near, persisted nowhere (the same convention as the wind/current
+## field toggles).
 const ZOOM_NEAR := 1.0
 const ZOOM_WIDE := 0.5
 var _zoom_wide := false
@@ -3784,8 +3785,9 @@ func _clamp_to_map(target: Vector2) -> Vector2:
 
 ## Spawns/frees chunks around the camera. The zoom-aware viewport size is
 ## converted to tiles so the loader's 24-chunk ring covers the whole visible
-## view — 20×12 at the near 1.0 level, 40×23 at the wide 0.5 level (the
-## §4.8 64-canvas zoom-out amendment; +2 tiles of apron both ways).
+## view — 30×17 at the near 1.0 level, 60×33 at the wide 0.5 level (the
+## §4.8 64-canvas zoom-out amendment + the 2026-11-08 resolution bump;
+## +2 tiles of apron both ways).
 func _update_chunks() -> void:
 	if _loader == null or _chunks_root == null:
 		return

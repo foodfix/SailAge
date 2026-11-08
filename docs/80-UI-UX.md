@@ -248,7 +248,7 @@ modes regardless of trim (`20-*` §4.17).
 
 ### 4.5 Sailing HUD (S3)
 
-Layout (1280×720; tile viewport is the space below the top bar):
+Layout (1920×1080; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
@@ -686,7 +686,7 @@ mutates state** — a pure view of the session.
 +------------------------------------------------------------------+
 | 海图 / Chart                                        [关闭海图]     | top 40px
 +------------------------------------------------------------------+
-|  whole world 4320×2160 downscaled to fit (≈0.30× at 1280×720)     |
+|  whole world 4320×2160 downscaled to fit (≈0.44× at 1920×1080)     |
 |   explored tiles: SEA/COAST_SEA at low alpha                      |
 |   unknown tiles: PANEL_BG                                         |
 |   known ports: 3px nation-coloured dots (+ names at zoom)         |
@@ -703,7 +703,7 @@ mutates state** — a pure view of the session.
   as nation-coloured dots with names shown at zoom, discovery hint icons, the
   fleet marker.
 - **Scale:** whole 4320×2160 grid downscaled to fit the viewport (scale
-  ≈ 0.30× at 1280×720); no scrolling, no per-region tabs. Dateline handling is
+  ≈ 0.44× at 1920×1080); no scrolling, no per-region tabs. Dateline handling is
   implicit in a full-world image (no seam crop).
 - **Input:** `Tab` toggles, `Esc` closes (`§4.3`); the panel owns all input
   while open. Closing returns to S3 with the fleet unmoved and the clock
@@ -923,7 +923,7 @@ chart adds:
 
 Phase 9 rebuilds the presentation: the Phase-2 16×10 MP grid becomes a
 48×30 physics world with a free camera, a minimap and overlays. Layout,
-1280×720, placeholder shapes only (§4.8 palette):
+1920×1080, placeholder shapes only (§4.8 palette):
 
 ```
 +------------------------------------------------------------------+
@@ -941,8 +941,8 @@ Phase 9 rebuilds the presentation: the Phase-2 16×10 MP grid becomes a
 ```
 
 - **World & camera.** The battle world is 48×30 tiles at 32 px =
-  1536×960; the camera viewport is 1280×584 (the bottom bar takes the
-  rest of the 1280×720 window). The camera auto-centers on the acting
+  1536×960; the camera viewport is 1920×944 (the bottom bar takes the
+  rest of the 1920×1080 window). The camera auto-centers on the acting
   unit until the first manual pan — a manual pan pauses follow until the
   next unit's turn. Pan with RMB/MMB drag; zoom with the wheel at
   0.6×–1.5×, anchored at the cursor; edge scroll runs off a 16 px screen
@@ -1595,7 +1595,7 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
 
 - **Entry.** S1 gains the 海战 button (`sandbox.title`) in its button
   stack, between New Game and Load. `Esc` returns to S1 (§4.2).
-- **Layout (1280×720).** left = the player panel, right = the enemy
+- **Layout (1920×1080).** left = the player panel, right = the enemy
   panel, bottom = the conditions row + `[开战] [随机全部] [导入] [导出]`.
   Every label comes from the `sandbox.*` family inventoried in `10-*`
   §7.12.
@@ -1970,14 +1970,14 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      (64 px); battle-grid fleet tokens render at 0.5 scale (32 px on
      the 32 px battle tile); icons inline keep the 32 art, hero
      contexts show the 64 canvas.
-   - **World zoom-out (amended 2026-11-04, user direction).** the
+   - **World zoom-out (amended 2026-11-04, user direction; view counts
+     re-pinned by the 2026-11-08 resolution bump to 1920×1080).** the
      world camera has exactly two zoom levels: **1.0** (near — 64 px
-     tiles, 20×12 view) and **0.5** (wide — 32 px effective, the
-     pre-upgrade 40×23 view; exact integer halving keeps every pixel
-     crisp, no fractional zoom). One key toggles (a free key per the
-     §4.2 keybind table); chunk spawning follows the effective view
-     radius so the wide view never shows void. Battle/ports/UI zoom
-     unaffected.
+     tiles, 30×17 view) and **0.5** (wide — 32 px effective, 60×33;
+     exact integer halving keeps every pixel crisp, no fractional
+     zoom). One key toggles (a free key per the §4.2 keybind table);
+     chunk spawning follows the effective view radius so the wide
+     view never shows void. Battle/ports/UI zoom unaffected.
    - **Ingestion contract (TheNoise, `POST /edit` on 127.0.0.1:8001,
      qwen_image21).** draft export (the 64 fallback upscaled to the
      API reference size) → `/edit` with the direction-specific

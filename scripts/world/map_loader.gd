@@ -61,10 +61,11 @@ const CHUNK_TILES := 128
 const MAX_LIVE_CHUNKS := 24
 ## One chunk ring beyond the viewport, so a camera nudge never shows void.
 const CHUNK_MARGIN := 1
-## 1280×720 at the world `WORLD_TILE_PX` = 64 → 20×12 tiles (the §4.8
-## 64-canvas amendment). The scene passes its own zoom-aware value; this
-## default keeps [method update_chunks] usable stand-alone.
-const DEFAULT_VIEW_TILES := Vector2i(20, 12)
+## 1920×1080 at the world `WORLD_TILE_PX` = 64 → 30×17 tiles (the §4.8
+## 64-canvas amendment + the 2026-11-08 resolution bump). The scene passes
+## its own zoom-aware value; this default keeps [method update_chunks]
+## usable stand-alone.
+const DEFAULT_VIEW_TILES := Vector2i(30, 17)
 ## Rough per-cell footprint of a TileMapLayer cell (quadrant + cell data); only
 ## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
 const MEMORY_PER_CELL_BYTES := 16

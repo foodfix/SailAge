@@ -53,7 +53,7 @@ var _host: Control = null
 
 func _ready() -> void:
 	_host = Control.new()
-	_host.size = Vector2(1280, 720)
+	_host.size = Vector2(1920, 1080)
 	add_child(_host)
 	await get_tree().process_frame
 	_make_run()

@@ -133,8 +133,9 @@ const TILE_PX := 32.0
 const GRID_W := BattleSimLib.GRID_WIDTH
 const GRID_H := BattleSimLib.GRID_HEIGHT
 const WORLD_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)  # 1536×960
-## The camera viewport (the bottom bar takes the rest of 1280×720, §4.7.1).
-const VIEW_SIZE := Vector2(1280, 584)
+## The camera viewport (the bottom bar takes the rest of 1920×1080, §4.7.1
+## as amended by the 2026-11-08 resolution bump).
+const VIEW_SIZE := Vector2(1920, 944)
 const TOP_BAR_H := 40.0
 const BOTTOM_BAR_H := 96.0
 ## The minimap: 192×120 at 4 px/cell, top-right (§4.7.1).

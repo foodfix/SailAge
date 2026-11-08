@@ -284,7 +284,7 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 	var note_text := _row_note_text(port, ship_type_id)
 	# §4.8: 32px table row. Two lines per entry (identity/price/action, then the
 	# stats) so the long localised stat string can wrap instead of overflowing
-	# the half-width catalog panel at 1280×720; gray rows add the note line.
+	# the half-width catalog panel at 1920×1080; gray rows add the note line.
 	var card := VBoxContainer.new()
 	card.name = "Catalog_%s" % ship_type_id
 	card.custom_minimum_size.y = float(PaletteLib.ROW_H)
@@ -829,7 +829,7 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 	# Two lines per row (§4.8: 32px rows, half-width panel): line 1 is the
 	# slot noun, the worn item and Unequip; line 2 is the buy list, because
 	# "<name> <price>" buttons for two items never fit beside those labels at
-	# 1280×720.
+	# 1920×1080.
 	var card := VBoxContainer.new()
 	card.name = "Equip_%s_%s" % [slot, "player" if ship_index < 0 else str(ship_index)]
 
