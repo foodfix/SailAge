@@ -1381,25 +1381,30 @@ CHROME_TILESETS: dict[str, dict] = {
             "edge",
         "seed": 20261108,
     },
-    "button": {
+    # The light click plate (80-* §4.8, 2026-11-08 evening revision):
+    # the button family re-sources here (the chestnut leather set is
+    # retired — dark plates made the card labels' ink unreadable).
+    "click": {
         "upper_description":
-            "small raised button plate of dark chestnut-brown polished "
-            "leather for a 16-bit strategy game menu: smooth warm brown "
-            "face with a faint stitched groove just inside the edge, "
-            "bright crisp bevel lit from the top-left, dark undercut on "
-            "the bottom-right, thin gold rim line around the edge, "
-            "retro 16-bit UI button in the style of classic 1990s naval "
-            "adventure games like Uncharted Waters 2 / New Horizons, "
-            "crisp deliberate pixels, flat color fills, light from "
-            "top-left, no text",
+            "raised rectangular aged-parchment click plate for a 16-bit "
+            "strategy game menu: warm cream-tan paper face with sparse "
+            "subtle fiber grain, framed by a carved warm brown wood rim "
+            "with a double thin brass line just inside it, small brass "
+            "square rosette at each inner corner, light from top-left: "
+            "the top-left bevel slope lit warm, the bottom-right slope "
+            "in deep shadow, retro 16-bit UI button in the style of "
+            "classic 1990s naval adventure games like Uncharted Waters "
+            "2 / New Horizons, crisp deliberate pixels, flat color "
+            "fills, no text",
         "lower_description":
             "flat solid bright green chroma-key color, one uniform "
             "green, no texture, no shading, no dithering",
         "transition_description":
-            "bright raised leather edge with square corners and a 1px "
-            "dark outline at the silhouette, gold rim light on top, "
-            "Uncharted Waters 2 button edge",
-        "seed": 20261109,
+            "low raised wood rim ending in a crisp straight edge with "
+            "square corners and a double brass line at the plate "
+            "silhouette, a 1px dark outline outside the brass, "
+            "Uncharted Waters 2 beveled parchment button edge",
+        "seed": 20261110,
     },
 }
 

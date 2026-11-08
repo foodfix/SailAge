@@ -52,9 +52,11 @@ no per-tile cards; the legacy `terrain_*` texture jobs are HIDDEN entirely (2026
 ## Chrome tilesets family (pixellab — the §4.8 2026-11-08 path)
 
 TWO cards, one per family (`chrome_frame` = the parchment panel plate,
-`chrome_button` = the chestnut leather button plate — the pinned
+`chrome_click` = the light parchment click plate — the 2026-11-08
+evening revision re-sourced the button families here and RETIRED the
+chestnut leather set; the pinned
 descriptions/seeds live in `tools/pixellab_pass.py CHROME_TILESETS` /
-80-* §4.8, seeds 20261108 / 20261109). ONE `/v2/create-tileset` pro
+80-* §4.8, seeds 20261108 / 20261110). ONE `/v2/create-tileset` pro
 tileset per re-roll via `run_chrome_tileset` **in-process**; defaults are
 read from the vendored canonical trio (tileset id + seed from the
 `_submit.json`, the three descriptions from the `_request.json`;
@@ -72,7 +74,7 @@ mapping (upper = material; TL = wang_1, T = wang_3, fill = wang_15, the
 other cells dihedral mirrors/rotations — exactly `build_ui_art`'s
 `FRAME_OPS` relations) into the 48×48 sheet, rendered as the sheet
 itself plus a 160×64 panel rect (corners + tiled edges/fill) — the
-button family adds a 96×28 button rect — on the muted review backdrop,
+click family adds a 96×28 button rect — on the muted review backdrop,
 NEAREST-upscaled 3×. **Accept + rebuild**: the staged trio is copied
 into `tools/assets/pixellab_raw/` under its canonical
 `tileset_chrome_<family>_<id>{,_request,_submit}.json` names, the
@@ -80,7 +82,7 @@ previous canonical trio for the family is deleted (the ingest requires
 exactly ONE `tileset_chrome_<family>_*.json` — `_chrome_find_tileset`),
 and `build_ui_art --import-chrome-pixellab` re-lands the 18 derived
 singles (panel/field from frame; button/hover/pressed/focus from
-button) + the `chrome{}` ledger. The gate is the fresh `chrome{}`
+click) + the `chrome{}` ledger. The gate is the fresh `chrome{}`
 section of `tools/ui_art/ingest_ledger.json` listing the new tileset id
 for the family. Git add/commit stays with the user.
 

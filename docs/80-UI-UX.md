@@ -2025,6 +2025,33 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    the coast-card pattern) re-roll one tileset each in-process and
    accept by staging the vendored trio + re-running the import.
 
+   **The light click plate (amended 2026-11-08 evening, user direction
+   — black-on-chestnut contrast revision):** the button family
+   re-sources to a THIRD tileset — `click`, seed 20261110, the same
+   envelope as frame/button, upper = "raised rectangular aged-parchment
+   click plate for a 16-bit strategy game menu: warm cream-tan paper
+   face with sparse subtle fiber grain, framed by a carved warm brown
+   wood rim with a double thin brass line just inside it, small brass
+   square rosette at each inner corner, light from top-left: the
+   top-left bevel slope lit warm, the bottom-right slope in deep
+   shadow, retro 16-bit UI button in the style of classic 1990s naval
+   adventure games like Uncharted Waters 2 / New Horizons, crisp
+   deliberate pixels, flat color fills, no text", lower = the same
+   green chroma key (pinned verbatim in
+   `pixellab_pass.CHROME_TILESETS`) — and the chestnut leather set is
+   RETIRED (its vendored trio + the `chrome_button` studio card
+   removed; two live tilesets: `frame` + `click`).
+   `button`/`button_hover`/`button_pressed`/`button_focus` derive from
+   `click` with the same op table (base / lift / press / ring); the
+   file ids, the seven sheets and the runtime paths are unchanged.
+   **Button text rides the ink seam:** in texture mode the Button font
+   states resolve `INK_WARM` — dark ink on the light plate, the UW2
+   menu look — and the nested card labels' `Label` ink becomes correct
+   by design (the black-on-chestnut regression this revision supersedes
+   was child Labels resolving the panel ink on a dark plate); the flat
+   fallback keeps cream-on-navy; disabled text = `INK_WARM` at 0.55
+   alpha in texture mode.
+
    **NPC world-fleet tokens (amended 2026-11-05, user direction —
    UW2 ships-in-sight):** world-map NPC fleets render the same 8-dir
    hull tokens as the player (the flagship's ship type, the fleet's
@@ -3215,8 +3242,11 @@ tile identically). **Ink seam (2026-11-08):** in texture mode
 `Label`/`Dim` and LineEdit/TextEdit text resolve `INK_WARM`
 (`Dim` = `INK_WARM` at 0.75 alpha) and the `Accent`/`Warn`
 variations resolve `ACCENT_LO` (parchment contrast);
-`Good`/`Bad`/`CardStatus*` keep their semantic hexes; button text
-stays `TEXT`. `surface_fill()` returns `PARCH` in texture mode.
+`Good`/`Bad`/`CardStatus*` keep their semantic hexes; **button text
+rides the seam too (2026-11-08 evening): `INK_WARM` in texture mode**
+(the light click plate), cream in the flat fallback, disabled text =
+`INK_WARM` at 0.55 alpha in texture mode. `surface_fill()` returns
+`PARCH` in texture mode.
 All modulate factors and the ink seam are named constants/statics
 in `ui_theme.gd`.
 

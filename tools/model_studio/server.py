@@ -431,8 +431,10 @@ class Studio:
         }
 
     def _chrome_entry(self, family, prompts, state, accepted) -> dict:
-        """One chrome tileset card (§4.8 2026-11-08): frame (parchment
-        panel plate) / button (chestnut leather plate), ONE card per
+        """One chrome tileset card (§4.8 2026-11-08; the evening revision
+        re-sourced the button families to the light `click` plate and
+        retired the chestnut set): frame (parchment panel plate) /
+        click (light parchment click plate), ONE card per
         family. draft = the canonical vendored strip; raw = the pending
         re-roll strip; snapped = the nine-patch mock preview (the pending
         tiles when one is staged, else the canonical tiles). Prompt = the
@@ -712,8 +714,10 @@ class Studio:
         except Exception as exc:  # noqa: BLE001 — degrade, never die
             warnings.append(f"coast: {type(exc).__name__}: {exc}")
             log(f"registry SKIP coast: {warnings[-1]}")
-        # The chrome tileset cards (§4.8 2026-11-08 — one per family):
-        # frame (parchment panel plate) + button (leather button plate)
+        # The chrome tileset cards (§4.8 2026-11-08, one per family):
+        # frame (parchment panel plate) + click (the light parchment
+        # click plate — the 2026-11-08 evening revision; the chestnut
+        # set is retired)
         for fam in chain.CHROME_FAMILIES:
             try:
                 jobs.append(self._chrome_entry(fam, prompts, state,

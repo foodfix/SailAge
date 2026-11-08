@@ -1019,3 +1019,26 @@ _Waves ledger entries are appended here by the master as merges land
 - Pending user review: the contact sheet (regenerated) + the studio
   card previews; a re-roll of either tileset is a card action, not a
   code change.
+
+### W7.1 — the light click plate (2026-11-08 evening) — COMPLETE
+
+- User direction (black-on-chestnut contrast): the button families
+  re-source to the THIRD tileset `click` (light parchment click plate,
+  double brass line + rosettes, seed 20261110, the same envelope/green
+  key) and the chestnut leather set is RETIRED (trio `git rm`'d,
+  `chrome_button` studio card removed; two live tilesets: frame +
+  click). Root cause the revision supersedes: card-style Buttons carry
+  child Labels, which resolve the Label ink (dark) on the dark
+  chestnut plate — on the light plate that ink is correct by design.
+- Derivations unchanged (base / lift / press / ring from `click`); the
+  file ids, sheets and runtime paths unchanged. Tones: face mean
+  `#ddbd90` (ink `INK_WARM` ≈ 7.5:1), rim `#b67625`, pressed ×0.80,
+  hover +18%, focus ring `ACCENT`.
+- §4.9: the Button font states ride the ink seam (`INK_WARM` texture /
+  cream flat; disabled = ink @ 0.55). `test_ui_theme` amended to the
+  new pins.
+- Gates: validator **groups 1–13 OK**; `build_ui_art --check`
+  **271 files byte-identical** (double run); full
+  `tools/run_tests.py` **62/62 GREEN** (442.1s, -j4).
+- Studio: `chrome_click` card replaces `chrome_button` (registry,
+  chain, mock, README).

@@ -1,0 +1,19 @@
+{
+ "mode": "pro",
+ "tile_size": {
+  "width": 16,
+  "height": 16
+ },
+ "view": "high top-down",
+ "transition_size": 0.25,
+ "roundness": 0,
+ "raggedness": 0,
+ "boundary_amplitude": 0,
+ "step_slope": 0,
+ "detail": "medium detail",
+ "shading": "basic shading",
+ "lower_description": "flat solid bright green chroma-key color, one uniform green, no texture, no shading, no dithering",
+ "upper_description": "raised rectangular aged-parchment click plate for a 16-bit strategy game menu: warm cream-tan paper face with sparse subtle fiber grain, framed by a carved warm brown wood rim with a double thin brass line just inside it, small brass square rosette at each inner corner, light from top-left: the top-left bevel slope lit warm, the bottom-right slope in deep shadow, retro 16-bit UI button in the style of classic 1990s naval adventure games like Uncharted Waters 2 / New Horizons, crisp deliberate pixels, flat color fills, no text",
+ "transition_description": "low raised wood rim ending in a crisp straight edge with square corners and a double brass line at the plate silhouette, a 1px dark outline outside the brass, Uncharted Waters 2 beveled parchment button edge",
+ "seed": 20261110
+}

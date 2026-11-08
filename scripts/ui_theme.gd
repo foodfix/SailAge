@@ -75,7 +75,7 @@ const DISABLED_MODULATE := 0.45
 static func build_theme(use_textures: bool = true) -> Theme:
 	var theme := Theme.new()
 	var sheets := _load_sheets() if use_textures else {}
-	_setup_button(theme, sheets)
+	_setup_button(theme, sheets, use_textures)
 	_setup_scrollbars(theme)
 	_setup_panels(theme, sheets)
 	_setup_fields(theme, sheets, use_textures)
@@ -205,7 +205,8 @@ static func _focus_ring(accent: Color) -> StyleBoxFlat:
 	return sb
 
 
-static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
+static func _setup_button(theme: Theme, sheets: Dictionary = {},
+		use_textures: bool = true) -> void:
 	# §4.9 Button row + state matrix, with the amended 2026-11-08
 	# PixelLab-chrome mapping: normal = button sheet; hover = button_hover
 	# sheet (the baked glow); momentary pressed = button_pressed sheet (the
@@ -266,14 +267,20 @@ static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
 			_texture_box(sheets["button_focus"]))
 	else:
 		theme.set_stylebox("focus", "Button", _focus_ring(PaletteLib.ACCENT))
-	# Text stays TEXT through every interactive state; disabled text is
-	# PANEL_LINE (the state matrix's disabled cell).
-	theme.set_color("font_color", "Button", PaletteLib.TEXT)
-	theme.set_color("font_hover_color", "Button", PaletteLib.TEXT)
-	theme.set_color("font_pressed_color", "Button", PaletteLib.TEXT)
-	theme.set_color("font_hover_pressed_color", "Button", PaletteLib.TEXT)
-	theme.set_color("font_focus_color", "Button", PaletteLib.TEXT)
-	theme.set_color("font_disabled_color", "Button", PaletteLib.PANEL_LINE)
+	# Text rides the §4.9 ink seam (2026-11-08 evening): the click plate is
+	# light parchment — ink text in texture mode (the card children's Label
+	# ink becomes correct by design), cream in the flat fallback; disabled
+	# text dims to ink at 0.55 alpha in texture mode, PANEL_LINE flat.
+	var button_ink: Color = (PaletteLib.INK_WARM
+			if _ink_mode(use_textures, sheets) else PaletteLib.TEXT)
+	var button_ink_dim: Color = (Color(PaletteLib.INK_WARM, 0.55)
+			if _ink_mode(use_textures, sheets) else PaletteLib.PANEL_LINE)
+	theme.set_color("font_color", "Button", button_ink)
+	theme.set_color("font_hover_color", "Button", button_ink)
+	theme.set_color("font_pressed_color", "Button", button_ink)
+	theme.set_color("font_hover_pressed_color", "Button", button_ink)
+	theme.set_color("font_focus_color", "Button", button_ink)
+	theme.set_color("font_disabled_color", "Button", button_ink_dim)
 
 	# Theme variations (§4.9 state matrix; Godot 4 `Theme.set_type_variation`).
 	# `Toggle` carries the amended texture-mode mapping's toggle-pressed cell:

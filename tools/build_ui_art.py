@@ -508,7 +508,9 @@ CHROME_PRESS_DARKEN = 0.80   # c' = round(c×darken), opaque px
 CHROME_FIELD_RECESS = 0.62   # field interior darken (inset parchment)
 CHROME_FOCUS_RING = "#d9a441"  # ACCENT — the silhouette focus ring
 CHROME_RAW_DIR = ROOT / "tools" / "assets" / "pixellab_raw"
-# frame = parchment panel plate; button = chestnut leather plate.
+# frame = parchment panel plate; click = the light parchment click plate
+# (the 2026-11-08 evening revision — the chestnut leather set is retired);
+# the button families derive from `click` with the same op table.
 # Derivations: family -> (source tileset, per-part (wang, op)) where op ∈
 # {"base", "ring", "lift", "invert", "press", "recess"} — "invert" =
 # rot_180 only, "press" = rot_180 + darken, "recess" = darken only.
@@ -517,15 +519,15 @@ CHROME_DERIVATIONS = {
                         "fill": (15, "base")}),
     "field": ("frame", {"corner": (8, "invert"), "edge": (12, "invert"),
                         "fill": (15, "recess")}),
-    "button": ("button", {"corner": (1, "base"), "edge": (3, "base"),
-                          "fill": (15, "base")}),
-    "button_hover": ("button", {"corner": (1, "lift"), "edge": (3, "lift"),
-                                "fill": (15, "lift")}),
-    "button_pressed": ("button", {"corner": (8, "press"),
-                                  "edge": (12, "press"),
-                                  "fill": (15, "press")}),
-    "button_focus": ("button", {"corner": (1, "ring"), "edge": (3, "ring"),
-                                "fill": (15, "base")}),
+    "button": ("click", {"corner": (1, "base"), "edge": (3, "base"),
+                         "fill": (15, "base")}),
+    "button_hover": ("click", {"corner": (1, "lift"), "edge": (3, "lift"),
+                               "fill": (15, "lift")}),
+    "button_pressed": ("click", {"corner": (8, "press"),
+                                 "edge": (12, "press"),
+                                 "fill": (15, "press")}),
+    "button_focus": ("click", {"corner": (1, "ring"), "edge": (3, "ring"),
+                               "fill": (15, "base")}),
 }
 
 

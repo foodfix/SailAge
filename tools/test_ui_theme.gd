@@ -527,6 +527,15 @@ func _texture_states(ttheme: Theme) -> void:
 	# §4.9 ink seam (2026-11-08): parchment panels ride the warm ink; button
 	# text stays cream (the plates are dark); surface_fill is PARCH; the
 	# styleboxes tile their middle regions.
+	# §4.9 ink seam (2026-11-08 evening): the click plate is light — button
+	# text rides INK_WARM in texture mode (cream in the flat fallback),
+	# disabled dims to ink at 0.55; nested card children's Label ink is
+	# correct by design (dark on light).
+	_check(ttheme.get_color("font_color", "Button") == PaletteLib.INK_WARM,
+		"texture mode: Button text is the warm ink (light click plate)")
+	_check(ttheme.get_color("font_disabled_color", "Button")
+		== Color(PaletteLib.INK_WARM, 0.55),
+		"texture mode: Button disabled text is ink at 0.55 alpha")
 	_check(ttheme.get_color("font_color", "Label") == PaletteLib.INK_WARM,
 		"texture mode: Label text is the warm ink (parchment panels)")
 	_check(ttheme.get_color("font_color", "Dim")
@@ -537,8 +546,6 @@ func _texture_states(ttheme: Theme) -> void:
 	_check(ttheme.get_color("font_color", "Good") == PaletteLib.GOOD
 		and ttheme.get_color("font_color", "Bad") == PaletteLib.BAD,
 		"texture mode: Good/Bad keep their semantic hexes")
-	_check(ttheme.get_color("font_color", "Button") == PaletteLib.TEXT,
-		"texture mode: Button text stays TEXT cream (dark plates)")
 	var line_edit := ttheme.get_color("font_color", "LineEdit")
 	_check(line_edit == PaletteLib.INK_WARM,
 		"texture mode: LineEdit text is the warm ink (inset parchment)")

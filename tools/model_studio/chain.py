@@ -387,9 +387,11 @@ def coast_mock_png(result: dict) -> bytes:
 # ---------- chrome tileset family (§4.8 2026-11-08, one card per family) -
 # The studio's chrome path drives tools/pixellab_pass.py
 # run_chrome_tileset IN-PROCESS: ONE /v2/create-tileset pro tileset per
-# family ("frame" = parchment panel plate, "button" = chestnut leather
-# button plate — the pinned descriptions/seeds live in
-# px.CHROME_TILESETS / 80-* §4.8, seeds 20261108 / 20261109). Re-rolls
+# family ("frame" = parchment panel plate, "click" = the light parchment
+# click plate — the pinned descriptions/seeds live in
+# px.CHROME_TILESETS / 80-* §4.8, seeds 20261108 / 20261110; the
+# 2026-11-08 evening revision retired the chestnut leather "button"
+# set). Re-rolls
 # STAGE into the studio cache (the coast pattern): the pass tool vendors
 # the trio into its pinned CHROME_RAW_DIR (tools/assets/pixellab_raw/),
 # and chrome_reroll immediately MOVES the fresh trio into the cache — a
@@ -400,7 +402,7 @@ def coast_mock_png(result: dict) -> bytes:
 # _chrome_find_tileset), and runs build_ui_art --import-chrome-pixellab
 # (green-key + the 18 derived singles + the chrome{} ledger gate).
 
-CHROME_FAMILIES = ("frame", "button")
+CHROME_FAMILIES = ("frame", "click")
 CHROME_CARD_PREFIX = "chrome_"
 CHROME_TILE = 16           # px — the pinned tile size (px.CHROME_SHARED_REQUEST)
 CHROME_SHEET = 48          # px — the 3x3 nine-patch sheet (build_ui_art SHEET)
@@ -682,7 +684,7 @@ def chrome_mock_png(result: dict, family: str) -> bytes:
     sheet = chrome_sheet_rows(result)
     panels = [(sheet, CHROME_SHEET, CHROME_SHEET),
               (_chrome_panel_rows(sheet, 160, 64), 160, 64)]
-    if family == "button":
+    if family == "click":
         panels.append((_chrome_panel_rows(sheet, 96, 28), 96, 28))
     pad, gap = 8, 12
     lw = pad + sum(pw for _r, pw, _ph in panels) + gap * (len(panels) - 1) \
