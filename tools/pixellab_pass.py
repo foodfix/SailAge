@@ -1381,19 +1381,22 @@ CHROME_TILESETS: dict[str, dict] = {
         "seed": 20261112,
     },
     # The light click plate (80-* §4.8, 2026-11-08 evening revision,
-    # night re-pin: parchment face + brass band — the tan-leather
-    # wording superseded).
+    # night re-pin: parchment face + brass band; the 2026-11-09 fence
+    # fix pins a repeat-safe face — tile-mode repetition turned the
+    # rolled crease marks into a fence on large pressed buttons).
     "click": {
         "upper_description":
             "raised rectangular parchment click plate for a 16-bit "
-            "strategy game menu: aged cream-tan parchment paper face "
-            "with sparse fiber grain, framed by a bright polished "
-            "brass band around the edge with a 1px dark outline just "
-            "outside it, strong raised bevel lit from the top-left "
-            "with a deep shadow on the bottom-right, retro 16-bit UI "
-            "button in the style of classic 1990s naval adventure "
-            "games like Uncharted Waters 2 / New Horizons, crisp "
-            "deliberate pixels, flat color fills, no text",
+            "strategy game menu: aged cream-tan parchment paper face, "
+            "a flat even repeat-safe texture with no fold lines, no "
+            "creases, no knots, no stitching and no distinct marks, "
+            "framed by a bright polished brass band around the edge "
+            "with a 1px dark outline just outside it, strong raised "
+            "bevel lit from the top-left with a deep shadow on the "
+            "bottom-right, retro 16-bit UI button in the style of "
+            "classic 1990s naval adventure games like Uncharted Waters "
+            "2 / New Horizons, crisp deliberate pixels, flat color "
+            "fills, no text",
         "lower_description":
             "flat solid bright green chroma-key color, one uniform "
             "green, no texture, no shading, no dithering",
@@ -1401,7 +1404,7 @@ CHROME_TILESETS: dict[str, dict] = {
             "raised polished brass rim ending in a crisp straight edge "
             "with square corners, a 1px dark outline at the silhouette, "
             "Uncharted Waters 2 brass-bound parchment button edge",
-        "seed": 20261111,
+        "seed": 20261113,
     },
 }
 

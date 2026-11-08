@@ -16,7 +16,7 @@
     "name": "wang_13",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABgklEQVR4nKWSvy8EQRTHPzOzeydCgv9Ac4VKI1GiUalEopEoqESjuVKUdBRCR4TKj4gChSgp5K7TOQmhERKRu+y53R3ZubnbW+Fy4Zvs7Hvz5jvvzfc98ZLb1ZIYIZDwdRA7QjVEIH9zhnjN7erE7m/kBkh7ke8HOH8h1uA44NzdXvMfOL19g8mdJm+uxaSwlaISesVkoUy5JqgD8zfftwslVgMpOiwR/Mo7EJhumBLR0RKTatl11RbnWaE/Si6d7RVKH/HJQAlKwaex3zoyTE0u1iKGfLqZZXRuGTHdjy6XIZ22GVLwWUk+fedwif2DPEMjE8bfXpllamEDqcDxBai26K0Q2amobDsZKoTuYiyTVILL43VDVrKCxkWgI2oT+OA9zHNy9Mjw0BhatiFCDy1cK2QEn9ahA4R062JKs/44jxYOpL0nXH3B2vgM4beOyJay5+7JuAMUejROfc5UtZVNs1t4qS6uCkVWt/bwzSzFA9UCHZ696jwQ+IagQ8+4kQxf1DODHWzx++4AAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAv0lEQVR4nGN8cWbRfwYKABMlmgeZAR/fPWY4uX8r5S74+O4xeQbwC8kymDt6M9y4eIkkAxhn5hjgjUYJeXWwwbgAiyDPP7w23L1yFkzjMoRl87HPYIahIjOYfvXhD5hWlBVguP/4AwMXOxPYEJwGMEDB+ft/Yb4Ck0/ffwSzDRWZGL58x+1KliUV9/F6wXClCgMPJ+7kwsJkA3cEdrASvzQTpWmRiQHkPXRDQHwiDWYBK0QPIzRDuXl5wDS2pA4A6dM0anaqAssAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -63,7 +63,7 @@
     "name": "wang_10",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA2klEQVR4nJ1SsQrCMBS8vJaqXUQFV3H1C/xRwR9w8QP8BicHB7GD4FhwkS5KTRNpahujCaYeCbzkuOPl5dhlt5IEjWua4JwesVmucb8xLPayIjiAEF+gd3GNgneUWOQvMexiZQAHuj0JipiL1r6nw9a4GA0HTW104DKYzubGRZYmmix+6mE+QZoKHrQ1YJWi83BMzILQ5pTLzNuA6kJ4SxwGNfrjCWQUN9lpZSA+yPCfDpjwH6DVAC1/wRllRXpEmShgKLc6BAySePONXlHWrRQol6rjKlA+UX4Cugw6W1qan00AAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAxUlEQVR4nGN8cWbRfwY0wMXLw7BjfgPDk+ffGHad+cCw++QHiMQ/BgYGJlSaiQEL+Pb5C8P7L0wMrz78QZVgwqSZGEgBIJvRABNJBmAxkAnG/vjuMcPJ/VtJdg0TujjIIKIBchjwC8kymDt6M9y4eAkuz8XOhN1mpLBgQpcHGQIDPJx4gghfNMLAl+9Ygh0ZkByNMMBErWhkYGBgIUk1FuuYSDIAOUigsUGaAeiqCQUiRjQiuwAajSzYki9yWsAAsKwMNQQA+KM14GqNH7IAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -110,7 +110,7 @@
     "name": "wang_4",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABLElEQVR4nMWSvUoDQRSFv52ZrBtIEcEHcMHGSiGKhWC3iqBvISIWPoQvoa2F+AAiBCxSiKAo2IidpBYCWiQm6+7syP6pSxwQUnhguDOHe879YRwMhl/QO4XO1Ryr+wc83t7RWtkk0dXUh/s2CgtqAz+LkiatpQB0TFlKODKLC4sBwmYQydcxLhWW4hRKYe8A7w2YqVDPTzdjacpqAAzN4OueGPDnl4tOCg5pH4FRM6+ggdhw0T6qtJ8Zoe0GNT1NX7kgFeeXx2wHe9Xq5UKxwBt1+WhMZfetjR2MiCGOMUmUiYU26RPrDtw14AyuOyfZu64ahO9RvhvxXdexfST94rO73q1yhU4mP/dgweFsD8/kA4sQ3BDqw1yc8uVxbB38FWIScW4QT2bw/yN8Al6UXGvt4ADNAAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA8UlEQVR4nJVTSwrCMBScpAGxVtGNIoj3cu/WK+gFPIqn8ABuvYAidGNJtaCUKLG2fYnP30Da0PfeZGZIRXBSNxi8QgL2+2I6xqDfwWQ2R5ae2DYeT9KoWbRwwxaSPIt3uX6EquT/McQrMLVsP5PzG/k1gXlb+VEBhydpnOT4BPVCY4glAGFDYjQMsV4tsTtkaLUjj0ASCyWRZ2mz1eh3i7N6kVtU38xkF4P0CqRxDn0WiBNd1fZH4VlgwrTDFna4HKIQj6tM/VNFZR52u+bDFIFWNycHn4ADIXdDpOAIWS4i02nm/gvGomQV0CvtH+CR3AGbNFDMGpsDlAAAAABJRU5ErkJggg==",
      "format": "png"
     },
     "corners": {
@@ -157,7 +157,7 @@
     "name": "wang_12",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABEklEQVR4nMWTv0oDQRCHv90bMUowglhYSQoLBVGLgJWdT+HbCD6GjZDeMk2wjUQUFE+UiFooQjiQI4joXVZ2PS9/DuSOFH4wzMwOM8xvYFX3vG7KFc1J85DWQZP9RwMRBFd1LH0Tk6K8QQxcnDUQDYS9L6Y+KyPFTLMlyXUyaGNzF7GB/Li/m4cafxEBufdbLK/XiD46I8WHmzZ5kOraNn1izNzi0CtUV2sZzQMJyZZ42BPQe+6gwm5mXVc0sfPOxgZqYiR8vWVpZYfru1PgMi0ubO3lkxC8+QRtnxkp52rIDHh6iVwwX/J4FyvOFBvQODpOk9nkOEXQJaOwZpk27myFUJiCO49vwIRo+3Em4f8lfAOVtlICdnCPewAAAABJRU5ErkJggg==",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA4ElEQVR4nGN8cWbRfwYKABMlmgeZAR/fPWY4uX8r5S74+O4xeQbwC8kymDt6M9y4eIkkAxhn5hjgjcavn78wcPPyoNAgAGOzCPL8w2uDIA8XAwPDPzSaAc5m2XzsM5grLYjdIVzsTAzffv5jePqeEczn4/7PwMvGwPD5FwPDp6+MDCwgwddvPzO8fsvAICrMywDjgwCI//rtJ7g4CIA0ffqKFAaM2xgoSsqMzJ9YIAaA4gMWHDA2shi6GrgQLCKRJWBsdM0wGonNBLcJ1VhUjG4wkmsgLkCPSWQXoFuAZggA9i1QPCdkwtgAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -204,7 +204,7 @@
     "name": "wang_6",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABQElEQVR4nJVTPUvEQBB9O1nPYwujja1YWt01VtZaCoLYKoitf0XQwlI8wV4rSwULC0Us/AhyKpyFjYKHBMxls7K78ZLcSbI+MuzM7O5k5s0sg4JCBdqtOZxexVhc2yz4ry9PQHCA37u1ipJG9CUtjeY8uEuAETkBJgBiXsHPOdwC/KJ9dzHk4/crzCjf9YyKSNi1FgLNVnZ4embWKrlMeLC0DPFVN8bCxgGOtlf7mx/iBcAZxsQ4fApMCU/nW4UM2PvNoYKMkcBG7b4FeH3u4Hh/D+EnsPswXMp6w66SAJ5InbpXaEekuqVciBCIPSDWJSBFkrbGBTuPmU6Dm/7kFFTNsqj/UAXKGzqLPFx6TIMOlvxrNPBn2aM99yClvFHNDlnpGfIYtBjDY1AU99uYRJUPNeOJIKE/ows7VDy1y/ADgN5UHjN0ovQAAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABCklEQVR4nGNk/sLyn+EfAyZgYmAAiXfnKoC5Ubl1WBRBlGEH2AzFaQATEg+GkcS5eXlwGsACtwm3W4h0wT8kZ6M5/+vnLwQM+IdThggXMOGRJSIgWTBsRNP06sMfhlA7PoZZXQ0M4mJ8mAbUJ8kx8HBid8ZzqN8PXvrG8O3nPwZBHkwnMd7c1fofxOAXkkWReHqwh+HMfSaGI5c+MvBx/2fgZWNgePqeEc7+/IuB4dNXRgYmkEZ0zSAA0gwCr99+Zpix+glYMwiANIHYIBo1DPCBfwwMy7Y8Zvh35A+GFAsuPaC4h6dAaBAx2bFgBDLOSMSZfNGSOmkJGNl2aOplObl/K0lmgA1BcgEAqq1RQ4+k68oAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -251,7 +251,7 @@
     "name": "wang_8",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmklEQVR4nGN8fW7pfyYGBPj/7wfD+RPbGHYsWsvA+JaJoefOPwZ8gAlZMzr4yYhfM9gABgoBy91rJ1AElDQMGL7/+UK8AYpaFqhO+fOHNBc8ONKPIsD9j4+B/fl+hm//GRgYmIkwYOq8MwzMaGFV4A+V/EuEAazfGRhYQC5HEpy2ioFowMjwnwHkWLIBEyWah40BfygzYOBjAQC0rSxcLTdl2wAAAABJRU5ErkJggg==",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA80lEQVR4nGN8cWbRfwYsYOOCPoaXrz4xHLv6iWH3yQ8QwX8MDAxMqDQTAymACZNmIsmAf7jNJA8ge+Hju8cMJ/dvJUkzVhd8fPeYeEOYGBhYYGx+IVkGc0dZFPlvP7F4Gk2IBRRd6ODS3Q8MvGwMDE/fM+K1HWQYiyAPpi32+nxg+umxz4S9sBmqSFoQW3pCcgGyPUghxwIiXr/9zPD6LQODqDAvA4wPAt/sWRmOdn3AGv9wKxi3MWBNymCL7Fgwky+6AcyfWCAGwBShs7HJIXmJCV0Agw3jg9ShuwCcF7A5DaYYXRMWV0FcgM1GGI1uAZohAHFyUObOQ4NLAAAAAElFTkSuQmCC",
      "format": "png"
     },
     "corners": {
@@ -294,11 +294,11 @@
     "connections": null
    },
    {
-    "id": "d42fea34-5038-4dbd-ae3b-077a516e3521",
+    "id": "3545c878-0c14-401b-929d-55b45a4b7986",
     "name": "wang_0",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKklEQVR4nGNk+M/wn4ECwESJ5lEDIICJgULANGoAw2AIgz+UGcA44LkRABIIBRcl9uwyAAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAkklEQVR4nI1TQQ6AMAhD5P+v9TxNdEyElkhiljFpy8q2/bBThtRQkTY/VxUWsVj5quXAv5h3MKDIVpJrqUBBpX76QkxN8Xs8Gla2nzlrhEPGTGYF3S3KxdnWZaOm/gELveBloxBWFspaGKSgAbOWJc4Iups7NX5IRkrmvRl9NPlnMgePAjQ0+V1k0GIjYnd7G5ALnQYwItOy68kAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -345,7 +345,7 @@
     "name": "wang_1",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABJklEQVR4nM1SsU4DMQx9tu+uXfgMPoAVCSGxdGGCGaYOdEJiYWdDbCzt0IUPgAk+gImVD2CFL2DgSBOjJHfSJXdFSF2wZNmJ7ef4xQSFYgPhTYr/B0CRX9S3wNtBCb5axfNYMfqiYLvi77xQTuLrKfAh2zA7u7DlJ77LGK4M4Wh2H/yH+XGwW24A4OUceNcKe9MlxJikK3GZnMVKnwOpG2sMiMeJAhJiToGnxSXqyq4nsdvNJSq4uznDZHoNXv3yC75LLiyE58c5Ti4WEI7jcZ5kR342hbMDoFaxfzgLxUrlX/bAhmcPjcfxFzFIohVC0WxIm+Btqy2ZHoQR96X/3MCBwOk6pn3MA2S72OXAF6egfWJ6q5zMqgbkCqCwUGcQxiYEv3HxA8unZ1ivFX1kAAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAyklEQVR4nI1SQQoCMQwcs0VEdhHEiwefoF/wGd58hH/z7FnwDx48eBOk9SK4SqHdTWkTd6CknTTJpOmocuaLFjkIUPlgCRJ4MMmWMkdcnI/JCopMR8pa8kRMJSV9lSopwb27VapK58CRIjytzC3bmyx7HBHfK+M0yYVCv4f9AsumLoq7WxcUSD0CqD4TbDdT1OsdZvNVxz8fNxZGeeUI+wYuV0qCPfzZL8IfNGPgZZ3oJ+2XDQGJrzw4AR9bz6ZWQTrGCEHR+XTMuB9H9TaTU9iw0QAAAABJRU5ErkJggg==",
      "format": "png"
     },
     "corners": {
@@ -392,7 +392,7 @@
     "name": "wang_11",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABjElEQVR4nH1Tu0pDQRA9uxujVqJBsLMIiKRJqSkCNuoviFaCjR9h6xcoBGxsbEQhhUgIpLJRiA8sQowELBMFsTDxJtmH7N5H7pqNB5Y7j52ZMzN7ycfDmaIY4qv1grdWHdeFc3g/BMfPyndwAAmMgMaDQwg+aYJlPwiGO9gkwBhMTSvQJBnnHuZt1m4tQ2puNpItBmNA9AwsixIAYUZ8rJYg02287pVRSwLzHkE3QdAjEqrjSqBEYGVRfzf1IlJsAf1O29h6/PN/BlRTj4aj2cyg/nSF5WwegJ9YgwlAsNhs6Ugb5hoY/w5DrMo62IqTcRaEgXNASQ+9sC0ISCOHuqNwHJenBxByAjSoJJX9dT4PGWbkHNu7hxhQu1p0L2LlYHBfLaHZqKJYPgLVcyAMS9k1fzPB0Xbjcz1Qr/uOxZV1pDOrpl97KyF0X8JP9DdBLr+DRvkkuqjpugelffpnYgT6mH4YwV3lApmN/ZFeXbo1A6rXIzhym1vg4KhVCiBqACr02IVZqdZDOdR/ARIGplTP7Pa2AAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAm0lEQVR4nGN8cWbRfwYsYOOCPjC9fv8Tht0nP0AE/zEwMDCh0kwMpAAmTJqJJAP+4TaTPIDshY/vHjOc3L8Vr2JsfCZ0dSCDsAJsbkUOA34hWQZzR2+GGxcvYbf9H3Y2E7pakCEg8PXzF+y2o8UECwMecP/xBwZlOR4G3TjcyhhxJSRYYhLkwRJ3xBpADGAiStXwNoAFb/IlAgAAkEw0Y7OdlM8AAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -439,7 +439,7 @@
     "name": "wang_3",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABJUlEQVR4nM1SPUsDQRSc3T1ErkprZWEX7PUKu6hY2AfyCwKW/hgxtZ2VRQhifoASFJsUdrYGizTHofsh7+19JutZpPHBwr6dnbczwwo4OGxQchPy/xggLnZ8BtGXgN6q4ij67VgiS215tjZgfN1rDTHNlu0KPp9veIAy6+Dr0wP2k14QK5UChCoY1QSIFMURCDdqBayVJHKoqoG/k/MBgHWVRltbbUUK6Y4kshT+lb9I3q6BVgZ3o0s+EYs8xKJeZhN04g7m7zOcnw1hAxYkDyLlHGKzsvQDuwfH2Ose8mvkkaU2DXhMBH5icjTA2/2ovMgWwymwAimVAC2WpgQep7fongxzic0PsNp7O3VfRiM57UNDYz69gnDfkIYiMnA2477YF/0PxVdzT6Yr5F4AAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeklEQVR4nGNk/sLyn+EfAyZgYmDAKw6lmRhwAWTNTLhpJgwJGEYWhxmGxUUscEHcbsE0CMmVTCj+wmYTHs0I6X94bMXFh4qxYAji8S+KONRAFoI2EwCMpUES/xkoACymamKU6GdgfHFmEUUuYKLI+uFhAMvJ/VspMgAA3uUdB7ENMEIAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -486,7 +486,7 @@
     "name": "wang_2",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAw0lEQVR4nGNk+M/wn4ECwESJ5sFhAGOBMCM4DP6wIYJCiI2RgfElD0Pj98+EDVgzyRSuk/vXLwY1LX+Gu0/uM+ycs5jh20cGhuk38BvA4mJZgCLw9vVNBvbfLER7geU3M2Zg/Pr/iWgDmGCMf0RrwWEADPCLyTP8Z+MCs/8wkGjAPzRJFnJcwPiP+ADEagADAwNJsYA3JTKxMRI2gImZkQGEwRxmRob/TH/g0fjvF+GMCncrE8NfBhACs7kgiYMFyscHAAxgMAs/nK0oAAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAx0lEQVR4nGNk/sLyn+EfAyZgYmDAKw6lmRhwAWTNTLhpJgwJGEYWhxmGxUUscEHcbsE0CMmVTCj+wmYTHs0I6X94bMXFh4qxYAiiu4JAODBhBBqyTchew+aifwwMjKVBEv8ZcABeFi6GxnmPUOId3UsspmpiWDUrizIwnLnPxGBdJspwtOM1pu1QwGIXUoLVgI0L+sA018HfuFMlOB0QA/CkFSaiDMCWFqCBS5wLcFkFzwvEAvRYALng5P6tGOrMHb3xG4KUbgC1cjQqI+nCvgAAAABJRU5ErkJggg==",
      "format": "png"
     },
     "corners": {
@@ -533,7 +533,7 @@
     "name": "wang_5",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABO0lEQVR4nJWTvUoEMRSFvySzu89haSEKYilWiwguPsF2FrOtjc8gPsAq2PgIorC2diKCW9nZ+Bayk4ncSWZ2NhNGPBDyw7kn957cKByOFt5y+B4OOZzekWX+7HExZ3Iyo8S0qXy8PxMo/ZiMc79wtpq08kK7e+OugB2BKXxSpRMykKmNwBqSYcY/8PX52jnLUkRr/I0xtrYPQiZ+L57omGR+wFiHbmUrpaRK0NiuQIw6eC0S7YnTHwWC3QyIRRe3lxQmISAlpDKo1qHu++uc4/MrdJEQ6IM2ipenOdOLG4xepUvoQ2kdR6ezKtipQb8HbR8Q91svoPSg8UY3pwHiQd0HzVM6/1z1IPwJEdEUsYTvgxoVScFy+RCzfKv/1cxCkrG/c0YZPlMbveHigZQhHWjFhnIFCpzM4gXwC+VmXojAu+2OAAAAAElFTkSuQmCC",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeUlEQVR4nGNk/sLyn+EfA05QGivDICbAwhCVW4dVnomBQsCEYgwTEiYSsMCdz0SpC/5BMQj8I9WAf+TZjjCAAsCCYcw/JC8RAZgw/A8zhEjAhIVFQTr4R64BFAAmcuIe1QB8IU6E+yAuQFdIUl7A5gIc3jq5fyuGAQBc0Rm0qdNwigAAAABJRU5ErkJggg==",
      "format": "png"
     },
     "corners": {
@@ -576,11 +576,11 @@
     "connections": null
    },
    {
-    "id": "b509a6d8-4b1f-4886-944f-f144911dfd37",
+    "id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
     "name": "wang_15",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABQ0lEQVR4nKVTMUtDMRD+Lkl/h4hb/4B2cNT+BUHcHHR18TeIq2Clk0M3hw4FS6GDm8Kzbh0K/QOKqzxo8iKX1/Ql4fkQ/eCSXO6+y+VyoY/ZwApUKABEujWVQjKwAG/ZGPQ5G9ho9ydyALEOpLWB+gvRQylALefP+A/Udnsv3mm4s7cJWmcKGdWrIpN06TqjNW52kgQUSGvgSaFTSvKn23Itqmjx8zWByY93l9Ay4BRNhEgk7q/P0D29gtC/P7TMUhKeRrc4uehBipXbI+7EyIkHrSFJwcj67KjIYalV+Yd4zcZYLjIMJzcATO3VSLQ2xVSpMf96x9buAXZcf5RPmP4PgFMz8St4dPaPsZj0N47c1vWFYhsguDAsDJ5fpg9oH547Pf0TdX8k6AMDGI1O9wgaGvNpD2RXEIZrbGCL3Ol+7fVvqzF9Q2qTsY0AAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARUlEQVR4nGN8cWbRfwYKABMlmgeZAR/fPWY4uX8r5S74+O4xeQbwC8kymDt6M9y4eIkkAxhHo5FhECUkhoEygIWc5IsMAAiwFEUR6UFHAAAAAElFTkSuQmCC",
      "format": "png"
     },
     "corners": {
@@ -627,7 +627,7 @@
     "name": "wang_14",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABBElEQVR4nJWTPW7CQBCF3+wuDrIigSgoQbScgONwq5Rp4AKpcoQUgSgNFVSpEEokKCJke3fQ2mT9w9oxT7a0M7Pvk57socN6yQK5DIBSzTovSBYmwMf7K+h7veRS12cmWYI6JQmUr7+y5Og3u3Peoklqt3m7afJugecXRtzJ6k7cAJhMZxW3xtemh4E64idmhBZyBelKDhGgEuGa+VEfcSZG3wBPn40JUGaSxGm/RXc0R7/bbHQR4CFFfGrnLvpMa0sN4E+94RgchOk5wZ0AUxmqewFWZNrYcglf8yFuD/EC3DCg/wFCEuybFpLAInGf0US1e+ZU+A807JOew2xtVWGT63QBEzVL6JrOTE8AAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwklEQVR4nGN8cWbRfwYKABMlmgeZAR/fPWY4uX8r5S74+O4xeQbwC8kymDt6M9y4eIkkAxhxRSPIO3evnGX48v0fAw8n7qBiwSXx4uFNMK2hxIPXBSz4JF99+MNw99Unhk9fGeFifNz/GXjZGBg+/2IAi7MwkAhAmj59JdIFIHD30ReG3Sc/MPw79IcBG2DBKooFMNmwQOLsH5o4Pk0gf2KoBNFIbLwGgAILBSDbDnUNC7bkC0pQIMDFjsV8kCFILgAAn/8+S7NYdusAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -674,7 +674,7 @@
     "name": "wang_9",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABYUlEQVR4nI2RvUsDQRDFf7t3Rz5MwEKEgBJttVRsbCzV/0HQ0sYi2KWytbCwMSCiBCwE2xArxTaIEoKtYmMTBUHkEi+3K7cJSS6SXF6zj1nem5k3ov54qSVh3J3vUDuNceB+EwU5KEakSCc9xoVduT0MFZr6BaZS4xsUz6qGeE74Y2ZCjGeQSLdJ7BcsBX5nJ3tScL3nkD1aZWHzHuYUrhUWJ3wQaPQwd52PU36fZXE3361lV7bN+1a5aDdiBLxEg5+YJmlLhPbQwqH+WEQKCxxQ2uffEfrhTs+bVwoQMm6EAQ+EpcI+yo6YIN54xdUZFL3lS+UTPmpVtnIFZCvCYBDSEqR8i41cAUt6aJzRITaP4WutiPTD8QvVMHkYU0bg6jnT5U8PNz0D6ZgsAtiRY3e6Ly2v91WDmm9MJK3h4wdQ1rBTWSgdGETM0L9/cL5BjJQnY58mMKSDVh5mbYHhHcofAMBsjT2GuUgAAAAASUVORK5CYII=",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABMUlEQVR4nGN8cWbRfwYsYOOCPjC9fv8Tht0nP0AE/zEwMDCh0kwMpAAmTJoJl9qvn79gCv7DbSZ5ANkLH989Zji5fytcjpuXh6BmrC74+O4x8S5gYmBggbH5hWQZzB1l4XL3H3/AaiNKOPxjYGBZNrmJ4cv3fww8nAjH3H31h4GXjYHh6XtGTE1ogEVGkgtDUEYSyrj+ieH1WwaGogQRhm/fORi4OH+AaRCAsRlj7RTBCUlaEDM9gVxgo8fPYKL4j+HuaxwuYGBgYHj99jPYJlFhXgYYHwRAfFB6uPuai8EjsQG7AUsq7iNx36BIMtl8YDDMVWB4/4WJ4Ru2hAUygMkGGhGwNI7MJiKZMcEVoUUPsYAJq00gPrKL8AAWrAphhjIxMLz68Ifh7+cXKMkcGQAAqKRof1nxO7oAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -721,7 +721,7 @@
     "name": "wang_7",
     "image": {
      "type": "base64",
-     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABzElEQVR4nG2Tu2tUQRTGf/NYsyykEkFMYRFIkcK1UrcQbeI2gmAVkIBFAklhY2NrK/4BiYgQrS0ElYiSIqjgI4mFEERQ1FJS2BgW984dOTNz7957NweGOTNzXt93zig8nop8WIYvBvrXH4WzNqCVCXpeNQQ+bb9AN+44cgCTtIJuU+zcu/gou3fBSVb39By2GeBfB5xRTCiD8xlaFS+urKQQayXJIaImO3z+/i7oE8PDLCq2f5dGHPw5foJfV2/w88kbjh5rc+rMlcBBtDQRgpSfqsox2P3FddrtSMWP3dfM5FP0bj/n7frSyDnhFwglH4EHh+1YDVnKIJsfsr/zANVt4fMhSkdCwdSz+6jrarQQQLdKJ69apXE1s5w37t0ikxZTuRyJZDO1e8mWJ9wP7y7TX7yDzlKAUasKcWNtE0dtFFvPVlm4uYbRsT1WsIcJGwsSy46ZUzXOc+HyCioflPB01WGme5Gd7Vd82/vI043VmnNVhKOiatt8HBz85uTZOaZnz0UY6Q/UZ16CxurG/kLv/DW+vrxfGgYY4+jSG2ghRlbAYxTvNx8ze2ml5KDJSVPqc+Ayev15MjL2NtfCUGknfXT4fBDOhV6c/wOQt6VM+nSgQQAAAABJRU5ErkJggg==",
+     "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAqklEQVR4nGNk/sLyn+EfA3bAxMBQGi3DICbAwhCVW4dLCR6Ay2AMA5iQeDCMLI4HsMBtIUIxfhf8Q3LyP1IN+IdDhugwQGb9Q9XMxY7fb0wYPJhmKPvbz38M3Lw8OA1gKUoQYfj2nQMuwMX5A84HsT//YmD4+vkLbgNM1cTQhPgw2HYhJTgNYPx0c91/nLIMDAzf8NgOdsE3AgoIASaKdA8KA1hO7t9KkQEApRErW+W2zpsAAAAASUVORK5CYII=",
      "format": "png"
     },
     "corners": {
@@ -772,12 +772,12 @@
   ],
   "terrain_prompts": {
    "lower": "flat solid bright green chroma-key color, one uniform green, no texture, no shading, no dithering",
-   "upper": "raised rectangular parchment click plate for a 16-bit strategy game menu: aged cream-tan parchment paper face with sparse fiber grain, framed by a bright polished brass band around the edge with a 1px dark outline just outside it, strong raised bevel lit from the top-left with a deep shadow on the bottom-right, retro 16-bit UI button in the style of classic 1990s naval adventure games like Uncharted Waters 2 / New Horizons, crisp deliberate pixels, flat color fills, no text",
+   "upper": "raised rectangular parchment click plate for a 16-bit strategy game menu: aged cream-tan parchment paper face, a flat even repeat-safe texture with no fold lines, no creases, no knots, no stitching and no distinct marks, framed by a bright polished brass band around the edge with a 1px dark outline just outside it, strong raised bevel lit from the top-left with a deep shadow on the bottom-right, retro 16-bit UI button in the style of classic 1990s naval adventure games like Uncharted Waters 2 / New Horizons, crisp deliberate pixels, flat color fills, no text",
    "transition": "raised polished brass rim ending in a crisp straight edge with square corners, a 1px dark outline at the silhouette, Uncharted Waters 2 brass-bound parchment button edge"
   },
   "terrain_ids": {
-   "lower": "d42fea34-5038-4dbd-ae3b-077a516e3521",
-   "upper": "b509a6d8-4b1f-4886-944f-f144911dfd37"
+   "lower": "3545c878-0c14-401b-929d-55b45a4b7986",
+   "upper": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0"
   },
   "transition_size": 0.25,
   "view": "high top-down",
@@ -792,6 +792,6 @@
    "requested_transition_size": 0.25,
    "tileset_adherence_freedom": 500
   },
-  "created_at": "2026-11-08T14:36:07.326272+00:00"
+  "created_at": "2026-11-08T14:55:50.866748+00:00"
  }
 }

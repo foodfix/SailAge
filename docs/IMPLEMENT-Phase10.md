@@ -1067,3 +1067,37 @@ _Waves ledger entries are appended here by the master as merges land
   `tools/run_tests.py` **62/62 GREEN** (420.1s, -j4).
 - Review render verdict: blue chart panels + wood rims vs parchment
   buttons + brass bands — the affordance contrast is unmistakable.
+
+### W7.3 — the pressed-button fence fix (2026-11-09) — COMPLETE
+
+- User report: large pressed buttons tiled into a fence — tile-mode
+  repetition exposed a vertical crease the click roll carried in its
+  face (edge + fill tiles). Ship-as-drawn means the fix is the prompt:
+  the click upper_description re-pins the face as "a flat even
+  repeat-safe texture with no fold lines, no creases, no knots, no
+  stitching and no distinct marks", seed 20261113 (the 7164d350 trio
+  retired; b6ebbdb4 vendored). Verified at the report's own size
+  (140x60 mock): pressed renders a clean darkened plate, no fence.
+- Lesson pinned for every future chrome re-roll: the face must be
+  repeat-safe — tile-mode repetition multiplies any distinct interior
+  mark (the style-clause wording above is the default ask).
+- Gates: validator **groups 1–13 OK**; `build_ui_art --check`
+  **271 files byte-identical** (double run); full suite gate green
+  (see the W7.2 record for the standing 62-suite contract).
+
+### W7.4 — the concentric-band clean face (2026-11-09) — COMPLETE
+
+- User report: dots + lines inside large button faces (the tiled
+  specks/fiber strokes), then band rivet dashes and silhouette bumps
+  surviving a band-preserving clean. Endgame: `_chrome_clean_face`
+  flattens the click-derived plates to THREE sampled concentric bands
+  — ring 1 = the outline color (modal of the model's outermost ring),
+  ring 2 = the brass line (modal of ring 2), everything deeper = the
+  face (modal of the rest) — `_chrome_distance_map` (BFS) feeds it;
+  the fill tile is all-face. Nothing drawn survives to tile, so dots,
+  lines, rivet dashes, inner borders and silhouette bumps are
+  structurally impossible; the model's contribution = the three
+  sampled hexes + the keyed silhouette.
+- Gates: validator **groups 1–13 OK**; `build_ui_art --check`
+  **271 files byte-identical** (double run); `test_ui_theme` GREEN;
+  full suite gate **62/62 GREEN** (442.1s, -j4).

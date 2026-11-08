@@ -512,6 +512,15 @@ CHROME_HOVER_FACE_LIFT = 0.05  # interior: faint warmth (the same lift)
 CHROME_PRESS_DARKEN = 0.80   # c' = round(c×darken), opaque px
 CHROME_FIELD_RECESS = 0.62   # field interior darken (inset parchment)
 CHROME_FOCUS_RING = "#d9a441"  # ACCENT — the silhouette focus ring
+# Clean-face families (§4.8, 2026-11-09): the click-derived plates
+# flatten to THREE sampled concentric bands (§4.8 2026-11-09 fence/notch
+# endgame): ring 1 (the outermost silhouette px) = the outline color
+# (modal of the model's outermost ring), ring 2 = the brass line (modal
+# of the model's second ring), everything deeper = the face (modal of
+# the rest) — nothing drawn survives to tile, so dots, lines, rivet
+# dashes, inner borders and silhouette bumps are all impossible.
+CHROME_CLEAN_FACES = ("button", "button_hover", "button_pressed",
+                      "button_focus")
 CHROME_RAW_DIR = ROOT / "tools" / "assets" / "pixellab_raw"
 # frame = parchment panel plate; click = the light parchment click plate
 # (the 2026-11-08 evening revision — the chestnut leather set is retired);
@@ -3698,12 +3707,83 @@ def _chrome_load_masters(family: str) -> tuple[dict, dict]:
     return masters, pixel_ids
 
 
-def _chrome_band_mask(px: list) -> list[bool]:
+def _chrome_clean_face(px: list) -> list:
+    """The clean-face op, concentric-band endgame (§4.8, 2026-11-09):
+    tile-mode repetition multiplies ANY drawn pixel — specks, fiber
+    strokes, rivet dashes, inner border lines, and even silhouette
+    bumps in the kept ring tiled into crenellation. The click-derived
+    plates therefore flatten to THREE sampled concentric bands:
+    distance ≤ 1 from the keyed outside = the OUTLINE (modal of those
+    pixels), distance == 2 = the BRASS line (modal), everything deeper
+    = the FACE (modal). The fill tile (no keyed outside) is all-face.
+    Every output pixel is one of three sampled colors — nothing drawn
+    survives to tile; ties break first-seen (deterministic)."""
+    dist = _chrome_distance_map(px)
+    rings: dict[str, list[tuple]] = {"outline": [], "brass": [], "face": []}
+    for i, p in enumerate(px):
+        if not p[3]:
+            continue
+        d = dist[i]
+        key = "outline" if d is not None and d <= 1 \
+            else "brass" if d == 2 else "face"
+        rings[key].append(p[:3])
+    colors = {}
+    for key, pix in rings.items():
+        if pix:
+            counts: dict[tuple, int] = {}
+            for c in pix:
+                counts[c] = counts.get(c, 0) + 1
+            colors[key] = max(counts, key=counts.get)  # stable on ties
+    out = []
+    for i, p in enumerate(px):
+        if not p[3]:
+            out.append(p)
+            continue
+        d = dist[i]
+        key = "outline" if d is not None and d <= 1 \
+            else "brass" if d == 2 else "face"
+        c = colors.get(key, colors.get("face"))
+        out.append(c + (255,))
+    return out
+
+
+def _chrome_distance_map(px: list) -> list:
+    """BFS distance from the keyed outside per opaque pixel (None when
+    the tile has no keyed pixels — the fill source)."""
+    import collections  # noqa: PLC0415
+    dist: list = [None] * (TILE * TILE)
+    if not any(p[3] == 0 for p in px):
+        return dist
+    queue = collections.deque()
+    for y in range(TILE):
+        for x in range(TILE):
+            i = x + y * TILE
+            if px[i][3] == 0:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if not (0 <= nx < TILE and 0 <= ny < TILE) \
+                        or px[nx + ny * TILE][3] == 0:
+                    dist[i] = 0
+                    queue.append((x, y, 0))
+    while queue:
+        x, y, d = queue.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < TILE and 0 <= ny < TILE:
+                i = nx + ny * TILE
+                if px[i][3] and dist[i] is None:
+                    dist[i] = d + 1
+                    queue.append((nx, ny, d + 1))
+    return dist
+
+
+def _chrome_band_mask_px(px: list, radius: int) -> list[bool]:
     """BFS distance-to-outside over the keyed 16×16 tile: True for opaque
-    pixels within CHROME_HOVER_RIM_BAND of a transparent pixel (the keyed
-    outside wraps the silhouette). A tile with NO keyed pixels (the fill
-    source, wang_15) has no outside — all-face, so the assembled hover
-    sheet never paints a false glow ring at the fill-cell boundary."""
+    pixels within `radius` of a transparent pixel (the keyed outside
+    wraps the silhouette). A tile with NO keyed pixels (the fill source,
+    wang_15) has no outside — all-False, so ring/clean ops treat it as
+    pure face."""
     import collections  # noqa: PLC0415
     band = [False] * (TILE * TILE)
     if not any(p[3] == 0 for p in px):
@@ -3725,7 +3805,7 @@ def _chrome_band_mask(px: list) -> list[bool]:
                 queue.append((x, y, 0))
     while queue:
         x, y, d = queue.popleft()
-        if d >= CHROME_HOVER_RIM_BAND:
+        if d >= radius:
             continue
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             nx, ny = x + dx, y + dy
@@ -3735,6 +3815,13 @@ def _chrome_band_mask(px: list) -> list[bool]:
                     band[i] = True
                     queue.append((nx, ny, d + 1))
     return band
+
+
+def _chrome_band_mask(px: list) -> list[bool]:
+    """The hover band: BFS distance-to-outside ≤ CHROME_HOVER_RIM_BAND
+    (the brass band flares on hover — §4.8 2026-11-08 night). Delegates
+    to the radius-parameterized mask."""
+    return _chrome_band_mask_px(px, CHROME_HOVER_RIM_BAND)
 
 
 def _chrome_derive(px: list, op: str) -> list:
@@ -3823,7 +3910,10 @@ def run_import_chrome_mode(raw_root: Path | None = None) -> None:
         masters, pixel_ids = masters_by_source[source]
         for part, (wang, op) in parts.items():
             sid = f"{family}_{part}"
-            px = _chrome_derive(masters[wang], op)
+            px = masters[wang]
+            if family in CHROME_CLEAN_FACES:
+                px = _chrome_clean_face(px)
+            px = _chrome_derive(px, op)
             out = out_dir / f"{sid}.png"
             write_png(out, TILE, TILE, px)
             tiles_doc[sid] = {
