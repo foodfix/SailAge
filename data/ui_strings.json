@@ -3784,6 +3784,10 @@
     "zh": "移除",
     "en": "Remove"
   },
+  "sandbox.ship.max": {
+    "zh": "最多 5 艘舰船。",
+    "en": "At most 5 ships per side."
+  },
   "sandbox.ship.type": {
     "zh": "船型",
     "en": "Ship type"

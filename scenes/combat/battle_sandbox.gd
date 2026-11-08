@@ -39,12 +39,16 @@ extends Control
 ## `Accent`/`Warn`/`Dim`) — this file carries NO per-screen styling (the
 ## sweep-guard audit `tools/test_ui_styling_audit.gd` pins that). The three
 ## §4.7.16 regions (player panel / enemy panel / conditions strip) sit at
-## fixed 1280×720 geometry; their CONTENT is container-driven (one header,
-## the fixed editors block, the ship-rows scroll, the add/remove buttons) so
-## the rows keep the 32 px grid and no label clips or control overflows.
-## Field labels are never `clip_text`ed: each column floor (the `LABEL_W*`
-## constants) fits the longest localized string, and the layout regression
-## test pins the live control rects for both locales.
+## the pinned 1920×1080 full-surface geometry (2026-11-09 re-layout — the
+## player panel at (16, 72) 944×848, the enemy panel at (960, 72) 944×848,
+## the conditions strip at (16, 936) 1888×128); their CONTENT is
+## container-driven (one header, the fixed editors block, the ship-rows
+## scroll, the add/remove buttons) so the rows keep the 32 px grid and no
+## label clips or control overflows. Ship editors are COMPACT 2-line blocks
+## so the 5-ship fleet never needs the rows scroll. Field labels are never
+## `clip_text`ed: each column floor (the `LABEL_W*` constants) fits the
+## longest localized string, and the layout regression test pins the live
+## control rects for both locales.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
@@ -82,6 +86,12 @@ const LABEL_W_STD := 72
 const LABEL_W_SHORT := 56
 const LABEL_W_DURABILITY := 96
 const ROW_HEADER_W := 72
+
+## The pinned §4.7.16 region rects (1920×1080 full-surface re-layout,
+## 2026-11-09): player panel, enemy panel, conditions strip.
+const PLAYER_PANEL_RECT := Rect2(16, 72, 944, 848)
+const ENEMY_PANEL_RECT := Rect2(960, 72, 944, 848)
+const CONDITIONS_RECT := Rect2(16, 936, 1888, 128)
 
 ## The nine battle kinds (`10-*` §4.10 `ai_profiles` key set / `60-*` §4.9a):
 ## the 7 pass-through kinds + `navy` (hunter battles) + `tournament`.
@@ -243,22 +253,25 @@ func _build_static_widgets() -> void:
 	_zero_write.size = Vector2(900, 20)
 	add_child(_zero_write)
 
-	# `Esc` → S1 (§4.2); the corner hint names the edge. Secondary text rides
-	# the theme's `Dim` variation; the box is sized for the default font
-	# (the per-screen font-size overrides retired with the §4.9 sweep).
+	# `Esc` → S1 (§4.2); the corner hint names the edge, right-aligned to the
+	# full 1920 surface. Secondary text rides the theme's `Dim` variation;
+	# the box is sized for the default font (the per-screen font-size
+	# overrides retired with the §4.9 sweep).
 	_back_hint = Label.new()
 	_back_hint.name = "BackHint"
 	_back_hint.text = "Esc · %s" % _t("sandbox.back")
 	_back_hint.theme_type_variation = "Dim"
-	_back_hint.position = Vector2(1000, 12)
-	_back_hint.size = Vector2(264, 20)
+	_back_hint.position = Vector2(1540, 12)
+	_back_hint.size = Vector2(364, 20)
 	_back_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_back_hint)
 
 	_toast = Label.new()
 	_toast.name = "Toast"
 	_toast.visible = false
-	_toast.position = Vector2(340, 696)
+	# Bottom-center toast slot in the gap between the panels' bottom edge
+	# (y = 920) and the conditions strip (y = 936).
+	_toast.position = Vector2(660, 908)
 	_toast.size = Vector2(600, 22)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
@@ -270,12 +283,12 @@ func _build_panels() -> void:
 	# column so the rows keep the 32 px grid and nothing overflows the panel
 	# edges.
 	var player := _panel_column("PlayerPanel", "sandbox.player",
-		Vector2(16, 68), Vector2(612, 480))
+		PLAYER_PANEL_RECT.position, PLAYER_PANEL_RECT.size)
 	_player_panel = player["panel"]
 	_player_box = player["box"]
 	_player_header = player["header"]
 	var enemy := _panel_column("EnemyPanel", "sandbox.enemy",
-		Vector2(652, 68), Vector2(612, 480))
+		ENEMY_PANEL_RECT.position, ENEMY_PANEL_RECT.size)
 	_enemy_panel = enemy["panel"]
 	_enemy_box = enemy["box"]
 	_enemy_header = enemy["header"]
@@ -306,12 +319,18 @@ func _build_panels() -> void:
 	_enemy_add.pressed.connect(func() -> void: add_ship_row("enemy"))
 	_enemy_remove.pressed.connect(func() -> void: remove_ship_row("enemy"))
 	_enemy_box.add_child(_side_buttons_row(_enemy_add, _enemy_remove))
+	_refresh_fleet_buttons()
 
 
 ## One side panel: the kit `frame` atom (§4.9 — titled PanelContainer with
 ## the 16px-margin body; the atom carries the margins the old hand-built
 ## MarginContainer set) at `at` × `panel_size`; the header is the frame's own
-## first row carrying the theme's `Accent` variation. Returns
+## first row carrying the theme's `Accent` variation. The frame's
+## MarginContainer EXPANDS vertically (2026-11-09) so the body column — and
+## with it the ship-rows scroll — receives the panel's leftover height;
+## without it the scroll collapsed to 0 px and NO ship row ever rendered
+## (the reported "add ship shows nothing" root cause; the shared kit atom
+## itself is left untouched for the other screens). Returns
 ## `{panel, box, header}` (`box` = the kit body column, `frame.meta["body"]`).
 func _panel_column(panel_name: String, title_key: String, at: Vector2,
 		panel_size: Vector2) -> Dictionary:
@@ -323,6 +342,8 @@ func _panel_column(panel_name: String, title_key: String, at: Vector2,
 	var header: Label = (panel.get_child(0) as Container).get_child(0) as Label
 	header.name = "Header"
 	header.theme_type_variation = "Accent"
+	var margin: Container = (panel.get_child(0) as Container).get_child(1)
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var box: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
 	box.name = "Box"
 	return {"panel": panel, "box": box, "header": header}
@@ -466,12 +487,13 @@ func _hull_row(hull_id: String) -> Dictionary:
 	return {}
 
 
-## One editable ship block (§4.7.16 panel shape): the "Ship {index}" header +
-## hull + escort captain id on line 1, cannons / crew / durability on line 2,
-## the figurehead slot on line 3 and the sail slot on line 4 (the equipment
-## options get the full row width — the localized item names run long, and a
-## shared line measured 592 px against the 580 px panel). Every field is one
-## unclipped label + one control sized inside the panel.
+## One editable ship block (§4.7.16 panel shape, the 2026-11-09 2-line
+## compact re-layout): line 1 = "Ship {index}" header + hull + cannons /
+## crew / durability, line 2 = escort captain id (expanding) + the
+## figurehead + sail slots. Two 32 px lines per ship keep the 5-ship fleet
+## inside the rows area with no scrolling (the panel's 944 px width fits
+## both lines' column floors — the longest localized EN forms included).
+## Every field is one unclipped label + one control sized inside the panel.
 func _make_ship_row(side: String) -> Dictionary:
 	var root := VBoxContainer.new()
 	root.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
@@ -479,7 +501,7 @@ func _make_ship_row(side: String) -> Dictionary:
 	var line1 := HBoxContainer.new()
 	var header := _field_label("", ROW_HEADER_W)
 	line1.add_child(header)
-	var type := _option(130)
+	var type := _option(150)
 	type.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for hull in DataLoader.ship_types_list:
 		if not (hull is Dictionary) or str(hull.get("id", "")).is_empty():
@@ -487,42 +509,36 @@ func _make_ship_row(side: String) -> Dictionary:
 		type.add_item(str(hull["id"]))
 		type.set_item_metadata(type.item_count - 1, str(hull["id"]))
 	line1.add_child(type)
-	line1.add_child(_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
-	var captain := LineEdit.new()
-	captain.placeholder_text = ""
-	captain.custom_minimum_size = Vector2(140, float(PaletteLib.ROW_H))
-	captain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line1.add_child(captain)
+	line1.add_child(_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD))
+	var cannons := _spin(0, 0, 0, 72)
+	line1.add_child(cannons)
+	line1.add_child(_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT))
+	var crew := _spin(0, 0, 0, 72)
+	line1.add_child(crew)
+	line1.add_child(
+		_field_label(_t("sandbox.ship.durability"), LABEL_W_DURABILITY))
+	var durability := _spin(1, 1, 1, 72)
+	line1.add_child(durability)
 	root.add_child(line1)
 
 	var line2 := HBoxContainer.new()
-	var cannons := _spin(0, 0, 0, 80)
-	var crew := _spin(0, 0, 0, 80)
-	var durability := _spin(1, 1, 1, 80)
-	line2.add_child(_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD))
-	line2.add_child(cannons)
-	line2.add_child(_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT))
-	line2.add_child(crew)
-	line2.add_child(
-		_field_label(_t("sandbox.ship.durability"), LABEL_W_DURABILITY))
-	line2.add_child(durability)
-	root.add_child(line2)
-
-	var line3 := HBoxContainer.new()
+	line2.add_child(_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
+	var captain := LineEdit.new()
+	captain.placeholder_text = ""
+	captain.custom_minimum_size = Vector2(120, float(PaletteLib.ROW_H))
+	captain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line2.add_child(captain)
 	var figurehead := _option(130)
 	_fill_equipment_option(figurehead, "figurehead")
-	line3.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
+	line2.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
 	figurehead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line3.add_child(figurehead)
-	root.add_child(line3)
-
-	var line4 := HBoxContainer.new()
+	line2.add_child(figurehead)
 	var sail := _option(130)
 	_fill_equipment_option(sail, "sail")
-	line4.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
+	line2.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
 	sail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line4.add_child(sail)
-	root.add_child(line4)
+	line2.add_child(sail)
+	root.add_child(line2)
 
 	var row := {
 		"root": root, "header": header, "type": type, "cannons": cannons,
@@ -629,7 +645,7 @@ func _build_enemy_options() -> void:
 
 	# Kind + the compose toggle — the checkbox sits DIRECTLY beside its label.
 	var kind_row := HBoxContainer.new()
-	_kind_option = _option(140)
+	_kind_option = _option(150)
 	_fill_option(_kind_option, KINDS, "sandbox.kind")
 	_kind_option.item_selected.connect(func(_index: int) -> void:
 		_apply_kind_profile(str(_option_value(_kind_option))))
@@ -653,7 +669,7 @@ func _build_enemy_options() -> void:
 	block.add_child(captain_row)
 
 	var ai_row := HBoxContainer.new()
-	_ai_level_option = _option(120)
+	_ai_level_option = _option(150)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t2"))
 	_ai_level_option.set_item_metadata(0, 0)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t3"))
@@ -735,17 +751,18 @@ func _profile_default(kind: String) -> Dictionary:
 	})
 
 
-## The bottom strip (§4.7.16): the conditions grid — two label+control pairs
-## per line, three lines, every label unclipped — plus the four action
-## buttons at its right end (the conditions row and 开战/随机全部/导入/导出
-## share the strip). The strip's panel chrome is the theme's (§4.9
-## PanelContainer row); its content joins the panel directly (the
-## chart-screen convention).
+## The bottom strip (§4.7.16, the 2026-11-09 pinned rect): the conditions
+## grid — six label+control pairs on ONE row (a 12-cell GridContainer,
+## ~1506 px against the 1888 px strip) — plus the four action buttons as a
+## 2×2 block at the strip's right end (a single 4-across row would add
+## ~500 px and overflow — the layout audit caught exactly that). The
+## strip's panel chrome is the theme's (§4.9 PanelContainer row); its
+## content joins the panel directly (the chart-screen convention).
 func _build_conditions_row() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "ConditionsPanel"
-	panel.position = Vector2(16, 556)
-	panel.size = Vector2(1248, 152)
+	panel.position = CONDITIONS_RECT.position
+	panel.size = CONDITIONS_RECT.size
 	_conditions_panel = panel
 	add_child(panel)
 	var strip := HBoxContainer.new()
@@ -754,7 +771,7 @@ func _build_conditions_row() -> void:
 
 	var grid := GridContainer.new()
 	grid.name = "Conditions"
-	grid.columns = 4
+	grid.columns = 12
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	_day_spin = _spin(DAY_MIN, 9999, 1, 90)
@@ -762,7 +779,7 @@ func _build_conditions_row() -> void:
 	grid.add_child(_day_spin)
 	# The seed pair: the value spin rides beside its mode option (it shows
 	# only for `seed_mode = fixed` — the §4.7.16 resolution rules).
-	_seed_mode_option = _option(110)
+	_seed_mode_option = _option(150)
 	_fill_option(_seed_mode_option, SEED_MODES, "sandbox.seed")
 	grid.add_child(_field_label(_t("sandbox.seed"), LABEL_W_SHORT))
 	_seed_spin = _spin(0, SEED_MAX, 1, 140)
@@ -772,7 +789,7 @@ func _build_conditions_row() -> void:
 	seed_box.add_child(_seed_mode_option)
 	seed_box.add_child(_seed_spin)
 	grid.add_child(seed_box)
-	_weather_option = _option(110)
+	_weather_option = _option(130)
 	_fill_option(_weather_option, WEATHERS, "world.weather")
 	grid.add_child(_field_label(_t("sandbox.weather"), LABEL_W_STD))
 	grid.add_child(_weather_option)
@@ -790,7 +807,7 @@ func _build_conditions_row() -> void:
 	current_box.add_child(_current_strength_spin)
 	grid.add_child(_field_label(_t("sandbox.current"), LABEL_W_STD))
 	grid.add_child(current_box)
-	_deployment_option = _option(130)
+	_deployment_option = _option(150)
 	_fill_option(_deployment_option, DEPLOYMENTS, "sandbox.deployment")
 	grid.add_child(_field_label(_t("sandbox.deployment"), LABEL_W_LONG))
 	grid.add_child(_deployment_option)
@@ -840,9 +857,13 @@ func enemy_rows() -> Array:
 
 
 ## Adds one ship row (a fresh default of the side's flagship hull). Refused
-## beyond [constant MAX_SHIPS] (§4.7.16: 1–5 ships per side).
+## beyond [constant MAX_SHIPS] (§4.7.16: 1–5 ships per side) with the
+## `sandbox.ship.max` toast; on success the side's rows scroll auto-scrolls
+## so the NEW row lands inside the viewport (2026-11-09 — the "add ship
+## shows nothing" fix; deferred one frame so the layout pass settles).
 func add_ship_row(side: String) -> bool:
 	if ship_rows(side).size() >= MAX_SHIPS:
+		_show_toast(_t("sandbox.ship.max"))
 		return false
 	var hull := "sloop"
 	if not ship_rows(side).is_empty():
@@ -851,6 +872,8 @@ func add_ship_row(side: String) -> bool:
 	_write_row(ship_rows(side)[ship_rows(side).size() - 1],
 		_default_ship_state(hull))
 	_refresh_row_headers(side)
+	_refresh_fleet_buttons()
+	_ensure_last_row_visible(side)
 	return true
 
 
@@ -868,9 +891,38 @@ func remove_ship_row(side: String) -> bool:
 	else:
 		_enemy_rows.remove_at(_enemy_rows.size() - 1)
 	_refresh_row_headers(side)
+	_refresh_fleet_buttons()
 	if side == "enemy" and not _enemy_rows.is_empty():
 		_sync_enemy_captain(true)
 	return true
+
+
+## Presentation-only enable state (2026-11-09): Add disables at the 5-ship
+## cap, Remove at the 1-ship floor (the compose toggle hides the enemy
+## buttons entirely, which supersedes this). The direct add/remove method
+## contracts are untouched.
+func _refresh_fleet_buttons() -> void:
+	if _player_add == null or _enemy_add == null:
+		return
+	_player_add.disabled = ship_rows("player").size() >= MAX_SHIPS
+	_player_remove.disabled = ship_rows("player").size() <= MIN_SHIPS
+	_enemy_add.disabled = ship_rows("enemy").size() >= MAX_SHIPS
+	_enemy_remove.disabled = ship_rows("enemy").size() <= MIN_SHIPS
+
+
+## One frame later (the layout pass settled), brings the side's LAST ship
+## row inside its scroll viewport. Guards a scene already torn down.
+func _ensure_last_row_visible(side: String) -> void:
+	if not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	var rows := ship_rows(side)
+	if rows.is_empty():
+		return
+	rows_scroll(side).ensure_control_visible(
+		(rows[rows.size() - 1] as Dictionary)["root"])
 
 
 func _refresh_row_headers(side: String) -> void:
@@ -1109,6 +1161,7 @@ func _load_config(data: Dictionary) -> void:
 		str(conditions.get("deployment", _option_value(_deployment_option))))
 	apply_clamps()
 	_on_compose_toggled(_compose_check.button_pressed)
+	_refresh_fleet_buttons()
 
 
 # --- Export / import (forward-compatible §4.7.16 schema) --------------------
@@ -1290,6 +1343,7 @@ func randomize_all(seed_value := -1) -> void:
 		DEPLOYMENTS[rng.randi_range(0, DEPLOYMENTS.size() - 1)])
 	apply_clamps()
 	_on_compose_toggled(_compose_check.button_pressed)
+	_refresh_fleet_buttons()
 
 
 func _random_hull(rng: RandomNumberGenerator) -> String:
@@ -1473,8 +1527,16 @@ func player_add_button() -> Button:
 	return _player_add
 
 
+func player_remove_button() -> Button:
+	return _player_remove
+
+
 func enemy_add_button() -> Button:
 	return _enemy_add
+
+
+func enemy_remove_button() -> Button:
+	return _enemy_remove
 
 
 func kind_option() -> OptionButton:

@@ -2397,10 +2397,11 @@ group 7's `ai_profiles` — §8, §8.2 item 14).
   `battle.ai_speed.animate`, `battle.ai_speed.instant`,
   `battle.result.stall`, `battle.log.rake` (`{attacker}`, `{target}`,
   `{damage}`), `battle.log.strike` (`{ship}`).
-- **`sandbox.*` (40 keys):** `sandbox.title`, `sandbox.start`,
+- **`sandbox.*` (41 keys):** `sandbox.title`, `sandbox.start`,
   `sandbox.random_all`, `sandbox.import`, `sandbox.export`,
   `sandbox.back`, `sandbox.player`, `sandbox.enemy`,
   `sandbox.ship` (`{index}`), `sandbox.ship.add`, `sandbox.ship.remove`,
+  `sandbox.ship.max`,
   `sandbox.ship.type`, `sandbox.ship.cannons`, `sandbox.ship.crew`,
   `sandbox.ship.durability`, `sandbox.ship.figurehead`, `sandbox.ship.sail`,
   `sandbox.ship.captain`, `sandbox.enemy.kind`, `sandbox.enemy.compose`,

@@ -43,6 +43,14 @@ extends Node
 ##      byte-identical with EVERY §4.7.16 field group surviving (named
 ##      drifts), the three seed modes, and the export's positive field
 ##      coverage.
+##  13  the 2026-11-09 re-layout pins — after every successful add the NEW
+##      row is inside its rows scroll viewport (the "add ship shows
+##      nothing" defect), the 5-ship fleet needs no rows scroll, the cap
+##      refusal shows the `sandbox.ship.max` toast and disables the Add
+##      button (Remove disables at the floor), the three regions sit at
+##      their exact pinned 1920×1080 rects, and the rendered-text audit:
+##      no Label/Button/OptionButton draws wider than its control in
+##      either locale.
 
 const SandboxLib := preload("res://scenes/combat/battle_sandbox.gd")
 const SandboxScene := preload("res://scenes/combat/battle_sandbox.tscn")
@@ -83,6 +91,7 @@ func _ready() -> void:
 		return
 	await _test_sandbox_boot()
 	await _test_clamps()
+	await _test_add_ship_visibility()
 	await _test_player_stats_seam()
 	await _test_export_import()
 	await _test_sandbox_run_and_zero_write()
@@ -251,6 +260,69 @@ func _test_clamps() -> void:
 	_check(sandbox.player_rows().size() >= 1 and sandbox.player_rows().size() <= 5
 			and sandbox.enemy_rows().size() >= 1 and sandbox.enemy_rows().size() <= 5,
 		"随机全部 keeps 1..5 ships per side")
+	sandbox.queue_free()
+	await get_tree().process_frame
+
+
+# --- 3. The §4.12.1 player_stats seam ---------------------------------------
+
+# --- 2b. Add-ship visibility + cap feedback (the 2026-11-09 re-layout) ------
+
+func _test_add_ship_visibility() -> void:
+	SandboxLib.last_config = {}
+	_fixture_run_state()
+	var sandbox = await _new_sandbox()
+	if sandbox == null:
+		return
+	# After EVERY successful add the NEW row must sit inside its side's
+	# rows scroll viewport — the reported "add ship shows nothing" defect.
+	for side in ["player", "enemy"]:
+		for step in 4:
+			_check(sandbox.add_ship_row(side),
+				"%s ship %d added" % [side, step + 2])
+			await get_tree().process_frame
+			await get_tree().process_frame
+			var scroll: ScrollContainer = sandbox.rows_scroll(side)
+			var rows: Array = sandbox.ship_rows(side)
+			var last: Control = rows[rows.size() - 1]["root"]
+			var viewport := Rect2(scroll.global_position, scroll.size)
+			var row_rect := Rect2(last.global_position, last.size)
+			var inside := viewport.encloses(row_rect)
+			var note: String = "" if inside else " (row %s vs viewport %s)" \
+				% [row_rect, viewport]
+			var message: String = ("after the %s add, the new ship row is "
+				+ "inside the rows scroll viewport (scroll_v %d)%s") \
+				% [side, int(scroll.scroll_vertical), note]
+			_check(inside, message)
+
+	# The 5-ship fleet needs NO rows scroll (the 2-line compact blocks).
+	for side in ["player", "enemy"]:
+		var content: float = (sandbox.rows_box(side)
+			as VBoxContainer).get_combined_minimum_size().y
+		var viewport_h: float = sandbox.rows_scroll(side).size.y
+		_check(content <= viewport_h + 1.0,
+			("%s: 5-ship rows content (%.0f px) fits the scroll viewport "
+			+ "(%.0f px) — no scrolling needed") % [side, content, viewport_h])
+
+	# Cap: the 6th add refuses, shows the sandbox.ship.max toast, and the
+	# Add button disables. Floor: Remove disables at 1, re-enables above.
+	_check(not sandbox.add_ship_row("player"),
+		"the 6th player add is refused at the §4.7.16 cap")
+	_check(sandbox.toast_label().visible,
+		"the refused add shows the sandbox.ship.max toast")
+	_check(sandbox.player_add_button().disabled,
+		"the player Add button disables at the 5-ship cap")
+	_check(not sandbox.player_remove_button().disabled,
+		"the player Remove button is enabled at 5 ships")
+	while sandbox.player_rows().size() > 1:
+		sandbox.remove_ship_row("player")
+	_check(sandbox.player_remove_button().disabled,
+		"the player Remove button disables at the 1-ship floor")
+	_check(not sandbox.player_add_button().disabled,
+		"the player Add button re-enables below the cap")
+	_check(sandbox.enemy_add_button().disabled
+			and sandbox.enemy_remove_button().disabled == false,
+		"the enemy side's buttons track their own counts")
 	sandbox.queue_free()
 	await get_tree().process_frame
 
@@ -755,7 +827,8 @@ func _test_layout_geometry() -> void:
 		var layout_note: String = "" if problems.is_empty() \
 			else " — " + "; ".join(problems)
 		var layout_text: String = "[%s] layout rects: no label clipped, no " \
-			+ "control past its panel edge, ship rows fit their scroll's width"
+			+ "control past its panel edge, every rendered text fits its " \
+			+ "control, ship rows fit their scroll's width"
 		_check(problems.is_empty(), (layout_text % locale) + layout_note)
 
 		# One header per panel — the panel content builds no second title row.
@@ -807,17 +880,29 @@ func _test_layout_geometry() -> void:
 				+ "directly under the rows area"
 			_check(gap_ok, (gap_text % [locale, side]) + gap_note)
 
-		# The three §4.7.16 regions stay inside the 1920×1080 design surface.
-		var in_screen := true
-		for region in [sandbox.player_panel(), sandbox.enemy_panel(),
-				sandbox.conditions_panel()]:
-			if region.global_position.x < 0.0 or region.global_position.y < 0.0 \
-					or region.global_position.x + region.size.x > 1920.0 \
-					or region.global_position.y + region.size.y > 1080.0:
-				in_screen = false
-		_check(in_screen,
-			"[%s] the three §4.7.16 regions stay inside the 1920×1080 surface"
-			% locale)
+		# The three §4.7.16 regions sit at their EXACT pinned 1920×1080
+		# rects (2026-11-09 full-surface re-layout; §4.7.16).
+		var rects := [
+			["player panel", sandbox.player_panel(),
+				Vector2(16, 72), Vector2(944, 848)],
+			["enemy panel", sandbox.enemy_panel(),
+				Vector2(960, 72), Vector2(944, 848)],
+			["conditions", sandbox.conditions_panel(),
+				Vector2(16, 936), Vector2(1888, 128)],
+		]
+		var rects_ok := true
+		var rects_note := ""
+		for entry in rects:
+			var control: Control = entry[1]
+			if control.position != (entry[2] as Vector2) \
+					or control.size != (entry[3] as Vector2):
+				rects_ok = false
+				rects_note += " %s at %s×%s" % [entry[0], control.position,
+					control.size]
+		_check(rects_ok,
+			("[%s] the three §4.7.16 regions sit at the pinned rects "
+			+ "(player 16,72 944×848 / enemy 960,72 944×848 / conditions "
+			+ "16,936 1888×128)") % locale + rects_note)
 
 		sandbox.queue_free()
 		await get_tree().process_frame
@@ -848,8 +933,12 @@ func _inside_a_scroll(control: Control) -> bool:
 
 ## The geometric layout audit over the live control rects: every non-scroll
 ## descendant must stay inside its panel's right/bottom edge, no label may
-## set clip_text, and each side's rows column must fit its scroll's width
-## (horizontal scrolling is disabled, so a too-wide row would clip).
+## set clip_text, each side's rows column must fit its scroll's width
+## (horizontal scrolling is disabled, so a too-wide row would clip), and —
+## the 2026-11-09 addition — every Label/Button/OptionButton's RENDERED
+## text must fit its control (the rect audit alone never sees an
+## OptionButton's selected item drawing past its box; Button pads ≈8px per
+## side, OptionButton pads + arrow ≈34px).
 func _layout_problems(sandbox) -> Array[String]:
 	var problems: Array[String] = []
 	var regions: Array = [
@@ -883,6 +972,11 @@ func _layout_problems(sandbox) -> Array[String]:
 			if control is Label and (control as Label).clip_text:
 				problems.append("%s: %s sets clip_text (labels never clip)"
 					% [region["name"], _ctrl_path(control, panel)])
+			var text_problem := _text_overflow(control)
+			if not text_problem.is_empty():
+				problems.append("%s: %s %s"
+					% [region["name"], _ctrl_path(control, panel),
+					text_problem])
 	for side in ["player", "enemy"]:
 		var scroll: ScrollContainer = sandbox.rows_scroll(side)
 		var box: VBoxContainer = sandbox.rows_box(side)
@@ -891,6 +985,57 @@ func _layout_problems(sandbox) -> Array[String]:
 				+ ("(%.0f) — horizontal clip"
 				% [side, box.size.x, scroll.size.x]))
 	return problems
+
+
+## The rendered-text fit audit for one control: "" = fits. Measures the
+## visible text (a Label's text, a Button's text, an OptionButton's
+## selected item) against the control's live width, minus the chrome the
+## theme actually reserves: the "normal" stylebox's own margins, and for
+## an OptionButton additionally its "arrow" icon (the pads are MEASURED,
+## not guessed — the flat guesses false-failed by 2px on 'Lookahead (T3)').
+## Empty texts skip.
+func _text_overflow(control: Control) -> String:
+	var text := ""
+	var reserve := 0.0
+	var font: Font = null
+	var font_size := 0
+	if control is Label:
+		text = (control as Label).text
+		font = (control as Label).get_theme_font("font")
+		font_size = (control as Label).get_theme_font_size("font_size")
+	elif control is OptionButton:
+		var option := control as OptionButton
+		if option.selected < 0 or option.selected >= option.item_count:
+			return ""
+		text = option.get_item_text(option.selected)
+		font = option.get_theme_font("font")
+		font_size = option.get_theme_font_size("font_size")
+		reserve += _stylebox_margins(option)
+		var arrow := option.get_theme_icon("arrow") as Texture2D
+		if arrow != null:
+			reserve += arrow.get_width()
+	elif control is Button:
+		text = (control as Button).text
+		font = (control as Button).get_theme_font("font")
+		font_size = (control as Button).get_theme_font_size("font_size")
+		reserve += _stylebox_margins(control)
+	if text.is_empty() or font == null:
+		return ""
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT,
+		-1, font_size).x
+	if width + reserve > control.size.x + 1.0:
+		return "text '%s' is %.0fpx (+%.0f chrome) but the box is %.0fpx" \
+			% [text, width, reserve, control.size.x]
+	return ""
+
+
+## The "normal" stylebox's left+right margins of a button-like control
+## (the space its theme chrome reserves beside the text).
+func _stylebox_margins(control: Control) -> float:
+	var box := control.get_theme_stylebox("normal") as StyleBox
+	if box == null:
+		return 0.0
+	return box.get_margin(SIDE_LEFT) + box.get_margin(SIDE_RIGHT)
 
 
 ## A short readable name for a control relative to its panel.

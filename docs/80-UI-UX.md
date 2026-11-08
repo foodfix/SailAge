@@ -1598,10 +1598,19 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
 
 - **Entry.** S1 gains the 海战 button (`sandbox.title`) in its button
   stack, between New Game and Load. `Esc` returns to S1 (§4.2).
-- **Layout (1920×1080).** left = the player panel, right = the enemy
-  panel, bottom = the conditions row + `[开战] [随机全部] [导入] [导出]`.
-  Every label comes from the `sandbox.*` family inventoried in `10-*`
-  §7.12.
+- **Layout (1920×1080 — pinned 2026-11-09, the full-surface re-layout).**
+  left = the player panel `(16, 72)` 944×848, right = the enemy panel
+  `(960, 72)` 944×848, bottom = the conditions strip `(16, 936)` 1888×128
+  carrying the six condition pairs on ONE grid row plus the
+  `[开战] [随机全部] [导入] [导出]` buttons as a 2×2 block at its right
+  end. Every label comes from the `sandbox.*` family inventoried in `10-*`
+  §7.12. Each ship editor renders as a COMPACT 2-line block so all five
+  ship rows fit their panel's rows area without scrolling: line 1 =
+  `Ship {index}` + ship type + cannons + crew + durability, line 2 =
+  captain (expanding) + figurehead + sail (full-width pair columns).
+  Dropdown widths follow the longest localized item text (+ arrow
+  ≈22 px + padding ≈12 px) per column — an OptionButton never clips its
+  selected text over a neighbor.
 - **Player panel.** 1–5 ships, one editable row per ship: ship type (the
   16 hulls), cannons (0 … `armament_slots`), crew (`crew_min` …
   `crew_max`), durability (1 … max), the figurehead + sail equipment
@@ -1629,9 +1638,19 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   the mode toggle only ever hides the per-ship rows + fleet buttons, never
   the enemy editors block); equipment dropdowns show the authored
   localized item `name`s (the `shipyard_screen` convention — metadata
-  stays the id); each ship editor renders as a compact multi-line block
-  (type/captain, cannons/crew/durability, then full-width figurehead and
-  sail lines) so no label clips and every control stays inside its panel.
+  stays the id); each ship editor renders as a compact 2-line block
+  (2026-11-09 re-layout — see the Layout bullet) so no label clips, every
+  control stays inside its panel, and the 5-ship fleet never needs the
+  rows scroll.
+- **Add-ship visibility + cap feedback (2026-11-09, the "add ship shows
+  nothing" fix).** After a successful `添加舰船` the side's rows scroll
+  auto-scrolls so the new row's rect is inside the scroll viewport
+  (`ensure_control_visible`, deferred — belt-and-braces for any future
+  font/geometry change that re-activates the scroll). At the 5-ship cap a
+  refused Add shows the `sandbox.ship.max` toast AND the Add button
+  disables (Remove disables at the 1-ship floor); direct
+  `add_ship_row`/`remove_ship_row` method calls keep returning
+  true/false unchanged (the disable is presentation-only).
 - **Import/export (forward-compatible schema).** `[导出]` copies the FULL
   configuration JSON to the clipboard; `[导入]` parses clipboard JSON and
   restores the editors. The schema declares ALL planned fields from day
