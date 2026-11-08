@@ -7,13 +7,12 @@ the result, and accept it into the game build.
 - **Server**: `server.py` — stdlib only (`http.server.ThreadingHTTPServer`),
   binds `127.0.0.1:8010`, no auth (local tool). One background worker thread
   runs generation jobs strictly one at a time from a FIFO queue.
-- **Chain**: `chain.py` — the pixellab family layer. **Ships, wakes and
-  the icon + glyph families** drive `tools/pixellab_pass.py` /
-  `tools/pixellab_vfx_pass.py` in-process (see the family sections
-  below); the LEGACY icon/icon-sheet path still re-implements the
-  model-pass pipeline (`tools/model_pass.py` parsed read-only for the
-  canonical icon prompt wording, never imported) pending its removal
-  commit.
+- **Chain**: `chain.py` — the pixellab family layer. All four art
+  families (ships, wakes, icons, glyphs) plus the coast tileset drive
+  the build-time pixellab tools in-process (see the family sections
+  below). The legacy TheNoise/ComfyUI icon chain and its driver parse
+  (`tools/model_pass.py`, deleted) are REMOVED — 2026-11-08 user
+  direction.
 - **Frontend**: `www/` — single-page vanilla HTML/CSS/JS, dark theme.
 
 ## Launch
@@ -143,9 +142,6 @@ ledger record + the shipped hero `assets/ui/markers64/<bare>.png` /
 `assets/ui/tokens64/<bare>.png` (the hero dirs hold BARE ids — the
 registry strips the family prefix).
 
-## Chain (per sprite job — the LEGACY icon path; superseded by the
-## icon/glyph families above, kept until the removal commit)
-
 ## API
 
 | Method | Path | Body | Purpose |
@@ -190,55 +186,25 @@ registry strips the family prefix).
   ~500 `<img>` requests at once — the intermittently-broken-thumbnails
   mechanism; single curl requests never hit it). `do_HEAD` answers
   headers-only instead of the stdlib 501 HTML page.
-- **Never-404 thumbs**: terrain `snapped` falls back to its normalized
-  gen sheet (terrain has no rembg/snap); every thumb slot of a listed
-  job degrades to a `missing` cell in the UI instead of breaking the
-  grid. Thumbs go through a bounded in-memory cache keyed by source
-  path + mtime.
-- **Prompts never go empty**: `tools/model_pass.py` is untracked and
-  rewritten by re-roll rounds — a torn or reshaped parse now keeps the
-  last good parse, else falls back to the **embedded** proven-wording
-  constants (icon overrides + style shipped in chain.py; the td/fx edit
-  bases come from the pass tools' pinned descriptors).
-  `default_prompt` and `canonical_seed` never raise; `registry()` guards
-  each job so one bad store file cannot 500 `/api/jobs` (that 500 was the
-  empty-grid / empty-textarea failure mode). Driver source + error are
-  visible at `GET /api/status` → `driver`.
+- **Never-404 thumbs**: every thumb slot of a listed job degrades to a
+  `missing` cell in the UI instead of breaking the grid. Thumbs go
+  through a bounded in-memory cache keyed by source path + mtime.
+- **Prompts never go empty**: the edit base comes from the pass tools'
+  pinned descriptors (`_ICON_DESCRIPTORS` / `_glyph_desc` /
+  `_desc_topdown` / the wake V5 wording) or the canonical raw manifest's
+  recorded description. `default_prompt` never raises; `registry()`
+  guards each job so one bad store file cannot 500 `/api/jobs`.
 - **Original prompts (user direction: edit from the actual original)**:
   every generation stores the EXACT prompt in `studio/state.json`
-  (`original_prompt` + `original_prompt_source: "exact"`); icon jobs are
-  backfilled with a faithful **reconstruction** of the driver's actual
-  wording (ICON_PROMPT_OVERRIDES + style; terrain per-sheet clauses),
-  tagged `original_prompt_source: "reconstructed"`
-  (or `"default"` if even the fallback wording had to be used — never
-  pinned to state.json so it upgrades when the driver parses again;
-  the td/fx families share this never-pin rule — `td_default_prompt`
-  degrades to the bare `{ship} sailing ship` template only when the
-  pinned descriptor AND the raw-store manifest both fail, and the
-  registry tags that source `"default"` via `td_fallback_prompt`).
+  (`original_prompt` + `original_prompt_source: "exact"`); the card's
+  edit base is the canonical manifest's recorded description (the
+  wording that produced the shipped art), else the pinned descriptor.
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
-## Job shapes (icons — driver-drift tolerant)
-
-- **Icon group sheets** `iconsheet_<group>` (progress key `icons_<group>`;
-  12 families of 8–14 icons): the card shows the sheet draft, the
-  generated sheet, and the group's **first icon crop** as the snapped
-  representative; they lead the Icons tab. **Re-roll** regenerates the
-  whole group through chain.py's ported driver chain — layout → 384px
-  clamped windows → green-killed 64px cell masks vs 32px draft masks →
-  aligned-IoU greedy assignment (the model may move icons) → per-icon
-  rembg + key + snap → **canonical `model_raw/snapped/icon_<id>.png`
-  writes** (+ studio copies + debg). **Accept** records the group and
-  triggers one `--import-icons <raw>/snapped <studio>/snapped` run (later
-  dirs win per id, so studio re-roll crops win); per-icon in-game /
-  rejected reasons surface in the card's status line.
-
-The registry **never raises**: draft files whose id starts with a
-retired prefix (`hull_` / `sheet_` / `terrain_` / `px_`) are skipped
-outright, an unparseable/unknown draft id is degraded to a generic card,
-and both are reported in `/api/status` → `registry.warnings` and
-`/api/jobs` → `warnings` — the API always answers valid JSON.
+The registry **never raises**: a failing card is skipped with a warning
+(reported in `/api/status` → `registry.warnings` and `/api/jobs` →
+`warnings`) — the API always answers valid JSON.
 
 ## Accept → in game (一键进游戏)
 
@@ -255,32 +221,28 @@ and both are reported in `/api/status` → `registry.warnings` and
    (idempotent), so the other wake cards stamp in-game too; the gate is
    the ship's record (sheet sha256 + effect_id) in
    `tools/assets/pixellab_raw/pixellab_vfx_ledger.json`.
-3. **Icon sheets** (`iconsheet_<group>`): one
-   `build_ui_art --import-icons <raw>/snapped <studio>/snapped` run;
-   per-icon REJECT lines surface per icon in the card's status.
+3. **Icons / glyphs** (`ic_<id>` / `gl_<id>`): a staged re-roll first
+   moves into the canonical pixellab raw store, then one
+   `build_ui_art --import-icons <pixellab_icons>` /
+   `--import-glyphs <pixellab_glyphs>` run re-lands the WHOLE family
+   (idempotent — the sibling cards stamp in-game too); the gate is the
+   id's ledger record + the shipped hero file (`assets/ui/icons64/`,
+   `assets/ui/markers64/`, `assets/ui/tokens64/`).
 4. The card status walks **queued for ingest → ingesting… → in game ✓**
    or **REJECTED / error: <reason>**; the result (state, reason, log
    tail) is stored per job in `studio/state.json` (`ingest` key) and
    mirrored into `accepted.json`.
 5. Header/filter chip **In game (n)** lists accepted+ingested jobs.
-6. Single-icon accepts record acceptance only — tagged
-   **accepted (game flow pending)**.
+6. Icon/glyph accepts are full accept→in-game flows (no pending state —
+   the import is the game build).
 
 Restart note: the token runtime loads data artifacts (no `godot --import`
 needed after a token replace) — restart the game to see accepted art.
 The studio never shells out to godot itself.
 
-**Coordination caution**: the batch per-hull refactor writes the same
-canonical `model_raw/snapped/` paths — avoid accepting a job while a
-batch re-roll is writing that same job's file (the single-file atomic
-copy tolerates it; the next ingest run picks up whichever bytes won).
-
 ## Notes
 
-- Canonical prompts are reconstructed from `tools/model_pass.py` by AST
-  parsing (literals via `ast.literal_eval`; `ICON_PROMPT_OVERRIDES` — which
-  references `ICON_STYLE` — via an AST-gated eval). If the driver's constant
-  surface drifts, boot fails loudly instead of shipping stale wording.
-- The studio queue is independent of any concurrent `model_pass.py` batch:
-  all studio output lives under `model_raw/studio/**`; ComfyUI uploads use
-  unique filenames and client id `sailage-studio`.
+- All studio output lives under `model_raw/studio/**` (gitignored);
+  the canonical pixellab raw stores are written ONLY on Accept (the
+  staging contract). Generation jobs run strictly serially (one worker
+  thread), so concurrent re-rolls queue instead of racing.

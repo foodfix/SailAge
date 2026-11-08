@@ -26,8 +26,11 @@ strength 1.0; drop to ~0.8 if hull identity drifts).
   | 91004 | `sailage/angles/sw` | sw | bow BOTTOM-LEFT, sails to TOP-RIGHT | 45° anticlockwise |
 
   The diagonal/orthogonal wording is verbatim from the game's POSE table
-  (`tools/model_pass.py`), so outputs match what the snap/ingest gates
-  (band, pennant-in-masthead, palette block) expect.
+  (the retired `tools/model_pass.py` — kept in git history), so outputs
+  matched what the snap/ingest gates (band, pennant-in-masthead,
+  palette block) expected. The whole angle workflow is RETIRED with the
+  2026-11-07 top-down amendment (one north token per ship; the runtime
+  rotates).
 
 - **Orbit convention (empirical, brigantine trials 2026-11-05/06):** the
   input faces WEST (bow LEFT). From that view, the **clockwise** orbit

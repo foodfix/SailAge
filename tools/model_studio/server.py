@@ -9,7 +9,7 @@ background worker thread (~40 s each) fed by a FIFO queue.
 Services (localhost): thenoise :8001 (/edit, the image model) and ComfyUI
 :8000 (rembg). This server binds 127.0.0.1:8010 — no auth, local tool.
 
-The --repo argument points at the MAIN SailAge repo: drafts/, progress.json,
+The --repo argument points at the MAIN SailAge repo: the canonical raw
 report.json and validate_data.py are read from there, and the studio cache
 (model_raw/studio/** — gitignored) is written there too. Canonical
 gen//snapped/ are NEVER written; only tools/model_studio/** is committed.
@@ -50,8 +50,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
-FAMILIES = ("topdown", "fx", "coast", "icons", "glyphs", "icon",
-            "iconsheet")
+FAMILIES = ("topdown", "fx", "coast", "icons", "glyphs")
 # draft-file prefixes that are NEVER listed (the retired ship families —
 # 2026-11-07 user direction — and the hidden terrain texture chain)
 HIDDEN_PREFIXES = ("hull_", "sheet_", "terrain_", "px_")
@@ -79,9 +78,9 @@ class Studio:
         self.qcond = threading.Condition(self.lock)
         self._thumb_cache: "OrderedDict[str, bytes]" = OrderedDict()
         self.last_warnings: list[str] = []   # registry skip/degrade notes
-        self._icon_groups_cache: dict[str, list[str]] = {}
-        self._icon_groups_at: float = 0.0
-        self.load_driver()
+        chain.init(repo)
+        self.report = self._read_json(
+            os.path.join(self.raw(), "report.json"), {})
 
     # -- paths ----------------------------------------------------------
     def raw(self) -> str:
@@ -103,12 +102,6 @@ class Studio:
 
     def _write_json(self, path: str, data) -> None:
         chain.atomic_write(path, json.dumps(data, indent=1).encode("utf-8"))
-
-    def load_driver(self) -> None:
-        chain.init(self.repo)
-        self.driver = chain.load_driver(self.repo)
-        self.report = self._read_json(
-            os.path.join(self.raw(), "report.json"), {})
 
     def prompts(self) -> dict:
         return self._read_json(self._json_path("prompts.json"), {})
@@ -436,83 +429,10 @@ class Studio:
             "thumbs": thumbs,
         }
 
-    def _icon_groups(self) -> dict[str, list[str]]:
-        """Group -> icon ids (chain's replication of the driver's
-        icon_group_definitions), cached 60 s (manifests drift mid-flight)."""
-        now = time.time()
-        if self._icon_groups_at and now - self._icon_groups_at < 60:
-            return self._icon_groups_cache
-        try:
-            self._icon_groups_cache = dict(chain.icon_group_definitions(
-                self.repo))
-        except Exception as exc:  # noqa: BLE001 — degraded listing
-            log(f"icon group definitions failed: {exc}")
-            self._icon_groups_cache = {}
-        self._icon_groups_at = now
-        return self._icon_groups_cache
-
-    def _iconsheet_entry(self, job_id, subject, prog, prompts, state,
-                         accepted, seed_map):
-        """Icon GROUP sheet card (12 families). Progress/ledger key is
-        `icons_<group>`; the driver (and the studio chain) write per-icon
-        canonical snapped files, so the snapped thumb shows the group's
-        first icon crop."""
-        prog_key = f"icons_{subject}"
-        canon = prog.get(prog_key, {}) or {}
-        studio_rec = state.get(job_id, {}) or {}
-        ids = self._icon_groups().get(subject) or []
-        n = len(ids) or len(canon.get("ids") or [])
-        thumbs = {}
-        for kind in ("draft", "raw", "snapped"):
-            for path, _mirrored in self.thumb_candidates(kind, job_id):
-                if os.path.isfile(path):
-                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000)}
-                    break
-        stored_original = (studio_rec.get("original_prompt")
-                           or studio_rec.get("prompt"))
-        if stored_original:
-            original_prompt = stored_original
-            original_source = (studio_rec.get("original_prompt_source")
-                               or "exact")
-        else:
-            original_prompt, original_source = chain.reconstruct_original(
-                job_id, self.repo, rec=canon or None)
-        eff_prompt = prompts.get(job_id) or original_prompt
-        return {
-            "id": job_id,
-            "family": "iconsheet",
-            "subject": subject,
-            "dir": None,
-            "tier": None,
-            "label": f"ICON SHEET · {subject} · {n} icons",
-            "mirror_of": None,
-            "band": None,
-            "pennant_ok": None,
-            "flagged": False,
-            "superseded": False,
-            "superseded_by": None,
-            "accepted": accepted.get(job_id),
-            "prompt": eff_prompt,
-            "original_prompt": original_prompt,
-            "original_prompt_source": original_source,
-            "custom_prompt": job_id in prompts,
-            "seed": studio_rec.get("seed", canon.get("seed")),
-            "canonical_seed": seed_map.get(job_id),
-            "status": studio_rec.get("status", canon.get("status")),
-            "status_source": "studio" if studio_rec else "canonical",
-            "ingest": studio_rec.get("ingest"),
-            "metrics": None,
-            "seconds": studio_rec.get("seconds", canon.get("seconds")),
-            "error": studio_rec.get("error"),
-            "thumbs": thumbs,
-        }
-
     def thumb_candidates(self, kind: str, job_id: str):
-        """Ordered file candidates for one thumb slot (icon/icon-sheet
-        jobs; the terrain machinery is kept though its cards are hidden).
-        Never 404 on a listed job's thumbs."""
-        fam, subject, _direction = chain.parse_job(job_id)
-        raw, st = self.raw(), self.studio()
+        """Ordered file candidates for one thumb slot. Never 404 on a
+        listed job's thumbs."""
+        fam, _subject, _direction = chain.parse_job(job_id)
         if fam == "icons" and job_id.startswith("ic_"):
             # prompt-only icon card: snapped = the canonical raw (the
             # shipped pixels' source); raw = the staged re-roll
@@ -535,37 +455,10 @@ class Studio:
             elif kind == "snapped":
                 out.append((chain.glyph_raw_path(gid), None))
             return out
-        if fam == "iconsheet":
-            # group card: draft = sheet draft, raw = generated sheet,
-            # snapped = the group's first icon crop (representative)
-            first = (self._icon_groups().get(subject) or [""])[0]
-            out = []
-            if kind == "draft":
-                out.append((os.path.join(raw, "drafts", job_id + ".png"),
-                            None))
-            elif kind == "raw":
-                out.append((os.path.join(st, "gen", job_id + ".png"), None))
-                out.append((os.path.join(raw, "gen", job_id + ".png"), None))
-            elif kind == "snapped" and first:
-                out.append((os.path.join(st, "snapped",
-                                         f"icon_{first}.png"), None))
-                out.append((os.path.join(raw, "snapped",
-                                         f"icon_{first}.png"), None))
-            return out
-        out = []
-        if kind == "draft":
-            out.append((os.path.join(raw, "drafts", job_id + ".png"), None))
-        elif kind == "raw":
-            out.append((os.path.join(st, "gen", job_id + ".png"), None))
-            out.append((os.path.join(raw, "gen", job_id + ".png"), None))
-        elif kind == "snapped":
-            out.append((os.path.join(st, "snapped", job_id + ".png"), None))
-            out.append((os.path.join(raw, "snapped", job_id + ".png"), None))
-            if fam == "terrain":
-                # the normalized 1024x512 gen sheet is the terrain artifact
-                out.append((os.path.join(st, "gen", job_id + ".png"), None))
-                out.append((os.path.join(raw, "gen", job_id + ".png"), None))
-        return out
+        # unknown/retired family (the icon/icon-sheet/terrain machinery
+        # is removed): no thumbs
+        return []
+
 
     def _thumb_cache_get(self, key: str):
         with self.lock:
@@ -689,51 +582,16 @@ class Studio:
         return None, None, False
 
     # -- registry ---------------------------------------------------------
-    def _seed_map(self) -> dict:
-        """canonical seed per job, computed in ONE pass (manifests read
-        once instead of per job). Tolerant to torn manifest reads."""
-        try:
-            d = self.driver
-            icons_dir = os.path.join(self.repo, "tools", "ui_art", "icons")
-            manifests = {}
-            if os.path.isdir(icons_dir):
-                for path in sorted(os.listdir(icons_dir)):
-                    if not path.endswith(".json"):
-                        continue
-                    try:
-                        with open(os.path.join(icons_dir, path),
-                                  encoding="utf-8") as fh:
-                            doc = json.load(fh)
-                    except (OSError, ValueError):
-                        continue
-                    sprites = doc if isinstance(doc, list) \
-                        else doc.get("sprites", [])
-                    for s in sprites:
-                        manifests[s["id"]] = s
-            ids = [i for i in d["ICON_PRIORITY"] if i in manifests]
-            ids += [i for i in sorted(manifests) if i not in set(ids)]
-            order = ([f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
-                     + [f"icon_{i}" for i in ids[:129]])
-            return {job: 1000 + i for i, job in enumerate(order)}
-        except Exception as exc:  # noqa: BLE001 — informational only
-            log(f"seed map failed: {exc}")
-            return {}
-
     def registry(self) -> list[dict]:
-        """Enumerate jobs from the store's drafts/ and merge canonical +
-        studio state. NEVER raises: per-job guard wraps entry AND fallback
-        construction — an unparseable job id (driver mid-refactor shapes)
-        is skipped with a warning, never a 500."""
+        """Enumerate the pixellab family cards and merge canonical +
+        studio state. NEVER raises: per-job guard wraps each entry — a
+        failing card is skipped with a warning, never a 500."""
         warnings: list[str] = []
-        drafts_dir = os.path.join(self.raw(), "drafts")
-        prog = self._read_json(os.path.join(self.raw(), "progress.json"),
-                               {}).get("jobs", {})
         report = self._read_json(os.path.join(self.raw(), "report.json"), {})
         with self.lock:
             prompts = self.prompts()
             state = self.state().get("jobs", {})
             accepted = self.accepted()
-        seed_map = self._seed_map()
         jobs = []
         # The top-down ship family leads the registry (§4.8 2026-11-07);
         # fleet labels only (≥1 snapped north token).
@@ -774,68 +632,14 @@ class Studio:
             except Exception as exc:  # noqa: BLE001 — degrade, never die
                 warnings.append(f"gl_{gid}: {type(exc).__name__}: {exc}")
                 log(f"registry SKIP gl_{gid}: {warnings[-1]}")
-        try:
-            draft_names = sorted(os.listdir(drafts_dir))
-        except OSError as exc:
-            log(f"drafts dir unreadable: {exc}")
-            draft_names = []
-        for fname in draft_names:
-            if not fname.endswith(".png"):
-                continue
-            job_id = fname[:-4]
-            if not JOB_RE.match(job_id):
-                continue
-            try:
-                fam = chain.parse_job(job_id)[0]
-            except KeyError:
-                fam = None
-            if job_id.startswith(HIDDEN_PREFIXES) \
-                    or fam in ("hull", "sheet", "terrain"):
-                # the retired ship families (hull_/sheet_/px_ — removed
-                # 2026-11-07; parse_job no longer knows them) and the
-                # legacy terrain texture jobs are HIDDEN entirely:
-                # terrain re-rolls live on the coast tileset card, the
-                # retired ship paths are gone
-                continue
-            try:
-                jobs.append(self._job_entry(job_id, prog, report, prompts,
-                                            state, accepted, seed_map))
-            except Exception as exc:  # noqa: BLE001 — degrade, don't die
-                reason = f"{type(exc).__name__}: {exc}"
-                # even the fallback card must never raise
-                try:
-                    fallback = {
-                        "id": job_id, "family": job_id.split("_", 1)[0],
-                        "subject": None, "dir": None, "tier": None,
-                        "label": job_id, "mirror_of": None, "band": None,
-                        "pennant_ok": None, "flagged": False,
-                        "accepted": accepted.get(job_id),
-                        "prompt": chain.default_prompt(job_id, self.repo),
-                        "original_prompt": "",
-                        "original_prompt_source": "default",
-                        "custom_prompt": job_id in prompts, "seed": None,
-                        "canonical_seed": seed_map.get(job_id),
-                        "status": None, "status_source": "canonical",
-                        "ingest": None, "metrics": None, "seconds": None,
-                        "error": None, "thumbs": {},
-                    }
-                    jobs.append(fallback)
-                except Exception as exc2:  # noqa: BLE001 — skip + warn
-                    warnings.append(f"{job_id}: {reason} "
-                                    f"(fallback also failed: {exc2})")
-                    log(f"registry SKIP {job_id}: {warnings[-1]}")
-                    continue
-                log(f"registry entry {job_id} degraded: {reason}")
         self.last_warnings = warnings
-        # backfill: persist each legacy job's original prompt ONCE, so the
-        # edit base stays stable across driver drift and "↺ original" is
-        # byte-identical. Exact originals are already in state.json (written
-        # by the worker); reconstructed ones are stored as reconstructed.
+        # backfill: persist each card's original prompt ONCE, so the edit
+        # base stays stable and "↺ original" is byte-identical. Exact
+        # originals are already in state.json (written by the worker).
         missing = {}
         for j in jobs:
             if j.get("original_prompt_source") == "default":
-                continue  # never pin fallback wording; it upgrades once the
-                          # driver parses again
+                continue  # never pin fallback wording
             if not j.get("original_prompt"):
                 continue
             st_rec = state.get(j["id"]) or {}
@@ -864,71 +668,6 @@ class Studio:
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
         return jobs, counts, flagged_ids
 
-    def _job_entry(self, job_id, prog, report, prompts, state, accepted,
-                   seed_map):
-        fam, subject, direction = chain.parse_job(job_id)
-        if fam == "iconsheet":
-            return self._iconsheet_entry(job_id, subject, prog, prompts,
-                                         state, accepted, seed_map)
-        canon = prog.get(job_id, {})
-        studio_rec = state.get(job_id, {})
-        metrics = studio_rec.get("metrics") or canon.get("metrics")
-
-        thumbs = {}
-        for kind in ("draft", "raw", "snapped"):
-            for path, _mirrored in self.thumb_candidates(kind, job_id):
-                if os.path.isfile(path):
-                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000)}
-                    break
-
-        # original prompt: EXACT when the studio generated it (worker writes
-        # original_prompt + source "exact"); else the backfilled
-        # reconstruction (source stored with it)
-        stored_original = (studio_rec.get("original_prompt")
-                           or studio_rec.get("prompt"))
-        if stored_original:
-            original_prompt = stored_original
-            if studio_rec.get("original_prompt_source"):
-                original_source = studio_rec["original_prompt_source"]
-            else:
-                # legacy worker recs stored the EXACT sent wording in
-                # `prompt` (original_prompt key did not exist yet)
-                original_source = "exact"
-        else:
-            original_prompt, original_source = chain.reconstruct_original(
-                job_id, self.repo, rec=canon or None)
-        eff_prompt = prompts.get(job_id) or original_prompt
-        return {
-            "id": job_id,
-            "family": fam,
-            "subject": subject,
-            "dir": direction,
-            "tier": None,
-            "label": (f"icon · {subject}" if fam == "icon"
-                      else f"terrain · {subject}"),
-            "mirror_of": None,
-            "band": None,
-            "pennant_ok": None,
-            "flagged": False,
-            "superseded": False,
-            "superseded_by": None,
-            "accepted": accepted.get(job_id),
-            "prompt": eff_prompt,
-            "original_prompt": original_prompt,
-            "original_prompt_source": original_source,
-            "custom_prompt": job_id in prompts,
-            "seed": studio_rec.get("seed", canon.get("seed")),
-            "canonical_seed": seed_map.get(job_id),
-            "status": studio_rec.get("status", canon.get("status")),
-            "status_source": "studio" if studio_rec else "canonical",
-            "ingest": studio_rec.get("ingest"),
-            "metrics": metrics,
-            "seconds": studio_rec.get("seconds", canon.get("seconds")),
-            "error": studio_rec.get("error"),
-            "thumbs": thumbs,
-        }
-
-    # -- worker -----------------------------------------------------------
     def start_worker(self) -> None:
         th = threading.Thread(target=self._worker, name="studio-worker",
                               daemon=True)
@@ -971,7 +710,6 @@ class Studio:
                 self.save_accepted(acc)
 
     INGEST_TIMEOUT_S = 420   # the full ladder is ~1–2 min; margin for cold runs
-    REJECT_RE = re.compile(r"^\s*REJECT (\S+): (\S+) — (.*)$", re.M)
 
     def _generate_coast(self, order: dict) -> None:
         """The coast tileset re-roll (§4.8 2026-11-06): one corner-tileset
@@ -1034,130 +772,6 @@ class Studio:
         if fam in ("icons", "glyphs"):
             self._pixellab_id_ingest_order(order, fam)
             return
-        job_id = order["job"]
-        with self.lock:
-            self.current = {"type": "ingest", "job": job_id,
-                            "stage": "build-ladder",
-                            "started_epoch": time.time()}
-        log(f"ingesting {job_id} -> build_ui_art --import-ships")
-        self._set_ingest_state(job_id, {"state": "running",
-                                        "started_at": time.strftime(
-                                            "%H:%M:%S")})
-        t0 = time.time()
-        try:
-            fam_probe = chain.parse_job(job_id)[0]
-        except KeyError:
-            fam_probe = ""
-        if fam_probe != "iconsheet":
-            # only icon-sheet accepts reach the generic ingest (icon and
-            # terrain accepts are record-only; ships/wakes have their own
-            # orders)
-            ing = {"state": "error",
-                   "reason": f"no generic ingest flow for {job_id!r} "
-                             f"({fam_probe or 'unknown shape'})"}
-            ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-            self._set_ingest_state(job_id, ing)
-            with self.lock:
-                self.current = None
-            log(f"ingest {job_id}: error ({ing['reason']})")
-            return
-        # --import-icons: multiple source dirs, later dirs win per id —
-        # the studio reroll crops land in studio/snapped and win over
-        # the batch round's canonical snaps
-        cmd = [sys.executable, os.path.join(self.repo, "tools",
-                                            "build_ui_art.py"),
-               "--import-icons", os.path.join(self.raw(), "snapped"),
-               os.path.join(self.studio(), "snapped")]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=self.INGEST_TIMEOUT_S,
-                                  cwd=self.repo)
-            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
-            rejects = {m.group(1): (m.group(2), m.group(3).strip())
-                       for m in self.REJECT_RE.finditer(out)}
-            ledger = self._read_json(
-                os.path.join(self.repo, "tools", "ui_art",
-                             "ingest_ledger.json"), {})
-            tokens = ledger.get("tokens") or {}
-            icons_led = ledger.get("icons") or {}
-            fam, subject, _direction = chain.parse_job(job_id)
-            ids: list[str] = []
-            gate_job, via = job_id, ""
-            if fam == "iconsheet":
-                ids = self._icon_groups().get(subject) or []
-            tail = out.strip()[-700:]
-            if proc.returncode != 0:
-                ing = {"state": "error", "exit_code": proc.returncode,
-                       "reason": f"build failed (exit {proc.returncode}): "
-                                 f"{tail[-300:]}",
-                       "log_tail": tail,
-                       "seconds": round(time.time() - t0, 1)}
-            elif fam == "iconsheet":
-                # per-icon gate results (ledger section `icons{}` per id)
-                per_icon, rejected_n, ok_n = {}, 0, 0
-                for iid in ids:
-                    rid = f"icon_{iid}"
-                    if rid in rejects:
-                        rsn, dtl = rejects[rid]
-                        per_icon[iid] = f"rejected: {rsn} — {dtl}"
-                        rejected_n += 1
-                    elif rid in icons_led:
-                        per_icon[iid] = "in game"
-                        ok_n += 1
-                    else:
-                        per_icon[iid] = "not ingested"
-                if rejected_n:
-                    first = "; ".join(v for v in per_icon.values()
-                                      if v.startswith("rejected"))[:300]
-                    ing = {"state": "rejected", "exit_code": 0,
-                           "reason": f"{rejected_n}/{len(ids)} icons "
-                                     f"rejected: {first}",
-                           "per_icon": per_icon, "log_tail": tail,
-                           "seconds": round(time.time() - t0, 1)}
-                elif ids and ok_n == len(ids):
-                    ing = {"state": "in-game", "exit_code": 0,
-                           "reason": f"all {ok_n} icons ingested",
-                           "per_icon": per_icon, "log_tail": tail,
-                           "seconds": round(time.time() - t0, 1)}
-                else:
-                    ing = {"state": "error", "exit_code": proc.returncode,
-                           "reason": "no icons ingested and no REJECT "
-                                     "lines — unexpected ingest output",
-                           "per_icon": per_icon, "log_tail": tail,
-                           "seconds": round(time.time() - t0, 1)}
-            elif gate_job in rejects:
-                reason, detail = rejects[gate_job]
-                ing = {"state": "rejected", "exit_code": 0,
-                       "reason": f"{reason}{via}", "detail": detail,
-                       "log_tail": tail,
-                       "seconds": round(time.time() - t0, 1)}
-            elif gate_job in tokens:
-                tok = tokens[gate_job]
-                ing = {"state": "in-game", "exit_code": 0,
-                       "accepted_at": tok.get("accepted_at"),
-                       "snapped_sha": tok.get("snapped_sha"),
-                       "via": via or None, "log_tail": tail,
-                       "seconds": round(time.time() - t0, 1)}
-            else:
-                ing = {"state": "error", "exit_code": proc.returncode,
-                       "reason": "no ledger entry and no REJECT line — "
-                                 "unexpected ingest output",
-                       "log_tail": tail,
-                       "seconds": round(time.time() - t0, 1)}
-        except subprocess.TimeoutExpired:
-            ing = {"state": "error",
-                   "reason": f"build timed out after "
-                             f"{self.INGEST_TIMEOUT_S}s"}
-        except Exception as exc:  # noqa: BLE001 — surface in the UI
-            ing = {"state": "error",
-                   "reason": f"{type(exc).__name__}: {exc}"}
-        ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        self._set_ingest_state(job_id, ing)
-        with self.lock:
-            self.current = None
-        log(f"ingest {job_id}: {ing['state']}"
-            + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
-
     def _pixellab_id_ingest_order(self, order: dict, fam: str) -> None:
         """Accept→game for the ic_/gl_ cards (§4.8 2026-11-08): a staged
         re-roll moves into the canonical pixellab raw store first (the
@@ -1547,10 +1161,8 @@ class Studio:
                     rec.update(result)
                     rec["status"] = result.get("status", "done")
                 else:
-                    result = chain.run_job(job_id, prompt, seed,
-                                           on_stage=stage)
-                    rec.update(result)
-                    rec["status"] = "done"
+                    raise RuntimeError(f"unknown job shape {job_id!r} "
+                                       f"(the legacy icon chain is gone)")
             except Exception as exc:  # noqa: BLE001 — surface in the UI
                 rec["status"] = "error"
                 rec["error"] = f"{type(exc).__name__}: {exc}"
@@ -1641,7 +1253,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"worker": "busy" if cur else "idle",
                                  "current": cur, "queue": queue,
                                  "repo": self.studio.repo,
-                                 "driver": chain.driver_status(),
                                  "registry":
                                      {"warnings":
                                       list(self.studio.last_warnings)}})
@@ -1767,8 +1378,7 @@ class Handler(BaseHTTPRequestHandler):
             return job_id[len("ic_"):] in chain.icon_ids()
         if job_id.startswith("gl_") and JOB_RE.match(job_id):
             return job_id[len("gl_"):] in chain.glyph_ids()
-        return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
-            chain.canonical_path("drafts", job_id)))
+        return False  # unknown shape — the legacy drafts store is gone
 
     def _accept_coast(self) -> None:
         """Accept the pending coast re-roll: stage the vendored trio into
@@ -1883,10 +1493,8 @@ class Handler(BaseHTTPRequestHandler):
                 source = "pixellab"
                 ingest_state = "queued"
             else:
-                source = ("studio" if os.path.isfile(
-                    chain.studio_path("snapped", job_id)) else "canonical")
-                ingest_state = ("queued" if fam == "iconsheet"
-                                else "game-flow-pending")
+                raise RuntimeError(f"unknown job shape {job_id!r} "
+                                   f"(the legacy icon chain is gone)")
             acc[job_id] = {
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "source": source,
@@ -1894,18 +1502,7 @@ class Handler(BaseHTTPRequestHandler):
                 "prompt": (st or {}).get("prompt"),
                 "ingest": ingest_state,
             }
-            if fam == "iconsheet":
-                # the studio chain writes per-icon canonical snapped files
-                # at generation time; accept = record the group + one
-                # --import-icons run over both source dirs
-                ids = self._icon_groups().get(subject) or []
-                acc[job_id]["group_ids"] = ids
-                st_ = self.studio.state()
-                rec = st_.setdefault("jobs", {}).setdefault(job_id, {})
-                rec["ingest"] = {"state": "queued",
-                                 "queued_at": acc[job_id]["at"]}
-                self.studio.save_state(st_)
-            elif fam == "topdown":
+            if fam == "topdown":
                 # record the label's provenance and queue the raw import
                 # (the whole fleet re-lands, idempotent)
                 manifest = chain.td_manifest().get(subject) or {}
@@ -1928,7 +1525,7 @@ class Handler(BaseHTTPRequestHandler):
                                  "queued_at": acc[job_id]["at"]}
                 self.studio.save_state(st_)
             self.studio.save_accepted(acc)
-        if fam in ("iconsheet", "topdown", "fx"):
+        if fam in ("topdown", "fx", "icons", "glyphs"):
             self.studio.enqueue_ingest(job_id)
         log(f"accepted {job_id} ({source}, ingest={ingest_state})")
         self._json(200, {"ok": True, "job": job_id, "accepted":
@@ -1937,7 +1534,8 @@ class Handler(BaseHTTPRequestHandler):
                          "note": ("restart the game to see it — the token "
                                   "runtime loads data artifacts, no import "
                                   "refresh needed"
-                                  if fam in ("iconsheet", "topdown", "fx")
+                                  if fam in ("topdown", "fx", "icons",
+                                             "glyphs")
                                   else "accepted (game flow pending)")})
 
 
@@ -1954,7 +1552,7 @@ def main(argv=None) -> None:
     ap.add_argument("--port", type=int, default=8010)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--repo", default="/home/weidong/repo/SailAge",
-                    help="MAIN repo root (drafts/progress/report inputs "
+                    help="MAIN repo root (canonical raw store inputs "
                          "+ studio cache)")
     args = ap.parse_args(argv)
 

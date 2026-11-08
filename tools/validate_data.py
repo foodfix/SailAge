@@ -8715,7 +8715,10 @@ G13_MASTHEAD_TOP_FRAC = 0.45  # in the top 45% of the opaque bbox
 # ramp with the authored phase-0 ring (the validator re-derives the whole
 # file from the gitignored sheet).  Sources stay gitignored — provenance
 # rides the committed ledger sha when the cache is absent (90-* §9.2).
-G13_ICON_CACHE_DIRS = ("snapped", "studio/snapped", "pixellab_icons")
+# the icon cache pin: pixellab only (the classic snapped/ +
+# studio/snapped caches retired with the TheNoise icon chain,
+# 2026-11-08 studio modernization)
+G13_ICON_CACHE_DIRS = ("pixellab_icons",)
 G13_ICON_INLINE = 32
 G13_ICON_CAP_32 = 20
 G13_TERRAIN_CACHE_SUBDIR = "gen"
@@ -9942,8 +9945,7 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
                  "against the §4.8.4 icon block", 13)
         # the halving + hero asserts, re-derived from the gitignored source
         sp = (UI_ART_DIR / "model_raw" / "pixellab_icons" / iid
-              / "snapped" / "icon.png") if src == "pixellab_icons" \
-            else UI_ART_DIR / "model_raw" / src / f"icon_{iid}.png"
+              / "snapped" / "icon.png")
         if not sp.is_file():
             continue
         verified += 1

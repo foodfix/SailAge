@@ -407,15 +407,6 @@ ICON_ARROW_BASE_DIRS = ("n", "ne")
 # (the byte-identical ring the ×2-upscale fallback carries — §4.8.2 seam
 # rule + the manifest `ring` note).  The rocky_uniform sheet is HELD for
 # the blob wave unless it reads as a clean plains texture at 1:1. ----
-TERRAIN_SHEET_JOB = "terrain_plains_uniform"
-TERRAIN_SHEET_FILE = "terrain_plains_uniform.png"
-TERRAIN_SHEET_W = 1024          # the gen sheet canvas
-TERRAIN_SHEET_H = 512
-TERRAIN_PATCH = 256             # 4×2 patch grid of 256px patches
-TERRAIN_VARIANTS = 4            # the A.5 locked land variant count
-TERRAIN_CROP_INSET = 96         # clean-interior offset inside a patch
-# (the crop sits ≥ 96px from every patch edge — the sheets are seamless
-# by design; any residual patch-border artifact stays out of the crops)
 LAND_BASE = "#7a5c2e"           # LAND — the kind's pinned base step
 LAND_HI = "#8f6d3a"             # LAND_HI — highlight / dither light step
 LAND_LO = "#5e4720"             # LAND_LO — shadow / dither dark step
@@ -999,307 +990,6 @@ def resolve_artifact_overrides(root: Path = ROOT):
     return out
 
 
-def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
-                    raw: bool = False) -> dict:
-    """The formal model-pass ingestion (90-* §9.2, 80-* §4.8 + f6c00bb).
-
-    Per snapped 64-grid BASE token (n/s/w/sw/nw): decode → formal quantize
-    (block nearest + pennant snap) → masthead presence (≥3 source px in
-    the top 45% of the bbox) → band gate on the ``w`` base → accept.
-    A failed masthead gate triggers the PENNANT AUTO-PAINT (master
-    adjudication 2026-11-05): the deterministic flag is composited at the
-    detected mast anchor (top-20%-band tallest vertical run) before the
-    idempotent re-quantize, so the flag lands exact-source and the gate
-    re-check passes; no anchor ⇒ the honest reject stands.  Derived dirs
-    (e/ne/se) are exact mirror_x flips of their accepted base, taken
-    BEFORE the pennant remap (carrying painted flags).  Accepted tokens
-    are remapped ×9 and written as the primary shipped token files; a
-    rejected or missing base silently falls its whole mirror group back
-    to the generator (the build's ladder fills the gaps).  Writes the
-    committed provenance ledger (pennant: "auto-painted" vs "model");
-    revokes (deletes) previously ingested files whose entry did not
-    survive this run so assets and ledger stay exactly coherent.
-    Returns the report fragment.
-
-    ``raw=True`` — the PixelLab ship-as-drawn mode (80-* §4.8
-    2026-11-06): all 8 native dirs are bases (no mirror derivation),
-    quantize is SKIPPED (the model's deliberate pixels are the shipped
-    pixels), the band gate is skipped (§4.8.7 retired for this family),
-    the hull-block/budget write checks are waived (palette lock waived),
-    and the ledger records the pixellab manifest provenance (object id,
-    seed, description sha) instead of progress.json."""
-    ship_types = json.loads(SHIP_TYPES.read_text())
-    roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
-    tiers = {s["id"]: int(s["tier"]) for s in roster}
-    tokens_dir = outroot / TOKENS_DIR
-
-    prev_tokens, prev_derived = {}, {}
-    prev = _read_ledger("--import-ships")
-    prev_tokens = prev.get("tokens") or {}
-    prev_derived = prev.get("derived") or {}
-
-    prog = {}
-    pj = snapped_dir.parent / "progress.json"
-    if pj.is_file():
-        try:
-            prog = json.loads(pj.read_text()).get("jobs") or {}
-        except ValueError:
-            prog = {}  # provenance seed stays null; ingestion proceeds
-    px_manifest = {}
-    if raw:
-        pm = ROOT / "tools" / "ui_art" / "model_raw" / "pixellab" \
-            / "pixellab.json"
-        if pm.is_file():
-            try:
-                px_manifest = {
-                    (rec.get("ship") or label): rec
-                    for label, rec in json.loads(
-                        pm.read_text()).items()}
-            except ValueError:
-                px_manifest = {}
-
-    today = time.strftime("%Y-%m-%d", time.gmtime())
-    candidates = []      # base jobs actually present in the snapped dir
-    accepted = {}        # token id -> (w, h, px) in source form (post-snap)
-    led_tokens = {}      # token id -> provenance record
-    rejected = []
-    for ship in sorted(tiers):
-        for d in (RAW_INGEST_DIRS if raw else INGEST_BASE_DIRS):
-            job = f"hull_{ship}_{d}"
-            sp = snapped_dir / f"{job}.png"
-            if not sp.is_file():
-                continue  # not generated (yet) — a gap, not a rejection
-            candidates.append(job)
-            raw_bytes = sp.read_bytes()
-            try:
-                w, h, px = decode_png(raw_bytes)
-            except Exception as exc:  # a concurrent re-roll may be mid-write;
-                # reject-and-report, the next re-run picks the file up
-                rejected.append({"job": job, "reason": "decode",
-                                 "detail": f"snapped PNG does not decode: {exc}"})
-                continue
-            if (w, h) != (CANVAS, CANVAS):
-                rejected.append({"job": job, "reason": "canvas",
-                                 "detail": f"{w}x{h} != {CANVAS}x{CANVAS}"})
-                continue
-            if not raw:
-                px = _quantize_token(w, h, px)
-            pennant = "raw" if raw else "model"
-            if not raw:
-                bb, n = _masthead_count(px, w, h)
-                if n < MASTHEAD_MIN_PX:
-                    # Pennant auto-paint (master adjudication 2026-11-05):
-                    # the model intermittently omits the masthead pennant —
-                    # composite the deterministic flag at the detected mast
-                    # anchor instead of re-roll roulette. Painted BEFORE the
-                    # (idempotent) quantize so the flag lands exact-source;
-                    # the masthead gate re-checks and must pass.
-                    anchor = _mast_anchor(px, w, h)
-                    if anchor is None:
-                        rejected.append({"job": job, "reason": "masthead",
-                                         "detail": f"{n} pennant-source px < "
-                                                   f"{MASTHEAD_MIN_PX} and no "
-                                                   "mast anchor for auto-paint"})
-                        continue
-                    px = _paint_pennant(px, w, h, anchor[0], anchor[1], d)
-                    px = _quantize_token(w, h, px)
-                    bb, n = _masthead_count(px, w, h)
-                    if n < MASTHEAD_MIN_PX:
-                        rejected.append({"job": job, "reason": "masthead",
-                                         "detail": f"auto-paint landed but {n} "
-                                                   f"pennant-source px < "
-                                                   f"{MASTHEAD_MIN_PX}"})
-                        continue
-                    pennant = "auto-painted"
-            if not raw and d == "w":  # banded side profile; mirrors inherit
-                lo, hi = FOOTPRINT_BANDS[tiers[ship]]
-                # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05):
-                # latin/galiot rigs consistently draw 1px wide — +1 hi.
-                if ship in ("latin", "galiot", "sloop") and tiers[ship] == 1:
-                    hi += 1                # band = the content bbox (calibration
-                cbb = _content_bbox(px, w, h)  # reconciliation 2026-11-05:
-                ext = cbb[2] - cbb[0] + 1      # speckle-excluded, largest-
-                if not lo <= ext <= hi:        # component semantics
-                    rejected.append({
-                        "job": job, "reason": "band",
-                        "detail": f"long axis {ext}px outside the "
-                                  f"tier-{tiers[ship]} band {lo}-{hi}"
-                                  f"{'+1 lateen' if hi != FOOTPRINT_BANDS[tiers[ship]][1] else ''} "
-                                  f"(§4.8.7)"})
-                    continue
-            sha = hashlib.sha256(raw_bytes).hexdigest()
-            prev_rec = prev_tokens.get(job) or {}
-            accepted_at = (prev_rec.get("accepted_at")
-                           if prev_rec.get("snapped_sha") == sha else None)
-            led = {"job": job,
-                   "seed": (prog.get(job) or {}).get("seed"),
-                   "snapped_sha": sha,
-                   "accepted_at": accepted_at or today,
-                   "pennant": pennant}
-            if raw:
-                # pixellab provenance (80-* §4.8 2026-11-06): object id +
-                # seed + description sha from the pixellab manifest
-                rec = (px_manifest.get(ship) or {})
-                desc = rec.get("description") or ""
-                led["pixellab"] = {"object_id": rec.get("object_id"),
-                                   "seed": rec.get("seed"),
-                                   "description_sha": hashlib.sha256(
-                                       desc.encode()).hexdigest()[:16]}
-                led["seed"] = rec.get("seed")
-            led_tokens[job] = led
-            accepted[job] = (w, h, px)
-
-    # Derived dirs (f6c00bb): exact mirror_x flips of the accepted base,
-    # taken BEFORE the pennant remap (the remap is color-level, so the
-    # order is contract, not necessity — the flip must not re-quantize).
-    # RAW mode skips derivation entirely: all 8 dirs are native bases.
-    derived_ids = {}     # derived token id -> base token id
-    if not raw:
-        for ship in sorted(tiers):
-            for dd, base_d in sorted(INGEST_DERIVED.items()):
-                base_job = f"hull_{ship}_{base_d}"
-                if base_job not in accepted:
-                    continue  # whole mirror group falls back (no mixing)
-                bw, bh, bpx = accepted[base_job]
-                derived_ids[f"hull_{ship}_{dd}"] = base_job
-                accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx,
-                                                           "mirror_x")
-
-    # Write the accepted tokens. Classic mode: the pennant ×9 remap grid
-    # (the ONLY owner-variant pixel; spain is the legal identity remap).
-    # RAW mode (80-* §4.8 2026-11-06, user direction): the model's pixels
-    # ship UNTOUCHED as ONE owner-less file per ship × dir — the runtime
-    # falls every owner id onto it (texture_registry owner fallback), so
-    # 9 owner copies of identical bytes are never written.
-    written = 0
-    for job in sorted(accepted):
-        ship, d = _parse_token_id(job)
-        w, h, px = accepted[job]
-        if raw:
-            write_png(tokens_dir / f"hull_{ship}_{d}.png", w, h, px)
-            written += 1
-            continue
-        for owner in OWNER_ORDER:
-            table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
-            watch = frozenset(s for s, t in table.items()
-                              if "#%02x%02x%02x" % t[:3] != s)
-            out, leftovers = apply_remap(w, h, px, table, watch)
-            if leftovers:
-                fail(f"ingest {job}/{owner}: the pennant source survived "
-                     f"the remap: {sorted(leftovers)}")
-            colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
-            if PENNANTS[owner] not in colors:
-                fail(f"ingest {job}/{owner}: the owner pennant hex "
-                     f"{PENNANTS[owner]} is missing after the remap")
-            off = sorted(c for c in colors if c not in HULL_BLOCK)
-            if off:
-                fail(f"ingest {job}/{owner}: hexes outside the hull "
-                     f"block: {off}")
-            if len(colors) > INGEST_INGESTED_BUDGET:
-                fail(f"ingest {job}/{owner}: {len(colors)} colors > "
-                     f"budget {INGEST_INGESTED_BUDGET} (§4.8.3)")
-            write_png(tokens_dir / f"hull_{ship}_{owner}_{d}.png", w, h, out)
-            written += 1
-
-    if raw:
-        # Raw-dedupe tree hygiene: this mode owns the owner-LESS names, so
-        # any per-owner grid file left by an earlier classic/raw-remap run
-        # is stale (the runtime resolves owners onto the shared file).
-        pattern = re.compile(
-            r"hull_.+_(%s)_(%s)\.png$" % ("|".join(OWNER_ORDER),
-                                          "|".join(DIR_ORDER)))
-        pruned = 0
-        for f in sorted(tokens_dir.glob("hull_*.png")):
-            if pattern.match(f.name):
-                f.unlink()
-                # the pre-lazy era's .import sidecar (10acf123 made tokens
-                # raw-bytes) — orphaned the moment its PNG goes
-                f.with_name(f.name + ".import").unlink(missing_ok=True)
-                pruned += 1
-        if pruned:
-            print(f"  ingest: pruned {pruned} stale per-owner token "
-                  "file(s) — the raw dedupe grid is ship × dir only")
-
-    # Provenance revocation: committed ingested files whose entry did not
-    # survive this run (source rejected / changed beyond the gates) are
-    # removed so the ladder falls those ids back to the generator THIS run
-    # (assets == generator ∪ ingested(ledger), exactly).
-    def revoke(ship, d):
-        if raw:
-            (tokens_dir / f"hull_{ship}_{d}.png").unlink(missing_ok=True)
-        for owner in OWNER_ORDER:
-            (tokens_dir / f"hull_{ship}_{owner}_{d}.png").unlink(missing_ok=True)
-
-    live_ids = set(accepted)
-    stale_ids = set()
-    for tid in sorted(prev_tokens):
-        if tid not in live_ids:
-            stale_ids.add(tid)
-    for fid in sorted(prev_derived):
-        ship, _owner, d = _parse_file_id(fid)
-        tid = f"hull_{ship}_{d}"
-        if tid not in live_ids:
-            stale_ids.add(tid)
-    for tid in sorted(stale_ids):
-        ship, d = _parse_token_id(tid)
-        revoke(ship, d)
-    revoked = len(stale_ids)
-
-    # Derived provenance records (per shipped file, keyed by file name).
-    led_derived = {}
-    for tid, base_job in sorted(derived_ids.items()):
-        ds_ship, dd = _parse_token_id(tid)
-        base_ship, base_d = _parse_token_id(base_job)
-        for owner in OWNER_ORDER:
-            led_derived[f"hull_{ds_ship}_{owner}_{dd}.png"] = {
-                "job": tid,
-                "derived_from": f"hull_{base_ship}_{owner}_{base_d}.png",
-                "flip": "h",
-            }
-
-    doc = {
-        "counts": {
-            "candidates": len(candidates),
-            "accepted_base": len(led_tokens),
-            "accepted_derived": len(derived_ids),
-            "rejected": len(rejected),
-            "revoked_stale": revoked,
-            "shipped_files": written,
-            "fallback_files": (len(tiers) * len(DIR_ORDER) if raw else
-                               len(tiers) * len(OWNER_ORDER) * len(DIR_ORDER))
-                              - written,
-            "pennant_auto_painted": sum(1 for rec in led_tokens.values()
-                                        if rec.get("pennant")
-                                        == "auto-painted"),
-        },
-        "generated_by": ("tools/build_ui_art.py --import-ships-pixellab"
-                         if raw else
-                         "tools/build_ui_art.py --import-ships"),
-        "rejected": rejected,
-        "tokens": led_tokens,
-        "derived": led_derived,
-    }
-    # Read-modify-write: the ships family owns only its sections — the
-    # icons/terrain families' sections (and their counts) pass through
-    # untouched, so the studio accept→ingest flow never revokes them.
-    prev_all = prev
-    _write_ledger(prev_all, "ships", doc)
-
-    report["ingest"] = {
-        "candidates": len(candidates),
-        "accepted_base": len(led_tokens),
-        "accepted_derived": len(derived_ids),
-        "rejected": rejected,
-        "revoked": revoked,
-        "files": written,
-        "painted": sum(1 for rec in led_tokens.values()
-                       if rec.get("pennant") == "auto-painted"),
-    }
-    return report["ingest"]
-
-
-# tier → canvas table (80-* §4.8 2026-11-07 top-down amendment; the
-# generator reads tier, no new data field).
 NORTH_TIER_SIZE = {1: 32, 2: 48, 3: 64}
 
 
@@ -2031,98 +1721,6 @@ def _tone_rank_land_quantize(crop):
         out[i] = _INGEST_HEXES[hx] + (255,)
     return out
 
-
-def run_terrain_ingest(gen_dir: Path, report: dict,
-                       sheet_file: str = TERRAIN_SHEET_FILE) -> dict:
-    """The formal model-pass terrain ingestion (80-* §4.8, the uniform-fill
-    rule): the plains_uniform sheet crops to TERRAIN_VARIANTS uniform
-    64px tiles (one per top-row patch, clean-interior offset ≥ 96px from
-    every patch edge), tone-ranked onto the authored land family's
-    distribution (LAND_TONE_*_FRAC — see that note), then stamped with
-    the authored phase-0 outer ring (the byte-identical ring the
-    ×2-upscale fallback carries — §4.8.2 seam rule + the manifest `ring`
-    note).  Written as ``assets/ui/terrain/terrain_land_0..3.png`` (the
-    per-file override ladder: the ×2-upscale string-map generator remains
-    the fallback).  The ledger section ``terrain{}`` records per file
-    {job, seed, sheet sha, patch, crop origin, acceptance date}.  The
-    ``terrain_rocky_uniform`` sheet is HELD for the blob wave: it
-    quantizes darker/flatter than the plains texture at 1:1 and plains
-    is the directed deliverable (2026-11-05 call, ledgered)."""
-    sp = gen_dir / sheet_file
-    if not sp.is_file():
-        fail(f"--import-terrain: sheet not found: {sp}")
-    raw = sp.read_bytes()
-    if raw[:8] != _PNG_SIG:
-        fail(f"--import-terrain: {sp.name}: not a PNG (bad magic bytes)")
-    w, h, px = decode_png(raw)
-    if (w, h) != (TERRAIN_SHEET_W, TERRAIN_SHEET_H):
-        fail(f"--import-terrain: {sp.name} is {w}x{h}, the pinned gen "
-             f"sheet canvas is {TERRAIN_SHEET_W}x{TERRAIN_SHEET_H}")
-    prev = _read_ledger("--import-terrain")
-    prev_terrain = prev.get("terrain") or {}
-    today = time.strftime("%Y-%m-%d", time.gmtime())
-    sha = hashlib.sha256(raw).hexdigest()
-    seed = _seed_lookup(gen_dir, sheet_file[:-len(".png")])
-    led, written = {}, 0
-    for variant in range(TERRAIN_VARIANTS):
-        patch_x, patch_y = variant, 0  # one crop per top-row patch position
-        cx = patch_x * TERRAIN_PATCH + TERRAIN_CROP_INSET
-        cy = patch_y * TERRAIN_PATCH + TERRAIN_CROP_INSET
-        crop = [px[(cy + y) * w + (cx + x)] for y in range(CANVAS)
-                for x in range(CANVAS)]
-        q = _tone_rank_land_quantize(crop)
-        out = _stamp_land_ring(CANVAS, CANVAS, q)
-        colors = {("#%02x%02x%02x" % p[:3]) for p in out}
-        off = sorted(c for c in colors if c not in set(LAND_RAMP))
-        if off:
-            fail(f"terrain ingest variant {variant}: hexes outside the "
-                 f"land ramp: {off}")
-        fname = f"terrain_land_{variant}.png"
-        write_png(ROOT / "assets" / "ui" / "terrain" / fname,
-                  CANVAS, CANVAS, out)
-        led[fname] = {"job": sheet_file[:-len(".png")], "seed": seed,
-                      "sheet_sha": sha, "patch": [patch_x, patch_y],
-                      "crop": [cx, cy], "accepted_at": today}
-        written += 1
-        print(f"  terrain {fname}: crop ({cx},{cy}) 64px from patch "
-              f"({patch_x},{patch_y}), {len(colors)} land-ramp colors, "
-              "phase-0 ring stamped OK")
-    # The whole-family replacement: the 4 land variants crop from ONE
-    # sheet in one pass; a previous ledger entry for a file that did not
-    # survive (never the case today — the family is pinned 0..3) revokes.
-    revoked = 0
-    for fname in sorted(prev_terrain):
-        if fname not in led:
-            (ROOT / "assets" / "ui" / "terrain" / fname).unlink(
-                missing_ok=True)
-            revoked += 1
-    note = prev.get("terrain_note")
-    if sheet_file != TERRAIN_SHEET_FILE:
-        note = (f"{sheet_file} ingested by explicit --terrain-sheet "
-                "override")
-    else:
-        note = None  # the pinned plains run clears any override note
-    counts = {"terrain": {"candidates": TERRAIN_VARIANTS,
-                          "accepted": len(led), "files": written}}
-    sections = {
-        "counts": counts,
-        "terrain_generated_by": "tools/build_ui_art.py --import-terrain",
-        "terrain_rejected": [],
-        "terrain": led,
-    }
-    if note is not None:
-        sections["terrain_note"] = note
-    _write_ledger(prev, "terrain", sections)
-    report["terrain_ingest"] = {
-        "sheet": sheet_file, "sheet_sha": sha, "accepted": len(led),
-        "files": written, "revoked": revoked,
-    }
-    return report["terrain_ingest"]
-
-
-# ======================================================================
-# manifest loading
-# ======================================================================
 
 class Manifests:
     def __init__(self):
@@ -3444,31 +3042,6 @@ def run_contact_sheet() -> None:
         print(f"build_ui_art: contact sheet -> {dest} ({sheet.w}x{sheet.h})")
 
 
-def run_import_mode(snapped_dir: Path, raw: bool = False) -> None:
-    """--import-ships / --import-ships-pixellab: ingest whatever the
-    model pass has accepted NOW, then run the full build so the ladder
-    falls the remaining ids back to the generator (re-runs pick up late
-    re-rolls with the same command). raw=True is the PixelLab
-    ship-as-drawn mode (8 native dirs, no quantize/band/palette-lock;
-    80-* §4.8 2026-11-06)."""
-    if not snapped_dir.is_dir():
-        fail(f"import: snapped dir not found: {snapped_dir}")
-    report = {}
-    ingest = run_ship_ingest(snapped_dir, ROOT, report, raw=raw)
-    m, report = build_into(ROOT, resolve_ingest_overrides(),
-                           resolve_artifact_overrides())
-    report["ingest"] = ingest
-    summary(m, report, ROOT)
-    counts = report.get("hulls", {})
-    total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)
-    expected = (16 * 8) if _ingest_raw_dedupe() else (16 * 9 * 8)
-    if m.classes.get("hulls") is not None and total != expected:
-        fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
-             f"+ ingested {counts.get('tokens_ingested', 0)}) != {expected}"
-             f" ({'raw dedupe: 16 ships x 8 dirs, owner fallback' if _ingest_raw_dedupe() else '16 x 9 owners x 8 dirs'})")
-    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
-
-
 def run_import_north_mode(raw_root: Path) -> None:
     """--import-ships-north: the top-down hull ingestion (80-* §4.8
     2026-11-07) + the full build. RAW_ROOT is the pixellab_topdown tree
@@ -3523,21 +3096,6 @@ def run_import_glyphs_mode(source_dirs: list[Path]) -> None:
     m, report = build_into(ROOT, resolve_ingest_overrides(),
                            resolve_artifact_overrides())
     report["glyph_ingest"] = glyphs
-    summary(m, report, ROOT)
-    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
-
-
-def run_import_terrain_mode(gen_dir: Path, sheet_file: str) -> None:
-    """--import-terrain: crop the model plains sheet to the 4 uniform land
-    variants (land-ramp quantize + phase-0 ring), then the full build so
-    the ladder lands the committed artifacts."""
-    if not gen_dir.is_dir():
-        fail(f"--import-terrain: gen dir not found: {gen_dir}")
-    report = {}
-    terrain = run_terrain_ingest(gen_dir, report, sheet_file)
-    m, report = build_into(ROOT, resolve_ingest_overrides(),
-                           resolve_artifact_overrides())
-    report["terrain_ingest"] = terrain
     summary(m, report, ROOT)
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
@@ -3934,21 +3492,6 @@ def main() -> None:
                     help="rebuild into a temp dir and byte-compare against assets/ui/ (§8.8)")
     ap.add_argument("--contact-sheet", action="store_true",
                     help="emit tools/contact_sheet.png (decision 9.4 review gate)")
-    ap.add_argument("--import-ships", metavar="SNAPPED_DIR",
-                    help="ingest the model-pass snapped ship tokens (64-grid "
-                         "RGBA) from SNAPPED_DIR — formal quantize, pennant "
-                         "snap, masthead + band gates, mirror-derived e/ne/se "
-                         "(f6c00bb), committed provenance ledger; accepted "
-                         "tokens are the primary art, the generator fills "
-                         "the gaps (§4.8 ingestion contract)")
-    ap.add_argument("--import-ships-pixellab", metavar="SNAPPED_DIR",
-                    help="ingest PixelLab ship tokens (raw 1:1, 80-* §4.8 "
-                         "2026-11-06): all 8 native dirs, no quantize, no "
-                         "band gate, palette lock waived, pennant-only "
-                         "recolor already applied; committed provenance "
-                         "ledger carries the pixellab manifest object ids "
-                         "(RETIRED for hulls by the 2026-11-07 top-down "
-                         "amendment — kept for history/re-ingest)")
     ap.add_argument("--import-ships-north", nargs="?", const="auto",
                     metavar="RAW_ROOT",
                     help="ingest the top-down north hull tokens (80-* §4.8 "
@@ -3981,18 +3524,6 @@ def main() -> None:
                          "tools/ui_art/model_raw/pixellab_glyphs); the "
                          "string-map generator is the per-file fallback; "
                          "no hero variants (pinned)")
-    ap.add_argument("--import-terrain", metavar="GEN_DIR",
-                    help="crop the model plains_uniform sheet to the 4 "
-                         "uniform land variants (land-ramp quantize, "
-                         "authored phase-0 ring), committed provenance "
-                         "ledger; the ×2-upscale generator remains the "
-                         "fallback")
-    ap.add_argument("--terrain-sheet", metavar="SHEET_PNG",
-                    default=TERRAIN_SHEET_FILE,
-                    help="sheet file name inside --import-terrain's GEN_DIR "
-                         f"(default {TERRAIN_SHEET_FILE}; a non-default "
-                         "sheet is an explicit override — e.g. trying the "
-                         "rocky sheet — and is ledgered as such)")
     ap.add_argument("--import-fx-pixellab", nargs="?", const="auto",
                     metavar="RAW_ROOT",
                     help="ingest the PixelLab waterline VFX family verbatim "
@@ -4006,13 +3537,11 @@ def main() -> None:
                     help="with --import-fx-pixellab: ingest the RETIRED "
                          "per-dir v3 waterline family instead of v5")
     args = ap.parse_args()
-    modes = [args.check, args.contact_sheet, args.import_ships,
-             args.import_icons, args.import_terrain,
-             args.import_ships_pixellab, args.import_ships_north,
+    modes = [args.check, args.contact_sheet,
+             args.import_icons, args.import_ships_north,
              args.import_fx_pixellab, args.import_glyphs]
     if sum(1 for m in modes if m) > 1:
-        fail("--check, --contact-sheet, --import-ships, --import-icons, "
-             "--import-terrain, --import-ships-pixellab, "
+        fail("--check, --contact-sheet, --import-icons, "
              "--import-ships-north, --import-fx-pixellab and "
              "--import-glyphs are mutually exclusive modes")
     if args.check:
@@ -4020,12 +3549,6 @@ def main() -> None:
         return
     if args.contact_sheet:
         run_contact_sheet()
-        return
-    if args.import_ships:
-        run_import_mode(Path(args.import_ships))
-        return
-    if args.import_ships_pixellab:
-        run_import_mode(Path(args.import_ships_pixellab), raw=True)
         return
     if args.import_ships_north:
         root = (ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_topdown")
@@ -4054,9 +3577,6 @@ def main() -> None:
         if args.import_glyphs != "auto":
             root = Path(args.import_glyphs)
         run_import_glyphs_mode([root])
-        return
-    if args.import_terrain:
-        run_import_terrain_mode(Path(args.import_terrain), args.terrain_sheet)
         return
     m, report = build_into(ROOT, resolve_ingest_overrides(),
                            resolve_artifact_overrides())

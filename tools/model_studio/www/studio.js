@@ -13,8 +13,6 @@ const CAPTIONS = {
            snapped: "wang mock preview · live map crop" },
   fx: { anim: "staged re-roll (API gif)", comp: "staged wake · frame 0 under the ship",
         shipped: "shipped — in game now" },
-  icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
-  iconsheet: { draft: "sheet draft (group)", raw: "generated sheet", snapped: "first icon crop 64" },
   icons: { raw: "staged re-roll (pending accept)", snapped: "canonical raw 64 — the shipped pixels" },
   glyphs: { raw: "staged re-roll (pending accept)", snapped: "canonical raw 64 — the shipped pixels" },
 };
@@ -289,7 +287,6 @@ function visible(job) {
   if (filter === "flagged") return job.flagged;
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
-  if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
   if (filter === "icons") return job.family === "icons";
   if (filter === "glyphs") return job.family === "glyphs";
   if (filter === "coast") return job.family === "coast";
@@ -421,8 +418,7 @@ async function refreshJobs() {
     // top-down ships lead the list, then the wake cards, then icon
     // group sheets, then the rest
     const rank = (f) => (f === "topdown" ? 0 : f === "fx" ? 1
-                         : f === "icons" ? 2 : f === "glyphs" ? 3
-                         : f === "coast" ? 4 : f === "iconsheet" ? 5 : 6);
+                         : f === "icons" ? 2 : f === "glyphs" ? 3 : 4);
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
