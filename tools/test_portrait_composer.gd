@@ -359,14 +359,19 @@ func _test_texture_registry() -> void:
 	# they resolve on first render, NOT through the eager registration, so
 	# the eager count is icons+markers+terrain+fx+portraits (~200), not the
 	# 1152-token grid. Token coverage is proven by the lazy probes below.
-	_check(count > 150,
-		"the registry registers the eager generated families (%d ids; " +
-		"tokens lazy since 10acf123)" % count)
+	# The eager set post the hero-64 rule (2026-11-08): terrain + shore +
+	# fx + portraits ONLY — icons, markers, facility tokens and hulls are
+	# all lazy raw-bytes/hero families now. Pin the exact deterministic
+	# count; a family change amends this pin.
+	_check(count == 77,
+		"the registry registers the eager generated families (77 ids = "
+			+ "terrain+shore+fx+portraits; icons/markers/hulls lazy)")
 	# One id per family resolves through the kit.
 	var probes := {
-		"coin": "icons (stem id)",
+		"coin": "icons resolve hero-first (icon64_coin, §4.8 2026-11-08)",
 		"hull_caravel_player": "tokens (north hull grid)",
-		"facility_market": "tokens (facility)",
+		"facility_market": "facility64 hero, family prefix stripped "
+			+ "(tokens64/market.png)",
 		"sea_pattern": "terrain (water pattern)",
 		"terrain_land_0": "terrain (kind tile)",
 		"shore_n": "terrain (shore strip stem id)",
@@ -379,10 +384,10 @@ func _test_texture_registry() -> void:
 			"registry resolves %s — %s" % [id, probes[id]])
 	# The override family registers when its dir exists; it does not in this
 	# tree, and the missing dir is skipped silently (headless-safe contract).
-	# markers/ landed with the W3 follow-up (master commit 72d4ffe) — the
-	# registry now carries them (master fix, ledgered; the W5-A escalation).
+	# markers/ 32s retired with the hero-64 rule (2026-11-08): marker ids
+	# resolve hero-first through markers64 (the prefix strip, ui_kit).
 	_check(UiKitLib.icon_texture("marker_wreck") != null,
-		"markers/ registered since the W3 follow-up — marker ids resolve")
+		"marker ids resolve hero-first (marker64_wreck via markers64)")
 	_check(UiKitLib.icon_texture("registry_absent_probe") == null,
 		"an unregistered id still resolves to null (the flat fallback)")
 	# Idempotent: the second call is a no-op; the deterministic sorted walks

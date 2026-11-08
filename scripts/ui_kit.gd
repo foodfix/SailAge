@@ -453,14 +453,15 @@ static func icon_texture(id: String) -> Texture2D:
 		# The §4.8 hero-64 display rule (2026-11-08): a generated id
 		# resolves its 64 hero FIRST (icons64/markers64/tokens64) — the
 		# inline-32 family is retired, the heroes ARE the shipped art.
-		# Hero ids (already prefixed) skip the probe; misses cache as
-		# before (a miss is a miss for the session; file replace +
-		# RESTART, `clear_textures` re-seeds).
+		# Family-prefixed ids (marker_/facility_) strip the family prefix
+		# for the 64 probe (the hero dirs hold BARE ids — the same rule
+		# hero_texture applies); already-64-prefixed ids skip the probe.
+		# Misses cache as before (a miss is a miss for the session; file
+		# replace + RESTART, `clear_textures` re-seeds).
 		if not id.begins_with("icon64_") and not id.begins_with("marker64_") \
 				and not id.begins_with("facility64_"):
-			for prefix in ["icon64_", "marker64_", "facility64_"]:
-				var hero: Texture2D = _token_loader.call(
-					"%s%s" % [prefix, id])
+			for hero_id in _hero_probe_ids(id):
+				var hero: Texture2D = _token_loader.call(hero_id)
 				if hero != null:
 					_textures[id] = hero
 					return hero
@@ -468,6 +469,20 @@ static func icon_texture(id: String) -> Texture2D:
 		_textures[id] = tex
 		return tex
 	return null
+
+
+## The hero probe ids for a bare generated id, in resolution order (§4.8
+## hero-64 rule): `icon64_<id>` always; a `marker_<x>` id additionally
+## probes `marker64_<x>`; a `facility_<x>` id additionally probes
+## `facility64_<x>` — the hero dirs hold bare ids, so the family prefix
+## must come off (the 2026-11-08 portrait-composer catch).
+static func _hero_probe_ids(id: String) -> Array[String]:
+	var out: Array[String] = ["icon64_%s" % id]
+	if id.begins_with("marker_"):
+		out.append("marker64_%s" % id.substr("marker_".length()))
+	elif id.begins_with("facility_"):
+		out.append("facility64_%s" % id.substr("facility_".length()))
+	return out
 
 
 ## Clear the registry (W3-A re-seeds wholesale; tests use it to restore).
