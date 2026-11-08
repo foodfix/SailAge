@@ -9996,6 +9996,138 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
     return verified + fallback
 
 
+def _g13_check_ingest_glyph_families(doc: dict) -> int:
+    """The glyph ingest families (80-* §4.8 2026-11-08): every
+    `markers{}` / `facility{}` record names a pinned inventory id,
+    carries sha-256 + seed + the pixellab_glyphs source + date, its 32px
+    file ships in its family dir, and the file is on the OWNING class
+    block within the 32px cap and is the EXACT re-quantize + 2:1 halving
+    of its snapped source where the gitignored cache exists.  Returns the
+    number of exactness chains re-derived locally."""
+    fam_dirs = {"markers": "markers", "facility": "tokens"}
+    fam_blocks = {"markers": BLOCK_TERRAIN, "facility": BLOCK_HULL}
+    fam_caps = {"markers": G13_CAP_32, "facility": G13_CAP_32}
+    # the pinned inventories, read from the authored manifests
+    inventories: dict[str, set] = {"markers": set(), "facility": set()}
+    for mf in sorted((UI_ART_DIR / "markers").glob("*.json")):
+        try:
+            mdoc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        items = mdoc if isinstance(mdoc, list) else mdoc.get("sprites", [mdoc])
+        for d in items:
+            if isinstance(d, dict) and d.get("id"):
+                inventories["markers"].add(str(d["id"]))
+    for mf in sorted((UI_ART_DIR / "hulls").glob("facility_*.json")):
+        try:
+            mdoc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        items = mdoc if isinstance(mdoc, list) else mdoc.get("sprites", [mdoc])
+        for d in items:
+            if isinstance(d, dict) and d.get("id"):
+                inventories["facility"].add(str(d["id"]))
+    verified = 0
+    for family in ("markers", "facility"):
+        fam = doc.get(family) or {}
+        rejected = doc.get(f"{family}_rejected") or []
+        skipped = doc.get(f"{family}_skipped") or []
+        cf = (doc.get("counts", {}) or {}).get(family) or {}
+        if not isinstance(fam, dict):
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"{family} section must be an object", 13)
+        if (cf.get("accepted") != len(fam)
+                or cf.get("rejected") != len(rejected)
+                or cf.get("skipped") != len(skipped)
+                or cf.get("files") != len(fam)):
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"counts.{family} drifts from the {family}/"
+                 f"{family}_rejected/{family}_skipped maps", 13)
+        for note in skipped:
+            if not (isinstance(note, dict) and note.get("job")
+                    and note.get("reason")):
+                fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                     f"{family}_skipped entry {note!r} needs job + reason",
+                     13)
+        for iid, rec in sorted(fam.items()):
+            if iid not in inventories[family]:
+                fail("art-ingest", f"{family}.{iid}",
+                     "ingested glyph id is outside the pinned inventory", 13)
+            if rec.get("job") != iid:
+                fail("art-ingest", f"{family}.{iid}",
+                     f"job {rec.get('job')!r} != {iid!r}", 13)
+            sha = rec.get("snapped_sha")
+            if (not isinstance(sha, str) or len(sha) != 64
+                    or any(c not in "0123456789abcdef" for c in sha)):
+                fail("art-ingest", f"{family}.{iid}",
+                     f"snapped_sha {sha!r} is not a sha-256 hex digest", 13)
+            seed = rec.get("seed")
+            if seed is not None and not is_int(seed):
+                fail("art-ingest", f"{family}.{iid}",
+                     f"seed {seed!r} is neither an int nor null", 13)
+            at = rec.get("accepted_at")
+            if not isinstance(at, str) or not re.fullmatch(
+                    r"\d{4}-\d{2}-\d{2}", at):
+                fail("art-ingest", f"{family}.{iid}",
+                     f"accepted_at {at!r} is not an ISO date", 13)
+            if rec.get("source") != "pixellab_glyphs":
+                fail("art-ingest", f"{family}.{iid}",
+                     f"source {rec.get('source')!r} is not "
+                     "'pixellab_glyphs'", 13)
+            p = (ASSETS_UI / fam_dirs[family] / f"{iid}.png")
+            if not p.is_file():
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     "ingested glyph file missing from the shipped grid "
+                     "(ledger + file commit together)", 13)
+            try:
+                w, h, px = decode_ui_png(p.read_bytes())
+            except (OSError, PngFormatError) as exc:
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     f"ingested glyph does not decode: {exc}", 13)
+            if (w, h) != (32, 32):
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     f"ingested glyph is {w}x{h}, the glyph canvas is "
+                     "32x32", 13)
+            got = {c for row in px for c in row if c is not None}
+            off = sorted(got - (fam_blocks[family] | BLOCK_LOCKED))
+            if off:
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     f"off-block hex(es) {off} — the {family} class checks "
+                     "against its owning §4.8.4 block", 13)
+            if len(got) > fam_caps[family]:
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     f"{len(got)} distinct colors > the 32px cap "
+                     f"{fam_caps[family]} (§4.8.3)", 13)
+            sp = (UI_ART_DIR / "model_raw" / "pixellab_glyphs" / iid
+                  / "snapped" / "icon.png")
+            if not sp.is_file():
+                continue
+            verified += 1
+            if hashlib.sha256(sp.read_bytes()).hexdigest() != sha:
+                fail("art-ingest", str(sp.relative_to(ART_ROOT)),
+                     "ledger snapped_sha drifts from the local snapped "
+                     "source — re-run build_ui_art --import-glyphs", 13)
+            try:
+                sw, sh, spx = decode_ui_png(sp.read_bytes())
+            except (OSError, PngFormatError) as exc:
+                fail("art-ingest", str(sp.relative_to(ART_ROOT)),
+                     f"snapped source does not decode: {exc}", 13)
+            if (sw, sh) != (64, 64):
+                fail("art-ingest", str(sp.relative_to(ART_ROOT)),
+                     f"snapped source is {sw}x{sh}, the glyph grid is "
+                     "64x64", 13)
+            q = [[None if c is None else _g13_nearest_hex(c,
+                                                         fam_blocks[family])
+                  for c in row] for row in spx]
+            want = _g13_halve64(q)
+            if px != want:
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     "is not the exact re-quantize + 2:1 nearest halving "
+                     "of its snapped source — re-run "
+                     "build_ui_art --import-glyphs", 13)
+    return verified
+
+
 def _g13_check_ingest_terrain_family(doc: dict) -> int:
     """The terrain ingest family (ledger v2): every `terrain{}` key is one
     of the 4 live land variants, its 64px file ships on the terrain block
@@ -10418,6 +10550,19 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
     else:
         print("INFO group 13 ingest terrain: no terrain{} section — the "
               "terrain family is staged (build_ui_art --import-terrain)")
+    if doc.get("markers") or doc.get("facility") \
+            or doc.get("markers_rejected") or doc.get("facility_rejected"):
+        n_glyph = _g13_check_ingest_glyph_families(doc)
+        if verbose:
+            print(f"INFO group 13 ingest glyphs: "
+                  f"{len(doc.get('markers') or {})} marker(s) + "
+                  f"{len(doc.get('facility') or {})} facility token(s) "
+                  f"audited ({n_glyph} halving chain(s) re-derived from "
+                  "the local snapped cache)")
+    else:
+        print("INFO group 13 ingest glyphs: no markers{}/facility{} "
+              "sections — the glyph families are staged "
+              "(build_ui_art --import-glyphs)")
 
 
 def _g13_check_shore_strips(sprites: dict) -> None:

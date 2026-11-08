@@ -365,6 +365,24 @@ ICON_INLINE_CAP = 20             # §4.8.3 32px tier color cap
 ICON_HERO_DIR = "icons64"        # assets/ui/<dir>/ — the hero 64 family
 ICON_HERO_CAP = 25               # §4.8.3 48px+ tier color cap (informative:
 # the quantized 64 art draws from the 22-color icon block)
+# ---- glyph-pass (marker/facility) blocks (80-* §4.8 2026-11-08): the
+# owning class blocks — markers quantize into the terrain block (the
+# class mapping's marker row), facility tokens into the hull block.
+# Pinned hex-for-hex with the validator's BLOCK_TERRAIN / BLOCK_HULL.
+MARKER_BLOCK = {
+    "#16446e", "#2f6f9e", "#7a5c2e", "#8f6d3a", "#5e4720", "#3d3d3d",
+    "#565656", "#c9d6df", "#e4eef4", "#9fb4c4", "#dff0f4", "#101010",
+    "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
+    "#9a9a9a",
+}
+# facility quantize target = HULL_BLOCK (the tokens family's block).
+# Glyph ingest family table: id prefix -> (ledger family, shipped dir,
+# quantize block).
+GLYPH_FAMILIES = {
+    "marker_": ("markers", "markers", MARKER_BLOCK),
+    "facility_": ("facility", "tokens", HULL_BLOCK),
+}
+GLYPH_INLINE_CAP = 20           # §4.8.3 32px tier color cap (both families)
 # ---- arrow-family ingest policy (fix 2026-11-05): the wind_arrow_*/
 # current_arrow_* families are derivation-only (§8.8 item 5) — e/s/w are
 # rot_cw/rot_180/rot_ccw of the n icon and nw/se/sw mirror/rot of ne, so
@@ -742,7 +760,8 @@ _QUANT_ORDER = sorted(HULL_BLOCK)  # deterministic nearest-color tie-break
 # the icon/terrain ingest families quantize outside the hull block — their
 # hex tables ride here (ICON_BLOCK / the land ramp)
 _INGEST_HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
-                 for h in ICON_BLOCK | set(LAND_RAMP)}
+                 for h in ICON_BLOCK | set(LAND_RAMP) | HULL_BLOCK
+                 | MARKER_BLOCK}
 
 
 def _hex_dist(rgb_a, rgb_b):
@@ -941,15 +960,18 @@ def resolve_ingest_overrides(root: Path = ROOT):
 
 
 def resolve_artifact_overrides(root: Path = ROOT):
-    """The override ladder for the icon + terrain families (80-* §4.8: the
-    ingested art is the PRIMARY shipped artifact, the generator is the
+    """The override ladder for the icon/glyph/terrain families (80-* §4.8:
+    the ingested art is the PRIMARY shipped artifact, the generator is the
     per-file fallback): a ledger entry whose committed artifact file
     exists serves that shipped file from the committed ingested artifact.
     The icon family resolves BOTH display surfaces per id — the 32 inline
     asset and the hero 64 asset (2026-11-08; the generator's hero
-    fallback is the ×2 upscale of the 32).  Returns {"icons": {id: path},
-    "icons64": {id: path}, "terrain": {file name: path}}."""
-    out = {"icons": {}, "icons64": {}, "terrain": {}}
+    fallback is the ×2 upscale of the 32).  The glyph families resolve
+    one 32 asset per id (no heroes — pinned).  Returns {"icons": {id:
+    path}, "icons64": {id: path}, "markers": {id: path}, "facility": {id:
+    path}, "terrain": {file name: path}}."""
+    out = {"icons": {}, "icons64": {}, "markers": {}, "facility": {},
+           "terrain": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
@@ -958,6 +980,11 @@ def resolve_artifact_overrides(root: Path = ROOT):
         ph = root / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png"
         if ph.is_file():
             out["icons64"][iid] = ph
+    for family, dirname in (("markers", "markers"), ("facility", "tokens")):
+        for iid in (doc.get(family) or {}):
+            p = root / "assets" / "ui" / dirname / f"{iid}.png"
+            if p.is_file():
+                out[family][iid] = p
     for fname in (doc.get("terrain") or {}):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
@@ -1424,6 +1451,14 @@ INGEST_CONTRACT = ("docs/80-UI-UX.md §4.8 ingestion contract + the "
 _SHIP_SECTIONS = ("generated_by", "rejected", "tokens", "derived")
 _ICON_SECTIONS = ("icons_generated_by", "icons_rejected", "icons_skipped",
                   "icons")
+_GLYPH_FAMILY_SECTIONS = {
+    "markers": ("markers_generated_by", "markers_rejected",
+                "markers_skipped", "markers"),
+    "facility": ("facility_generated_by", "facility_rejected",
+                 "facility_skipped", "facility"),
+}
+_GLYPH_SECTIONS = _GLYPH_FAMILY_SECTIONS["markers"] \
+    + _GLYPH_FAMILY_SECTIONS["facility"]
 _TERRAIN_SECTIONS = ("terrain_generated_by", "terrain_rejected", "terrain",
                      "terrain_note")
 
@@ -1447,7 +1482,7 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
     values; every other family's sections pass through untouched; counts
     merge per family sub-object."""
     owned = {"ships": _SHIP_SECTIONS, "icons": _ICON_SECTIONS,
-             "terrain": _TERRAIN_SECTIONS}[family]
+             "terrain": _TERRAIN_SECTIONS, "glyphs": _GLYPH_SECTIONS}[family]
     counts = dict(prev.get("counts") or {})
     counts.update(sections.get("counts", {}))
     doc = {"version": INGEST_VERSION, "contract": INGEST_CONTRACT,
@@ -1456,7 +1491,8 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
         if key in ("version", "contract", "counts"):
             continue
         if any(key in own for own in
-               (_SHIP_SECTIONS, _ICON_SECTIONS, _TERRAIN_SECTIONS)) \
+               (_SHIP_SECTIONS, _ICON_SECTIONS, _TERRAIN_SECTIONS,
+                *_GLYPH_FAMILY_SECTIONS.values())) \
                 and key not in owned:
             doc[key] = val  # another family's section — preserve verbatim
     for key, val in sections.items():
@@ -1468,12 +1504,13 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
                                         sort_keys=True) + "\n")
 
 
-def _seed_lookup(snapped_dir: Path, job: str):
+def _seed_lookup(snapped_dir: Path, job: str, iid: str | None = None):
     """The provenance seed for a job: the source dir's own state/progress
     file first (the studio re-roll state), then the model_raw root
-    progress; the pixellab_icons manifest last (tools/pixellab_pass.py
-    --icons records the pinned seed per icon id); null when nothing
-    records it (provenance rides the sha)."""
+    progress; the pixellab manifest last (tools/pixellab_pass.py records
+    the pinned seed per id — the icons manifest keyed `pixellab_icons.json`,
+    the glyph manifest `pixellab_glyphs.json`); null when nothing records
+    it (provenance rides the sha)."""
     for cand in (snapped_dir.parent / "state.json",
                  snapped_dir.parent / "progress.json"):
         if not cand.is_file():
@@ -1484,16 +1521,17 @@ def _seed_lookup(snapped_dir: Path, job: str):
             continue
         if job in jobs:
             return (jobs[job] or {}).get("seed")
-    mf = snapped_dir.parent.parent / "pixellab_icons.json"
-    if mf.is_file():
-        try:
-            doc = json.loads(mf.read_text())
-            iid = job[len(ICON_INGEST_PREFIX):]
-            seed = (doc.get(iid) or {}).get("seed")
-            if isinstance(seed, int):
-                return seed
-        except ValueError:
-            pass
+    iid = iid if iid is not None else job[len(ICON_INGEST_PREFIX):]
+    for mf_name in ("pixellab_icons.json", "pixellab_glyphs.json"):
+        mf = snapped_dir.parent.parent / mf_name
+        if mf.is_file():
+            try:
+                doc = json.loads(mf.read_text())
+                seed = (doc.get(iid) or {}).get("seed")
+                if isinstance(seed, int):
+                    return seed
+            except ValueError:
+                pass
     return None
 
 
@@ -1781,6 +1819,135 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
         "revoked": revoked, "hero_64": len(led),
     }
     return report["icons_ingest"]
+
+
+def _quantize_glyph(w, h, px, block):
+    """Formal glyph quantize: nearest hex over the OWNING block (markers
+    → terrain block, facility → hull block — 80-* §4.8 2026-11-08);
+    px below the alpha threshold pass through as fully transparent."""
+    out = []
+    for p in px:
+        if p[3] < ICON_ALPHA_THRESHOLD:
+            out.append((0, 0, 0, 0))
+        else:
+            best_hex, best_d = None, None
+            for hx in sorted(block):
+                d = _hex_dist(p[:3], _INGEST_HEXES[hx])
+                if best_d is None or d < best_d:
+                    best_hex, best_d = hx, d
+            out.append(_INGEST_HEXES[best_hex] + (255,))
+    return out
+
+
+def run_glyph_ingest(source_dirs, report: dict) -> dict:
+    """The formal glyph ingestion (80-* §4.8 2026-11-08 marker/facility
+    amendment): per snapped 64-grid glyph, class resolved by id prefix
+    (marker_* → the markers dir / terrain block; facility_* → the tokens
+    dir / hull block), re-quantize to the OWNING block, halve 64→32
+    (exact 2:1 nearest), gate on the §4.8.3 32px cap, write the shipped
+    32 (assets/ui/markers/<id>.png / assets/ui/tokens/<id>.png) — no
+    hero variants (pinned: no 64px surface for either family).  Ledger
+    sections `markers{}` / `facility{}` per id {job, seed, source,
+    snapped_sha, accepted_at}; the generator string maps remain the
+    per-file fallback.  Returns the report fragment."""
+    candidates: dict[str, tuple[Path, str]] = {}
+    for d in source_dirs:
+        rp = d.resolve().parts
+        want = (Path("ui_art") / "model_raw" / "pixellab_glyphs").parts
+        if not (len(rp) >= len(want) and rp[-len(want):] == want):
+            fail(f"--import-glyphs: source dir {d} is not the "
+                 f"model_raw/pixellab_glyphs cache")
+        for sub in sorted(p for p in d.iterdir() if p.is_dir()):
+            sp = sub / "snapped" / "icon.png"
+            if sp.is_file():
+                candidates[sub.name] = (sp, "pixellab_glyphs")
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    prev = _read_ledger("--import-glyphs")
+    led = {"markers": {}, "facility": {}}
+    rejected = {"markers": [], "facility": []}
+    counts = {"markers": {}, "facility": {}}
+    for fam in ("markers", "facility"):
+        prev_fam = prev.get(fam) or {}
+        written = 0
+        for iid in sorted(candidates):
+            fam_of_id = next((f for pfx, f in
+                              ((k, v[0]) for k, v in GLYPH_FAMILIES.items())
+                              if iid.startswith(pfx)), None)
+            if fam_of_id != fam:
+                continue
+            sp, src_rel = candidates[iid]
+            job = iid
+            raw = sp.read_bytes()
+            if raw[:8] != _PNG_SIG:
+                rejected[fam].append({"job": job, "reason": "decode",
+                                      "detail": "source is not a PNG"})
+                continue
+            try:
+                w, h, px = decode_png(raw)
+            except Exception as exc:
+                rejected[fam].append({"job": job, "reason": "decode",
+                                      "detail": f"does not decode: {exc}"})
+                continue
+            if (w, h) != (CANVAS, CANVAS):
+                rejected[fam].append({"job": job, "reason": "canvas",
+                                      "detail": f"{w}x{h} != 64x64"})
+                continue
+            block = next(v[2] for k, v in GLYPH_FAMILIES.items()
+                         if iid.startswith(k))
+            q = _quantize_glyph(w, h, px, block)
+            hw, hh, hpx = _halve64(w, h, q)
+            colors = {("#%02x%02x%02x" % p[:3]) for p in hpx if p[3]}
+            if len(colors) > GLYPH_INLINE_CAP:
+                rejected[fam].append({"job": job, "reason": "budget",
+                                      "detail": f"{len(colors)} colors > the "
+                                                f"32px cap {GLYPH_INLINE_CAP}"})
+                continue
+            out_dir = next(v[1] for k, v in GLYPH_FAMILIES.items()
+                           if iid.startswith(k))
+            write_png(ROOT / "assets" / "ui" / out_dir / f"{iid}.png",
+                      hw, hh, hpx)
+            written += 1
+            sha = hashlib.sha256(raw).hexdigest()
+            prev_rec = prev_fam.get(iid) or {}
+            accepted_at = (prev_rec.get("accepted_at")
+                           if prev_rec.get("snapped_sha") == sha else None)
+            led[fam][iid] = {"job": job,
+                             "seed": _seed_lookup(sp.parent, job, iid=iid),
+                             "source": src_rel,
+                             "snapped_sha": sha,
+                             "accepted_at": accepted_at or today}
+            print(f"  glyph {iid}: {w}x{h} -> {hw}x{hh}, {len(colors)} "
+                  f"colors, sha {sha[:12]}… OK")
+        revoked = 0
+        for iid in sorted(prev_fam):
+            if iid not in led[fam]:
+                out_dir = next(v[1] for k, v in GLYPH_FAMILIES.items()
+                               if iid.startswith(k))
+                (ROOT / "assets" / "ui" / out_dir / f"{iid}.png").unlink(
+                    missing_ok=True)
+                revoked += 1
+        candidates_n = sum(1 for iid in candidates
+                           if next((f for pfx, f in
+                                    ((k, v[0]) for k, v in
+                                     GLYPH_FAMILIES.items())
+                                    if iid.startswith(pfx)), None) == fam)
+        counts[fam] = {"candidates": candidates_n,
+                       "accepted": len(led[fam]),
+                       "rejected": len(rejected[fam]),
+                       "skipped": 0, "files": written, "revoked": revoked}
+    _write_ledger(prev, "glyphs", {
+        "counts": counts,
+        "markers_generated_by": "tools/build_ui_art.py --import-glyphs",
+        "markers_rejected": rejected["markers"],
+        "markers_skipped": [],
+        "markers": led["markers"],
+        "facility_generated_by": "tools/build_ui_art.py --import-glyphs",
+        "facility_rejected": rejected["facility"],
+        "facility_skipped": [],
+        "facility": led["facility"],
+    })
+    report["glyph_ingest"] = counts
+    return report["glyph_ingest"]
 
 
 def _ring_hi_at64(x, y):
@@ -2319,6 +2486,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     seam-ring verify so the ring reads the shipped canvases."""
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
               "icons_ingested": 0, "icons64_ingested": 0,
+              "markers_ingested": 0, "facility_ingested": 0,
               "terrain_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
@@ -2326,10 +2494,13 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     # them after the passes (a temp rebuild copies instead — the override
     # points at the committed tree, the dest at the temp dir).
     stash: dict[Path, bytes] = {}
-    for family, dirname in (("icons", "icons"), ("icons64", ICON_HERO_DIR),
-                            ("terrain", "terrain")):
+    for family, dirname, keyed in (("icons", "icons", True),
+                                   ("icons64", ICON_HERO_DIR, True),
+                                   ("markers", "markers", True),
+                                   ("facility", "tokens", True),
+                                   ("terrain", "terrain", False)):
         for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
-            fname = key if family == "terrain" else f"{key}.png"
+            fname = key if not keyed else f"{key}.png"
             dest = outroot / "assets" / "ui" / dirname / fname
             if override == dest and dest.is_file():
                 stash[dest] = dest.read_bytes()
@@ -2471,6 +2642,21 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
         counts["icons64_ingested"] += 1
+    # the glyph families (markers / facility — the 2026-11-08 amendment):
+    # one 32 asset per id, the same ladder semantics, no hero/arrow
+    # interactions
+    for family, dirname in (("markers", "markers"), ("facility", "tokens")):
+        fam_overrides = (artifacts or {}).get(family) or {}
+        for iid in sorted(fam_overrides):
+            override = fam_overrides[iid]
+            dest = outroot / "assets" / "ui" / dirname / f"{iid}.png"
+            if override.is_file() and override != dest:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(override, dest)
+            elif dest in stash:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(stash[dest])
+            counts[f"{family}_ingested"] += 1
     terr = (artifacts or {}).get("terrain") or {}
     for fname in sorted(terr):
         override = terr[fname]
@@ -3306,6 +3492,23 @@ def run_import_icons_mode(source_dirs: list[Path]) -> None:
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 
+def run_import_glyphs_mode(source_dirs: list[Path]) -> None:
+    """--import-glyphs: the formal marker/facility ingestion (re-quantize
+    to the owning class block, exact 2:1 nearest halving to the 32px
+    asset), then the full build so the ladder lands the committed
+    artifacts."""
+    for d in source_dirs:
+        if not d.is_dir():
+            fail(f"--import-glyphs: source dir not found: {d}")
+    report = {}
+    glyphs = run_glyph_ingest(source_dirs, report)
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
+    report["glyph_ingest"] = glyphs
+    summary(m, report, ROOT)
+    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
+
+
 def run_import_terrain_mode(gen_dir: Path, sheet_file: str) -> None:
     """--import-terrain: crop the model plains sheet to the 4 uniform land
     variants (land-ramp quantize + phase-0 ring), then the full build so
@@ -3749,6 +3952,17 @@ def main() -> None:
                          "model_raw/studio/snapped) or the pixellab "
                          "per-id tree (tools/pixellab_pass.py --icons: "
                          "model_raw/pixellab_icons)")
+    ap.add_argument("--import-glyphs", nargs="?", const="auto",
+                    metavar="SRC_DIR",
+                    help="ingest the PixelLab marker/facility glyphs (80-* "
+                         "§4.8 2026-11-08): per id re-quantize to the "
+                         "owning class block (markers → terrain, facility "
+                         "→ hull), exact 2:1 halving to the 32px asset, "
+                         "committed provenance ledger; SRC_DIR is the "
+                         "pixellab_glyphs tree (default "
+                         "tools/ui_art/model_raw/pixellab_glyphs); the "
+                         "string-map generator is the per-file fallback; "
+                         "no hero variants (pinned)")
     ap.add_argument("--import-terrain", metavar="GEN_DIR",
                     help="crop the model plains_uniform sheet to the 4 "
                          "uniform land variants (land-ramp quantize, "
@@ -3777,12 +3991,12 @@ def main() -> None:
     modes = [args.check, args.contact_sheet, args.import_ships,
              args.import_icons, args.import_terrain,
              args.import_ships_pixellab, args.import_ships_north,
-             args.import_fx_pixellab]
+             args.import_fx_pixellab, args.import_glyphs]
     if sum(1 for m in modes if m) > 1:
         fail("--check, --contact-sheet, --import-ships, --import-icons, "
              "--import-terrain, --import-ships-pixellab, "
-             "--import-ships-north and --import-fx-pixellab are mutually "
-             "exclusive modes")
+             "--import-ships-north, --import-fx-pixellab and "
+             "--import-glyphs are mutually exclusive modes")
     if args.check:
         run_check()
         return
@@ -3816,6 +4030,12 @@ def main() -> None:
         return
     if args.import_icons:
         run_import_icons_mode([Path(p) for p in args.import_icons])
+        return
+    if args.import_glyphs:
+        root = ROOT / "tools" / "ui_art" / "model_raw" / "pixellab_glyphs"
+        if args.import_glyphs != "auto":
+            root = Path(args.import_glyphs)
+        run_import_glyphs_mode([root])
         return
     if args.import_terrain:
         run_import_terrain_mode(Path(args.import_terrain), args.terrain_sheet)

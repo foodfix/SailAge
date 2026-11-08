@@ -23,6 +23,14 @@ _ICON_DESCRIPTORS entry may generate (doc-first guard).
   python3 tools/pixellab_pass.py --icons snap [id ...]
   python3 tools/pixellab_pass.py --icons status
 
+Glyph mode (2026-11-08, 80-* §4.8 marker/facility amendment): the same
+prompt-only 64x64 envelope for the 6 markers + 6 facility tokens under
+two rewritten family suffixes (MARKER_SUFFIX / FACILITY_SUFFIX, no icon
+heritage); raws land gitignored under model_raw/pixellab_glyphs/<id>/.
+  python3 tools/pixellab_pass.py --glyphs run [id ...]
+  python3 tools/pixellab_pass.py --glyphs snap [id ...]
+  python3 tools/pixellab_pass.py --glyphs status
+
 Legacy Pro-Flash 8-dir hull mode (RETIRED by the 2026-11-07 top-down
 amendment — kept only for history/re-download of the old raws):
   python3 tools/pixellab_pass.py run [ship ...]
@@ -745,6 +753,226 @@ _ICON_DESCRIPTORS: dict[str, str] = {
 _ICON_VARIANTS: dict[str, str] = {}
 
 
+# ---- glyph pass pins (80-* §4.8, the 2026-11-08 marker/facility
+# amendment) --------------------------------------------------------------
+# The 6 markers + 6 facility tokens join the PixelLab backend under the
+# ICON ruling: prompt-only generate-image-v2 at 64x64 (seed 92000, the
+# icon envelope), quantize-to-owning-block + 2:1 halve at INGEST. Two
+# REWRITTEN suffixes — no icon heritage (user direction).
+GLYPH_OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw",
+                             "pixellab_glyphs")
+GLYPH_MANIFEST = os.path.join(GLYPH_OUT_DIR, "pixellab_glyphs.json")
+# MARKER_SUFFIX, pinned verbatim (80-* §4.8 2026-11-08; the map-overlay
+# design problem is separation over live sea AND land tiles, not palette
+# discipline).
+MARKER_SUFFIX = (
+    ", single centered world-map marker glyph, bold compact silhouette "
+    "readable at tiny size, thick dark 1-pixel outline, flat cel shading "
+    "with two or three shading bands, strong contrast against both blue "
+    "sea and brown land, single object fully inside the frame, no "
+    "scenery, no text, no gradients, retro 16-bit pixel-art game map "
+    "marker in the style of classic 1990s naval adventure games like "
+    "Uncharted Waters 2 / New Horizons, transparent background.")
+# FACILITY_SUFFIX, pinned verbatim (80-* §4.8 2026-11-08; building fronts
+# are a different object class from every prior family; signs stay
+# UNLETTERED).
+FACILITY_SUFFIX = (
+    ", small 16th-century European port building front seen straight-on, "
+    "flat frontal facade, centered doorway, one or two windows, thick "
+    "dark 1-pixel outline, warm wood and stone midtones, bold readable "
+    "silhouette, flat cel shading with two or three shading bands, the "
+    "building fully inside the frame, no scenery around it, no text, no "
+    "lettered signs, no gradients, retro 16-bit pixel-art in the style "
+    "of classic 1990s naval adventure games like Uncharted Waters 2 / "
+    "New Horizons, transparent background.")
+
+# Per-glyph identity+spec descriptors, pinned verbatim (80-* §4.8
+# 2026-11-08); amendment = edit here + docs. Composition =
+# {descriptor}{<family suffix>} — the identity rides the descriptor.
+_GLYPH_DESCRIPTORS: dict[str, str] = {
+    # --- world-map markers ---
+    "marker_treasure":
+        "A golden X-shaped treasure cross mark with a slight sheen",
+    "marker_wreck":
+        "A broken sunken ship hull floating bow-down with exposed ribs "
+        "and a tilted mast stump",
+    "marker_discovery_creature":
+        "A friendly finned sea-creature silhouette breaching a small "
+        "wave",
+    "marker_discovery_natural":
+        "A small rocky island with one tall palm tree",
+    "marker_discovery_relic":
+        "A leaning carved stone relic head half-buried in a small "
+        "mound",
+    "marker_discovery_ruins":
+        "Two broken mossy stone columns on a cracked slab",
+    # --- port facility tokens ---
+    "facility_market":
+        "A market stall building with a striped awning over goods "
+        "crates",
+    "facility_shipyard":
+        "A timber shipyard slipway shed with a hoist crane arm",
+    "facility_palace":
+        "A grand two-floor palace facade with columns and a triangular "
+        "pediment",
+    "facility_tavern":
+        "A low timber tavern front with a hanging tankard sign",
+    "facility_inn":
+        "A cozy inn front with a hanging lantern sign",
+    "facility_guild":
+        "A guild hall front with a hanging banner",
+}
+
+
+def _glyph_desc(glyph_id: str) -> str:
+    """Composed description: {identity+spec}{family suffix} (80-* §4.8
+    2026-11-08)."""
+    if glyph_id not in _GLYPH_DESCRIPTORS:
+        raise SystemExit(
+            f"{glyph_id}: no pinned descriptor in _GLYPH_DESCRIPTORS — "
+            f"the doc-first rule forbids sending an unpinned prompt")
+    suffix = (FACILITY_SUFFIX if glyph_id.startswith("facility_")
+              else MARKER_SUFFIX)
+    return f"{_GLYPH_DESCRIPTORS[glyph_id]}{suffix}"
+
+
+def _glyphs() -> list[str]:
+    """The 12-id glyph inventory, read from the authored manifests (the
+    marker + facility string-map files stay the id authority)."""
+    import glob  # noqa: PLC0415
+    ids: list[str] = []
+    for path in (sorted(glob.glob(os.path.join(REPO, "tools", "ui_art",
+                                               "markers", "*.json")))
+                 + sorted(glob.glob(os.path.join(REPO, "tools", "ui_art",
+                                                 "hulls", "facility_*.json")))):
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        items = doc if isinstance(doc, list) else doc.get("sprites", [doc])
+        for s in items:
+            if isinstance(s, dict) and s.get("id"):
+                ids.append(str(s["id"]))
+    return ids
+
+
+def run_glyph(glyph_id: str, label: str | None = None,
+              description: str | None = None, seed: int | None = None,
+              poll_status=None) -> dict:
+    """One prompt-only generate-image-v2 generation on the pinned 64x64
+    canvas (the icon envelope — never a style_image or reference_images)
+    + raw download to <id>/icon.png."""
+    payload = {
+        "description": description or _glyph_desc(glyph_id),
+        "image_size": {"width": ICON_SIZE, "height": ICON_SIZE},
+        "no_background": True,
+        "seed": ICON_SEED if seed is None else int(seed),
+    }
+    print(f"[pixellab-glyphs {glyph_id}] POST generate-image-v2 "
+          f"({ICON_SIZE}x{ICON_SIZE}) ...", flush=True)
+    created = _post("/generate-image-v2", payload)
+    job_id = created["background_job_id"]
+    usage = created.get("usage") or {}
+    print(f"    job={job_id} usage={json.dumps(usage)}", flush=True)
+
+    deadline = time.time() + POLL_MAX
+    job = {}
+    while time.time() < deadline:
+        time.sleep(POLL_S)
+        job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
+        if job.get("status") in ("completed", "failed"):
+            break
+        print(f"    status={job.get('status')}", flush=True)
+    if job.get("status") != "completed":
+        raise RuntimeError(f"{glyph_id}: job {job_id} status="
+                           f"{job.get('status')!r} "
+                           f"(last: {json.dumps(job)[:300]})")
+
+    dest = label or glyph_id
+    dest_dir = os.path.join(GLYPH_OUT_DIR, dest)
+    os.makedirs(dest_dir, exist_ok=True)
+    png = _job_image_bytes(job)
+    with open(os.path.join(dest_dir, "icon.png"), "wb") as fh:
+        fh.write(png)
+    rec = {"job_id": job_id, "description": payload["description"],
+           "seed": payload["seed"], "size": ICON_SIZE, "glyph": glyph_id,
+           "label": dest, "bytes": {"icon": len(png)},
+           "usage": usage, "job_status": job.get("status")}
+    os.makedirs(GLYPH_OUT_DIR, exist_ok=True)
+    # merge-retry write (multi-worker safe — the icon-pass precedent)
+    for attempt in range(4):
+        manifest = {}
+        if os.path.isfile(GLYPH_MANIFEST):
+            try:
+                with open(GLYPH_MANIFEST, encoding="utf-8") as fh:
+                    manifest = json.load(fh)
+                break
+            except ValueError:
+                time.sleep(0.5 * (attempt + 1))
+        else:
+            break
+    manifest[dest] = rec
+    with open(GLYPH_MANIFEST, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=1, ensure_ascii=False)
+    return rec
+
+
+def snap_glyph(glyph_id: str) -> None:
+    """Glyph-as-drawn passthrough into <id>/snapped/icon.png. Gate:
+    canvas fit (exact 64x64); quantize + halve happen at ingest."""
+    from PIL import Image  # noqa: PLC0415
+    src_dir = os.path.join(GLYPH_OUT_DIR, glyph_id)
+    src = os.path.join(src_dir, "icon.png")
+    if not os.path.exists(src):
+        raise SystemExit(f"{glyph_id}: no raw glyph at {src} — "
+                         f"run --glyphs run first")
+    img = Image.open(src)
+    w, h = img.size
+    fit = (w, h) == (ICON_SIZE, ICON_SIZE)
+    dst_dir = os.path.join(src_dir, "snapped")
+    os.makedirs(dst_dir, exist_ok=True)
+    with open(src, "rb") as fh:
+        data = fh.read()
+    with open(os.path.join(dst_dir, "icon.png"), "wb") as fh:
+        fh.write(data)
+    print(f"  {glyph_id}: raw copy {w}x{h} want={ICON_SIZE}x{ICON_SIZE} "
+          f"fit={fit}", flush=True)
+
+
+def run_glyph_fleet(ids: list[str], seed: int | None = None) -> None:
+    todo = [i for i in ids if i in _GLYPH_DESCRIPTORS]
+    skipped = len(ids) - len(todo)
+    if skipped:
+        print(f"[pixellab-glyphs] {skipped} id(s) without a pinned "
+              f"descriptor — not sent to the API", flush=True)
+    for i, glyph_id in enumerate(todo, 1):
+        raw = os.path.join(GLYPH_OUT_DIR, glyph_id, "icon.png")
+        if os.path.isfile(raw):
+            print(f"[pixellab-glyphs {i}/{len(todo)}] {glyph_id} already "
+                  f"has raw icon.png — skipped (delete it to re-roll)",
+                  flush=True)
+            continue
+        rec = run_glyph(glyph_id, seed=seed)
+        print(f"[pixellab-glyphs {i}/{len(todo)}] {glyph_id} saved "
+              f"icon.png ({rec['bytes']['icon']} bytes)", flush=True)
+    print(f"[pixellab-glyphs] manifest -> {GLYPH_MANIFEST}", flush=True)
+
+
+def status_glyphs() -> None:
+    if not os.path.exists(GLYPH_MANIFEST):
+        print("no glyph manifest yet")
+        return
+    with open(GLYPH_MANIFEST, encoding="utf-8") as fh:
+        m = json.load(fh)
+    for glyph_id, e in m.items():
+        print(f"{glyph_id:28s} size={e['size']} seed={e['seed']} "
+              f"job={e['job_id'][:12]}…")
+    print(f"{len(m)} glyphs")
+
+
 def _good_en_name(good_id: str) -> str:
     with open(os.path.join(REPO, "data", "goods.json"),
               encoding="utf-8") as fh:
@@ -1322,8 +1550,23 @@ if __name__ == "__main__":
     icons = bool(args) and args[0] == "--icons"
     if icons:
         args = args[1:]
+    glyphs = bool(args) and args[0] == "--glyphs"
+    if glyphs:
+        args = args[1:]
     cmd = args[0] if args else "status"
-    if icons:
+    if glyphs:
+        if cmd == "run":
+            run_glyph_fleet(args[1:] or _glyphs(), seed=seed_override)
+        elif cmd == "snap":
+            for glyph_id in (args[1:] or _glyphs()):
+                raw = os.path.join(GLYPH_OUT_DIR, glyph_id, "icon.png")
+                if not os.path.isfile(raw):
+                    print(f"  {glyph_id}: no raw yet — skipped")
+                    continue
+                snap_glyph(glyph_id)
+        else:
+            status_glyphs()
+    elif icons:
         if cmd == "run":
             run_icon_fleet(args[1:] or _icons(), seed=seed_override)
         elif cmd == "snap":

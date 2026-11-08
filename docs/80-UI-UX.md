@@ -2335,6 +2335,83 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      arrow-family ingest policy and the `ICON_ARROW_*` guards are
      unchanged (§9b).
 
+     **PixelLab glyph pass — markers & facility tokens (amended
+     2026-11-08, user direction — the marker and facility families join
+     the PixelLab backend under the icon ruling):** the 6 marker
+     (`marker_treasure`, `marker_wreck`,
+     `marker_discovery_{creature,natural,relic,ruins}`) and 6 facility
+     (`facility_{market,shipyard,palace,tavern,inn,guild}`) string-map
+     glyphs generate via `tools/pixellab_pass.py --glyphs`, the same
+     **prompt-only `POST /v2/generate-image-v2` envelope as the icons
+     (exactly four fields, never a style_image or reference_images):**
+     `{"description", "image_size": {64, 64}, "no_background": true,
+     "seed": 92000}`. **Icon ruling, not the hull ruling:** generate at
+     64, quantize to the owning class block, binary alpha, exact 2:1
+     nearest halve → the 32 inline asset, 20-color cap at 32
+     (§4.8.3); **no hero variants** — no 64px display surface exists
+     for either family (pinned). **Owning blocks (pinned):**
+     `marker_*` → the terrain block (the §4.8 class mapping's "port
+     markers" row — the marker glyphs are map-overlay art, not
+     terrain tiles themselves; the block mapping is amended here to
+     say so explicitly); `facility_*` → the hull block (the tokens
+     family). The shipped 32 assets stay in place
+     (`assets/ui/markers/<id>.png`, `assets/ui/tokens/<id>.png`);
+     the generator string maps remain the per-file fallback.
+     **Rewritten prompt families (user direction — NO icon heritage;
+     each family gets its own pinned suffix):**
+     **`MARKER_SUFFIX`, pinned verbatim (the map-overlay design
+     problem is separation over live sea AND land tiles, not palette
+     discipline):** `single centered world-map marker glyph, bold
+     compact silhouette readable at tiny size, thick dark 1-pixel
+     outline, flat cel shading with two or three shading bands,
+     strong contrast against both blue sea and brown land, single
+     object fully inside the frame, no scenery, no text, no
+     gradients, retro 16-bit pixel-art game map marker in the style
+     of classic 1990s naval adventure games like Uncharted Waters 2 /
+     New Horizons, transparent background.` **`FACILITY_SUFFIX`,
+     pinned verbatim (building fronts are a different object class
+     from every prior family; signs stay UNLETTERED):** `small
+     16th-century European port building front seen straight-on,
+     flat frontal facade, centered doorway, one or two windows,
+     thick dark 1-pixel outline, warm wood and stone midtones, bold
+     readable silhouette, flat cel shading with two or three
+     shading bands, the building fully inside the frame, no scenery
+     around it, no text, no lettered signs, no gradients, retro
+     16-bit pixel-art in the style of classic 1990s naval adventure
+     games like Uncharted Waters 2 / New Horizons, transparent
+     background.` **Per-id descriptors** are pinned verbatim in
+     `tools/pixellab_pass.py` (`_GLYPH_DESCRIPTORS`); composition =
+     `{identity}, {spec}{<family suffix>}`. **Cache & ledger:** raws
+     gitignored under `tools/ui_art/model_raw/pixellab_glyphs/<id>/`
+     (snap passthrough `<id>/snapped/icon.png`, canvas-fit gate
+     exact 64×64, ship-as-generated at the 64 grid — quantize and
+     halve happen at ingest); manifest + provenance identical to the
+     icon pass; **ingestion** via the new
+     `build_ui_art --import-glyphs`: per id, class resolved by
+     prefix, re-quantize to the owning block, halve 64→32, cap
+     gate, write the shipped 32; ledger sections `markers{}` /
+     `facility{}` (job/seed/source/sha/accepted_at, mirroring
+     `icons{}`); the override ladder + `--check` byte-identical
+     contract extend to both families
+     (`resolve_artifact_overrides` gains `markers`/`facility`).
+     **Validator (group 13):** per family — presence, 32×32 canvas,
+     owning-block membership, ≤ 20 colors, and the exactness assert
+     (shipped 32 == the 2:1 halve of the re-quantized snapped
+     source, re-derived where the local cache exists); ids outside
+     the two pinned inventories rejected. **Acceptance flow:** ONE
+     bundled resumption run with the 6 outstanding icons (`fair`,
+     `flag_england`, `good_raw_silk`, `good_rhubarb`, `good_rice`,
+     `wind_arrow_ne`; 18 jobs total, ~$0.14 at ~$0.008/job) once
+     the PixelLab account is topped up → snap → review sheets
+     (icons addendum 6, markers 6, facility 6) → user verdict →
+     union ingest (`--import-icons` both caches +
+     `--import-glyphs`) → gates (`--check` byte-identical,
+     validator groups 1–13, suites). **Wind-family closure rides
+     this run:** `wind_arrow_ne` landing and passing the
+     NE-pointing gate admits both wind bases; the §8.8 item 5
+     refresh path re-derives the six wind siblings from the
+     ingested sources automatically.
+
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
      Standard 48-Tile Auto-Tile Set per terrain PAIR (center 1,
