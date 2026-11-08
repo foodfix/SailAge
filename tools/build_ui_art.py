@@ -2565,6 +2565,11 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                                    ("terrain", "terrain", False)):
         for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
             fname = key if not keyed else f"{key}.png"
+            if family in ("markers64", "facility64"):
+                # the hero dirs hold BARE ids (the registry strips the 64
+                # prefix, which itself sits on the family prefix)
+                var_pfx = "marker_" if family == "markers64" else "facility_"
+                fname = key[len(var_pfx):] + ".png"
             dest = outroot / "assets" / "ui" / dirname / fname
             if override == dest and dest.is_file():
                 stash[dest] = dest.read_bytes()
@@ -2724,10 +2729,15 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             counts[f"{family}_ingested"] += 1
     for family, dirname in (("facility64", "tokens64"),
                             ("markers64", "markers64")):
+        # the hero dirs hold BARE ids (the registry strips the 64 prefix,
+        # which itself sits on the family prefix — the 2026-11-08
+        # hero-render regression)
+        fam_pfx = "facility_" if family == "facility64" else "marker_"
         fam64 = (artifacts or {}).get(family) or {}
         for iid in sorted(fam64):
             override = fam64[iid]
-            dest = outroot / "assets" / "ui" / dirname / f"{iid}.png"
+            dest = (outroot / "assets" / "ui" / dirname
+                    / f"{iid[len(fam_pfx):]}.png")
             if override.is_file() and override != dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(override, dest)
