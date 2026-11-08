@@ -2,52 +2,7 @@
   "sprites": [
     {
       "id": "trophy",
-      "file": "assets/ui/icons/trophy.png",
-      "width": 32,
-      "height": 32,
-      "mode": "string-map",
-      "png": "indexed",
-      "palette": {
-        ".": "transparent",
-        "a": "#d9a441",
-        "h": "#f7f5ee",
-        "l": "#a87a28",
-        "o": "#465468"
-      },
-      "rows": [
-        "................................",
-        "................................",
-        "................................",
-        "................................",
-        "................................",
-        "................................",
-        "................................",
-        "..........oooooooooooo..........",
-        "....ooo...oaaaaaaaaaao...ooo....",
-        "...o...o.oaaaaaaaaaaaao.o...o...",
-        "..o.....oaaaaaaaaaaaaaao.....o..",
-        "..o....olaaaaaahhaaaaaalo....o..",
-        "..o...oalaaaaaahaaaaaaalao...o..",
-        "...o.oalaaaaaaaaaaaaaaaalao.o...",
-        "....ollaaaaaaaaaaaaaaaaaallo....",
-        "...oaaaaaaaaaaaaaaaaaaaaaaaao...",
-        "..oaaaaaaaaaaaaaaaaaaaaaaaaaao..",
-        ".ooooooooooooooaaoooooooooooooo.",
-        "...............oo...............",
-        "...............oo...............",
-        "...............oo...............",
-        "...............oo...............",
-        "...............oo...............",
-        "..........oooooaaooooo..........",
-        "..........oaaaaaaaaaao..........",
-        "........oolllllllllllloo........",
-        "........ollllllllllllllo........",
-        "........oooooooooooooooo........",
-        "................................",
-        "................................",
-        "................................",
-        "................................"
-      ]
+      "note": "ships via icons64/<id>.png (the hero-64 display rule, 2026-11-08)"
     }
   ]
 }

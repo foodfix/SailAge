@@ -352,8 +352,7 @@ def _paint_pennant(px, w, h, mast_x, bbox_top, d):
 # grid 1:1; the generator's per-file fallback is the exact ×2 nearest
 # upscale of the shipped 32 (§4.8 64-canvas fallback rule). ----
 ICON_INGEST_PREFIX = "icon_"
-ICON_INGEST_SOURCES = ("snapped", "studio/snapped",
-                       "pixellab_icons")  # canonical cache dirs
+ICON_INGEST_SOURCES = ("pixellab_icons",)  # canonical cache dirs
 # (precedence order; later CLI dirs win per id). "pixellab_icons" is the
 # tools/pixellab_pass.py --icons cache: <dir>/<id>/snapped/icon.png per
 # id (the per-id nested layout), not the flat icon_<id>.png caches.
@@ -1804,18 +1803,11 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
                              "detail": f"{w}x{h} != {CANVAS}x{CANVAS}"})
             continue
         q = _quantize_icon(w, h, px)
-        changed = sum(1 for a, b in zip(px, q) if a != b)
         colors = {("#%02x%02x%02x" % p[:3]) for p in q if p[3]}
-        if len(colors) > ICON_INLINE_CAP:
-            rejected.append({"job": job, "reason": "budget",
-                             "detail": f"{len(colors)} colors > the 32px "
-                                       f"cap {ICON_INLINE_CAP} (§4.8.3)"})
-            continue
-        hw, hh, hpx = _halve64(w, h, q)
-        write_png(ROOT / "assets" / "ui" / "icons" / f"{iid}.png",
-                  hw, hh, hpx)
-        # The hero 64 asset (2026-11-08 amendment — the deferral is
-        # retired): the quantized 64 grid 1:1, same binary alpha.
+        # The hero 64 asset IS the shipped art (the hero-64 display
+        # rule — the halved-32 inline family retired): the quantized 64
+        # grid 1:1, same binary alpha; the color budget is the block
+        # itself (22 colors).
         write_png(ROOT / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png",
                   w, h, q)
         written += 1
@@ -1828,21 +1820,18 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
                     "source": src_rel,
                     "snapped_sha": sha,
                     "accepted_at": accepted_at or today}
-        print(f"  icon {iid}: {w}x{h} -> {hw}x{hh}, {len(colors)} colors "
-              f"(re-quantize touched {changed} px), hero 64, "
+        print(f"  icon {iid}: {w}x{h} -> hero 64, {len(colors)} colors, "
               f"sha {sha[:12]}… OK")
     revoked = 0
     for iid in sorted(prev_icons):
         if iid not in led:
-            (ROOT / "assets" / "ui" / "icons" / f"{iid}.png").unlink(
-                missing_ok=True)
             (ROOT / "assets" / "ui" / ICON_HERO_DIR
              / f"{iid}.png").unlink(missing_ok=True)
             revoked += 1
     counts = {"icons": {"candidates": len(candidates),
                         "accepted": len(led), "rejected": len(rejected),
                         "skipped": len(skipped),
-                        "files": written, "hero_64": len(led)}}
+                        "files": len(led), "hero_64": len(led)}}
     _write_ledger(prev, "icons", {
         "counts": counts,
         "icons_generated_by": "tools/build_ui_art.py --import-icons",
@@ -2211,6 +2200,13 @@ class Manifests:
                 # (master reconciliation 2026-11-04, ledgered: render.js
                 # rejects rows-less declarations).
                 return "derive" if len(items) == 1 else "multi"
+            if len(items) > 1 or isinstance(doc, list):
+                # Inventory-only declaration in a multi-sprite manifest
+                # (the hero-64 display rule, 2026-11-08): id (+ optional
+                # derive relation) with no render output — the arrow
+                # refresh and the inventories read these directly from
+                # the manifest; the shipped art is the icons64 hero.
+                continue
             if len(items) == 1 and not isinstance(doc, list):
                 # auxiliary doc (rig.json style library, hulls.json registry,
                 # future class-level notes) — no render semantics
@@ -2608,35 +2604,32 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                  "64-canvas amendment)")
         write_png(outroot / decl["file"],
                   *upscale_nearest(w, h, px, CANVAS // side))
-    # The icon/terrain override ladder (§4.8 ingestion contract): the
-    # committed ingested artifacts are the primary bytes.  Applied AFTER
-    # the derive/outline passes — no ingested icon may sit in a derive
-    # chain (the A.2 contract's model icons are all direct renders; a
-    # future derive-base ingest would need the ledger to gate it).
-    icons = (artifacts or {}).get("icons") or {}
-    for iid in sorted(icons):
-        override = icons[iid]
-        dest = outroot / "assets" / "ui" / "icons" / f"{iid}.png"
+    # The override ladder (§4.8 ingestion contract; the hero-64 display
+    # rule, 2026-11-08): the committed ingested artifacts are the primary
+    # bytes.  The icons 32 inline ladder is retired — the icons64 heroes
+    # ARE the shipped icon art; the markers64/facility64 ladders serve
+    # their heroes; the terrain ladder is unchanged.
+    heroes = (artifacts or {}).get("icons64") or {}
+    for iid in sorted(heroes):
+        override = heroes[iid]
+        dest = outroot / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png"
         if override.is_file() and override != dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(override, dest)
         elif dest in stash:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
-        counts["icons_ingested"] += 1
+        counts["icons64_ingested"] += 1
     # §8.8 item 5 refresh path (the 2026-11-08 icon amendment: "the build
     # re-derives the siblings from the new source"): a ledger-ingested
-    # arrow BASE re-derives its family siblings from the SHIPPED base
-    # asset — the manifest's authored derive chain would otherwise pair
-    # the new base art with old sibling art and break the pixel-exact
-    # transform pin.  Runs after the icons ladder (the shipped base is
-    # the ingested bytes) and before the hero fallback (the refreshed
-    # siblings upscale with everything else).
+    # arrow BASE re-derives its family siblings at 64 from the SHIPPED
+    # base hero — the manifest's authored derive chain operated on the
+    # retired 32 grid (the derive decls are gone from the icon
+    # manifests), so the refresh keeps the derived hero set coherent.
+    # Runs after the icons64 ladder (the shipped base is the ingested
+    # bytes) and before the facility64/markers64 ladders.
     arrow_refreshed = 0
     arrow_prefixes = ("wind_arrow_", "current_arrow_")
-    # the derive decls live in the manifest files (m.renders only holds
-    # the first sprite per multi-sprite manifest — the arrow families'
-    # n/ne rows plus six derive decls each are absorbed as "multi")
     for mf in sorted((MANIFESTS / "icons").glob("*.json")):
         try:
             doc = json.loads(mf.read_text())
@@ -2653,61 +2646,22 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             base_id = derive_base_of(d)
             if not sid or not str(base_id).startswith(arrow_prefixes):
                 continue
-            if base_id not in icons:  # the ledger-ingested id set (ladder above)
+            if base_id not in heroes:  # the ledger-ingested id set
                 continue
-            file_name = decl.get("file")
-            if not file_name:
-                continue
-            base_file = outroot / "assets" / "ui" / "icons" / f"{base_id}.png"
+            base_file = (outroot / "assets" / "ui" / ICON_HERO_DIR
+                         / f"{base_id}.png")
             if not base_file.is_file():
                 continue
             w, h, px = read_png(base_file)
             w, h, px = _transform(w, h, px, d["op"])
-            write_png(outroot / file_name, w, h, px)
+            write_png(outroot / "assets" / "ui" / ICON_HERO_DIR
+                      / f"{sid}.png", w, h, px)
             arrow_refreshed += 1
     counts["icons_arrow_refreshed"] = arrow_refreshed
-    # §4.8 hero-64 fallback (the 2026-11-08 icon amendment): every shipped
-    # 32px icon asset (render.js writes the multi-sprite manifests; the
-    # derive pass the singles) gets a hero 64 canvas — the exact ×2
-    # nearest upscale of the FINAL shipped 32 art (never hand-drawn at
-    # 64); an ingested id's committed hero replaces it in the ladder
-    # below.  Runs after the icons ladder so the upscale reads the
-    # ingested bytes where they exist.
-    hero_fallbacks = 0
-    icons_root = outroot / "assets" / "ui" / "icons"
-    if icons_root.is_dir():
-        for p in sorted(icons_root.glob("*.png")):
-            w, h, px = read_png(p)
-            if (w, h) != (ICON_INLINE, ICON_INLINE):
-                continue  # a non-32 icon-class render (none today) passes through
-            hw, hh, hpx = upscale_nearest(w, h, px, 2)
-            dest = outroot / "assets" / "ui" / ICON_HERO_DIR / p.name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            write_png(dest, hw, hh, hpx)
-            hero_fallbacks += 1
-    counts["icons_hero_fallback"] = hero_fallbacks
-    heroes = (artifacts or {}).get("icons64") or {}
-    for iid in sorted(heroes):
-        override = heroes[iid]
-        dest = outroot / "assets" / "ui" / ICON_HERO_DIR / f"{iid}.png"
-        if override.is_file() and override != dest:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(override, dest)
-        elif dest in stash:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(stash[dest])
-        counts["icons64_ingested"] += 1
-    # the glyph families (markers / facility — the 2026-11-08 amendment):
-    # one 32 asset per id, the same ladder semantics, no hero/arrow
-    # interactions; the facility family additionally carries its hero 64
-    # (tokens64 — restored from the stash / copied like icons64)
-    # the glyph 32 inline ladder retired with the hero-64 display rule
-    # (2026-11-08): markers/facility ship heroes only (the *64 ladders)
     for family, dirname in (("facility64", "tokens64"),
                             ("markers64", "markers64")):
         # the hero dirs hold BARE ids (the registry strips the 64 prefix,
-        # which itself sits on the family prefix — the 2026-11-08
-        # hero-render regression)
+        # which itself sits on the family prefix)
         fam_pfx = "facility_" if family == "facility64" else "marker_"
         fam64 = (artifacts or {}).get(family) or {}
         for iid in sorted(fam64):

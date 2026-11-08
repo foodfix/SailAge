@@ -9895,35 +9895,32 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
             fail("art-ingest", f"icons.{iid}",
                  f"source {src!r} is not a pinned icon cache dir "
                  f"({G13_ICON_CACHE_DIRS})", 13)
-        p = ASSETS_UI / "icons" / f"{iid}.png"
+        # the hero-64 display rule (2026-11-08): the hero IS the shipped
+        # icon art — the halved-32 inline family retired
+        p = ASSETS_UI / "icons64" / f"{iid}.png"
         if not p.is_file():
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                 "ingested icon file missing from the shipped grid "
-                 "(the override ladder commits ledger + file together)", 13)
-        # the shipped artifact: 32×32, block member, within the 32px cap
+                 "ingested icon hero missing from the shipped grid "
+                 "(the override ladder commits ledger + hero together)", 13)
         try:
             data = p.read_bytes()
             w, h, px = decode_ui_png(data)
         except (OSError, PngFormatError) as exc:
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                 f"ingested icon does not decode: {exc}", 13)
-        if (w, h) != (G13_ICON_INLINE, G13_ICON_INLINE):
+                 f"ingested icon hero does not decode: {exc}", 13)
+        if (w, h) != (64, 64):
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                 f"ingested icon is {w}x{h}, the inline canvas is "
-                 f"{G13_ICON_INLINE}x{G13_ICON_INLINE}", 13)
+                 f"ingested icon hero is {w}x{h}, the hero canvas is "
+                 "64x64", 13)
         got = {c for row in px for c in row if c is not None}
         off = sorted(got - (BLOCK_ICON | BLOCK_LOCKED))
         if off:
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
                  f"off-block hex(es) {off} — the icon class checks against "
                  "the §4.8.4 icon block", 13)
-        if len(got) > G13_ICON_CAP_32:
-            fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                 f"{len(got)} distinct colors > the 32px cap "
-                 f"{G13_ICON_CAP_32} (§4.8.3)", 13)
-        # the hero 64 asset (the 2026-11-08 amendment): committed beside
-        # the 32, decoded + block-checked for every ledger id
-        hero = ASSETS_UI / "icons64" / f"{iid}.png"
+        # the hero exactness rides the halving assert below (hero == the
+        # re-quantized snapped source) — the 32 audits retire
+        hero = p
         if not hero.is_file():
             fail("art-ingest", str(hero.relative_to(ART_ROOT)),
                  "ingested icon's hero 64 asset missing (ledger + 32 + "
@@ -9965,45 +9962,16 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
                  "64x64", 13)
         q = [[None if c is None else _g13_nearest_hex(c, BLOCK_ICON)
               for c in row] for row in spx]
-        want = _g13_halve64(q)
-        if px != want:
+        # the hero-64 rule: the hero IS the shipped art — exact 1:1
+        # re-quantize of the snapped source (the halving assert retired)
+        if px != q:
             fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                 "is not the exact re-quantize + 2:1 nearest halving of its "
-                 "snapped source — re-run build_ui_art --import-icons", 13)
-        if hpx != q:
-            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
                  "is not the exact re-quantize of its snapped source "
                  "(hero 64 1:1) — re-run build_ui_art --import-icons", 13)
-    # the hero-64 fallback sweep (the 2026-11-08 amendment): every
-    # generated (non-ingested) icon id ships its hero as the exact ×2
-    # nearest upscale of the shipped 32 art
-    fallback = 0
-    for iid in sorted(icon_ids - set(icons)):
-        p32 = ASSETS_UI / "icons" / f"{iid}.png"
-        hero = ASSETS_UI / "icons64" / f"{iid}.png"
-        if not p32.is_file():
-            continue  # the shipped-grid check owns 32 presence
-        if not hero.is_file():
-            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                 "hero 64 asset missing for a generated icon (the "
-                 "fallback is the exact ×2 upscale of the shipped 32) — "
-                 "re-run the build", 13)
-        try:
-            w, h, px32 = decode_ui_png(p32.read_bytes())
-            hw, hh, hpx = decode_ui_png(hero.read_bytes())
-        except (OSError, PngFormatError) as exc:
-            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                 f"hero/inline pair does not decode: {exc}", 13)
-        if (w, h) != (32, 32) or (hw, hh) != (64, 64):
-            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                 f"hero/inline canvases {hw}x{hh}/{w}x{h} violate the "
-                 "64-hero-of-32 pair (64x64 / 32x32)", 13)
-        if hpx != _g13_upscale2x(px32):
-            fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                 "is not the exact ×2 nearest upscale of the shipped "
-                 "32 art — re-run the build", 13)
-        fallback += 1
-    return verified + fallback
+    # the hero-64 fallback sweep retired (the 2026-11-08 resolution):
+    # every icon id is ledger-committed — the icons64 ladder serves them
+    # and the per-id hero checks above own the contract
+    return verified
 
 
 def _g13_check_ingest_glyph_families(doc: dict) -> int:

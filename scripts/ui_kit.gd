@@ -450,11 +450,21 @@ static func icon_texture(id: String) -> Texture2D:
 	if _textures.has(id):
 		return _textures.get(id) as Texture2D
 	if _token_loader.is_valid():
+		# The §4.8 hero-64 display rule (2026-11-08): a generated id
+		# resolves its 64 hero FIRST (icons64/markers64/tokens64) — the
+		# inline-32 family is retired, the heroes ARE the shipped art.
+		# Hero ids (already prefixed) skip the probe; misses cache as
+		# before (a miss is a miss for the session; file replace +
+		# RESTART, `clear_textures` re-seeds).
+		if not id.begins_with("icon64_") and not id.begins_with("marker64_") \
+				and not id.begins_with("facility64_"):
+			for prefix in ["icon64_", "marker64_", "facility64_"]:
+				var hero: Texture2D = _token_loader.call(
+					"%s%s" % [prefix, id])
+				if hero != null:
+					_textures[id] = hero
+					return hero
 		var tex := _token_loader.call(id) as Texture2D
-		# Misses cache too (the top-down amendment made misses common —
-		# a dir-less owner id probing the fallback chain, fx sizes absent
-		# until ingest): a miss is a miss for the session; the file-swap
-		# pin is file replace + RESTART, and `clear_textures` re-seeds.
 		_textures[id] = tex
 		return tex
 	return null
