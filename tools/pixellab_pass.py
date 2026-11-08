@@ -857,10 +857,12 @@ def _glyphs() -> list[str]:
 
 def run_glyph(glyph_id: str, label: str | None = None,
               description: str | None = None, seed: int | None = None,
-              poll_status=None) -> dict:
+              poll_status=None, out_root: str | None = None,
+              manifest_path: str | None = None) -> dict:
     """One prompt-only generate-image-v2 generation on the pinned 64x64
     canvas (the icon envelope — never a style_image or reference_images)
-    + raw download to <id>/icon.png."""
+    + raw download to <id>/icon.png. out_root/manifest_path stage into
+    the studio cache (the run_icon staging)."""
     payload = {
         "description": description or _glyph_desc(glyph_id),
         "image_size": {"width": ICON_SIZE, "height": ICON_SIZE},
@@ -893,7 +895,8 @@ def run_glyph(glyph_id: str, label: str | None = None,
                            f"(last: {json.dumps(job)[:300]})")
 
     dest = label or glyph_id
-    dest_dir = os.path.join(GLYPH_OUT_DIR, dest)
+    out = out_root or GLYPH_OUT_DIR
+    dest_dir = os.path.join(out, dest)
     os.makedirs(dest_dir, exist_ok=True)
     png = _job_image_bytes(job)
     with open(os.path.join(dest_dir, "icon.png"), "wb") as fh:
@@ -902,13 +905,14 @@ def run_glyph(glyph_id: str, label: str | None = None,
            "seed": payload["seed"], "size": ICON_SIZE, "glyph": glyph_id,
            "label": dest, "bytes": {"icon": len(png)},
            "usage": usage, "job_status": job.get("status")}
-    os.makedirs(GLYPH_OUT_DIR, exist_ok=True)
+    os.makedirs(out, exist_ok=True)
     # merge-retry write (multi-worker safe — the icon-pass precedent)
+    man = manifest_path or GLYPH_MANIFEST
     for attempt in range(4):
         manifest = {}
-        if os.path.isfile(GLYPH_MANIFEST):
+        if os.path.isfile(man):
             try:
-                with open(GLYPH_MANIFEST, encoding="utf-8") as fh:
+                with open(man, encoding="utf-8") as fh:
                     manifest = json.load(fh)
                 break
             except ValueError:
@@ -916,16 +920,17 @@ def run_glyph(glyph_id: str, label: str | None = None,
         else:
             break
     manifest[dest] = rec
-    with open(GLYPH_MANIFEST, "w", encoding="utf-8") as fh:
+    with open(man, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=1, ensure_ascii=False)
     return rec
 
 
-def snap_glyph(glyph_id: str) -> None:
+def snap_glyph(glyph_id: str, out_root: str | None = None) -> None:
     """Glyph-as-drawn passthrough into <id>/snapped/icon.png. Gate:
-    canvas fit (exact 64x64); quantize + halve happen at ingest."""
+    canvas fit (exact 64x64); quantize happens at ingest. out_root
+    stages into the studio cache (the run_glyph staging)."""
     from PIL import Image  # noqa: PLC0415
-    src_dir = os.path.join(GLYPH_OUT_DIR, glyph_id)
+    src_dir = os.path.join(out_root or GLYPH_OUT_DIR, glyph_id)
     src = os.path.join(src_dir, "icon.png")
     if not os.path.exists(src):
         raise SystemExit(f"{glyph_id}: no raw glyph at {src} — "
@@ -1022,10 +1027,15 @@ def _icons() -> list[str]:
 
 def run_icon(icon_id: str, label: str | None = None,
              description: str | None = None, seed: int | None = None,
-             poll_status=None) -> dict:
+             poll_status=None, out_root: str | None = None,
+             manifest_path: str | None = None) -> dict:
     """One prompt-only generate-image-v2 generation on the pinned 64x64
     canvas (the 2026-11-08 icon envelope — never a style_image or
-    reference_images) + raw download to <id>/icon.png."""
+    reference_images) + raw download to <id>/icon.png. out_root/
+    manifest_path override the canonical store — the studio (model_
+    studio) stages re-rolls into its gitignored cache with them (the
+    coast/fx pattern; a discarded re-roll never pollutes the canonical
+    raw store)."""
     payload = {
         "description": description or _icon_desc(icon_id),
         "image_size": {"width": ICON_SIZE, "height": ICON_SIZE},
@@ -1058,7 +1068,8 @@ def run_icon(icon_id: str, label: str | None = None,
                            f"(last: {json.dumps(job)[:300]})")
 
     dest = label or icon_id
-    dest_dir = os.path.join(ICON_OUT_DIR, dest)
+    out = out_root or ICON_OUT_DIR
+    dest_dir = os.path.join(out, dest)
     os.makedirs(dest_dir, exist_ok=True)
     png = _job_image_bytes(job)
     with open(os.path.join(dest_dir, "icon.png"), "wb") as fh:
@@ -1067,16 +1078,17 @@ def run_icon(icon_id: str, label: str | None = None,
            "seed": payload["seed"], "size": ICON_SIZE, "icon": icon_id,
            "label": dest, "bytes": {"icon": len(png)},
            "usage": usage, "job_status": job.get("status")}
-    os.makedirs(ICON_OUT_DIR, exist_ok=True)
+    os.makedirs(out, exist_ok=True)
     # Merge-retry write (multi-worker safe): parallel --icons workers
     # finish jobs independently; each write re-reads the latest manifest
     # so a sibling's record survives (last-writer-wins on the SAME id is
     # impossible — slices are disjoint per worker).
+    man = manifest_path or ICON_MANIFEST
     for attempt in range(4):
         manifest = {}
-        if os.path.isfile(ICON_MANIFEST):
+        if os.path.isfile(man):
             try:
-                with open(ICON_MANIFEST, encoding="utf-8") as fh:
+                with open(man, encoding="utf-8") as fh:
                     manifest = json.load(fh)
                 break
             except ValueError:
@@ -1084,19 +1096,19 @@ def run_icon(icon_id: str, label: str | None = None,
         else:
             break
     manifest[dest] = rec
-    with open(ICON_MANIFEST, "w", encoding="utf-8") as fh:
+    with open(man, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=1, ensure_ascii=False)
     return rec
 
 
-def snap_icon(icon_id: str) -> None:
+def snap_icon(icon_id: str, out_root: str | None = None) -> None:
     """Icon-as-drawn passthrough: the RAW icon copies BYTE-IDENTICAL
     into <id>/snapped/icon.png for ingest naming. Gate: canvas fit
     (exact 64x64). No resize, no quantize — the model's pixels are the
-    review pixels; quantize + halve happen at ingest (80-* §4.8
-    2026-11-08)."""
+    review pixels; quantize happens at ingest (80-* §4.8 2026-11-08).
+    out_root stages into the studio cache (the run_icon staging)."""
     from PIL import Image  # noqa: PLC0415
-    src_dir = os.path.join(ICON_OUT_DIR, icon_id)
+    src_dir = os.path.join(out_root or ICON_OUT_DIR, icon_id)
     src = os.path.join(src_dir, "icon.png")
     if not os.path.exists(src):
         raise SystemExit(f"{icon_id}: no raw icon at {src} — "

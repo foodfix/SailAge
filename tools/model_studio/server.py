@@ -50,7 +50,8 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
-FAMILIES = ("topdown", "fx", "coast", "icon", "iconsheet")
+FAMILIES = ("topdown", "fx", "coast", "icons", "glyphs", "icon",
+            "iconsheet")
 # draft-file prefixes that are NEVER listed (the retired ship families —
 # 2026-11-07 user direction — and the hidden terrain texture chain)
 HIDDEN_PREFIXES = ("hull_", "sheet_", "terrain_", "px_")
@@ -265,6 +266,121 @@ class Studio:
             "thumbs": {},
         }
 
+    def _icon_id_entry(self, icon_id, prompts, state, accepted) -> dict:
+        """One prompt-only icon card (§4.8 2026-11-08 studio
+        modernization): ONE card per id, raw 64x64 in → quantized-64
+        hero out. Thumbs: snapped = the canonical raw (the shipped
+        pixels' source); raw = the staged re-roll when one is pending."""
+        job_id = f"ic_{icon_id}"
+        manifest = chain.icon_manifest().get(icon_id) or {}
+        studio_rec = state.get(job_id, {}) or {}
+        staged = os.path.isfile(chain.icon_stage_path(icon_id))
+        thumbs = {}
+        if os.path.isfile(chain.icon_raw_path(icon_id)):
+            thumbs["snapped"] = {"v": int(os.path.getmtime(
+                chain.icon_raw_path(icon_id)) * 1000)}
+        if staged:
+            thumbs["raw"] = {"v": int(os.path.getmtime(
+                chain.icon_stage_path(icon_id)) * 1000)}
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt")
+                           or manifest.get("description"))
+        original_prompt = stored_original or chain.icon_default_prompt(
+            icon_id)
+        original_source = ("manifest" if manifest.get("description")
+                           else "default")
+        eff_prompt = prompts.get(job_id) or original_prompt
+        return {
+            "id": job_id,
+            "family": "icons",
+            "subject": icon_id,
+            "dir": None,
+            "tier": None,
+            "label": f"ICON · {icon_id} · 64px · ~$0.008/roll",
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", manifest.get("seed")),
+            "canonical_seed": manifest.get("seed"),
+            "status": studio_rec.get("status",
+                                     "re-rolled — pending accept" if staged
+                                     else "canonical"),
+            "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
+            "metrics": None,
+            "seconds": studio_rec.get("seconds"),
+            "error": studio_rec.get("error"),
+            "thumbs": thumbs,
+        }
+
+    def _glyph_id_entry(self, glyph_id, prompts, state, accepted) -> dict:
+        """One prompt-only glyph card — the icon envelope against the
+        frozen MARKER_SUFFIX / FACILITY_SUFFIX; the card label carries
+        the family."""
+        job_id = f"gl_{glyph_id}"
+        manifest = chain.glyph_manifest().get(glyph_id) or {}
+        studio_rec = state.get(job_id, {}) or {}
+        staged = os.path.isfile(chain.glyph_stage_path(glyph_id))
+        thumbs = {}
+        if os.path.isfile(chain.glyph_raw_path(glyph_id)):
+            thumbs["snapped"] = {"v": int(os.path.getmtime(
+                chain.glyph_raw_path(glyph_id)) * 1000)}
+        if staged:
+            thumbs["raw"] = {"v": int(os.path.getmtime(
+                chain.glyph_stage_path(glyph_id)) * 1000)}
+        fam_name = "MARKER" if glyph_id.startswith("marker_") \
+            else "FACILITY"
+        fam_stripped = (glyph_id[len("marker_"):]
+                        if glyph_id.startswith("marker_")
+                        else glyph_id[len("facility_"):])
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt")
+                           or manifest.get("description"))
+        original_prompt = stored_original or chain.glyph_default_prompt(
+            glyph_id)
+        original_source = ("manifest" if manifest.get("description")
+                           else "default")
+        eff_prompt = prompts.get(job_id) or original_prompt
+        return {
+            "id": job_id,
+            "family": "glyphs",
+            "subject": glyph_id,
+            "dir": None,
+            "tier": None,
+            "label": f"{fam_name} · {fam_stripped} · 64px · "
+                     f"~$0.008/roll",
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", manifest.get("seed")),
+            "canonical_seed": manifest.get("seed"),
+            "status": studio_rec.get("status",
+                                     "re-rolled — pending accept" if staged
+                                     else "canonical"),
+            "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
+            "metrics": None,
+            "seconds": studio_rec.get("seconds"),
+            "error": studio_rec.get("error"),
+            "thumbs": thumbs,
+        }
+
     def _coast_entry(self, prompts, state, accepted) -> dict:
         """The coast tileset card (§4.8 2026-11-06): ONE card per tileset.
         draft = the shipped ledger strip; raw = the pending re-roll strip;
@@ -397,6 +513,28 @@ class Studio:
         Never 404 on a listed job's thumbs."""
         fam, subject, _direction = chain.parse_job(job_id)
         raw, st = self.raw(), self.studio()
+        if fam == "icons" and job_id.startswith("ic_"):
+            # prompt-only icon card: snapped = the canonical raw (the
+            # shipped pixels' source); raw = the staged re-roll
+            iid = job_id[len("ic_"):]
+            out = []
+            if kind == "raw":
+                out.append((chain.icon_stage_path(iid), None))
+                out.append((os.path.join(chain.icon_stage_root(), iid,
+                                         "icon.png"), None))
+            elif kind == "snapped":
+                out.append((chain.icon_raw_path(iid), None))
+            return out
+        if fam == "glyphs" and job_id.startswith("gl_"):
+            gid = job_id[len("gl_"):]
+            out = []
+            if kind == "raw":
+                out.append((chain.glyph_stage_path(gid), None))
+                out.append((os.path.join(chain.glyph_stage_root(), gid,
+                                         "icon.png"), None))
+            elif kind == "snapped":
+                out.append((chain.glyph_raw_path(gid), None))
+            return out
         if fam == "iconsheet":
             # group card: draft = sheet draft, raw = generated sheet,
             # snapped = the group's first icon crop (representative)
@@ -619,6 +757,23 @@ class Studio:
         except Exception as exc:  # noqa: BLE001 — degrade, never die
             warnings.append(f"coast: {type(exc).__name__}: {exc}")
             log(f"registry SKIP coast: {warnings[-1]}")
+        # The prompt-only icon family (§4.8 2026-11-08): one card per id
+        # (the doc-first guard list enumerates them — no drafts).
+        for iid in chain.icon_ids():
+            try:
+                jobs.append(self._icon_id_entry(iid, prompts, state,
+                                                accepted))
+            except Exception as exc:  # noqa: BLE001 — degrade, never die
+                warnings.append(f"ic_{iid}: {type(exc).__name__}: {exc}")
+                log(f"registry SKIP ic_{iid}: {warnings[-1]}")
+        # The glyph family: 6 markers + 6 facility tokens, same envelope.
+        for gid in chain.glyph_ids():
+            try:
+                jobs.append(self._glyph_id_entry(gid, prompts, state,
+                                                 accepted))
+            except Exception as exc:  # noqa: BLE001 — degrade, never die
+                warnings.append(f"gl_{gid}: {type(exc).__name__}: {exc}")
+                log(f"registry SKIP gl_{gid}: {warnings[-1]}")
         try:
             draft_names = sorted(os.listdir(drafts_dir))
         except OSError as exc:
@@ -876,6 +1031,9 @@ class Studio:
         if fam == "fx":
             self._fx_ingest_order(order)
             return
+        if fam in ("icons", "glyphs"):
+            self._pixellab_id_ingest_order(order, fam)
+            return
         job_id = order["job"]
         with self.lock:
             self.current = {"type": "ingest", "job": job_id,
@@ -999,6 +1157,119 @@ class Studio:
             self.current = None
         log(f"ingest {job_id}: {ing['state']}"
             + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
+
+    def _pixellab_id_ingest_order(self, order: dict, fam: str) -> None:
+        """Accept→game for the ic_/gl_ cards (§4.8 2026-11-08): a staged
+        re-roll moves into the canonical pixellab raw store first (the
+        coast/fx staging contract), then build_ui_art --import-icons /
+        --import-glyphs re-lands the WHOLE family (idempotent — the
+        union ingest). Gate: the id's ledger record + the shipped hero
+        file (assets/ui/icons64/<id>.png; markers64/tokens64 <bare>.png
+        for glyphs)."""
+        job_id = order["job"]
+        with self.lock:
+            self.current = {"type": "ingest", "job": job_id,
+                            "stage": "stage-swap",
+                            "started_epoch": time.time()}
+        self._set_ingest_state(job_id, {"state": "running",
+                                        "started_at": time.strftime(
+                                            "%H:%M:%S")})
+        t0 = time.time()
+        try:
+            if fam == "icons":
+                iid = job_id[len("ic_"):]
+                if os.path.isfile(chain.icon_stage_path(iid)):
+                    chain.icon_accept_stage(iid)
+                cmd = [sys.executable,
+                       os.path.join(self.repo, "tools", "build_ui_art.py"),
+                       "--import-icons", chain.icon_raw_dir()]
+                ledger_fam, ledger_key = "icons", iid
+                hero = os.path.join(self.repo, "assets", "ui", "icons64",
+                                    f"{iid}.png")
+            else:
+                gid = job_id[len("gl_"):]
+                if os.path.isfile(chain.glyph_stage_path(gid)):
+                    chain.glyph_accept_stage(gid)
+                cmd = [sys.executable,
+                       os.path.join(self.repo, "tools", "build_ui_art.py"),
+                       "--import-glyphs", chain.glyph_raw_dir()]
+                bare = (gid[len("marker_"):] if gid.startswith("marker_")
+                        else gid[len("facility_"):])
+                ledger_fam, ledger_key = (
+                    "markers" if gid.startswith("marker_")
+                    else "facility"), gid
+                hero_dir = ("markers64" if gid.startswith("marker_")
+                            else "tokens64")
+                hero = os.path.join(self.repo, "assets", "ui", hero_dir,
+                                    f"{bare}.png")
+            with self.lock:
+                if self.current:
+                    self.current["stage"] = "build-ladder"
+            log(f"ingesting {job_id} -> {cmd[-2]} {cmd[-1]}")
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=self.INGEST_TIMEOUT_S,
+                                  cwd=self.repo)
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            tail = out.strip()[-700:]
+            ledger = self._read_json(
+                os.path.join(self.repo, "tools", "ui_art",
+                             "ingest_ledger.json"), {})
+            rec = (ledger.get(ledger_fam) or {}).get(ledger_key) or {}
+            ok = proc.returncode == 0 and bool(rec) \
+                and os.path.isfile(hero)
+            if ok:
+                ing = {"state": "in-game", "exit_code": 0,
+                       "reason": (f"{ledger_key} landed "
+                                  f"({rec.get('size')}px, seed "
+                                  f"{rec.get('seed')})"),
+                       "accepted_at": rec.get("accepted_at"),
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+            else:
+                rej = next((r for r in ledger.get("rejected", [])
+                            if r.get("job") == ledger_key), None)
+                ing = {"state": "error",
+                       "exit_code": proc.returncode,
+                       "reason": (f"{ledger_key} did not land "
+                                  f"(ledgered: {bool(rec)}, hero: "
+                                  f"{os.path.isfile(hero)})")
+                                  + (f" — {rej.get('reason')}: "
+                                     f"{rej.get('detail')}" if rej else "")
+                                  + (f" (exit {proc.returncode}): "
+                                     f"{tail[-200:]}" if proc.returncode
+                                     else ""),
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+        except subprocess.TimeoutExpired:
+            ing = {"state": "error",
+                   "reason": f"build timed out after "
+                             f"{self.INGEST_TIMEOUT_S}s"}
+        except Exception as exc:  # noqa: BLE001 — surface in the UI
+            ing = {"state": "error",
+                   "reason": f"{type(exc).__name__}: {exc}"}
+        ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._set_ingest_state(job_id, ing)
+        if ing.get("state") == "in-game":
+            # the import re-lands the WHOLE family — stamp the sibling
+            # cards in-game too (their bytes are unchanged; idempotent)
+            with self.lock:
+                st = self.state()
+                siblings = [f"ic_{i}" for i in chain.icon_ids()] \
+                    if fam == "icons" \
+                    else [f"gl_{g}" for g in chain.glyph_ids()]
+                for other in siblings:
+                    if other == job_id:
+                        continue
+                    oth = st.setdefault("jobs", {}).setdefault(other, {})
+                    oi = (oth.setdefault("ingest", {})
+                          if isinstance(oth.get("ingest"), dict)
+                          else oth.setdefault("ingest", {}))
+                    if oi.get("state") != "in-game":
+                        oi.update({"state": "in-game",
+                                   "reason": "family re-land (idempotent)",
+                                   "finished_at": ing["finished_at"]})
+                self.save_state(st)
+            log(f"ingest {job_id}: in-game (family re-landed)")
 
     def _td_ingest_order(self, order: dict) -> None:
         """Accept→game for a top-down ship (§4.8 2026-11-07): the
@@ -1260,6 +1531,21 @@ class Studio:
                                                prompt)
                     rec.update(result)
                     rec["status"] = result.get("status", "done")
+                elif fam == "icons":
+                    # prompt-only icon family: in-process tool call, both
+                    # stages land in the STAGING store (the fx contract —
+                    # a discarded re-roll never touches the canonical raw)
+                    result = chain.icon_generate(job_id[len("ic_"):],
+                                                 prompt, seed,
+                                                 on_stage=stage)
+                    rec.update(result)
+                    rec["status"] = result.get("status", "done")
+                elif fam == "glyphs":
+                    result = chain.glyph_generate(job_id[len("gl_"):],
+                                                  prompt, seed,
+                                                  on_stage=stage)
+                    rec.update(result)
+                    rec["status"] = result.get("status", "done")
                 else:
                     result = chain.run_job(job_id, prompt, seed,
                                            on_stage=stage)
@@ -1477,6 +1763,10 @@ class Handler(BaseHTTPRequestHandler):
             return job_id[len("fx_"):] in chain.FX_SHIPS
         if job_id.startswith("td_") and JOB_RE.match(job_id):
             return chain.td_exists(job_id[len("td_"):])
+        if job_id.startswith("ic_") and JOB_RE.match(job_id):
+            return job_id[len("ic_"):] in chain.icon_ids()
+        if job_id.startswith("gl_") and JOB_RE.match(job_id):
+            return job_id[len("gl_"):] in chain.glyph_ids()
         return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
             chain.canonical_path("drafts", job_id)))
 
@@ -1586,7 +1876,7 @@ class Handler(BaseHTTPRequestHandler):
         with self.studio.lock:
             st = self.studio.state().get("jobs", {}).get(job_id)
             acc = self.studio.accepted()
-            if fam in ("topdown", "fx"):
+            if fam in ("topdown", "fx", "icons", "glyphs"):
                 # the pixellab store IS the ingestion input (the td
                 # snapped/ dir; the staged fx dir on accept) — nothing to
                 # place here, the ingest order does the staging

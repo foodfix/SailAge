@@ -7,11 +7,13 @@ the result, and accept it into the game build.
 - **Server**: `server.py` — stdlib only (`http.server.ThreadingHTTPServer`),
   binds `127.0.0.1:8010`, no auth (local tool). One background worker thread
   runs generation jobs strictly one at a time from a FIFO queue.
-- **Chain**: `chain.py` — self-contained re-implementation of the validated
-  model-pass pipeline (`tools/model_pass.py` is parsed read-only for the
-  canonical icon prompt wording, never imported). **Ships and wakes** drive
-  `tools/pixellab_pass.py` / `tools/pixellab_vfx_pass.py` in-process
-  instead — see the ship and wake-VFX family sections below.
+- **Chain**: `chain.py` — the pixellab family layer. **Ships, wakes and
+  the icon + glyph families** drive `tools/pixellab_pass.py` /
+  `tools/pixellab_vfx_pass.py` in-process (see the family sections
+  below); the LEGACY icon/icon-sheet path still re-implements the
+  model-pass pipeline (`tools/model_pass.py` parsed read-only for the
+  canonical icon prompt wording, never imported) pending its removal
+  commit.
 - **Frontend**: `www/` — single-page vanilla HTML/CSS/JS, dark theme.
 
 ## Launch
@@ -110,29 +112,39 @@ re-rollable, and their chain machinery is gone from `chain.py`. The
 icon/icon-sheet families and the (hidden) terrain machinery are
 untouched.
 
-## Chain (per sprite job — icons; terrain machinery kept, hidden)
+## Icon family (pixellab prompt-only — the §4.8 2026-11-08 hero rule)
 
-1. **draft** — `model_raw/drafts/<job>.png` → base64 → POST
-   `http://127.0.0.1:8001/edit` `{"image","prompt","seed"}` (response body
-   IS the PNG, 2 attempts).
-2. **rembg** — ComfyUI `http://127.0.0.1:8000`: multipart `/upload/image`,
-   the API-format workflow from
-   `LifeSimulator/src/lib/comfyui/workflow-template-rembg.json` **AS-IS**
-   (InvertMask kept — polarity verified), `/prompt`, poll `/history`, `/view`.
-3. **snap** — nearest-resize to 512×512 → majority-vote downscale to the 64
-   logical grid over opaque px → quantize to `sorted(validate_data.BLOCK_ICON)`
-   for icons → masthead presence check (hull-only legacy metrics).
-4. **writes** — studio cache only, atomic (tmp + rename):
-   `model_raw/studio/gen/<job>.png`, `studio/snapped/<job>.png` (64×64),
-   `studio/debg/<job>.png` (rembg intermediate, kept so an offline re-check
-   can re-run the snap deterministically), `studio/state.json` (per job:
-   prompt, seed, status, metrics, timestamps), `studio/prompts.json`
-   (edited prompts), `studio/accepted.json` (accept marks).
+117 cards, ONE per id (`ic_<id>`; the pinned `_ICON_DESCRIPTORS`
+generation list — the six `current_arrow_*` siblings are
+derivation-only, derived at ingest from the n/ne bases, and have no
+card). Generation = `tools/pixellab_pass.py run_icon` **in-process**:
+ONE prompt-only `generate-image-v2` job per id on the pinned 64×64
+canvas, the 4-field envelope `{description, image_size, no_background,
+seed}` — never a style_image or reference_images. The prompt box is
+free text (default = the pinned descriptor + the frozen `ICON_SUFFIX`);
+seed user-settable (blank → the pinned 92000). Re-rolls STAGE into the
+studio cache (`model_raw/studio/icons/<id>/`, gitignored — the coast/fx
+pattern: a discarded or failed re-roll never pollutes the canonical raw
+store). The card shows the staged re-roll vs the canonical raw 64 (the
+shipped pixels' source). Accept moves the staged dir + manifest record
+into `model_raw/pixellab_icons/` and runs `build_ui_art --import-icons
+<canonical>` (the whole family re-lands, idempotent); the gate is the
+id's `icons{}` ledger record + the shipped hero file
+`assets/ui/icons64/<id>.png`. Cost ≈ $0.008/roll.
 
-Only `icon_*` / `iconsheet_*` drafts are listed and re-rollable. The
-legacy `hull_*` / `sheet_*` / `terrain_*` draft files stay in the store
-but are never listed (skipped by prefix), and their prompt/registry
-machinery is removed.
+## Glyph family (pixellab prompt-only — markers + facility tokens)
+
+12 cards (`gl_<id>`): the 6 `marker_*` discovery/treasure/wreck markers
+and the 6 `facility_*` port tokens — the same prompt-only envelope
+against the frozen `MARKER_SUFFIX` / `FACILITY_SUFFIX` (no icon
+heritage). Staging, accept and gates mirror the icon family:
+`--import-glyphs <canonical>`; the gate is the `markers{}`/`facility{}`
+ledger record + the shipped hero `assets/ui/markers64/<bare>.png` /
+`assets/ui/tokens64/<bare>.png` (the hero dirs hold BARE ids — the
+registry strips the family prefix).
+
+## Chain (per sprite job — the LEGACY icon path; superseded by the
+## icon/glyph families above, kept until the removal commit)
 
 ## API
 

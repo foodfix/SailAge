@@ -1371,11 +1371,269 @@ def fx_composite_png(ship: str, pack: dict) -> bytes:
     return out.getvalue()
 
 
+# --------------- icons + glyphs families (§4.8 2026-11-08, prompt-only) -
+# The studio drives tools/pixellab_pass.py IN-PROCESS: ONE prompt-only
+# generate-image-v2 job per id (the pinned 4-field envelope — never a
+# style_image or reference_images; the doc-first guard list pins which
+# ids may generate). ONE card per id (the 2026-11-08 studio
+# modernization replaced the TheNoise icon/icon-sheet machinery).
+# Re-rolls STAGE into the studio cache (the coast/fx pattern) — the
+# canonical raw stores model_raw/pixellab_icons/ + pixellab_glyphs/
+# (the ingest's input) are only touched on Accept.
+
+ICON_IDS_CACHE: list[str] | None = None
+
+
+def icon_ids() -> list[str]:
+    """The doc-first GENERATION list — the pinned icon descriptor ids.
+    Not the full 122-manifest inventory: the six current_arrow_ siblings
+    are derivation-only (derived at ingest from the n/ne bases) and have
+    no card — the doc-first rule forbids sending an unpinned prompt."""
+    global ICON_IDS_CACHE
+    if ICON_IDS_CACHE is None:
+        ICON_IDS_CACHE = sorted(_px_mod()._ICON_DESCRIPTORS)
+    return list(ICON_IDS_CACHE)
+
+
+GLYPH_IDS_CACHE: list[str] | None = None
+
+
+def glyph_ids() -> list[str]:
+    """The 6 markers + 6 facility tokens (the pinned descriptor ids)."""
+    global GLYPH_IDS_CACHE
+    if GLYPH_IDS_CACHE is None:
+        GLYPH_IDS_CACHE = sorted(_px_mod()._GLYPH_DESCRIPTORS)
+    return list(GLYPH_IDS_CACHE)
+
+
+def glyph_family(glyph_id: str) -> str:
+    return "marker" if glyph_id.startswith("marker_") else "facility"
+
+
+# -- canonical raw paths (what the ingest walks + the ledger gates) ------
+
+def icon_raw_dir() -> str:
+    return _px_mod().ICON_OUT_DIR
+
+
+def glyph_raw_dir() -> str:
+    return _px_mod().GLYPH_OUT_DIR
+
+
+def icon_manifest() -> dict:
+    """The canonical pixellab_icons manifest (id-keyed generation
+    records — the exact wording + seed that produced the shipped raw)."""
+    path = _px_mod().ICON_MANIFEST
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def glyph_manifest() -> dict:
+    """The canonical pixellab_glyphs manifest (id-keyed)."""
+    path = _px_mod().GLYPH_MANIFEST
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def icon_raw_path(icon_id: str) -> str:
+    return os.path.join(icon_raw_dir(), icon_id, "snapped", "icon.png")
+
+
+def glyph_raw_path(glyph_id: str) -> str:
+    return os.path.join(glyph_raw_dir(), glyph_id, "snapped", "icon.png")
+
+
+# -- staging (the coast/fx pattern) ---------------------------------------
+
+def icon_stage_root() -> str:
+    return os.path.join(STUDIO, "icons")
+
+
+def icon_stage_manifest_path() -> str:
+    return os.path.join(icon_stage_root(), "pixellab_icons.json")
+
+
+def icon_stage_path(icon_id: str) -> str:
+    return os.path.join(icon_stage_root(), icon_id, "snapped", "icon.png")
+
+
+def icon_stage_manifest() -> dict:
+    """The staging manifest written by pixellab_pass.run_icon
+    (manifest_path = the studio icons root): id-keyed generation
+    records, the accept copy's source."""
+    path = icon_stage_manifest_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def glyph_stage_root() -> str:
+    return os.path.join(STUDIO, "glyphs")
+
+
+def glyph_stage_manifest_path() -> str:
+    return os.path.join(glyph_stage_root(), "pixellab_glyphs.json")
+
+
+def glyph_stage_path(glyph_id: str) -> str:
+    return os.path.join(glyph_stage_root(), glyph_id, "snapped", "icon.png")
+
+
+def glyph_stage_manifest() -> dict:
+    """The staging manifest written by pixellab_pass.run_glyph (the
+    icon staging)."""
+    path = glyph_stage_manifest_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+# -- prompts (the pinned descriptors are the free-text edit base) ---------
+
+def icon_default_prompt(icon_id: str) -> str:
+    return str(_px_mod()._icon_desc(icon_id))
+
+
+def glyph_default_prompt(glyph_id: str) -> str:
+    return str(_px_mod()._glyph_desc(glyph_id))
+
+
+# -- generation (in-process; ~$0.008/roll, 20-60 s) -----------------------
+
+def icon_generate(icon_id: str, description: str, seed: int,
+                  on_stage=None) -> dict:
+    """One icon job: generate + snap passthrough, BOTH into the staging
+    store (a discarded/failed re-roll never pollutes the canonical raw
+    store — the fx contract)."""
+    t0 = time.time()
+    stage = on_stage or (lambda _s: None)
+    mod = _px_mod()
+    stage("posting")
+    rec = mod.run_icon(icon_id, description=description, seed=seed,
+                       poll_status=lambda s: stage(f"render:{s}"),
+                       out_root=icon_stage_root(),
+                       manifest_path=icon_stage_manifest_path())
+    stage("snapping")
+    mod.snap_icon(icon_id, out_root=icon_stage_root())
+    ok = os.path.isfile(icon_stage_path(icon_id))
+    return {
+        "status": "done" if ok else "partial",
+        "job_id": rec.get("job_id"),
+        "seed": seed,
+        "size": rec.get("size"),
+        "description": description,
+        "seconds": round(time.time() - t0, 1),
+    }
+
+
+def glyph_generate(glyph_id: str, description: str, seed: int,
+                   on_stage=None) -> dict:
+    """One glyph job — the icon envelope against the family suffix."""
+    t0 = time.time()
+    stage = on_stage or (lambda _s: None)
+    mod = _px_mod()
+    stage("posting")
+    rec = mod.run_glyph(glyph_id, description=description, seed=seed,
+                        poll_status=lambda s: stage(f"render:{s}"),
+                        out_root=glyph_stage_root(),
+                        manifest_path=glyph_stage_manifest_path())
+    stage("snapping")
+    mod.snap_glyph(glyph_id, out_root=glyph_stage_root())
+    ok = os.path.isfile(glyph_stage_path(glyph_id))
+    return {
+        "status": "done" if ok else "partial",
+        "job_id": rec.get("job_id"),
+        "seed": seed,
+        "size": rec.get("size"),
+        "description": description,
+        "seconds": round(time.time() - t0, 1),
+    }
+
+
+# -- accept staging (canonical swap + the ingest gate reads it) -----------
+
+def _copy_stage_into(canonical_root: str, stage_dir_of, stage_manifest,
+                     canonical_manifest_path, job_id: str) -> None:
+    """Shared accept copy: the staged id dir (raw + snapped) + its
+    manifest record move into the canonical raw store (the ingest's
+    input). The manifest record merges FIRST, then the dir swaps in
+    (the fx accept order)."""
+    import shutil  # noqa: PLC0415
+    src = stage_dir_of(job_id)
+    if not os.path.isdir(src):
+        raise RuntimeError(f"no staged re-roll for {job_id}")
+    rec = stage_manifest().get(job_id)
+    if not rec:
+        raise RuntimeError(f"staged manifest record missing for {job_id}")
+    os.makedirs(canonical_root, exist_ok=True)
+    try:
+        with open(canonical_manifest_path, encoding="utf-8") as fh:
+            canonical = json.load(fh)
+    except (OSError, ValueError):
+        canonical = {}
+    canonical[job_id] = rec
+    atomic_write(canonical_manifest_path,
+                 json.dumps(canonical, indent=1, ensure_ascii=False)
+                 .encode("utf-8"))
+    dst = os.path.join(canonical_root, job_id)
+    tmp = dst + ".stage-tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.copytree(src, tmp)
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    os.replace(tmp, dst)
+
+
+def _accept_stage(canonical_root: str, stage_root: str, stage_manifest,
+                  stage_manifest_path: str, job_id: str) -> None:
+    """Accept one staged re-roll into the canonical store, then drop the
+    staged dir + record (a stale stage would masquerade as a pending
+    re-roll)."""
+    _copy_stage_into(canonical_root,
+                     lambda jid: os.path.join(stage_root, jid),
+                     stage_manifest, stage_manifest_path, job_id)
+    staged = stage_manifest()
+    if job_id in staged:
+        del staged[job_id]
+        atomic_write(stage_manifest_path,
+                     json.dumps(staged, indent=1, ensure_ascii=False)
+                     .encode("utf-8"))
+    import shutil  # noqa: PLC0415
+    shutil.rmtree(os.path.join(stage_root, job_id), ignore_errors=True)
+
+
+def icon_accept_stage(icon_id: str) -> None:
+    _accept_stage(icon_raw_dir(), icon_stage_root(), icon_stage_manifest,
+                  icon_stage_manifest_path(), icon_id)
+
+
+def glyph_accept_stage(glyph_id: str) -> None:
+    _accept_stage(glyph_raw_dir(), glyph_stage_root(), glyph_stage_manifest,
+                  glyph_stage_manifest_path(), glyph_id)
+
+
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     """(family, subject, dir) for the live job shapes:
     - td_<label>         top-down north ship jobs (§4.8 2026-11-07)
     - fx_<ship>          wake VFX jobs, ship ∈ data/ship_types.json
                          (the per-ship wake revision, §4.8 2026-11-08)
+    - ic_<icon_id>       prompt-only icon jobs (§4.8 2026-11-08, one
+                         card per id — the studio modernization)
+    - gl_<glyph_id>      prompt-only marker/facility jobs (same)
     - icon_<id> / iconsheet_<group> / terrain_<key>
     The retired shapes (px_<label> oblique ships, hull_<ship>_<dir>,
     sheet_<ship>) are UNKNOWN since the 2026-11-07 removal — they raise
@@ -1385,6 +1643,10 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
         return "topdown", job_id[len("td_"):], None
     if job_id.startswith("fx_"):
         return "fx", job_id[len("fx_"):], None
+    if job_id.startswith("ic_"):
+        return "icons", job_id[len("ic_"):], None
+    if job_id.startswith("gl_"):
+        return "glyphs", job_id[len("gl_"):], None
     if job_id.startswith("iconsheet_"):
         return "iconsheet", job_id[len("iconsheet_"):], None
     if job_id.startswith("icons_"):
@@ -1404,6 +1666,10 @@ def default_prompt(job_id: str, repo: str) -> str:
         return fx_default_prompt()
     if job_id.startswith("td_"):
         return td_default_prompt(job_id[len("td_"):])
+    if job_id.startswith("ic_"):
+        return icon_default_prompt(job_id[len("ic_"):])
+    if job_id.startswith("gl_"):
+        return glyph_default_prompt(job_id[len("gl_"):])
     d = load_driver(repo)
     try:
         fam, subject, direction = parse_job(job_id)

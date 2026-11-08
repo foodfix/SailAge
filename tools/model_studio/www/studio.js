@@ -15,6 +15,8 @@ const CAPTIONS = {
         shipped: "shipped — in game now" },
   icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   iconsheet: { draft: "sheet draft (group)", raw: "generated sheet", snapped: "first icon crop 64" },
+  icons: { raw: "staged re-roll (pending accept)", snapped: "canonical raw 64 — the shipped pixels" },
+  glyphs: { raw: "staged re-roll (pending accept)", snapped: "canonical raw 64 — the shipped pixels" },
 };
 
 // the top-down strip: the compass order with the pinned rotation
@@ -136,7 +138,10 @@ function buildCard(job) {
   } else {
     thumbs = document.createElement("div");
     thumbs.className = "thumbs";
-    const kinds = isFxCard ? FX_KINDS : ["draft", "raw", "snapped"];
+    const kinds = isFxCard ? FX_KINDS
+      : job.family === "icons" || job.family === "glyphs"
+        ? ["raw", "snapped"]   // prompt-only: no draft input image
+        : ["draft", "raw", "snapped"];
     const caps = CAPTIONS[job.family] || {};
     const last = kinds[kinds.length - 1];
     for (const kind of kinds) {
@@ -285,6 +290,8 @@ function visible(job) {
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
   if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
+  if (filter === "icons") return job.family === "icons";
+  if (filter === "glyphs") return job.family === "glyphs";
   if (filter === "coast") return job.family === "coast";
   if (filter === "ships") return isTd(job);
   return job.family === filter;
@@ -365,7 +372,10 @@ function updateCard(job) {
     }
   } else {
     const isFxCard = isFx(job);
-    const kinds = isFxCard ? FX_KINDS : ["draft", "raw", "snapped"];
+    const kinds = isFxCard ? FX_KINDS
+      : job.family === "icons" || job.family === "glyphs"
+        ? ["raw", "snapped"]   // prompt-only: no draft input image
+        : ["draft", "raw", "snapped"];
     const caps = CAPTIONS[job.family] || {};
     for (const kind of kinds) {
       const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
@@ -411,13 +421,14 @@ async function refreshJobs() {
     // top-down ships lead the list, then the wake cards, then icon
     // group sheets, then the rest
     const rank = (f) => (f === "topdown" ? 0 : f === "fx" ? 1
-                         : f === "iconsheet" ? 2 : 3);
+                         : f === "icons" ? 2 : f === "glyphs" ? 3
+                         : f === "coast" ? 4 : f === "iconsheet" ? 5 : 6);
     data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
       `coast ${data.counts.coast || 0} · top-down ${data.counts.topdown || 0}`
-      + ` · wake ${data.counts.fx || 0} · icons ${data.counts.icon}`
-      + ` + ${data.counts.iconsheet || 0} sheets — flagged`
+      + ` · wake ${data.counts.fx || 0} · icons ${data.counts.icons || 0}`
+      + ` · glyphs ${data.counts.glyphs || 0} — flagged`
       + ` ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
