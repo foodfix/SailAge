@@ -998,7 +998,7 @@ def fx_composite_png(ship: str, pack: dict) -> bytes:
     (anchor_sprite + offset)). Review aid only; never shipped."""
     from io import BytesIO  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
-    tok_path = os.path.join(REPO, "assets", "ui", "tokens",
+    tok_path = os.path.join(REPO, "assets", "ui", "hulls",
                             f"hull_{ship}.png")
     with open(tok_path, "rb") as fh:
         tok = Image.open(BytesIO(fh.read())).convert("RGBA")

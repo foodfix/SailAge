@@ -1479,7 +1479,8 @@ class Handler(BaseHTTPRequestHandler):
                      path)
         mc = re.match(r"^/thumb/(draft|raw|snapped)/coast\.png$", path)
         mch = re.match(r"^/thumb/(draft|raw|snapped)/chrome_"
-                       r"(frame|button)\.png$", path)
+                       r"(" + "|".join(chain.CHROME_FAMILIES) + r")\.png$",
+                       path)
         if mc:
             data = self.studio.coast_thumb(mc.group(1))
             if data is None:
