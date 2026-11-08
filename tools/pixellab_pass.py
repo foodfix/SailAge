@@ -1329,6 +1329,10 @@ if __name__ == "__main__":
         elif cmd == "snap":
             for icon_id in (args[1:] or _icons()):
                 if icon_id in _ICON_DESCRIPTORS or icon_id in _ICON_VARIANTS:
+                    raw = os.path.join(ICON_OUT_DIR, icon_id, "icon.png")
+                    if not os.path.isfile(raw):
+                        print(f"  {icon_id}: no raw yet — skipped")
+                        continue
                     snap_icon(icon_id)
             print("[pixellab-icons] derived-only arrow dirs and "
                   "descriptor-less ids are never generated/ingested")

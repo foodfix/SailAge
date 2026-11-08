@@ -6,12 +6,12 @@
     "candidates": 16,
     "fallback_files": 0,
     "icons": {
-      "accepted": 113,
+      "accepted": 115,
       "candidates": 129,
-      "files": 113,
-      "hero_64": 113,
+      "files": 115,
+      "hero_64": 115,
       "rejected": 0,
-      "skipped": 16
+      "skipped": 14
     },
     "pennant_auto_painted": 0,
     "pruned_retired_grid": 0,
@@ -28,795 +28,809 @@
   "generated_by": "tools/build_ui_art.py --import-ships-north",
   "icons": {
     "anchor": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_anchor",
-      "seed": 2087,
-      "snapped_sha": "90a095e155e4581d680fff73a43de3011dfe5f4ec7654f9702af6a4321f6db72",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "437c27a1292d542b168aa13ea769665e8d3d4082f435dfadf5e5d2c72cd1f92b",
+      "source": "pixellab_icons"
     },
     "bell": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_bell",
-      "seed": 2100,
-      "snapped_sha": "170899ffb0b7e450ee59f18464be84e3ff56bb3e4f7bbc75da386a03da2e60c2",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "c5d18698e1f2b02e4f12c878ec4b6512fdf2643f78905f7daafa27356198ce31",
+      "source": "pixellab_icons"
     },
     "calm": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_calm",
-      "seed": 2106,
-      "snapped_sha": "cf6edbaea15599082bab649e12a83913225514b79c8aa484caed7c81a4d05452",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "df80645f0391a0d337813d110707a7a886b121d34f970ff464f374fd124e01d2",
+      "source": "pixellab_icons"
     },
     "cannon": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_cannon",
-      "seed": 2101,
-      "snapped_sha": "d046ae19f51de7cf6e41d3cd51076adc91705b4e579cba32ab8ceb33bd7cb19a",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "0c632bafb47a855dae7726ff9d1789dd9c73fa2c1f1aebfef14ac0a029afd673",
+      "source": "pixellab_icons"
     },
     "chest": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_chest",
-      "seed": 2097,
-      "snapped_sha": "f97b355aa4255b5f0c6ed1c41f72b476562a014664cdc563e350734cb2b45006",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "be29ad123100bb22b7982d45085e2c569b4b031a53e8cdf52e2647964d5b825b",
+      "source": "pixellab_icons"
     },
     "coin": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_coin",
-      "seed": 2092,
-      "snapped_sha": "66070b1da7bfc5276c136a880eb7b602459bb46970a44891bad546816985f217",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "108829e59f2ea4b4d590d32f6dacf7fbfcb7c7cd9eb0d35a32f8dba93fe1889f",
+      "source": "pixellab_icons"
     },
     "compass": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_compass",
-      "seed": 2105,
-      "snapped_sha": "879342e0bb44594d0cab1fc29b6f1a5c48efe427c81d762dab2e4bca41176491",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "aae5314932d2e24176d961e06bde871ffb7dcc8aec3b6cf6e8b884d69d2f3caf",
+      "source": "pixellab_icons"
     },
     "crew": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_crew",
-      "seed": 2093,
-      "snapped_sha": "1cc68c198161a0420744230805b108fa7777e7d78f5c6d2b11592381820ccbbd",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "825b4893b32b0f3e7170ff59c1ff6af020848f1aa7e516f0fd3c9c70736c6569",
+      "source": "pixellab_icons"
     },
     "crown": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_crown",
-      "seed": 2088,
-      "snapped_sha": "9a480bd11ec44535397cbbf6d3558344b36ec3a7a2ac605ac9728c99d6d5e92d",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ae1e7b56979fa59781b8df2960c29430867f2633aed924b87df42747dd7b857c",
+      "source": "pixellab_icons"
+    },
+    "current_arrow_n": {
+      "accepted_at": "2026-11-08",
+      "job": "icon_current_arrow_n",
+      "seed": 92000,
+      "snapped_sha": "01e91c0b81181b73b65c7f3ccd5d858b4e14bc0593641bce5dd4bc6a8c0a143e",
+      "source": "pixellab_icons"
+    },
+    "current_arrow_ne": {
+      "accepted_at": "2026-11-08",
+      "job": "icon_current_arrow_ne",
+      "seed": 92000,
+      "snapped_sha": "e3db3c6de0629167ebcd2c53fe14c4a073080e1d47cd89b4473a3530cb8b63bb",
+      "source": "pixellab_icons"
     },
     "durability": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_durability",
-      "seed": 2096,
-      "snapped_sha": "009f4f2d3e63a77990403735476c4989056bafd292c2a7c6c82929733013a727",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ce7b81d67c0600f149ed029f781bdec091a21122b88dbbdb3d7b1709183f33e0",
+      "source": "pixellab_icons"
     },
     "eq_albatross_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_albatross_figurehead",
-      "seed": null,
-      "snapped_sha": "4bd19bb7e865237116cba48c057940147c03c5a70b4cb47d1b72ae5ce7850bb5",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "06155ae3322151d759b6d066521a8ae753481709fd0f7ee3d1e982fc371f87c0",
+      "source": "pixellab_icons"
     },
     "eq_angel_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_angel_figurehead",
-      "seed": null,
-      "snapped_sha": "c626bbc2509a06cf5f1ea03f987ba88726c7aadda664190a9086ec03f73dc3ff",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "a6285a0e48a3fd9c6472f62b1688fef343a3a353b21cd070e1da4fb2dd680779",
+      "source": "pixellab_icons"
     },
     "eq_backsword": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_backsword",
-      "seed": null,
-      "snapped_sha": "f827c5c632c82bc1857d662407654b13d6fb83111d7554e05244e5c5d3a4d2c5",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "36c0f007103ff0e3858cbec2df6a11aba682a80308a5668554f6a1c6e7f92e0d",
+      "source": "pixellab_icons"
     },
     "eq_bloodhand_cuirass": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_bloodhand_cuirass",
-      "seed": null,
-      "snapped_sha": "2ba77415a96efc4f83c342063f456dd9f320786ff8ba2314ec5fca1e14b8ca4b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "145146cd85c646d3364bd3f0ec8e6016b0183c2425b319c11e04e967a55e1ee8",
+      "source": "pixellab_icons"
     },
     "eq_breastplate": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_breastplate",
-      "seed": null,
-      "snapped_sha": "fc1ff82807997ac939d410e7904dfd761cbfb3e6af96f1c8d91072cfb661e456",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7c3181dcf04f6526422ff417528d0513bdf4b5f2fe004202493a629099b90cef",
+      "source": "pixellab_icons"
     },
     "eq_brigandine": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_brigandine",
-      "seed": null,
-      "snapped_sha": "a9c024413480ff8e1de51d247ab3f16ec4352808fa55cc90199f19c9204eff90",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "4080a6347dac845335a7f834fc067a79e741a13f1e06660f35bc7064dc674ce7",
+      "source": "pixellab_icons"
     },
     "eq_brocade_sails": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_brocade_sails",
-      "seed": null,
-      "snapped_sha": "8a12546c08face9f6eda74d9fa86d23ddd72addecbe6cf5b02e4965ff2bd7afd",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "4c27c424c15f7b2d29db97719cb3a0025998f7585653f6c91799b686cd6329bc",
+      "source": "pixellab_icons"
     },
     "eq_cotton_sails": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_cotton_sails",
-      "seed": null,
-      "snapped_sha": "1c88eca1d0e0d4a83ec394cf81694615682f7e5679f4d393c0c7e1a9f2f0efbe",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "a62a8e23e060b1cc9727887d6e47d7e751843a901e055aa0f847d1052a97f1c4",
+      "source": "pixellab_icons"
     },
     "eq_cutlass": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_cutlass",
-      "seed": null,
-      "snapped_sha": "3914368c688116d8749822af8e4937fa2746f8f69b4f27ccf34bd3e354d3ef60",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "4a267e92cb30f1655f75cf23073dc154e43bb1588982aca628f87b826c50b54d",
+      "source": "pixellab_icons"
     },
     "eq_dragon_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_dragon_figurehead",
-      "seed": null,
-      "snapped_sha": "6cba31ccfd223781bc2473a31d11cfe6c34eff0f047e837417ea3ea8e026dfc7",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7f88649a09fd835bdff3795f461372724e51d20d7ced204e6694e582b7d0a879",
+      "source": "pixellab_icons"
     },
     "eq_eagle_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_eagle_figurehead",
-      "seed": null,
-      "snapped_sha": "f95f790191d1e4d2b37c977793db2cba62f1b97fd4c1db043805704e7ff54087",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "3963fdd542bced6b1d220207ec8351e10dbd43687153d77f7a46671566c30ba2",
+      "source": "pixellab_icons"
     },
     "eq_flemish_linen_sails": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_flemish_linen_sails",
-      "seed": null,
-      "snapped_sha": "e49d32dd489a9faccbfaf0c214cfa62365770f78c952986d241e5df31231cad4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "cef2af2b714e1eb6e4ddcb08492aa936cedc33ff2a3552b0d467a461872dd260",
+      "source": "pixellab_icons"
     },
     "eq_golden_dragon_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_golden_dragon_figurehead",
-      "seed": null,
-      "snapped_sha": "7692d4011439a6b8dde60f9f65cf1b33c4e7e0e8ab311fe3d9243fc29e97b16a",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "498175827df262c2030fd5bd1a1b64ff750f7f74f42ce6a67f87b75f512c8f8a",
+      "source": "pixellab_icons"
     },
     "eq_khair_scimitar": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_khair_scimitar",
-      "seed": null,
-      "snapped_sha": "48fb47a7940af940b0c8cbac5dff43a8079de7b8490458c24465563e9607b837",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "479d2be1129d9584a011a4b04b7336ea5a6dcd143aca01edc3a8215873751d79",
+      "source": "pixellab_icons"
     },
     "eq_lucky_charm": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_lucky_charm",
-      "seed": null,
-      "snapped_sha": "ab8ff52f86856b5ad196f38e384c9d6d21807f66c6bcf9086780a87a67335e27",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "5377c48b2cab733167fd9279f655ddb042c4cd1c712a6494ec72ad8ba275cedf",
+      "source": "pixellab_icons"
     },
     "eq_main_gauche": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_main_gauche",
-      "seed": null,
-      "snapped_sha": "816283b89ecda2424181f4da11e992b40e5d85ea96bfaf08156dfa2df3e5aaa9",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1a96550b81224d063d10a22a0df97a419ecda7a63535a11610c61d34bbbad8f1",
+      "source": "pixellab_icons"
     },
     "eq_matting_sails": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_matting_sails",
-      "seed": null,
-      "snapped_sha": "1a6bd6a4775692fcd97c696426e160752eabf011359102c2e23dbe2f6fb7210b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "59d29dce33160514d9362e28b33381901112b89a515b0bf7fb7148ee253f0b7a",
+      "source": "pixellab_icons"
     },
     "eq_mermaid_figurehead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_mermaid_figurehead",
-      "seed": null,
-      "snapped_sha": "bcb5f8d22ccd8c42667d040a4b197b74bc6c52f0cb67a1ae6eea453a33e3823f",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "04fd8b5d062cc6d26f505d4f3b8981b0ff23b675672fb251e2ac6d586b915b73",
+      "source": "pixellab_icons"
     },
     "eq_rapier": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_rapier",
-      "seed": null,
-      "snapped_sha": "f7713c228de0bb5b5aad88eb4a6d89378984a264414d84aa6ecdbe5332a9ee74",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "e878ad70bcd5f3171a12faca468fe1a34122ebb81dcfb5dbb46c1dcd61e0d261",
+      "source": "pixellab_icons"
     },
     "eq_red_sail": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_red_sail",
-      "seed": null,
-      "snapped_sha": "808c4fe875276c735e13b4b1a2c4671495d95900582f98b86572701a0d64dc51",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "8f8b9b08f626f13e4325f913170cc48cefa6a0873ed174488ad38b5e5b7a2113",
+      "source": "pixellab_icons"
     },
     "eq_saint_medallion": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_saint_medallion",
-      "seed": null,
-      "snapped_sha": "9b614bc0108bd203558f20fd6214d704124e9461b6b4024ce10c080975d58b90",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "34b046aaf47ff877955646f8eac35740cbac9a4b58f82d97907cec23b9da2a25",
+      "source": "pixellab_icons"
     },
     "eq_storm_sails": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_storm_sails",
-      "seed": null,
-      "snapped_sha": "9d7da88d28b49924e4be05a765b698de601bd33c08a61d15ef2b04227b94cfea",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "574857c06ea92a5cb0a256fe289bf6eb2ca09708fac4509b8910cc20de5f86f2",
+      "source": "pixellab_icons"
     },
     "eq_three_quarter_armor": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_three_quarter_armor",
-      "seed": null,
-      "snapped_sha": "d1c10c2c9f9bc1d78f937ff5035c317d0794f5e62d0d95f499b1e93f4e279f28",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7af51ca57104511112e05e1d30b92c0c409865c3d194ad20006c76773aba2ca4",
+      "source": "pixellab_icons"
     },
     "eq_zweihander": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_eq_zweihander",
-      "seed": null,
-      "snapped_sha": "b23837a46378dd66f5ffa3ed993b9a625ff425dd84bf9baa4fdefa2d03cf1b3e",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "9887a1ab9f4a7b4ac71b5ecfd8e33765d8ddba9dbce1f0b24fabc18d111bd983",
+      "source": "pixellab_icons"
     },
     "event_demand": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_event_demand",
-      "seed": null,
-      "snapped_sha": "e91780ea2d495449097fa90ab15f07dedaffcc7550d1683ad7a06e40f3445a0e",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ed6b2ea4c726b5204ebc86d544fd88756e535e5dbd8f5a144923cfeef2296a06",
+      "source": "pixellab_icons"
     },
     "fair": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_fair",
       "seed": 2107,
       "snapped_sha": "3a037b15c1330e11c1b31ae0db7120efc611e68bf5a1b263444304e1c418d239",
       "source": "snapped"
     },
     "flag_england": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_england",
       "seed": null,
       "snapped_sha": "26012b16a12c8a858c1a873b9eb6057cfcc1c6fa5c49fe8da0b0b9829c13d871",
       "source": "snapped"
     },
     "flag_holland": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_holland",
-      "seed": null,
-      "snapped_sha": "300083f91a888f0599109f04440b16b1ee9d430e31bc2443b4db7cfd14be51d8",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "3b401fb489066d7829a9a45a9e361307f454a8000616484c07dca79f85f75193",
+      "source": "pixellab_icons"
     },
     "flag_italy": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_italy",
-      "seed": null,
-      "snapped_sha": "7bb107d44334222b6b4aec46ea10b68d8cedc7437d7b8945c55c26640669c23c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "bcdb91fb7cc907a4ed788568167157771ea0ed33c20bfa5f8f8b11d78f1cb1dc",
+      "source": "pixellab_icons"
     },
     "flag_neutral": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_neutral",
-      "seed": null,
-      "snapped_sha": "ceb12c183c226df7c8faaaeeabe0d339ef9c8f019a9c7c989967fb9bebcc90ca",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "e9424fd817d8d3c1e5651f6d33d556579804d1a83bbd00e78491651318a9e3d9",
+      "source": "pixellab_icons"
     },
     "flag_ottoman": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_ottoman",
-      "seed": null,
-      "snapped_sha": "4028c54a5ce2df2a29c0e75e7caca8ac1bcd520802503878c2e4e376958586a4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7a3ef9d3371a5ab1b3e2a8aadbbec557002449dd4f839c924af9ce423b723f5f",
+      "source": "pixellab_icons"
     },
     "flag_portugal": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_portugal",
-      "seed": null,
-      "snapped_sha": "522fc43b11bfc97b4f0751d3bec2b18579cd2eb841e8a597f1a22c7472ec3321",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "416d9b9cbdf96328716c91786af791da35166920d070f2ca27b43e46347186d0",
+      "source": "pixellab_icons"
     },
     "flag_spain": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_flag_spain",
-      "seed": null,
-      "snapped_sha": "116add2997d2da72c14cca58213da76d6378457f613e85bb88e2a639d1fa0612",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "40b26b0cacb0561ffdcefb19b13e7b9b90e18b4a2809f065878e31d97eb29252",
+      "source": "pixellab_icons"
     },
     "formation_column": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_formation_column",
-      "seed": null,
-      "snapped_sha": "11d7f2aba1a57e56dca5b1fd353f8c5cde98bfb79a5dc445bd45b91842f3c4fb",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "652036e68c1155be91ba5b763e543cb5da572c802c361e31a853d874ffdc966d",
+      "source": "pixellab_icons"
     },
     "formation_line_ahead": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_formation_line_ahead",
-      "seed": null,
-      "snapped_sha": "82213ae96565b28b29a7ca336cae559d2b9e3c61c7d35e0b02e9b87004e921a9",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "66a89cb918b81d89a636fd4b055967dfd3c171791a62e0ff910fb996fc0fb66c",
+      "source": "pixellab_icons"
     },
     "formation_screen": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_formation_screen",
-      "seed": null,
-      "snapped_sha": "b6df45b2490c32cc1cc6ec068b9546b1b38ef6207da922a9998ff24a2d152f2b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "bb7ebb75166251482b0b2055be5db40587bf02cf716361b5624739efac102bd9",
+      "source": "pixellab_icons"
     },
     "formation_swarm": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_formation_swarm",
-      "seed": null,
-      "snapped_sha": "f9f744cc63e1521afc3392975a8c2e2b4f60cd99ca5ec3117cf3eb3911589aea",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "14f2876e1bb15741c94982e08dc34c4f181a650a784e7d6bfd83c0fe028abc2e",
+      "source": "pixellab_icons"
     },
     "good_amber": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_amber",
-      "seed": null,
-      "snapped_sha": "a73aa010cf574cd8b90f1946191a1d83cbd9f0b98c34c86fa35c72c403c52634",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1eb0d09b1c968108af820160de282e6b24abe9acf762eed5d3f9f3951b867267",
+      "source": "pixellab_icons"
     },
     "good_carpet": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_carpet",
-      "seed": null,
-      "snapped_sha": "adb2fcf2250494a1cfceeec76fb69cdedb1ccd19b12eeb5530885912f7f287cf",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ae9579b93caeef9307d79075dfae8af95433a09a271bd1b9e605dc61b11702ee",
+      "source": "pixellab_icons"
     },
     "good_ceramics": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_ceramics",
-      "seed": null,
-      "snapped_sha": "f3744d33f3bb92f887b67e9f5593723efee73b7b307c776ba9dae529893d33c3",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "a2c67045ffa25b5331488b38256f4f038738a1ed42a915685a00ac29856976e7",
+      "source": "pixellab_icons"
     },
     "good_cheese": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_cheese",
-      "seed": null,
-      "snapped_sha": "134b0067663f76f3691acaa4c2d338c9ccd3e77040b7699397d4495115e06d8c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "6325076ab377c27dfebe6c5321ac657560257f74f0cd4b23947c268363ed7cfd",
+      "source": "pixellab_icons"
     },
     "good_coffee": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_coffee",
-      "seed": null,
-      "snapped_sha": "44b25a99c8d3da6f53fa057011d1831e96fa53b675c6b5a40ee28b0b5edfb1ad",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1535c77d29e2787cb8c0ba83e75b3eede16a6f6d31ddbbab4ac9564c08817ce4",
+      "source": "pixellab_icons"
     },
     "good_copper": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_copper",
-      "seed": null,
-      "snapped_sha": "829356247076317a456689d9619db838ecf177af09024eadd7eb73baca83a035",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "288b74f415567aec7d888c0aad57012967f64607cb75a7ad3f8f9d55301025ee",
+      "source": "pixellab_icons"
     },
     "good_cotton_cloth": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_cotton_cloth",
-      "seed": null,
-      "snapped_sha": "f56da8e950be5d6b85f9f5a75ee7eafff4b6d0cb682d99303db344ad7f63d6e0",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "74d57e855caadceaa8d1c769be9867439e15359605f1a38724bf36cf6f763040",
+      "source": "pixellab_icons"
     },
     "good_dried_fish": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_dried_fish",
-      "seed": 2115,
-      "snapped_sha": "c07ae4bc352ef860402a9325e0f158df8b2ffe273bbab4fadae2951037b93443",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "59d176d4393e5b4a99bf450ecca34a688b689c925e5a517a164d0592794e7db0",
+      "source": "pixellab_icons"
     },
     "good_dye_wood": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_dye_wood",
-      "seed": null,
-      "snapped_sha": "bdf61a09ffe681af424baa95dd46d70051047400329de63af6e1a4c2d8d93001",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "2d7d259aa5f5a6ee3ffa066e4360f02300ed002930e21a4842465f7bbd4b52a7",
+      "source": "pixellab_icons"
     },
     "good_furs": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_furs",
-      "seed": null,
-      "snapped_sha": "992d160ce085e866e50fe9979abafdd002320ebba95cf80fe776787800a82030",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "f4191d6e31f357cbc53daa38e0ce689fb5f95c9ef07904833b8cab8fdfc93704",
+      "source": "pixellab_icons"
     },
     "good_gems": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_gems",
-      "seed": null,
-      "snapped_sha": "f9c0511d5780c7961ab1c6948f6df9813f083ed26150988266815eca7ca6f23b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "c4f4b2077b275799b416ca15b98c10bef79627379c0c5d644acad44c8b0ed15b",
+      "source": "pixellab_icons"
     },
     "good_glassware": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_glassware",
-      "seed": null,
-      "snapped_sha": "e2a5a5b976895bd899b382b352d1294ac40e341cd411e4af1a7f1c3f81302972",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1d29d50c3e75f1cc5827057edf4df091322ae71af9f0db15aaebe7442ec3d684",
+      "source": "pixellab_icons"
     },
     "good_gold": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_gold",
-      "seed": null,
-      "snapped_sha": "f5648f6e124cb7bdcce63d4362cacfcb4f4a97eb4583591b84c5222da2f18e21",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1e9d257c54c8bc94306aa75007eef2976b001a7ca5fb5ee4e14ed745754531e1",
+      "source": "pixellab_icons"
     },
     "good_indigo": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_indigo",
-      "seed": null,
-      "snapped_sha": "7c320612c426a1b008ac57d115cd65d748fdb5cc1ea688bff906476f233d71f4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ee059a584eec82554bd2a9eace77da93d2f7674aac68e07dc4f2d774bb821ea2",
+      "source": "pixellab_icons"
     },
     "good_iron": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_iron",
-      "seed": 2117,
-      "snapped_sha": "a495f09b854c81a755684206c12020f0eb1df7dbcd7681a0d65306998e6250e4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "21ce3b4591c074f814f0cb1674a4210af000c621f373bc2fe720b419bd3a4ea1",
+      "source": "pixellab_icons"
     },
     "good_ivory": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_ivory",
-      "seed": null,
-      "snapped_sha": "341fec09453660feae6eb2ae29c0847a3eb157848e33dcecf53d195cae7cc6c4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "a549f24ccacc2194ebeec3878d60ee1ac2969dde3c831ef4e69bdfc2c844b029",
+      "source": "pixellab_icons"
     },
     "good_lacquerware": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_lacquerware",
-      "seed": null,
-      "snapped_sha": "43c436cac32a0074c7da6023f33cd1663cad0f23d0d84dac5e9cfa09a12dd25b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "4e53e68b133928c79ac0551f53c705b8a62af42cea7936f35bbdaaf22d0a30d4",
+      "source": "pixellab_icons"
     },
     "good_leather": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_leather",
-      "seed": null,
-      "snapped_sha": "aa07475219e9cba050de76e1a8759d5fdbab03e133e0681499d5dd4860c346df",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7334bc50fe4212ca338af1442e1aaf93373f05ad47224d72090fb1d0ebbd6b2f",
+      "source": "pixellab_icons"
     },
     "good_linen": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_linen",
-      "seed": null,
-      "snapped_sha": "530741acec3c1c32af6ecef55910850675bdb5a2648545288f09c1ee4d2b0dca",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "9919542ff96dc3a333963df38ffda3e3c358b8a3a80734076e0e7e94cc96e0e6",
+      "source": "pixellab_icons"
     },
     "good_musk": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_musk",
-      "seed": null,
-      "snapped_sha": "48aebc6ed74ebd76b9f27427e40c8880476d00778a886204fed11a98d024f919",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "0e49efb139fd432aa045c21ef165fce8bd5d8df926f85c76e5769db1e00174fd",
+      "source": "pixellab_icons"
     },
     "good_olive_oil": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_olive_oil",
-      "seed": null,
-      "snapped_sha": "b328a5b75dd9f84f5467944e394d985b86219494cb754bc4a494653086d8e83b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "fd90e9d5e681a7e18cf251cec101d142363b38e9eb21ca9cd1ef85c7346b94a2",
+      "source": "pixellab_icons"
     },
     "good_pearls": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_pearls",
-      "seed": null,
-      "snapped_sha": "59c7f5d40c03400437a44a5d6489ce64c774a2045b3997f561cca7ea96dbd987",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "da9d1e7bf767c09321660958862c9e78cd4369a03df6ae82c00054f0af6a0957",
+      "source": "pixellab_icons"
     },
     "good_perfume": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_perfume",
-      "seed": null,
-      "snapped_sha": "cdae9f3ffd2525defb87331e19f50c307124ff4306451d5faf82a3fcbaadaf59",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "e6e8893971dfe27e24ef6e469737c0d33d25900af9916f1e20edecaf517efc85",
+      "source": "pixellab_icons"
     },
     "good_pitch": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_pitch",
-      "seed": null,
-      "snapped_sha": "595847bc6a2fbe81d26e43d2e1625c471f28d9c0e1c88e3a2506bf4e16fff886",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "23b9efd76f749029bc63ca6277a1e17030aa5ee0344c1d57e532f89f1170174a",
+      "source": "pixellab_icons"
     },
     "good_porcelain": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_porcelain",
-      "seed": null,
-      "snapped_sha": "2d690f0504885d839b7de13e35cf7a2d96af11512bc00dcf7c487ed201df5439",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "82d684d3f70183a71acaa6bd0fc03b98d6454986ba134d1bfb02fb93b3dfa552",
+      "source": "pixellab_icons"
     },
     "good_raw_silk": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_raw_silk",
       "seed": null,
       "snapped_sha": "c78dab64594465de650e29f2bf5ee1709b001fc25a8347bcbabcdf7242ecd3b2",
       "source": "snapped"
     },
     "good_rhubarb": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_rhubarb",
       "seed": null,
       "snapped_sha": "d3de9369efbb08747fc7aea7d711536dc4fe5c6712eb40c7fed759198ab77405",
       "source": "snapped"
     },
     "good_rice": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_rice",
       "seed": null,
       "snapped_sha": "1ae016506013175b868fcb2a1c7eb87d80cfd738ea467bcf5341a8a9b52e7dbe",
       "source": "snapped"
     },
     "good_salt": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_salt",
-      "seed": 2114,
-      "snapped_sha": "ad2da719ad95d3c0e682a83eee63f1c7ecd8fbc455d7d418146dc638a72fbcc4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ef0ac4bd0de1af9bb1633cd833083f773fcee87e69b0386f4576571e500aea8c",
+      "source": "pixellab_icons"
     },
     "good_sandalwood": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_sandalwood",
-      "seed": null,
-      "snapped_sha": "ef640ce127a7b22d70be4288f978b68747ed5c4393b35b6b6dabf3aa11da3efe",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1adb1332018022ec68b978238ebcbde0e9c9e3c743121500d3f4f81196d8f7a9",
+      "source": "pixellab_icons"
     },
     "good_silk": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_silk",
-      "seed": 2111,
-      "snapped_sha": "6d098fc030df4c6406f55fc7143d0a2f8e010486b7b094cb4616012d48f45eff",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "2e8bd9a14f74312364e0069890525b8f5904f9d138f1bf554f5c5ff85f331d4a",
+      "source": "pixellab_icons"
     },
     "good_silver": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_silver",
-      "seed": null,
-      "snapped_sha": "74d8fbf1963401727341f18048e3a64a8db9f705c8070db6e489b6c5f0985ca9",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "2991b174990397c6ae0eba7c0c7dadb228ab059d7131ad4a4e9e9ce7f31f8a04",
+      "source": "pixellab_icons"
     },
     "good_spices": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_spices",
-      "seed": 2112,
-      "snapped_sha": "21f9fec241d05f35c054cd5a3eedd974ae1eca5002f4d963b2038f54f51b63a4",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "733fc95ebbc54e4a1c47809cae84e8d0f0b361429d9af76333d0e0caa63518ba",
+      "source": "pixellab_icons"
     },
     "good_sugar": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_sugar",
-      "seed": null,
-      "snapped_sha": "445f12554476a072affc3b7db084c77ad8f10f3c7a359d2bf55e5863c78a4c12",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "619d9b789760c22f3141d8cb5156f6e64ceba81a063292b2c348e8c8751951e5",
+      "source": "pixellab_icons"
     },
     "good_tea": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_tea",
-      "seed": null,
-      "snapped_sha": "eba86982e668b5caa855aeeebb76fa35283c9035a3ca832158fe21eef86fdb70",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "f8161bacbc2913affba2f721c6414cb8c1266dcf63cf3531dc56385c5e6b0cd9",
+      "source": "pixellab_icons"
     },
     "good_timber": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_timber",
-      "seed": 2116,
-      "snapped_sha": "e999db8c84f19bdd319e6f39032505f0010bd1887e5296743c156f558eea8146",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "45bdef6bb837d76b70e244109910015dc8cf4c0f5ec44b72bd1a8352a20b5de6",
+      "source": "pixellab_icons"
     },
     "good_tobacco": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_tobacco",
-      "seed": null,
-      "snapped_sha": "fca76b94ea4706073c66dafd66451fe13ee6dcc78833a8e5b8d1d6e9b187c1e3",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "3e5de04e527032323d6f62681372a78061a677575979eb2ee4559f7e85ae0ecf",
+      "source": "pixellab_icons"
     },
     "good_wheat": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_wheat",
-      "seed": 2110,
-      "snapped_sha": "1340774e62cb5e2a358a2ed01c47af696495816ef18b5dc13f15f7fb29d6a7a2",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "034572486383a7bbe6fa0c1ce0f894cfd83139aadf875457f6fe755823e07c96",
+      "source": "pixellab_icons"
     },
     "good_wine": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_wine",
-      "seed": 2113,
-      "snapped_sha": "5b4fd83852e7b4dbe5eef15846d50e8d6e1579ba28115c42fc46ae674b007962",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "445bd4e6a53a12b6bebaaef64511b96a22019bc36338d260436b701a6fabe50d",
+      "source": "pixellab_icons"
     },
     "good_wool": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_good_wool",
-      "seed": null,
-      "snapped_sha": "0cf9d0ebfb15b9bceb3239fd7781843950b439fd60c1792e460b42b36157f67c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "addd350b0b310faf243cc43cb9f877e1e225367ce7dbd24bc8043ebc6e094ae3",
+      "source": "pixellab_icons"
     },
     "hammer": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_hammer",
-      "seed": 2099,
-      "snapped_sha": "acf7f538aef282c6c2852a7915c83850264d52a5424db2bd53c0a2cc561016c2",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "0647b6dd62a1b0c9f024b9f35fe11c3a933ef5e0ecadd1989dbac819dc7a0b01",
+      "source": "pixellab_icons"
     },
     "hook": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_hook",
-      "seed": 2102,
-      "snapped_sha": "65c9218fbfe44d4973080774dcb489e9e435bd10c5272f51ebc3267d1c2b250f",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "24f06b35b928d3dd444959eab8d0d05b52c32d426df79c76001353410fb9c6c4",
+      "source": "pixellab_icons"
     },
     "hourglass": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_hourglass",
-      "seed": 2090,
-      "snapped_sha": "46cb05de5724ec6329754e8acbcc75bbb712f8bb7da0389d8101c736c5be8ad2",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "6f9ace961e97a080c9dd914649d72a4d80fad8cc8fa352cc5dd08d4dc48c4222",
+      "source": "pixellab_icons"
     },
     "morale": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_morale",
-      "seed": 2095,
-      "snapped_sha": "f9fc5ddf2eef1e43da001da21ff45ee15a3827b90e047f921ecb08f4eeabf09c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "26e7e80d327fc66139cc493837e0f3acf4047839c00c195e63ede848ee3f6f9c",
+      "source": "pixellab_icons"
     },
     "provisions": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_provisions",
-      "seed": 2094,
-      "snapped_sha": "c8aac70e3082eaf7e13a2a64934e4b496ddd9d57d7d904b4eb8f0c60e78b5544",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "b366ef3de35d2b6b726dbc99f2227278a80a384c5b7166a2f84140043ab82282",
+      "source": "pixellab_icons"
     },
     "ram": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_ram",
-      "seed": 2103,
-      "snapped_sha": "c2e8b74da94a5534a81bcdba959324b4365d9359f5c1b78dfb6c6f4352ea934c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "938c3c080ada8ad9d34f59bef004426859de8d363323320038a2b3e3f3ea6376",
+      "source": "pixellab_icons"
     },
     "role_coaster": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_coaster",
-      "seed": null,
-      "snapped_sha": "e61d8c00992716fd337384551ba842f708c34da118e68d4cdd7c7ef5ebea3f02",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "4e8cf05b5c038ee700e9aea49e3b409a99cb4a68c26b27dd7ad0e2afdd4d057e",
+      "source": "pixellab_icons"
     },
     "role_courier": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_courier",
-      "seed": null,
-      "snapped_sha": "5cd63554827741ba66c285ef14ab6f85943cacc26fea43c4ec7b1f6270d1dee9",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "fca624acaa2c5ebaf9ab9b75ef2a010a8266b1bb9c714fcaa143a2577767e327",
+      "source": "pixellab_icons"
     },
     "role_hunter": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_hunter",
-      "seed": null,
-      "snapped_sha": "678ab9d77712acdf809c8d506561f2044748ff7cbca397585827658e5bb9ec0e",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "63c74f1fd2f3329a81716964ff4ad10fec22f65f55a348052dce12dbd6d4792b",
+      "source": "pixellab_icons"
     },
     "role_patrol": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_patrol",
-      "seed": null,
-      "snapped_sha": "5dcd849de116adce018bc7f20968b565867efeb0783aad4b55e8f45e24f13213",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "2218bb50e399efa63c7104198d0493ce8bda3e8de676584ee67e3d8705597156",
+      "source": "pixellab_icons"
     },
     "role_pirate": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_pirate",
-      "seed": null,
-      "snapped_sha": "f614717ffc40c767a59c409796f758183446ff7b520ce722e6c4ff9a03dae314",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "89c960f94253e2d087eea1d37390e5a1eb1677f35ddce3101dcf9271bc939cdb",
+      "source": "pixellab_icons"
     },
     "role_privateer": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_privateer",
-      "seed": null,
-      "snapped_sha": "416be163fc032b704e9e05396cc2d31adfea55c2b060cf96b58953ddf534ac11",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "70783f226beebdb04164f276d256981f798928aebc6f4ce08bd2fa0bd8d54a25",
+      "source": "pixellab_icons"
     },
     "role_trader": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_role_trader",
-      "seed": null,
-      "snapped_sha": "ff060fec3ff4621f1df9bcbd9937ac4dcac9936ef231172105bebc07c97b18b0",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "c9c29b6bbee026182e2687e6b1aa05615296930453a07a974d6993ead79b68dc",
+      "source": "pixellab_icons"
     },
     "save": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_save",
-      "seed": 2091,
-      "snapped_sha": "21e300753015a5655efd4626136490f00dbcac246553d0a7641550c993d8623b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "6a02c52d1118dbf92d9b3b2bd30cca39ee6fb1130787b670722ec2ffef17da7a",
+      "source": "pixellab_icons"
     },
     "scroll": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_scroll",
-      "seed": 2098,
-      "snapped_sha": "d427ed51c9e463f4bb4bf8d3f6a2f1d324d985c747c7e577a7a88201ff1e9269",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "9946ca502a6c320e4b5153de448bccd6aecfb410a2d17750103bb88805bd63df",
+      "source": "pixellab_icons"
     },
     "shot_armor_piercing": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_shot_armor_piercing",
-      "seed": null,
-      "snapped_sha": "0e4760e9c39ff671f4865caae85d5bacdac64b0ce879d65cb6c7ddcd7c538376",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "36dca1e7d4d8ee1fb4b0601e90ea350c90c8bf0f391017a01cc1536b0699bf5e",
+      "source": "pixellab_icons"
     },
     "shot_chain": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_shot_chain",
-      "seed": null,
-      "snapped_sha": "b15e891dc9a8b79b8f03fb3f640a0fde45ca0f29c06c18098d51700ea5f469d3",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "d9f9e27aebfca8a4f35f6a3c2424a3fe8b4e61f860c21444b488df18cffc1cdd",
+      "source": "pixellab_icons"
     },
     "shot_grape": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_shot_grape",
-      "seed": null,
-      "snapped_sha": "14672c8a01afb8a215ef48c2ce00093a8c77c16fcf86eee729957808d7c559a1",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "be94b6a8e326111256b06020f0617cc6693e936cdddcdeba187e2b8c071ce114",
+      "source": "pixellab_icons"
     },
     "shot_round": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_shot_round",
-      "seed": null,
-      "snapped_sha": "c58bf017fb13354e0eb7fa5122f45bcb7e7572e11d77cecbe04f49512f964ce0",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "32b833167a2328002fa47b3bb46e5ad02e625e7824bc60486917a9e59e4834b6",
+      "source": "pixellab_icons"
     },
     "skull": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_skull",
-      "seed": 2089,
-      "snapped_sha": "c1fe9dd3b31d8ae32ac76aa4a4fafdbe696150eb9626b44962c0032549e03c89",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1bb701aa1499059b6127954199efff57a681af1f3b61a0ce691c2944257f8e43",
+      "source": "pixellab_icons"
     },
     "storm": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_storm",
-      "seed": 2109,
-      "snapped_sha": "d3aee00fabe74935dabfdf0e5e6b2b57e9534cd1f31608e6613ae8a86b4decbb",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "1f6d04132acad81a4f72ad1153864d49233feac4b420cf67cdd13f1d13aad7ee",
+      "source": "pixellab_icons"
     },
     "strong": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_strong",
-      "seed": 2108,
-      "snapped_sha": "436d0282073c7d9f8f1959dcfa8abcb80a81a1341c5c80e26ab3175d6a648dbe",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "9d4c2146328f639e848b6bf5ff8dc072ce38c814f1275a8d9581d06c7de40b87",
+      "source": "pixellab_icons"
     },
     "surrender_flag": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_surrender_flag",
-      "seed": 2104,
-      "snapped_sha": "2a348e658d6d42d881db5f68532b71c895fa8a6ea53ec620f6d1d595bc3e77ff",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "d1fc12851662d914c7f98b210b0b798db08cc2b9de665f2cbc279ac7970e08bd",
+      "source": "pixellab_icons"
     },
     "trend_down": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_trend_down",
-      "seed": null,
-      "snapped_sha": "332f0f60b0e1e75ff9a6b98b35a0fc6ce635fb4cd067126c7662e397d67955af",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "ce3f5a16590207a30657edc17388674d11ce07581f4fca3a9ecbae9d9337c3ce",
+      "source": "pixellab_icons"
     },
     "trend_up": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_trend_up",
-      "seed": null,
-      "snapped_sha": "db3eb89ddfc258fefd825deaba88e8c906b0a4eb3ab02cafc84eaf1cb6e0ce3c",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "9d7e79b64ff1d52057160d11a4d75291fc403b91a842a0381aab729465d2dadb",
+      "source": "pixellab_icons"
     },
     "trophy": {
-      "accepted_at": "2026-11-05",
+      "accepted_at": "2026-11-08",
       "job": "icon_trophy",
-      "seed": 2118,
-      "snapped_sha": "afce02c4759c135481b03261053123b7e5af20d8f65e2f0a540318271626125b",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "22de7fe95ccd3f363d31c9b38f1dd41a3598727dddd7fe622dd98b12e03077cc",
+      "source": "pixellab_icons"
     }
   },
   "icons_generated_by": "tools/build_ui_art.py --import-icons",
@@ -826,16 +840,6 @@
       "detail": "current_arrow_e is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
       "job": "icon_current_arrow_e",
       "reason": "derivation-only family"
-    },
-    {
-      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
-      "job": "icon_current_arrow_n",
-      "reason": "arrow family kept generated"
-    },
-    {
-      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
-      "job": "icon_current_arrow_ne",
-      "reason": "arrow family kept generated"
     },
     {
       "detail": "current_arrow_nw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
@@ -868,12 +872,12 @@
       "reason": "derivation-only family"
     },
     {
-      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "detail": "the model's NE base does not read as a NE-pointing arrow — the whole family keeps its generated art this round",
       "job": "icon_wind_arrow_n",
       "reason": "arrow family kept generated"
     },
     {
-      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "detail": "the model's NE base does not read as a NE-pointing arrow — the whole family keeps its generated art this round",
       "job": "icon_wind_arrow_ne",
       "reason": "arrow family kept generated"
     },

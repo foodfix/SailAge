@@ -2398,6 +2398,48 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
         counts["icons_ingested"] += 1
+    # §8.8 item 5 refresh path (the 2026-11-08 icon amendment: "the build
+    # re-derives the siblings from the new source"): a ledger-ingested
+    # arrow BASE re-derives its family siblings from the SHIPPED base
+    # asset — the manifest's authored derive chain would otherwise pair
+    # the new base art with old sibling art and break the pixel-exact
+    # transform pin.  Runs after the icons ladder (the shipped base is
+    # the ingested bytes) and before the hero fallback (the refreshed
+    # siblings upscale with everything else).
+    arrow_refreshed = 0
+    arrow_prefixes = ("wind_arrow_", "current_arrow_")
+    # the derive decls live in the manifest files (m.renders only holds
+    # the first sprite per multi-sprite manifest — the arrow families'
+    # n/ne rows plus six derive decls each are absorbed as "multi")
+    for mf in sorted((MANIFESTS / "icons").glob("*.json")):
+        try:
+            doc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        items = doc if isinstance(doc, list) else doc.get("sprites", [doc])
+        for decl in items:
+            if not isinstance(decl, dict):
+                continue
+            d = decl.get("derive")
+            if not (isinstance(d, dict) and d.get("op") in DERIVE_OPS):
+                continue
+            sid = decl.get("id")
+            base_id = derive_base_of(d)
+            if not sid or not str(base_id).startswith(arrow_prefixes):
+                continue
+            if base_id not in icons:  # the ledger-ingested id set (ladder above)
+                continue
+            file_name = decl.get("file")
+            if not file_name:
+                continue
+            base_file = outroot / "assets" / "ui" / "icons" / f"{base_id}.png"
+            if not base_file.is_file():
+                continue
+            w, h, px = read_png(base_file)
+            w, h, px = _transform(w, h, px, d["op"])
+            write_png(outroot / file_name, w, h, px)
+            arrow_refreshed += 1
+    counts["icons_arrow_refreshed"] = arrow_refreshed
     # §4.8 hero-64 fallback (the 2026-11-08 icon amendment): every shipped
     # 32px icon asset (render.js writes the multi-sprite manifests; the
     # derive pass the singles) gets a hero 64 canvas — the exact ×2
