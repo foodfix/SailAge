@@ -255,11 +255,18 @@ static func row_icon(cols: int) -> HBoxContainer:
 
 ## The hero texture for a generated icon id (§4.8 hero-64 display rule):
 ## tries the 64 hero families in order (`icon64_`, `marker64_`,
-## `facility64_`) and falls back to the inline 32 (`icon_texture`) — so
-## chrome/kit ids without heroes resolve exactly as before.
+## `facility64_`) under the id's BARE name (the `marker_`/`facility_`
+## family prefix is stripped for the 64 probe — the hero dirs hold bare
+## ids) and falls back to the inline 32 (`icon_texture`) — chrome/kit ids
+## without heroes resolve exactly as before.
 static func hero_texture(id: String) -> Texture2D:
+	var bare := id
+	for family_prefix in ["marker_", "facility_"]:
+		if id.begins_with(family_prefix):
+			bare = id.substr(family_prefix.length())
+			break
 	for prefix in ["icon64_", "marker64_", "facility64_"]:
-		var tex := icon_texture("%s%s" % [prefix, id])
+		var tex := icon_texture("%s%s" % [prefix, bare])
 		if tex != null:
 			return tex
 	return icon_texture(id)

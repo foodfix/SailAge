@@ -987,17 +987,16 @@ def resolve_artifact_overrides(root: Path = ROOT):
             p = root / "assets" / "ui" / dirname / f"{iid}.png"
             if p.is_file():
                 out[family][iid] = p
-        # family heroes live in the *64 dirs (the icons64 pattern)
-        if family == "facility":
+        # family heroes live in the *64 dirs under the BARE id (the
+        # registry strips facility64_/marker64_ before probing)
+        if family in ("facility", "markers"):
+            bare_dir = "tokens64" if family == "facility" else "markers64"
+            fam_pfx = "facility_" if family == "facility" else "marker_"
             for iid in (doc.get(family) or {}):
-                ph = root / "assets" / "ui" / "tokens64" / f"{iid}.png"
+                ph = root / "assets" / "ui" / bare_dir / (
+                    f"{iid[len(fam_pfx):]}.png")
                 if ph.is_file():
-                    out["facility64"][iid] = ph
-        if family == "markers":
-            for iid in (doc.get(family) or {}):
-                ph = root / "assets" / "ui" / "markers64" / f"{iid}.png"
-                if ph.is_file():
-                    out["markers64"][iid] = ph
+                    out[f"{family}64"][iid] = ph
     for fname in (doc.get("terrain") or {}):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
@@ -1944,15 +1943,19 @@ def run_glyph_ingest(source_dirs, report: dict) -> dict:
                                       "detail": f"{len(colors)} colors > the "
                                                 f"32px cap {GLYPH_INLINE_CAP}"})
                 continue
-            out_dir, hero_dir = next((v[1], v[3]) for k, v in
-                                     GLYPH_FAMILIES.items()
-                                     if iid.startswith(k))
+            out_dir, hero_dir, fam_pfx = next((v[1], v[3], k) for k, v in
+                                              GLYPH_FAMILIES.items()
+                                              if iid.startswith(k))
             write_png(ROOT / "assets" / "ui" / out_dir / f"{iid}.png",
                       hw, hh, hpx)
             if hero_dir:
                 # the hero 64 asset (the icons64 pattern): the quantized
-                # 64 grid 1:1, same binary alpha
-                write_png(ROOT / "assets" / "ui" / hero_dir / f"{iid}.png",
+                # 64 grid 1:1, same binary alpha — under the BARE id (the
+                # registry's facility64_/marker64_ probe strips the 64
+                # prefix, so the hero file must not double the family
+                # prefix; the 2026-11-08 hero-render regression)
+                bare = iid[len(fam_pfx):]
+                write_png(ROOT / "assets" / "ui" / hero_dir / f"{bare}.png",
                           w, h, q)
             written += 1
             sha = hashlib.sha256(raw).hexdigest()
@@ -1970,14 +1973,15 @@ def run_glyph_ingest(source_dirs, report: dict) -> dict:
         revoked = 0
         for iid in sorted(prev_fam):
             if iid not in led[fam]:
-                out_dir, hero_dir = next((v[1], v[3]) for k, v in
-                                         GLYPH_FAMILIES.items()
-                                         if iid.startswith(k))
+                out_dir, hero_dir, fam_pfx = next(
+                    (v[1], v[3], k) for k, v in GLYPH_FAMILIES.items()
+                    if iid.startswith(k))
                 (ROOT / "assets" / "ui" / out_dir / f"{iid}.png").unlink(
                     missing_ok=True)
                 if hero_dir:
+                    bare = iid[len(fam_pfx):]
                     (ROOT / "assets" / "ui" / hero_dir
-                     / f"{iid}.png").unlink(missing_ok=True)
+                     / f"{bare}.png").unlink(missing_ok=True)
                 revoked += 1
         candidates_n = sum(1 for iid in candidates
                            if next((f for pfx, f in

@@ -10008,6 +10008,7 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
     fam_blocks = {"markers": BLOCK_TERRAIN, "facility": BLOCK_HULL}
     fam_caps = {"markers": G13_CAP_32, "facility": G13_CAP_32}
     fam_hero_dirs = {"markers": "markers64", "facility": "tokens64"}
+    fam_hero_prefixes = {"markers": "marker_", "facility": "facility_"}
     # the pinned inventories, read from the authored manifests
     inventories: dict[str, set] = {"markers": set(), "facility": set()}
     for mf in sorted((UI_ART_DIR / "markers").glob("*.json")):
@@ -10101,7 +10102,8 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
                      f"{fam_caps[family]} (§4.8.3)", 13)
             # the hero 64 (the hero-64 display rule, 2026-11-08): BOTH
             # glyph families ship heroes now — the icons64 pattern
-            hero = ASSETS_UI / fam_hero_dirs[family] / f"{iid}.png"
+            hero = (ASSETS_UI / fam_hero_dirs[family]
+                    / f"{iid[len(fam_hero_prefixes[family]):]}.png")
             if not hero.is_file():
                 fail("art-ingest", str(hero.relative_to(ART_ROOT)),
                      f"{family} hero 64 asset missing (ledger + 32 + "
