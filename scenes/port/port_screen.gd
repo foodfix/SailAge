@@ -346,32 +346,46 @@ func _make_facility_button(facility_id: String, text_key: String,
 	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	card.alignment = BoxContainer.ALIGNMENT_CENTER
 	button.add_child(card)
-	# The name row: the generated facility token (32px, scaled into the
-	# 320×64 card) beside the name label — mouse-transparent like the rest.
+	# The name row: the facility token as the card's full-height left
+	# emblem — the §4.8 hero 64 (2026-11-08, `facility64_<id>` through
+	# the kit registry; a missing hero id falls back to the halved 32
+	# token at 32) — beside the name label; mouse-transparent like the
+	# rest. The 320×64 card envelope is unchanged.
 	var name_row := HBoxContainer.new()
 	name_row.name = "NameRow"
 	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	card.add_child(name_row)
-	var token := UiKitLib.icon_texture("facility_%s" % facility_id)
+	var token := UiKitLib.icon_texture("facility64_%s" % facility_id)
+	var token_size := 64
+	if token == null:
+		token = UiKitLib.icon_texture("facility_%s" % facility_id)
+		token_size = 32
 	if token != null:
 		var icon := TextureRect.new()
 		icon.name = "Token"
 		icon.texture = token
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon.custom_minimum_size = Vector2(32, 32)
+		icon.custom_minimum_size = Vector2(token_size, token_size)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		name_row.add_child(icon)
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_row.add_child(name_label)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var status_label := Label.new()
 	status_label.name = "Status"
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(status_label)
+	var text_stack := VBoxContainer.new()
+	text_stack.name = "TextStack"
+	text_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_stack.add_child(name_label)
+	text_stack.add_child(status_label)
+	name_row.add_child(text_stack)
 	button.set_meta("name_label", name_label)
 	button.set_meta("status_label", status_label)
 	# A disabled stub has no target: `pressed` never fires on a disabled

@@ -377,10 +377,12 @@ MARKER_BLOCK = {
 }
 # facility quantize target = HULL_BLOCK (the tokens family's block).
 # Glyph ingest family table: id prefix -> (ledger family, shipped dir,
-# quantize block).
+# quantize block, hero dir-or-None). Facility tokens carry a hero 64
+# (assets/ui/tokens64/<id>.png — the icons64 pattern, user direction
+# 2026-11-08); markers ship the halved 32 only.
 GLYPH_FAMILIES = {
-    "marker_": ("markers", "markers", MARKER_BLOCK),
-    "facility_": ("facility", "tokens", HULL_BLOCK),
+    "marker_": ("markers", "markers", MARKER_BLOCK, None),
+    "facility_": ("facility", "tokens", HULL_BLOCK, "tokens64"),
 }
 GLYPH_INLINE_CAP = 20           # §4.8.3 32px tier color cap (both families)
 # ---- arrow-family ingest policy (fix 2026-11-05): the wind_arrow_*/
@@ -971,7 +973,7 @@ def resolve_artifact_overrides(root: Path = ROOT):
     path}, "icons64": {id: path}, "markers": {id: path}, "facility": {id:
     path}, "terrain": {file name: path}}."""
     out = {"icons": {}, "icons64": {}, "markers": {}, "facility": {},
-           "terrain": {}}
+           "facility64": {}, "terrain": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
@@ -985,6 +987,12 @@ def resolve_artifact_overrides(root: Path = ROOT):
             p = root / "assets" / "ui" / dirname / f"{iid}.png"
             if p.is_file():
                 out[family][iid] = p
+        # facility heroes live in tokens64/ (the icons64 pattern)
+        if family == "facility":
+            for iid in (doc.get(family) or {}):
+                ph = root / "assets" / "ui" / "tokens64" / f"{iid}.png"
+                if ph.is_file():
+                    out["facility64"][iid] = ph
     for fname in (doc.get("terrain") or {}):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
@@ -1902,10 +1910,16 @@ def run_glyph_ingest(source_dirs, report: dict) -> dict:
                                       "detail": f"{len(colors)} colors > the "
                                                 f"32px cap {GLYPH_INLINE_CAP}"})
                 continue
-            out_dir = next(v[1] for k, v in GLYPH_FAMILIES.items()
-                           if iid.startswith(k))
+            out_dir, hero_dir = next((v[1], v[3]) for k, v in
+                                     GLYPH_FAMILIES.items()
+                                     if iid.startswith(k))
             write_png(ROOT / "assets" / "ui" / out_dir / f"{iid}.png",
                       hw, hh, hpx)
+            if hero_dir:
+                # the hero 64 asset (the icons64 pattern): the quantized
+                # 64 grid 1:1, same binary alpha
+                write_png(ROOT / "assets" / "ui" / hero_dir / f"{iid}.png",
+                          w, h, q)
             written += 1
             sha = hashlib.sha256(raw).hexdigest()
             prev_rec = prev_fam.get(iid) or {}
@@ -1917,24 +1931,33 @@ def run_glyph_ingest(source_dirs, report: dict) -> dict:
                              "snapped_sha": sha,
                              "accepted_at": accepted_at or today}
             print(f"  glyph {iid}: {w}x{h} -> {hw}x{hh}, {len(colors)} "
-                  f"colors, sha {sha[:12]}… OK")
+                  f"colors{' , hero 64' if hero_dir else ''}, "
+                  f"sha {sha[:12]}… OK")
         revoked = 0
         for iid in sorted(prev_fam):
             if iid not in led[fam]:
-                out_dir = next(v[1] for k, v in GLYPH_FAMILIES.items()
-                               if iid.startswith(k))
+                out_dir, hero_dir = next((v[1], v[3]) for k, v in
+                                         GLYPH_FAMILIES.items()
+                                         if iid.startswith(k))
                 (ROOT / "assets" / "ui" / out_dir / f"{iid}.png").unlink(
                     missing_ok=True)
+                if hero_dir:
+                    (ROOT / "assets" / "ui" / hero_dir
+                     / f"{iid}.png").unlink(missing_ok=True)
                 revoked += 1
         candidates_n = sum(1 for iid in candidates
                            if next((f for pfx, f in
                                     ((k, v[0]) for k, v in
                                      GLYPH_FAMILIES.items())
                                     if iid.startswith(pfx)), None) == fam)
+        hero_n = sum(1 for iid in led[fam]
+                     if next((v[3] for k, v in GLYPH_FAMILIES.items()
+                              if iid.startswith(k)), None))
         counts[fam] = {"candidates": candidates_n,
                        "accepted": len(led[fam]),
                        "rejected": len(rejected[fam]),
-                       "skipped": 0, "files": written, "revoked": revoked}
+                       "skipped": 0, "files": written,
+                       "hero_64": hero_n, "revoked": revoked}
     _write_ledger(prev, "glyphs", {
         "counts": counts,
         "markers_generated_by": "tools/build_ui_art.py --import-glyphs",
@@ -2487,7 +2510,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
               "icons_ingested": 0, "icons64_ingested": 0,
               "markers_ingested": 0, "facility_ingested": 0,
-              "terrain_ingested": 0}
+              "facility64_ingested": 0, "terrain_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
     # clobber them.  Stash the ingested bytes first; the ladder restores
@@ -2498,6 +2521,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                                    ("icons64", ICON_HERO_DIR, True),
                                    ("markers", "markers", True),
                                    ("facility", "tokens", True),
+                                   ("facility64", "tokens64", True),
                                    ("terrain", "terrain", False)):
         for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
             fname = key if not keyed else f"{key}.png"
@@ -2644,7 +2668,8 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
         counts["icons64_ingested"] += 1
     # the glyph families (markers / facility — the 2026-11-08 amendment):
     # one 32 asset per id, the same ladder semantics, no hero/arrow
-    # interactions
+    # interactions; the facility family additionally carries its hero 64
+    # (tokens64 — restored from the stash / copied like icons64)
     for family, dirname in (("markers", "markers"), ("facility", "tokens")):
         fam_overrides = (artifacts or {}).get(family) or {}
         for iid in sorted(fam_overrides):
@@ -2657,6 +2682,17 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(stash[dest])
             counts[f"{family}_ingested"] += 1
+    fac64 = (artifacts or {}).get("facility64") or {}
+    for iid in sorted(fac64):
+        override = fac64[iid]
+        dest = outroot / "assets" / "ui" / "tokens64" / f"{iid}.png"
+        if override.is_file() and override != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(override, dest)
+        elif dest in stash:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(stash[dest])
+        counts["facility64_ingested"] += 1
     terr = (artifacts or {}).get("terrain") or {}
     for fname in sorted(terr):
         override = terr[fname]

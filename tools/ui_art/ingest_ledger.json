@@ -4,14 +4,32 @@
     "accepted_base": 16,
     "accepted_derived": 0,
     "candidates": 16,
+    "facility": {
+      "accepted": 6,
+      "candidates": 6,
+      "files": 6,
+      "hero_64": 6,
+      "rejected": 0,
+      "revoked": 0,
+      "skipped": 0
+    },
     "fallback_files": 0,
     "icons": {
-      "accepted": 115,
+      "accepted": 117,
       "candidates": 129,
-      "files": 115,
-      "hero_64": 115,
+      "files": 117,
+      "hero_64": 117,
       "rejected": 0,
-      "skipped": 14
+      "skipped": 12
+    },
+    "markers": {
+      "accepted": 6,
+      "candidates": 6,
+      "files": 6,
+      "hero_64": 0,
+      "rejected": 0,
+      "revoked": 0,
+      "skipped": 0
     },
     "pennant_auto_painted": 0,
     "pruned_retired_grid": 0,
@@ -25,6 +43,53 @@
     }
   },
   "derived": {},
+  "facility": {
+    "facility_guild": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_guild",
+      "seed": 92000,
+      "snapped_sha": "421ff8bf51e26f9b78e3d8b9f22eefc632da49590b7f7442e28b61d53fcd58bb",
+      "source": "pixellab_glyphs"
+    },
+    "facility_inn": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_inn",
+      "seed": 92000,
+      "snapped_sha": "b6c0928f5cbf78e28fbf9318deda8a97974ff78de0a89cec5034a73f449bcded",
+      "source": "pixellab_glyphs"
+    },
+    "facility_market": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_market",
+      "seed": 92000,
+      "snapped_sha": "e7e597f4fd954ff814e0ddce86b9e9ed36c72fcfeeb83d918df2e60f1a9fd28b",
+      "source": "pixellab_glyphs"
+    },
+    "facility_palace": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_palace",
+      "seed": 92000,
+      "snapped_sha": "2de8f0632d20aaa28f772d294d0d58c15b5eb623bf97bf33a0174ea9304e3a0e",
+      "source": "pixellab_glyphs"
+    },
+    "facility_shipyard": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_shipyard",
+      "seed": 92000,
+      "snapped_sha": "50c7006c49bd0ec73608002897725fdc90dfb769eac84afd46fc4206acda14e7",
+      "source": "pixellab_glyphs"
+    },
+    "facility_tavern": {
+      "accepted_at": "2026-11-08",
+      "job": "facility_tavern",
+      "seed": 92000,
+      "snapped_sha": "2ee5262c75c1e26f4619bb2decda7adead8909b1a2e5563da5f50748f4a06e06",
+      "source": "pixellab_glyphs"
+    }
+  },
+  "facility_generated_by": "tools/build_ui_art.py --import-glyphs",
+  "facility_rejected": [],
+  "facility_skipped": [],
   "generated_by": "tools/build_ui_art.py --import-ships-north",
   "icons": {
     "anchor": {
@@ -289,16 +354,16 @@
     "fair": {
       "accepted_at": "2026-11-08",
       "job": "icon_fair",
-      "seed": 2107,
-      "snapped_sha": "3a037b15c1330e11c1b31ae0db7120efc611e68bf5a1b263444304e1c418d239",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "caa9050d2c7b3cc745e167b0fd918614692a636caf4e47463245fcca31a7c2d6",
+      "source": "pixellab_icons"
     },
     "flag_england": {
       "accepted_at": "2026-11-08",
       "job": "icon_flag_england",
-      "seed": null,
-      "snapped_sha": "26012b16a12c8a858c1a873b9eb6057cfcc1c6fa5c49fe8da0b0b9829c13d871",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "7a6338febdb8de01abd07674cd0493275869a569588831bda614d168119648bd",
+      "source": "pixellab_icons"
     },
     "flag_holland": {
       "accepted_at": "2026-11-08",
@@ -548,23 +613,23 @@
     "good_raw_silk": {
       "accepted_at": "2026-11-08",
       "job": "icon_good_raw_silk",
-      "seed": null,
-      "snapped_sha": "c78dab64594465de650e29f2bf5ee1709b001fc25a8347bcbabcdf7242ecd3b2",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "3a23461f673bdfaf66d372a98de3501e2dbc69a045fb808822098a2711863631",
+      "source": "pixellab_icons"
     },
     "good_rhubarb": {
       "accepted_at": "2026-11-08",
       "job": "icon_good_rhubarb",
-      "seed": null,
-      "snapped_sha": "d3de9369efbb08747fc7aea7d711536dc4fe5c6712eb40c7fed759198ab77405",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "0fa28080bff6067f1b899a61c53386e2913541b9b94ea44022e00eefec404e94",
+      "source": "pixellab_icons"
     },
     "good_rice": {
       "accepted_at": "2026-11-08",
       "job": "icon_good_rice",
-      "seed": null,
-      "snapped_sha": "1ae016506013175b868fcb2a1c7eb87d80cfd738ea467bcf5341a8a9b52e7dbe",
-      "source": "snapped"
+      "seed": 92000,
+      "snapped_sha": "747d2d8b44639e5d62e91b83ae09e661055d667509404b4309f1b91197bc1044",
+      "source": "pixellab_icons"
     },
     "good_salt": {
       "accepted_at": "2026-11-08",
@@ -831,6 +896,20 @@
       "seed": 92000,
       "snapped_sha": "22de7fe95ccd3f363d31c9b38f1dd41a3598727dddd7fe622dd98b12e03077cc",
       "source": "pixellab_icons"
+    },
+    "wind_arrow_n": {
+      "accepted_at": "2026-11-08",
+      "job": "icon_wind_arrow_n",
+      "seed": 92000,
+      "snapped_sha": "c1675110a902d975e3e213a48833915703b5de0350f0b97965afa2afbd8d002a",
+      "source": "pixellab_icons"
+    },
+    "wind_arrow_ne": {
+      "accepted_at": "2026-11-08",
+      "job": "icon_wind_arrow_ne",
+      "seed": 92002,
+      "snapped_sha": "30c8471b1380e7f8772adf50b520d068b874889a25be9a933260461f151faf1e",
+      "source": "pixellab_icons"
     }
   },
   "icons_generated_by": "tools/build_ui_art.py --import-icons",
@@ -872,16 +951,6 @@
       "reason": "derivation-only family"
     },
     {
-      "detail": "the model's NE base does not read as a NE-pointing arrow — the whole family keeps its generated art this round",
-      "job": "icon_wind_arrow_n",
-      "reason": "arrow family kept generated"
-    },
-    {
-      "detail": "the model's NE base does not read as a NE-pointing arrow — the whole family keeps its generated art this round",
-      "job": "icon_wind_arrow_ne",
-      "reason": "arrow family kept generated"
-    },
-    {
       "detail": "wind_arrow_nw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
       "job": "icon_wind_arrow_nw",
       "reason": "derivation-only family"
@@ -907,6 +976,53 @@
       "reason": "derivation-only family"
     }
   ],
+  "markers": {
+    "marker_discovery_creature": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_discovery_creature",
+      "seed": 92000,
+      "snapped_sha": "5af8c03a37c98437d0aefd6a406d985e42b0fd443fcc858ee00583899e255603",
+      "source": "pixellab_glyphs"
+    },
+    "marker_discovery_natural": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_discovery_natural",
+      "seed": 92000,
+      "snapped_sha": "0b954cbe4e120da6e6838ea1c39537279fac69c80c3bfd4043502fe09380b9d3",
+      "source": "pixellab_glyphs"
+    },
+    "marker_discovery_relic": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_discovery_relic",
+      "seed": 92000,
+      "snapped_sha": "47d1bd06732c9dda3860143932a01b3d19c3b23a40741e9d09a83e1ca69931ca",
+      "source": "pixellab_glyphs"
+    },
+    "marker_discovery_ruins": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_discovery_ruins",
+      "seed": 92000,
+      "snapped_sha": "544abdf3425eaa0332b034e3610bc83788be8350dd7a9cfcbe09674fdbb66627",
+      "source": "pixellab_glyphs"
+    },
+    "marker_treasure": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_treasure",
+      "seed": 92000,
+      "snapped_sha": "aced652bff280ed2a9313654dc765d27c0b67b1cb32516a6c588e7aeaf55569b",
+      "source": "pixellab_glyphs"
+    },
+    "marker_wreck": {
+      "accepted_at": "2026-11-08",
+      "job": "marker_wreck",
+      "seed": 92000,
+      "snapped_sha": "df0eb377bf7557c3267c1cc7d6a5733347f755fc9a995341bea1c449872df16b",
+      "source": "pixellab_glyphs"
+    }
+  },
+  "markers_generated_by": "tools/build_ui_art.py --import-glyphs",
+  "markers_rejected": [],
+  "markers_skipped": [],
   "rejected": [],
   "terrain": {
     "terrain_land_0.png": {

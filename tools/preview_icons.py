@@ -10,6 +10,7 @@ artifact (art_review/).
 Usage:
   python3 tools/preview_icons.py [--out art_review/icons_review.png]
                                  [--only id ...]
+                                 [--raw pixellab_glyphs]
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import sys
 from PIL import Image  # noqa: PLC0415
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-RAW = os.path.join(REPO, "tools", "ui_art", "model_raw", "pixellab_icons")
+RAW_ROOT = os.path.join(REPO, "tools", "ui_art", "model_raw")
 OUT_DEFAULT = os.path.join(REPO, "art_review", "icons_review.png")
 
 RECESS = (28, 34, 48, 255)    # PANEL_BG — the icon recess/background fill
@@ -43,9 +44,11 @@ def main() -> None:
     args = sys.argv[1:]
     out = args[args.index("--out") + 1] if "--out" in args else OUT_DEFAULT
     only = args[args.index("--only") + 1:] if "--only" in args else []
-
+    raw_name = args[args.index("--raw") + 1] if "--raw" in args \
+        else "pixellab_icons"
+    RAW = os.path.join(RAW_ROOT, raw_name)
     manifest = {}
-    mpath = os.path.join(RAW, "pixellab_icons.json")
+    mpath = os.path.join(RAW, f"{raw_name}.json")
     if os.path.isfile(mpath):
         with open(mpath, encoding="utf-8") as fh:
             manifest = json.load(fh)

@@ -418,8 +418,9 @@ _ICON_DESCRIPTORS: dict[str, str] = {
         "pale ink fill",
     "wind_arrow_ne":
         "A bold straight arrow pointing to the top-right corner at 45 "
-        "degrees, thick pale shaft, large triangular head, flat pale "
-        "ink fill",
+        "degrees, thick shaft, large triangular head, colored ONLY in "
+        "pale grey and off-white like a paper ink mark — no gold, no "
+        "brown, no tan, no warm tones",
     "current_arrow_n":
         "A bold straight arrow pointing straight up to the top edge of "
         "the canvas, thick shaft with slightly rounded ends, large "

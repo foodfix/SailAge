@@ -2348,8 +2348,15 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      "seed": 92000}`. **Icon ruling, not the hull ruling:** generate at
      64, quantize to the owning class block, binary alpha, exact 2:1
      nearest halve → the 32 inline asset, 20-color cap at 32
-     (§4.8.3); **no hero variants** — no 64px display surface exists
-     for either family (pinned). **Owning blocks (pinned):**
+     (§4.8.3); **hero variants: markers none** (no 64px display
+     surface — pinned); **facility tokens YES** (user direction,
+     same day): the ingest ALSO emits the hero 64 asset
+     `assets/ui/tokens64/<id>.png` (the quantized 64 grid 1:1 —
+     the icons64 pattern), and the port hub facility cards render
+     it at 1:1 64 (the §4.8.1 card keeps its 320×64 envelope; the
+     token becomes the card's full-height left emblem, name +
+     status stacked beside it; a missing hero id falls back to the
+     halved 32 token at 32). **Owning blocks (pinned):**
      `marker_*` → the terrain block (the §4.8 class mapping's "port
      markers" row — the marker glyphs are map-overlay art, not
      terrain tiles themselves; the block mapping is amended here to
