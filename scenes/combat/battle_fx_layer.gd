@@ -39,7 +39,7 @@ extends Control
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 
 ## §4.2: 32 px per battle tile (mirrors the screen/overlay constants).
-const TILE_PX := 32.0
+const TILE_PX := 64.0
 
 # --- §4.7.17 pinned timings (ms) ---------------------------------------------
 

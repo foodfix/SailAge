@@ -25,8 +25,9 @@ const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 ## never preloads this file (the .tscn wires the node).
 const ScreenLib := preload("res://scenes/combat/battle_screen.gd")
 
-## 32 px per tile (§4.2 "rendered at 32px" — mirrors the screen constant).
-const TILE_PX := 32.0
+## 64 px per tile (§4.2 as amended 2026-11-08 — mirrors the screen
+## constant; the tokens render 1:1 64 on 64px tiles).
+const TILE_PX := 64.0
 ## A click within this distance of a vector's endpoint picks it.
 const ENDPOINT_PICK_RADIUS := 12.0
 ## A click within this distance of the vector's line picks it too.

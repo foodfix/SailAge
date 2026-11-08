@@ -12,7 +12,7 @@ extends Node
 ##   1 the §4.7.1 camera pure functions — fixed-value assertions (world↔screen
 ##     round trip, clamp corners, zoom-anchor identity, minimap mapping of the
 ##     four corners + centre, edge-scroll band math, the 4 px threshold);
-##   2 the scene: 1280×584 viewport over the 1536×960 world, the 192×120
+##   2 the scene: 1920×944 viewport over the 3072×1920 world, the 192×120
 ##     minimap top-right, the 96 px bottom bar, the shot selector + [fit];
 ##   3 open_battle deploys per §4.11.2 (48×30), passes `wind_dir`/`current`
 ##     through, consumes the pending descriptor once;
@@ -108,20 +108,20 @@ func _ready() -> void:
 func _test_camera_functions() -> void:
 	# world_to_screen: the camera centre lands at the viewport centre at
 	# zoom 1.0; the world origin is offset by the half-extents.
-	_check(ScreenLib.world_to_screen(Vector2(768, 480), Vector2(768, 480), 1.0)
+	_check(ScreenLib.world_to_screen(Vector2(1536, 960), Vector2(1536, 960), 1.0)
 			.is_equal_approx(Vector2(960, 472)),
 		"world_to_screen: the camera centre maps to the viewport centre "
-			+ "(768,480 → 960,472 @ zoom 1)")
-	_check(ScreenLib.world_to_screen(Vector2.ZERO, Vector2(768, 480), 1.0)
-			.is_equal_approx(Vector2(192, -8)),
-		"world_to_screen: the world origin maps to (192,-8) @ cam "
-			+ "(768,480) zoom 1")
+			+ "(1536,960 → 960,472 @ zoom 1)")
+	_check(ScreenLib.world_to_screen(Vector2.ZERO, Vector2(1536, 960), 1.0)
+			.is_equal_approx(Vector2(-576, -488)),
+		"world_to_screen: the world origin maps to (-576,-488) @ cam "
+			+ "(1536,960) zoom 1")
 	# screen_to_world is the exact inverse: round trip on three states.
 	var round_trip_ok := true
 	for state in [
 		[Vector2(123, 456), Vector2(800, 300), 1.25],
-		[Vector2.ZERO, Vector2(768, 480), 0.6],
-		[Vector2(1536, 960), Vector2(700, 500), 1.5],
+		[Vector2.ZERO, Vector2(1536, 960), 0.6],
+		[Vector2(3072, 1920), Vector2(700, 500), 1.5],
 	]:
 		var p: Vector2 = state[0]
 		var cam: Vector2 = state[1]
@@ -134,65 +134,66 @@ func _test_camera_functions() -> void:
 		"screen_to_world inverts world_to_screen (three cam/zoom states, "
 			+ "zoom 0.6 / 1.25 / 1.5, within 0.001 px)")
 
-	# clamp_cam: the x axis centres at zoom 1 (the 1536px world fits the
-	# 1920px view); the y axis clamps to [472, 488] (944px view of a
-	# 960px world).
-	_check(ScreenLib.clamp_cam(Vector2.ZERO, 1.0).is_equal_approx(Vector2(768, 472)),
-		"clamp_cam: the top-left corner centres x and clamps y to the "
-			+ "half-extent (768,472)")
-	_check(ScreenLib.clamp_cam(Vector2(2000, 2000), 1.0)
-			.is_equal_approx(Vector2(768, 488)),
-		"clamp_cam: the bottom-right corner centres x and clamps y to "
-			+ "world − half (768,488)")
-	_check(ScreenLib.clamp_cam(Vector2(500, 500), 0.6).is_equal_approx(Vector2(768, 480)),
-		"clamp_cam: at zoom 0.6 the whole world fits, so any cam centres (768,480)")
-	_check(ScreenLib.clamp_cam(Vector2(768, 100), 1.0).is_equal_approx(Vector2(768, 472)),
-		"clamp_cam: only the offending axis clamps (768,100 → 768,472)")
-	_check(ScreenLib.clamp_cam(Vector2(768, 480), 1.0).is_equal_approx(Vector2(768, 480)),
+	# clamp_cam: at zoom 1 both axes clamp — x to [960, 2112] (1920px
+	# view of a 3072px world), y to [472, 1448] (944px view of a 1920px
+	# world); the world centre (1536,960) is a fixed point.
+	_check(ScreenLib.clamp_cam(Vector2.ZERO, 1.0).is_equal_approx(Vector2(960, 472)),
+		"clamp_cam: the top-left corner clamps to the half-extents (960,472)")
+	_check(ScreenLib.clamp_cam(Vector2(4000, 4000), 1.0)
+			.is_equal_approx(Vector2(2112, 1448)),
+		"clamp_cam: the bottom-right corner clamps to world − half "
+			+ "(2112,1448)")
+	_check(ScreenLib.clamp_cam(Vector2(500, 500), 0.6).is_equal_approx(
+			Vector2(1536, 786.666)),
+		"clamp_cam: at zoom 0.6 x centres (the world fits) and y clamps "
+			+ "into [786.7, 1133.3] (500 → 786.7)")
+	_check(ScreenLib.clamp_cam(Vector2(1536, 100), 1.0).is_equal_approx(Vector2(1536, 472)),
+		"clamp_cam: only the offending axis clamps (1536,100 → 1536,472)")
+	_check(ScreenLib.clamp_cam(Vector2(1536, 960), 1.0).is_equal_approx(Vector2(1536, 960)),
 		"clamp_cam: a centred camera is a fixed point")
 
 	# zoom_at: one notch in = ×1.25, cursor-anchored. Anchors sit on the
 	# viewport centre axis: at the 1920px view the 1536px world fits
 	# horizontally, so a zoom re-centres x and the anchor identity only
 	# holds through the centre axis (the y axis stays clamped at zoom 1).
-	var zoom_center := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 472), Vector2(768, 480))
+	var zoom_center := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 472), Vector2(1536, 960))
 	_check(is_equal_approx(float(zoom_center["zoom"]), 1.25)
-			and (zoom_center["cam"] as Vector2).is_equal_approx(Vector2(768, 480)),
+			and (zoom_center["cam"] as Vector2).is_equal_approx(Vector2(1536, 960)),
 		"zoom_at: a notch at the viewport centre zooms ×1.25 and keeps the cam")
-	var zoom_corner := ScreenLib.zoom_at(1.0, 1.0, Vector2.ZERO, Vector2(768, 480))
-	_check((zoom_corner["cam"] as Vector2).is_equal_approx(Vector2(768, 385.6)),
-		"zoom_at: a notch at the screen corner re-anchors the cam (768,385.6)")
-	var anchored := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 400), Vector2(768, 480))
+	var zoom_corner := ScreenLib.zoom_at(1.0, 1.0, Vector2.ZERO, Vector2(1536, 960))
+	_check((zoom_corner["cam"] as Vector2).is_equal_approx(Vector2(1344, 865.6)),
+		"zoom_at: a notch at the screen corner re-anchors the cam (1344,865.6)")
+	var anchored := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 400), Vector2(1536, 960))
 	var anchor_world := ScreenLib.screen_to_world(Vector2(960, 400),
-		Vector2(768, 480), 1.0)
+		Vector2(1536, 960), 1.0)
 	var stays := ScreenLib.world_to_screen(anchor_world,
 		anchored["cam"], anchored["zoom"])
 	_check(stays.is_equal_approx(Vector2(960, 400)),
 		"zoom_at: the world point under the cursor stays put (anchor identity "
 			+ "at screen (960,400))")
 	_check(is_equal_approx(float(ScreenLib.zoom_at(1.5, 1.0,
-			Vector2(960, 472), Vector2(768, 480))["zoom"]), 1.5),
+			Vector2(960, 472), Vector2(1536, 960))["zoom"]), 1.5),
 		"zoom_at: the zoom clamps at the 1.5× ceiling")
-	_check(is_equal_approx(float(ScreenLib.zoom_at(0.6, -1.0,
-			Vector2(960, 472), Vector2(768, 480))["zoom"]), 0.6),
-		"zoom_at: the zoom clamps at the 0.6× floor")
-	var zoom_out := ScreenLib.zoom_at(1.0, -1.0, Vector2(960, 472), Vector2(768, 480))
+	_check(is_equal_approx(float(ScreenLib.zoom_at(0.5, -1.0,
+			Vector2(960, 472), Vector2(1536, 960))["zoom"]), 0.45),
+		"zoom_at: the zoom clamps at the 0.45× floor")
+	var zoom_out := ScreenLib.zoom_at(1.0, -1.0, Vector2(960, 472), Vector2(1536, 960))
 	_check(is_equal_approx(float(zoom_out["zoom"]), 0.8)
-			and (zoom_out["cam"] as Vector2).is_equal_approx(Vector2(768, 480)),
+			and (zoom_out["cam"] as Vector2).is_equal_approx(Vector2(1536, 960)),
 		"zoom_at: a notch out divides by 1.25 (1.0 → 0.8)")
 
-	# fit_zoom: 944/960 — height-bound (0.9833…), inside the zoom window.
-	_check(is_equal_approx(ScreenLib.fit_zoom(), 944.0 / 960.0),
-		"fit_zoom is the height-bound 944/960 (the [fit]/Home view)")
+	# fit_zoom: 944/1920 — height-bound (0.4917), inside the zoom window.
+	_check(is_equal_approx(ScreenLib.fit_zoom(), 944.0 / 1920.0),
+		"fit_zoom is the height-bound 944/1920 (the [fit]/Home view)")
 
-	# minimap_map: 4 px per cell ⇒ world px × 0.125; corners + centre.
+	# minimap_map: 4 px per cell ⇒ world px × 0.0625; corners + centre.
 	_check(ScreenLib.minimap_map(Vector2.ZERO).is_equal_approx(Vector2.ZERO),
 		"minimap_map: the world's top-left maps to the minimap's top-left")
-	_check(ScreenLib.minimap_map(Vector2(1536, 960)).is_equal_approx(Vector2(192, 120)),
+	_check(ScreenLib.minimap_map(Vector2(3072, 1920)).is_equal_approx(Vector2(192, 120)),
 		"minimap_map: the world's bottom-right maps to (192,120)")
-	_check(ScreenLib.minimap_map(Vector2(768, 480)).is_equal_approx(Vector2(96, 60)),
+	_check(ScreenLib.minimap_map(Vector2(1536, 960)).is_equal_approx(Vector2(96, 60)),
 		"minimap_map: the world centre maps to the minimap centre (96,60)")
-	_check(ScreenLib.minimap_map(Vector2(45 * 32, 15 * 32)).is_equal_approx(
+	_check(ScreenLib.minimap_map(Vector2(45 * 64, 15 * 64)).is_equal_approx(
 			Vector2(180, 60)),
 		"minimap_map: enemy deployment cell (45,15) maps to (180,60) at 4 px/cell")
 
@@ -225,10 +226,10 @@ func _test_camera_functions() -> void:
 	_check(is_equal_approx(ScreenLib.CLICK_THRESHOLD_PX, 4.0)
 			and is_equal_approx(ScreenLib.EDGE_BAND_PX, 16.0)
 			and is_equal_approx(ScreenLib.EDGE_SPEED, 600.0)
-			and is_equal_approx(ScreenLib.ZOOM_MIN, 0.6)
+			and is_equal_approx(ScreenLib.ZOOM_MIN, 0.45)
 			and is_equal_approx(ScreenLib.ZOOM_MAX, 1.5),
 		"the §4.3 constants are pinned: 4 px threshold, 16 px band, 600 px/s, "
-			+ "zoom 0.6×–1.5×")
+			+ "zoom 0.45×–1.5×")
 
 
 # --- 2. Scene boot & layout (§4.7.1 wireframe) ----------------------------
@@ -251,10 +252,11 @@ func _test_scene() -> void:
 	var bottom: ColorRect = screen.get_node("BottomPanel")
 	_check(bottom.position.y == 984.0 and bottom.size.y == 96.0,
 		"the bottom bar takes the rest of 1920×1080 (96 px, §4.7.1)")
-	_check(ScreenLib.WORLD_PX.is_equal_approx(Vector2(1536, 960))
-			and is_equal_approx(ScreenLib.TILE_PX, 32.0)
-			and ScreenLib.TOKEN_PX == 24,
-		"the world is 48×30 tiles at 32 px = 1536×960; tokens are 24×24 (§4.2/§4.8)")
+	_check(ScreenLib.WORLD_PX.is_equal_approx(Vector2(3072, 1920))
+			and is_equal_approx(ScreenLib.TILE_PX, 64.0)
+			and ScreenLib.TOKEN_PX == 64,
+		"the world is 48×30 tiles at 64 px = 3072×1920; tokens render 1:1 "
+			+ "64 (§4.2/§4.8, the hero-64 hard rule)")
 	_check(screen._overlay != null and screen._overlay.has_method("pick_velocity"),
 		"the overlay carries the §4.7.1 velocity-pick pick")
 	_check(is_equal_approx(screen.camera_state()["zoom"], ScreenLib.fit_zoom())

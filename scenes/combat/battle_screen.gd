@@ -128,11 +128,12 @@ const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
 
 # --- §4.7.1 world & camera geometry (all numbers pinned there) --------------
 
-## The battle world: 48×30 tiles at 32 px (§4.2).
-const TILE_PX := 32.0
+## The battle world: 48×30 tiles at 64 px (§4.2, the 2026-11-08
+## battle-64 amendment — tokens render 1:1 64 on 64px tiles).
+const TILE_PX := 64.0
 const GRID_W := BattleSimLib.GRID_WIDTH
 const GRID_H := BattleSimLib.GRID_HEIGHT
-const WORLD_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)  # 1536×960
+const WORLD_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)  # 3072×1920
 ## The camera viewport (the bottom bar takes the rest of 1920×1080, §4.7.1
 ## as amended by the 2026-11-08 resolution bump).
 const VIEW_SIZE := Vector2(1920, 944)
@@ -141,10 +142,10 @@ const BOTTOM_BAR_H := 96.0
 ## The minimap: 192×120 at 4 px/cell, top-right (§4.7.1).
 const MINIMAP_SIZE := Vector2(192, 120)
 const MINIMAP_MARGIN := 8.0
-const MINIMAP_SCALE := 0.125  # 4 px/cell ÷ 32 px/cell
+const MINIMAP_SCALE := 0.0625  # 4 px/cell ÷ 64 px/cell
 ## Camera zoom bounds and the per-notch wheel step (§4.3/§4.7.1: 0.6×–1.5×,
 ## anchored at the cursor; the step follows the S17 chart's ×1.25 precedent).
-const ZOOM_MIN := 0.6
+const ZOOM_MIN := 0.45  # the [fit] view is height-bound 944/1920 = 0.4917
 const ZOOM_MAX := 1.5
 const ZOOM_STEP := 1.25
 ## Edge scroll: a 16 px screen band pans at 600 px/s (§4.3).
@@ -154,7 +155,7 @@ const EDGE_SPEED := 600.0
 const CLICK_THRESHOLD_PX := 4.0
 
 ## §4.8: ship tokens are 24×24 squares with a letter.
-const TOKEN_PX := 24
+const TOKEN_PX := 64
 ## W4 (§4.8a): the §4.7 gate value — a side at or below it fills the morale
 ## bar in the WARN tier. On the player side this is display ONLY ("low player
 ## morale is a HUD warning only", §4.8a — player ships never auto-strike);
