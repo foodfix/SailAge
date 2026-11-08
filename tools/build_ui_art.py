@@ -1614,6 +1614,27 @@ def _derive_only_icon_ids() -> set:
     return out
 
 
+def _declared_icon_ids() -> set:
+    """The icon ids the manifests still declare (the id authority): any
+    candidate outside this set is a retired id — skipped with a ledger
+    note and its files revoked (the runtime-rotation amendment removed
+    the wind arrows' seven sibling ids this way)."""
+    out = set()
+    icon_dir = MANIFESTS / "icons"
+    if not icon_dir.is_dir():
+        return out
+    for mf in sorted(icon_dir.glob("*.json")):
+        try:
+            doc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        items = doc if isinstance(doc, list) else doc.get("sprites", [doc])
+        for d in items:
+            if isinstance(d, dict) and d.get("id"):
+                out.add(str(d["id"]))
+    return out
+
+
 def _arrow_base_dir(iid):
     """(family prefix, dir) when the id is an arrow-family BASE candidate
     (n/ne — the derivable source icons); None for everything else."""
@@ -1726,6 +1747,7 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     today = time.strftime("%Y-%m-%d", time.gmtime())
     led, rejected, skipped, written = {}, [], [], 0
     derive_only = _derive_only_icon_ids()
+    declared = _declared_icon_ids()
     # Arrow-family admission: the n/ne bases must verifiably point the
     # declared way before ANY member of the family may ingest; a poor
     # base skips the whole family for the round (generated art stays).
@@ -1743,6 +1765,13 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     for iid in sorted(candidates):
         sp, src_rel = candidates[iid]
         job = f"{ICON_INGEST_PREFIX}{iid}"
+        if iid not in declared:
+            skipped.append({"job": job,
+                            "reason": "id retired from the manifests",
+                            "detail": f"{iid} is no longer a declared icon "
+                                      "id — its shipped files revoke"})
+            print(f"  icon {iid}: SKIPPED — retired id (files revoke)")
+            continue
         if iid in derive_only:
             skipped.append({"job": job,
                             "reason": "derivation-only family",

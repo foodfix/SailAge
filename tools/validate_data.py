@@ -10841,7 +10841,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
     ship_types = docs["ship_types.json"]["ship_types"]
 
     icon_expected = set(G13_ICON_PINNED)
-    icon_expected |= {f"wind_arrow_{d}" for d in G13_DIR_IDS}
+    # the wind arrows moved to runtime rotation (the 2026-11-08
+    # amendment): ONE north texture ships; the seven sibling ids retired
+    icon_expected.add("wind_arrow_n")
     icon_expected |= {f"current_arrow_{d}" for d in G13_DIR_IDS}
     icon_expected |= {f"flag_{n['id']}" for n in nations}
     icon_expected |= {f"flag_neutral"}

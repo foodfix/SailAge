@@ -15,12 +15,12 @@
     },
     "fallback_files": 0,
     "icons": {
-      "accepted": 117,
+      "accepted": 116,
       "candidates": 129,
-      "files": 117,
-      "hero_64": 117,
+      "files": 116,
+      "hero_64": 116,
       "rejected": 0,
-      "skipped": 12
+      "skipped": 13
     },
     "markers": {
       "accepted": 6,
@@ -903,13 +903,6 @@
       "seed": 92000,
       "snapped_sha": "c1675110a902d975e3e213a48833915703b5de0350f0b97965afa2afbd8d002a",
       "source": "pixellab_icons"
-    },
-    "wind_arrow_ne": {
-      "accepted_at": "2026-11-08",
-      "job": "icon_wind_arrow_ne",
-      "seed": 92002,
-      "snapped_sha": "30c8471b1380e7f8772adf50b520d068b874889a25be9a933260461f151faf1e",
-      "source": "pixellab_icons"
     }
   },
   "icons_generated_by": "tools/build_ui_art.py --import-icons",
@@ -946,34 +939,39 @@
       "reason": "derivation-only family"
     },
     {
-      "detail": "wind_arrow_e is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_e is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_e",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     },
     {
-      "detail": "wind_arrow_nw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_ne is no longer a declared icon id — its shipped files revoke",
+      "job": "icon_wind_arrow_ne",
+      "reason": "id retired from the manifests"
+    },
+    {
+      "detail": "wind_arrow_nw is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_nw",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     },
     {
-      "detail": "wind_arrow_s is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_s is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_s",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     },
     {
-      "detail": "wind_arrow_se is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_se is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_se",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     },
     {
-      "detail": "wind_arrow_sw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_sw is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_sw",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     },
     {
-      "detail": "wind_arrow_w is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "detail": "wind_arrow_w is no longer a declared icon id — its shipped files revoke",
       "job": "icon_wind_arrow_w",
-      "reason": "derivation-only family"
+      "reason": "id retired from the manifests"
     }
   ],
   "markers": {

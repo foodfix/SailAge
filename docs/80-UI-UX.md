@@ -2465,7 +2465,26 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      staged state — the committed ledger carries only the real
      model provenance. Gates: `--check` 405 files byte-identical,
      validator groups 1–13 PASS (marker/facility sections +
-     facility-hero exactness), 61/61 suites green.
+     facility-hero exactness), 61/61 suites green. **Wind arrows move
+     to runtime rotation (amended 2026-11-08, user direction — "take
+     the north one, and create others by rotate it"):** the wind
+     family ships ONE generated north texture (`wind_arrow_n`); the
+     seven other dirs render by rotating it at draw time through the
+     pinned heading8 map (`ArrowFieldLib.DIR_ROTATION_DEGREES`, the
+     hull-token precedent — n 0, ne 45, … nw 315 clockwise in screen
+     y-down, NEAREST filter, crisp pixels). A build-time rotation
+     cannot serve the diagonals losslessly (45° pixel rotation
+     aliases — the reason the family ever generated a diagonal base),
+     so `wind_arrow_ne` and the six derive decls RETIRE from
+     `arrows_wind.json` (their 32/64 files deleted; the ledger entry
+     revoked; undeclared candidate ids skip with a ledger note — the
+     manifests stay the id authority). The §8.8 item 5 transform pin
+     retires for the wind rows (no sibling files exist to check);
+     the current-arrow family keeps its two-base scheme unchanged.
+     Consumers: the S3 arrow field (world map) rotates through
+     `draw_set_transform`; the HUD wind sprite rotates the same map
+     around its anchor. The windArrow_n pointing gate and the
+     ingested provenance carry over unchanged.
 
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the

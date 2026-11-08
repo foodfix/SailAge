@@ -1177,9 +1177,18 @@ func _draw() -> void:
 	# placeholder exactly as before — wind `TEXT`, current `ACCENT`. The
 	# current arrow renders only while the fleet stands on a current tile.
 	var wind_centre := _weather_label.position + WIND_ARROW_OFFSET
-	var wind_sprite := _arrow_sprite("wind_arrow_", _wind_dir_displayed)
+	# The §4.8 runtime-rotation amendment (2026-11-08): ONE north wind
+	# texture, rotated through the pinned heading8 map (the hull-token
+	# precedent); a registry miss keeps the drawn placeholder.
+	var wind_sprite := UiKitLib.icon_texture("wind_arrow_n")
 	if wind_sprite != null:
-		draw_texture_rect(wind_sprite, _arrow_sprite_rect(wind_centre), false)
+		var wind_rect := _arrow_sprite_rect(wind_centre)
+		draw_set_transform(wind_rect.get_center(),
+			deg_to_rad(wind_arrow_angle()), Vector2.ONE)
+		draw_texture_rect(wind_sprite,
+			Rect2(Vector2.ONE * -ARROW_SPRITE_PX * 0.5,
+				Vector2(ARROW_SPRITE_PX, ARROW_SPRITE_PX)), false)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		_draw_compass_arrow(wind_centre, _wind_dir_displayed, PaletteLib.TEXT)
 	if current_arrow_visible():

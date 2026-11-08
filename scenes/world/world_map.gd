@@ -2736,15 +2736,27 @@ func _draw_arrow_field() -> void:
 		var at := Vector2(cell) * float(_cell_pixels) \
 			+ Vector2.ONE * float(_cell_pixels) * 0.5
 		var dir_id := str(entry.get("dir_id", ""))
+		var kind := str(entry.get("kind", ""))
 		var texture: Texture2D = null
+		var rotation_deg := 0.0
 		if not dir_id.is_empty():
-			texture = UiKitLib.icon_texture(
-				"%s_arrow_%s" % [str(entry.get("kind", "")), dir_id])
+			if kind == "wind":
+				# The §4.8 runtime-rotation amendment (2026-11-08): the
+				# wind family ships ONE north texture; the eight dirs
+				# rotate it through the pinned heading8 map at draw time.
+				texture = UiKitLib.icon_texture("wind_arrow_n")
+				rotation_deg = ArrowFieldLib.rotation_degrees_of_dir(dir_id)
+			else:
+				texture = UiKitLib.icon_texture(
+					"%s_arrow_%s" % [kind, dir_id])
 		var half := float(_cell_pixels) * 0.5
 		if texture != null:
+			_arrow_layer.draw_set_transform(at,
+				deg_to_rad(rotation_deg), Vector2.ONE)
 			_arrow_layer.draw_texture_rect(texture,
-				Rect2(at - Vector2.ONE * half, Vector2.ONE * _cell_pixels),
+				Rect2(Vector2(-half, -half), Vector2.ONE * _cell_pixels),
 				false)
+			_arrow_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			continue
 		if bool(entry.get("variable", false)):
 			_draw_var_diamond(at, half * 0.6)
