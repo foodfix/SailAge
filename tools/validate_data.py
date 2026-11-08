@@ -10007,6 +10007,7 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
     fam_dirs = {"markers": "markers", "facility": "tokens"}
     fam_blocks = {"markers": BLOCK_TERRAIN, "facility": BLOCK_HULL}
     fam_caps = {"markers": G13_CAP_32, "facility": G13_CAP_32}
+    fam_hero_dirs = {"markers": "markers64", "facility": "tokens64"}
     # the pinned inventories, read from the authored manifests
     inventories: dict[str, set] = {"markers": set(), "facility": set()}
     for mf in sorted((UI_ART_DIR / "markers").glob("*.json")):
@@ -10098,33 +10099,29 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
                 fail("art-ingest", str(p.relative_to(ART_ROOT)),
                      f"{len(got)} distinct colors > the 32px cap "
                      f"{fam_caps[family]} (§4.8.3)", 13)
-            # the facility hero 64 (the 2026-11-08 user direction): the
-            # icons64 pattern — committed beside the 32 for every
-            # facility record; markers carry no hero (pinned)
-            hero = None
-            hpx = None
-            if family == "facility":
-                hero = ASSETS_UI / "tokens64" / f"{iid}.png"
-                if not hero.is_file():
-                    fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                         "facility hero 64 asset missing (ledger + 32 + "
-                         "hero commit together) — re-run "
-                         "build_ui_art --import-glyphs", 13)
-                try:
-                    hw, hh, hpx = decode_ui_png(hero.read_bytes())
-                except (OSError, PngFormatError) as exc:
-                    fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                         f"hero asset does not decode: {exc}", 13)
-                if (hw, hh) != (64, 64):
-                    fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                         f"hero asset is {hw}x{hh}, the hero canvas is "
-                         "64x64", 13)
-                hgot = {c for row in hpx for c in row if c is not None}
-                hoff = sorted(hgot - (fam_blocks[family] | BLOCK_LOCKED))
-                if hoff:
-                    fail("art-ingest", str(hero.relative_to(ART_ROOT)),
-                         f"hero off-block hex(es) {hoff} — the facility "
-                         "class checks against the hull block", 13)
+            # the hero 64 (the hero-64 display rule, 2026-11-08): BOTH
+            # glyph families ship heroes now — the icons64 pattern
+            hero = ASSETS_UI / fam_hero_dirs[family] / f"{iid}.png"
+            if not hero.is_file():
+                fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                     f"{family} hero 64 asset missing (ledger + 32 + "
+                     "hero commit together) — re-run "
+                     "build_ui_art --import-glyphs", 13)
+            try:
+                hw, hh, hpx = decode_ui_png(hero.read_bytes())
+            except (OSError, PngFormatError) as exc:
+                fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                     f"hero asset does not decode: {exc}", 13)
+            if (hw, hh) != (64, 64):
+                fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                     f"hero asset is {hw}x{hh}, the hero canvas is "
+                     "64x64", 13)
+            hgot = {c for row in hpx for c in row if c is not None}
+            hoff = sorted(hgot - (fam_blocks[family] | BLOCK_LOCKED))
+            if hoff:
+                fail("art-ingest", str(hero.relative_to(ART_ROOT)),
+                     f"hero off-block hex(es) {hoff} — the {family} class "
+                     "checks against its owning §4.8.4 block", 13)
             sp = (UI_ART_DIR / "model_raw" / "pixellab_glyphs" / iid
                   / "snapped" / "icon.png")
             if not sp.is_file():
@@ -10152,10 +10149,10 @@ def _g13_check_ingest_glyph_families(doc: dict) -> int:
                      "is not the exact re-quantize + 2:1 nearest halving "
                      "of its snapped source — re-run "
                      "build_ui_art --import-glyphs", 13)
-            if family == "facility" and hpx != q:
+            if hpx != q:
                 fail("art-ingest", str(hero.relative_to(ART_ROOT)),
                      "is not the exact re-quantize of its snapped source "
-                     "(facility hero 64 1:1) — re-run "
+                     f"({family} hero 64 1:1) — re-run "
                      "build_ui_art --import-glyphs", 13)
     return verified
 

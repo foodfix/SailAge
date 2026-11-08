@@ -381,7 +381,7 @@ MARKER_BLOCK = {
 # (assets/ui/tokens64/<id>.png — the icons64 pattern, user direction
 # 2026-11-08); markers ship the halved 32 only.
 GLYPH_FAMILIES = {
-    "marker_": ("markers", "markers", MARKER_BLOCK, None),
+    "marker_": ("markers", "markers", MARKER_BLOCK, "markers64"),
     "facility_": ("facility", "tokens", HULL_BLOCK, "tokens64"),
 }
 GLYPH_INLINE_CAP = 20           # §4.8.3 32px tier color cap (both families)
@@ -972,8 +972,8 @@ def resolve_artifact_overrides(root: Path = ROOT):
     one 32 asset per id (no heroes — pinned).  Returns {"icons": {id:
     path}, "icons64": {id: path}, "markers": {id: path}, "facility": {id:
     path}, "terrain": {file name: path}}."""
-    out = {"icons": {}, "icons64": {}, "markers": {}, "facility": {},
-           "facility64": {}, "terrain": {}}
+    out = {"icons": {}, "icons64": {}, "markers": {}, "markers64": {},
+           "facility": {}, "facility64": {}, "terrain": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
@@ -987,12 +987,17 @@ def resolve_artifact_overrides(root: Path = ROOT):
             p = root / "assets" / "ui" / dirname / f"{iid}.png"
             if p.is_file():
                 out[family][iid] = p
-        # facility heroes live in tokens64/ (the icons64 pattern)
+        # family heroes live in the *64 dirs (the icons64 pattern)
         if family == "facility":
             for iid in (doc.get(family) or {}):
                 ph = root / "assets" / "ui" / "tokens64" / f"{iid}.png"
                 if ph.is_file():
                     out["facility64"][iid] = ph
+        if family == "markers":
+            for iid in (doc.get(family) or {}):
+                ph = root / "assets" / "ui" / "markers64" / f"{iid}.png"
+                if ph.is_file():
+                    out["markers64"][iid] = ph
     for fname in (doc.get("terrain") or {}):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
@@ -2538,8 +2543,9 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     seam-ring verify so the ring reads the shipped canvases."""
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
               "icons_ingested": 0, "icons64_ingested": 0,
-              "markers_ingested": 0, "facility_ingested": 0,
-              "facility64_ingested": 0, "terrain_ingested": 0}
+              "markers_ingested": 0, "markers64_ingested": 0,
+              "facility_ingested": 0, "facility64_ingested": 0,
+              "terrain_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
     # clobber them.  Stash the ingested bytes first; the ladder restores
@@ -2549,6 +2555,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     for family, dirname, keyed in (("icons", "icons", True),
                                    ("icons64", ICON_HERO_DIR, True),
                                    ("markers", "markers", True),
+                                   ("markers64", "markers64", True),
                                    ("facility", "tokens", True),
                                    ("facility64", "tokens64", True),
                                    ("terrain", "terrain", False)):
@@ -2711,17 +2718,19 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(stash[dest])
             counts[f"{family}_ingested"] += 1
-    fac64 = (artifacts or {}).get("facility64") or {}
-    for iid in sorted(fac64):
-        override = fac64[iid]
-        dest = outroot / "assets" / "ui" / "tokens64" / f"{iid}.png"
-        if override.is_file() and override != dest:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(override, dest)
-        elif dest in stash:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(stash[dest])
-        counts["facility64_ingested"] += 1
+    for family, dirname in (("facility64", "tokens64"),
+                            ("markers64", "markers64")):
+        fam64 = (artifacts or {}).get(family) or {}
+        for iid in sorted(fam64):
+            override = fam64[iid]
+            dest = outroot / "assets" / "ui" / dirname / f"{iid}.png"
+            if override.is_file() and override != dest:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(override, dest)
+            elif dest in stash:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(stash[dest])
+            counts[f"{family}_ingested"] += 1
     terr = (artifacts or {}).get("terrain") or {}
     for fname in sorted(terr):
         override = terr[fname]

@@ -78,13 +78,17 @@ static var _fx_dir := FX_DIR
 ## the same miss resolver under the `icon64_` id prefix — raw bytes, no
 ## `.import` sidecars (the token family rule), so an ingest reaches the
 ## game by file replace + restart. The facility-token heroes
-## (`facility64_`, 80-* §4.8 2026-11-08) join the same lazy family.
+## (`facility64_`, 80-* §4.8 2026-11-08) and the marker heroes
+## (`marker64_`, the hero-64 display rule) join the same lazy family.
 const ICONS64_DIR := "res://assets/ui/icons64"
 static var _icons64_dir := ICONS64_DIR
 const ICONS64_PREFIX := "icon64_"
 const TOKENS64_DIR := "res://assets/ui/tokens64"
 static var _tokens64_dir := TOKENS64_DIR
 const TOKENS64_PREFIX := "facility64_"
+const MARKERS64_DIR := "res://assets/ui/markers64"
+static var _markers64_dir := MARKERS64_DIR
+const MARKERS64_PREFIX := "marker64_"
 
 static var _registered := false
 ## Ids registered by the last successful pass (the suite/report read seam).
@@ -148,16 +152,20 @@ static func _load_token_texture(id: String) -> Texture2D:
 				FileAccess.get_file_as_bytes(fx_path)) != OK:
 			return null
 		return ImageTexture.create_from_image(fx_image)
-	# The hero-64 icon family (80-* §4.8 2026-11-08): id `icon64_<icon>`
-	# reads `assets/ui/icons64/<icon>.png` raw — same lazy family rules.
-	# The facility-token heroes (`facility64_<id>`) ride the same branch
-	# against `assets/ui/tokens64/`.
-	var raw_dir := _icons64_dir if id.begins_with(ICONS64_PREFIX) \
-		else (_tokens64_dir if id.begins_with(TOKENS64_PREFIX) else "")
-	var bare := id.substr(ICONS64_PREFIX.length()) \
-			if id.begins_with(ICONS64_PREFIX) \
-			else (id.substr(TOKENS64_PREFIX.length())
-					if id.begins_with(TOKENS64_PREFIX) else "")
+	# The hero-64 families (80-* §4.8 2026-11-08): `icon64_<icon>` reads
+	# `assets/ui/icons64/<icon>.png`, `facility64_<id>` reads tokens64/,
+	# `marker64_<id>` reads markers64/ — raw bytes, same lazy rules.
+	var raw_dir := ""
+	var bare := ""
+	if id.begins_with(ICONS64_PREFIX):
+		raw_dir = _icons64_dir
+		bare = id.substr(ICONS64_PREFIX.length())
+	elif id.begins_with(TOKENS64_PREFIX):
+		raw_dir = _tokens64_dir
+		bare = id.substr(TOKENS64_PREFIX.length())
+	elif id.begins_with(MARKERS64_PREFIX):
+		raw_dir = _markers64_dir
+		bare = id.substr(MARKERS64_PREFIX.length())
 	if not raw_dir.is_empty():
 		var raw_path := "%s/%s.png" % [raw_dir, bare]
 		if FileAccess.file_exists(raw_path):

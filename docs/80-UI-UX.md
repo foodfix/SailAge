@@ -2446,7 +2446,30 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      this run:** `wind_arrow_ne` landing and passing the
      NE-pointing gate admits both wind bases; the §8.8 item 5
      refresh path re-derives the six wind siblings from the
-     ingested sources automatically. **Acceptance record
+     ingested sources automatically. **The hero-64 display rule
+     (amended 2026-11-08, user direction — everything generated as
+     64×64 renders as 64×64; the 1920×1080 resolution bump lands the
+     same day):** every surface that renders PixelLab art draws it
+     **1:1 at 64 px, NEAREST** — no 64→32 texture filtering and no
+     32→64 stretching — **everywhere except battle, the S17 chart and
+     the minimap** (those stay on the halved-32 assets / flat raster
+     per the §4.8 LOD pins; the halved-32 family's remaining
+     consumers are battle + those flat contexts only). **Kit
+     contract:** rows that carry a 64-generated icon use the new
+     `row_icon` row (64 high, the icon slot flush 64); icon-less
+     text rows keep the §4.9 32 grid; tall tables (market, shipyard,
+     intel) scroll inside their windows — the window outer sizes
+     stay pinned (1920×1080 design canvas, `canvas_items` stretch,
+     keep aspect). **Marker heroes un-deferred:** `assets/ui/markers64/`
+     ships the quantized 64 per marker id (`marker64_<id>` through
+     the kit registry's lazy raw-bytes branch); the world map draws
+     treasure/wreck/discovery markers from the heroes at cell size
+     native. The S3 arrow field and the HUD wind/current sprites
+     draw from the `icons64/` sources (the north wind texture
+     rotating per the heading8 map at 64). Rosters and fleet lists
+     render the static `n` hull token at its tier-native size (up to
+     64, no keep-aspect 32 box). The halved-32 inline assets remain
+     committed for the exempt contexts and as the per-file fallback. **Acceptance record
      (2026-11-08):** 12/12 first roll at the pinned seed, prompt-only,
      no reference images; the user verdict accepted all as drawn
      (`marker_discovery_natural` keeps the model's small red X).
