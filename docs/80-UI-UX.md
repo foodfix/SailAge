@@ -940,16 +940,19 @@ Phase 9 rebuilds the presentation: the Phase-2 16×10 MP grid becomes a
 +------------------------------------------------------------------+
 ```
 
-- **World & camera.** The battle world is 48×30 tiles at 32 px =
-  1536×960; the camera viewport is 1920×944 (the bottom bar takes the
-  rest of the 1920×1080 window). The camera auto-centers on the acting
-  unit until the first manual pan — a manual pan pauses follow until the
-  next unit's turn. Pan with RMB/MMB drag; zoom with the wheel at
-  0.6×–1.5×, anchored at the cursor; edge scroll runs off a 16 px screen
-  band at 600 px/s (§4.3); `Home` or the `[fit]` button fits the whole
-  1536×960 world. All camera math lives as pure functions in
-  `battle_screen.gd` (world↔screen mapping, clamp, zoom anchor, minimap
-  mapping, the 4 px click/drag threshold) with fixed-value assertions in
+- **World & camera.** The battle world is 48×30 tiles at 64 px =
+  3072×1920 (the 2026-11-08 battle-64 amendment — tokens render 1:1 64
+  on 64px tiles); the camera viewport is 1920×944 (the bottom bar takes
+  the rest of the 1920×1080 window). The camera auto-centers on the
+  acting unit until the first manual pan — a manual pan pauses follow
+  until the next unit's turn. Pan with RMB/MMB drag; zoom with the wheel
+  at 0.45×–1.5×, anchored at the cursor (the floor lowered so `[fit]` —
+  height-bound 944/1920 ≈ 0.4917 — truly fits the whole world); edge
+  scroll runs off a 16 px screen band at 600 px/s (§4.3); `Home` or the
+  `[fit]` button fits the whole 3072×1920 world. All camera math lives
+  as pure functions in `battle_screen.gd` (world↔screen mapping, clamp,
+  zoom anchor, minimap mapping, the 4 px click/drag threshold) with
+  fixed-value assertions in
   `tools/test_battle_screen.gd`.
 - **Minimap.** 192×120 px (4 px/cell), top-right: the viewport frame,
   ship dots in the §4.8 pin colors (player/enemy; a navy fleet's dot
@@ -2451,10 +2454,20 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      64×64 renders as 64×64; the 1920×1080 resolution bump lands the
      same day):** every surface that renders PixelLab art draws it
      **1:1 at 64 px, NEAREST** — no 64→32 texture filtering and no
-     32→64 stretching — **everywhere except battle, the S17 chart and
-     the minimap** (those stay on the halved-32 assets / flat raster
-     per the §4.8 LOD pins; the halved-32 family's remaining
-     consumers are battle + those flat contexts only). **Kit
+     32→64 stretching — **everywhere** (the 2026-11-08 same-day battle
+     amendment moved the battle grid to 64px tiles: the tokens render
+     1:1 64 in battle too; the S17 chart and the minimap stay on their
+     own flat-raster/derived layers — they never drew the generated
+     files). The halved-32 families are RETIRED: `assets/ui/icons/`,
+     `assets/ui/markers/` and the facility half of `assets/ui/tokens/`
+     are deleted — `assets/ui/icons64/`, `assets/ui/markers64/` and
+     `assets/ui/tokens64/` ARE the shipped art (every icon id is
+     ledger-committed; the icon string-map manifests are stripped to
+     id/derive decls — id authority + inventories; the authored string
+     maps live in git history; `gen_icons.py` retired). The hull north
+     tokens moved to `assets/ui/hulls/` (the tier-native master family
+     — 32/48/64 by tier, rendered 1:1 native everywhere, boxes ≥
+     native, no resample — the token-rendering hard rule). **Kit
      contract:** rows that carry a 64-generated icon use the new
      `row_icon` row (64 high, the icon slot flush 64); icon-less
      text rows keep the §4.9 32 grid; tall tables (market, shipyard,
