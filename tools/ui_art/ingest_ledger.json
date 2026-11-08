@@ -7,7 +7,7 @@
         "from": "click",
         "part": "corner",
         "pixel_id": "1",
-        "sha256": "424c00e583a1bcda445cda8a7926bfc871c329c341d489cbff474323e17c817e",
+        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
         "wang": 1
       },
       "button_edge": {
@@ -16,7 +16,7 @@
         "from": "click",
         "part": "edge",
         "pixel_id": "3",
-        "sha256": "3fa50342d2bf9554c69aaf5e19d8888dd1dc624d02e0624a30d9dd21e9abb163",
+        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
         "wang": 3
       },
       "button_fill": {
@@ -25,25 +25,25 @@
         "from": "click",
         "part": "fill",
         "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "4197bc2ee9d155b76141217bf9e19db48d6113d793a628fec697e088b06ed666",
+        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
         "wang": 15
       },
       "button_focus_corner": {
-        "derivation": "ring",
+        "derivation": "base",
         "family": "button_focus",
         "from": "click",
         "part": "corner",
         "pixel_id": "1",
-        "sha256": "91b93d4f7b2806a4cb6e815b35f6974b061b1341ff9e8521572e01948805b6a0",
+        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
         "wang": 1
       },
       "button_focus_edge": {
-        "derivation": "ring",
+        "derivation": "base",
         "family": "button_focus",
         "from": "click",
         "part": "edge",
         "pixel_id": "3",
-        "sha256": "814c6831412ace4b00a9df5e05752afaaf8a9732f56a071df9f9376a14f277e4",
+        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
         "wang": 3
       },
       "button_focus_fill": {
@@ -52,61 +52,61 @@
         "from": "click",
         "part": "fill",
         "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "4197bc2ee9d155b76141217bf9e19db48d6113d793a628fec697e088b06ed666",
+        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
         "wang": 15
       },
       "button_hover_corner": {
-        "derivation": "lift",
+        "derivation": "base",
         "family": "button_hover",
         "from": "click",
         "part": "corner",
         "pixel_id": "1",
-        "sha256": "b1f154be01350409d0cd021435256edb53fba1d83c2d4eaa5c22216ac7a3d547",
+        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
         "wang": 1
       },
       "button_hover_edge": {
-        "derivation": "lift",
+        "derivation": "base",
         "family": "button_hover",
         "from": "click",
         "part": "edge",
         "pixel_id": "3",
-        "sha256": "939b6a2b90d192ff044b03af76cc7223d71a2670319284086cad58f03bd1339a",
+        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
         "wang": 3
       },
       "button_hover_fill": {
-        "derivation": "lift",
+        "derivation": "base",
         "family": "button_hover",
         "from": "click",
         "part": "fill",
         "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "c6e91b03e90efc221c5ec75c742af67e58f241d97716c7650c4a2030df736db9",
+        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
         "wang": 15
       },
       "button_pressed_corner": {
-        "derivation": "press",
+        "derivation": "base",
         "family": "button_pressed",
         "from": "click",
         "part": "corner",
-        "pixel_id": "8",
-        "sha256": "33f81c8040c261aacecb9be676964ff475e03ba8f044265c05ede350b25d983f",
-        "wang": 8
+        "pixel_id": "1",
+        "sha256": "c6c80ea642fc2b7f523879183855e4046f6eb6bdaad6e5455188e4e4929821c1",
+        "wang": 1
       },
       "button_pressed_edge": {
-        "derivation": "press",
+        "derivation": "base",
         "family": "button_pressed",
         "from": "click",
         "part": "edge",
-        "pixel_id": "12",
-        "sha256": "62eb955ac9770788b8d48abd033746d0448fa0c5f14e17aabc25415decc6d2d7",
-        "wang": 12
+        "pixel_id": "3",
+        "sha256": "2cd9dce35a038edd5e33e686c2d0fd8284b35a003559d4fe2684e7ab322b4f63",
+        "wang": 3
       },
       "button_pressed_fill": {
-        "derivation": "press",
+        "derivation": "base",
         "family": "button_pressed",
         "from": "click",
         "part": "fill",
         "pixel_id": "0f5e64f7-381a-4cde-8cfc-a9859ac51fa0",
-        "sha256": "475016df3edae91d460f946f3a79afaf36305d73a440aa6a9f1567b5a4302a4f",
+        "sha256": "eb70274fb2f47b30bce53d9333da37b90978c551ad5883cfc261aee0af0e3219",
         "wang": 15
       },
       "field_corner": {

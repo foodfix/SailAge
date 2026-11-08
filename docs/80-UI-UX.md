@@ -2080,49 +2080,27 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    material + value + rim metal (blue chart paper + wood vs cream
    parchment + brass); the double-line and rosette cues the model
    under-rendered are gone. **The fence fix (2026-11-09, user
-    deliberate pixels, flat color fills, no text". Differentiation =
-   material + value + rim metal (blue chart paper + wood vs cream
-   parchment + brass); the double-line and rosette cues the model
-   under-rendered are gone. **The fence fix (2026-11-09, user
    direction — pressed buttons tiled into a fence):** tile-mode
    repetition exposes any interior mark, and the rolled click face
    carried a vertical crease — large pressed buttons fenced. The
    click upper_description re-pins the face as "a flat even
    repeat-safe texture with no fold lines, no creases, no knots, no
    stitching and no distinct marks", seed 20261113 (the 7164d350 trio
-   retired). **The clean-face op (2026-11-09, user direction — dots +
-   lines inside large buttons):** tile-mode repetition multiplies ANY
-   face mark — the rolled parchment face's sparse specks and
-   horizontal fiber strokes tile into a dot lattice and faint lines on
-   large buttons, and the band's drawn rivet dashes / inner border
-   lines survive a band-preserving clean. The click-derived families
-   (button/button_hover/button_pressed/button_focus) therefore
-   flatten everything EXCEPT the outermost CHROME_CLEAN_RING 1px of
-   the silhouette (the dark outline + brass edge = the plate's
-   material identity) to the tile's modal face color (ties break
-   first-seen); pressed/hover/focus then apply their ops on the
-   cleaned tile. The frame family keeps its chart-paper speckle (the
-   weathered look is intended). **Hover lift op re-pinned
-   (rim-weighted):**
-   the whole-plate +18% lift is nearly invisible on light parchment —
-   the `lift` derivation now computes each opaque pixel's distance to
-   the plate's transparent outside (BFS on the 16×16 keyed tile): band
-   pixels (distance ≤ HOVER_RIM_BAND 2) flare
-   `c' = c + round((255−c)×HOVER_RIM_LIFT 0.35)` (the brass band lights
-   up), interior pixels a faint warmth `×HOVER_FACE_LIFT 0.05` of the
-   same lift. Pressed/focus/disabled unchanged (sunken rim / ACCENT
-   ring / modulate dim). **The clean-face op (2026-11-09, user
-   direction — dots + lines inside large buttons):** tile-mode
-   repetition multiplies ANY face mark — the rolled parchment face's
-   sparse specks and horizontal fiber strokes tile into a dot lattice
-   and faint lines on large buttons. The click-derived families
-   (button/button_hover/button_pressed/button_focus) therefore flatten
-   the face at import: pixels farther than HOVER_RIM_BAND from the
-   keyed outside collapse to the tile's modal face color (ties break
-   first-seen), pixels within the band keep as drawn (the brass band
-   and bevel stay authentic); pressed/hover/focus then apply their ops
-   on the cleaned tile. The frame family keeps its chart-paper speckle
-   (the weathered look is intended). **Palette:** the icon block appends
+   retired). **The raw-plate rule (2026-11-09, user direction — ship
+   the raw tile):** the click-derived families
+   (button/button_hover/button_pressed/button_focus) ship the RAW
+   keyed click tiles — the green authoring background keyed to alpha
+   and NOTHING else. The clean-face flatten (three-band modal
+   sampling, d6d235bd) is retired — its modal collapse sampled
+   outline == brass == face and every themed Button rendered without
+   its boundary; the lift/press/ring state ops are retired with it —
+   every state sheet carries the SAME raw plate (no baked glow, no
+   sunken rim, no ACCENT ring; the boundary is the model's own drawn
+   outline). The nine-patch assembler still places the tiles
+   pixel-exact (FRAME_OPS orientation mirroring) and the stylebox
+   TILEs the middle regions — tiles are placed, never scaled. The
+   frame family keeps its chart-paper speckle (the weathered look is
+   intended). **Palette:** the icon block appends
    `PANEL_BLUE #b7cfe0` (pale sky-blue chart paper — the texture-mode
    flat panel fill; `surface_fill()` re-points, ink `INK_WARM` ≈ 8.6:1
    on it); `PARCH` stays pinned (the parchment-plate constant).

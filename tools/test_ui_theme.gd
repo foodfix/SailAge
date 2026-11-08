@@ -378,13 +378,19 @@ func _test_texture_mode() -> void:
 ## `fill_opaque` (the plate interior never leaks the key), `rim_clear`
 ## (each ring cell carries its keyed transparent outside on the OUTER
 ## half), `corners_clear` (the silhouette clears the sheet corners).
+## `ring_distinct` (§4.8 raw-plate rule, 2026-11-09 — the four click
+## families) adds a color-RELATION pin, still no absolute hexes: every
+## corner/edge cell carries ≥ 2 distinct opaque colors — the model's
+## own drawn outline must differ from the face, or the plate ships
+## borderless (the d6d235bd clean-face modal collapse rendered every
+## themed Button as interior-only).
 func _sheet_specs() -> Dictionary:
 	return {
 		"panel": {"pixellab": true},
-		"button": {"pixellab": true},
-		"button_hover": {"pixellab": true},
-		"button_pressed": {"pixellab": true},
-		"button_focus": {"pixellab": true},
+		"button": {"pixellab": true, "ring_distinct": true},
+		"button_hover": {"pixellab": true, "ring_distinct": true},
+		"button_pressed": {"pixellab": true, "ring_distinct": true},
+		"button_focus": {"pixellab": true, "ring_distinct": true},
 		"field": {"pixellab": true},
 	}
 
@@ -624,6 +630,31 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 		and img.get_pixel(0, 47).a < 0.01 and img.get_pixel(47, 47).a < 0.01,
 		("texture mode: %s transparent at the four sheet corners "
 			+ "(the keyed plate silhouette)") % sheet_id)
+	# Boundary-distinct pin (§4.8 raw-plate rule, 2026-11-09): on the
+	# click families every ring cell (a 16x16 corner or edge cell of
+	# the sheet) must carry ≥ 2 distinct opaque colors — the model's
+	# drawn outline differs from the face. The shipped d6d235bd
+	# collapse (outline == face, one flat color per tile) rendered
+	# every themed Button borderless; this fails on exactly that.
+	# Alpha geometry above; color RELATION here — no hexes.
+	if spec.get("ring_distinct", false):
+		var ring_distinct := true
+		for cell_x in [0, 16, 32]:
+			for cell_y in [0, 16, 32]:
+				if cell_x == 16 and cell_y == 16:
+					continue  # the fill cell is all-face by design
+				var seen := {}
+				for y in range(cell_y, cell_y + 16):
+					for x in range(cell_x, cell_x + 16):
+						var c := img.get_pixel(x, y)
+						if c.a > 0.99:
+							seen[c] = true
+				if seen.size() < 2:
+					ring_distinct = false
+		_check(ring_distinct,
+			("texture mode: %s ring cells keep an outline distinct from "
+				+ "the face (>= 2 opaque colors per corner/edge cell; "
+				+ "the borderless-plate regression)") % sheet_id)
 
 
 ## Exact 8-bit pixel compare (the sheets import lossless: compress/mode=0).
