@@ -1273,12 +1273,24 @@ async function layoutCommit() {
         + `data/ui_layout.json (validator gate passed)`;
       layEl("lay-valid").textContent = "validator: pass";
       layEl("lay-valid").className = "badge pok";
+      // The both-locale guard reminder (80-* §4.8.9) — shown ONLY on a
+      // successful commit: nothing changed on a rejection, so no suites
+      // are owed. The set is concrete: the layout guards + the
+      // port-screen behavior suites.
+      const remind = layEl("lay-remind");
+      remind.textContent = "⚠ layout overrides committed — before playing "
+        + "on, run: python3 tools/run_tests.py --only test_layout --jobs 4"
+        + " + the port-screen suites (market/port_hub/inn/tavern/palace/"
+        + "shipyard/quests). The studio cannot run Godot — the committed "
+        + "file is the suites' input (80-* §4.8.9 both-locale guard).";
+      remind.hidden = false;
       await layoutLoadFile();          // show the committed bytes
     } else {
       verdict.className = "status error";
       verdict.textContent = `commit REJECTED — ${body.error || r.statusText}`;
       layEl("lay-valid").textContent = "validator: FAIL";
       layEl("lay-valid").className = "badge pbad";
+      layEl("lay-remind").hidden = true;   // nothing changed — no suites owed
     }
   } catch (e) {
     verdict.className = "status error";
