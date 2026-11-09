@@ -72,6 +72,12 @@
       "x": 0,
       "y": 0
     },
+    "rows.portrait.bust": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
     "rows.terms_befriend.terms": {
       "h": 2,
       "w": 13,

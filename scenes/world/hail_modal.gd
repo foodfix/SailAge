@@ -227,6 +227,12 @@ func _new_list_row(id: String) -> Control:
 	row.position = rect.position
 	row.size = rect.size
 	_content.add_child(row)
+	# The content node stacks to the list block's computed extent — a
+	# custom minimum, so the ScrollContainer's own layout keeps it exactly
+	# that tall (a manual `size` would be overwritten by the viewport).
+	_content.custom_minimum_size = Vector2(
+		float(ROW_W * PaletteLib.CHROME_TILE),
+		float(_content.get_child_count() * ROW_H * PaletteLib.CHROME_TILE))
 	RegistryLib.register("hail", row, "rows.%s" % id,
 		{"list": LIST_ROWS, "data_ordered": true})
 	return row

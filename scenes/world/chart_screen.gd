@@ -2382,9 +2382,10 @@ func _ensure_panel_rows() -> void:
 	_panel_rows["neutral"] = _panel_swatch_row(KEY_LEGEND_NEUTRAL,
 		ChartViewLib.port_neutral_color())
 	_panel_rows["hover"] = _panel_row("", false)  # value-only tooltip row
-	# The content node stacks to the list block's computed extent (a plain
-	# Control — nothing inside it is flow-laid).
-	_debug_rows.size = Vector2(
+	# The content node stacks to the list block's computed extent — a
+	# custom minimum, so the ScrollContainer's own layout keeps it exactly
+	# that tall (a manual `size` would be overwritten by the viewport).
+	_debug_rows.custom_minimum_size = Vector2(
 		float(PANEL_ROW_W * PaletteLib.CHROME_TILE),
 		float(_panel_rows.size() * PANEL_ROW_H * PaletteLib.CHROME_TILE))
 	# §4.6 interactive legend rows (amended 2026-11-01): a click shows/hides

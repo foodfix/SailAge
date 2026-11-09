@@ -261,6 +261,12 @@ func _new_list_row(id: String) -> Control:
 	row.position = rect.position
 	row.size = rect.size
 	_rows.add_child(row)
+	# The content node stacks to the list block's computed extent — a
+	# custom minimum, so the ScrollContainer's own layout keeps it exactly
+	# that tall (a manual `size` would be overwritten by the viewport).
+	_rows.custom_minimum_size = Vector2(
+		float(ROW_W * PaletteLib.CHROME_TILE),
+		float(_rows.get_child_count() * ROW_H * PaletteLib.CHROME_TILE))
 	RegistryLib.register("fleet_picker", row, "fleet_rows.%s" % id,
 		{"list": LIST_FLEET_ROWS, "data_ordered": true})
 	return row
@@ -342,11 +348,6 @@ func _rebuild_fleets() -> void:
 		if not (fleet is Dictionary):
 			continue
 		_build_fleet_row(fleet)
-	# The content node stacks to the list block's computed extent (a plain
-	# Control — nothing inside it is flow-laid).
-	_rows.size = Vector2(
-		float(ROW_W * PaletteLib.CHROME_TILE),
-		float(_rows.get_child_count() * ROW_H * PaletteLib.CHROME_TILE))
 
 
 func _rebuild_port() -> void:
@@ -383,9 +384,6 @@ func _rebuild_port() -> void:
 		"fleet_rows.appoint.button", {"role": "button"})
 	_port_buttons = {"dock": dock, "appoint": appoint}
 	_set_status("" if _appoint_enabled else _appoint_reason)
-	_rows.size = Vector2(
-		float(ROW_W * PaletteLib.CHROME_TILE),
-		float(_rows.get_child_count() * ROW_H * PaletteLib.CHROME_TILE))
 
 
 func _build_fleet_row(fleet: Dictionary) -> Control:
@@ -426,6 +424,8 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 	# captain name must not widen the menu — the window is pinned by the
 	# data table).
 	var name_label := Label.new()
+	name_label.clip_text = true
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.text = I18n.fmt("interact.pick.row", {
 		"name": InteractionsLib.display_name(fleet),
 		"tier": NpcFleetsLib.captain_tier_of(fleet),
@@ -433,8 +433,6 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 	name_label.position = Vector2(64, 0)
 	name_label.size = Vector2(128, 32)
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_label.clip_text = true
-	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(name_label)
 	RegistryLib.register("fleet_picker", name_label,
@@ -459,7 +457,7 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 	for verb in verbs:
 		var button := _verb_button(I18n.t_key("interact.verb.%s" % verb))
 		button.position = Vector2(float(verb_x[verb]), 0)
-		button.size = Vector2(96, 32)
+		button.size = Vector2(96, PaletteLib.BUTTON_H - 8)
 		if verb == InteractionsLib.VERB_TALK \
 				and not InteractionsLib.hail_in_range(fleet):
 			# Grayed with the distance reason beyond Chebyshev 2 (§4.10.1).
