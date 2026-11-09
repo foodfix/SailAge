@@ -698,9 +698,8 @@ func _test_battle_windows() -> void:
 
 	screen.call("open_menu")
 	await _settle()
-	var menu_panel: Control = screen.get_node("BattleMenu/Center/Panel")
-	var ai_button: Button = screen.get_node(
-		"BattleMenu/Center/Panel/Margin/Body/AiAnimate")
+	var menu_panel: Control = screen.get_node("BattleMenu/Panel")
+	var ai_button: Button = screen.get_node("BattleMenu/Panel/AiAnimate")
 	await assert_window_size_invariant("battle menu window", menu_panel, [
 		func() -> void:
 			ai_button.pressed.emit(),
@@ -712,7 +711,11 @@ func _test_battle_windows() -> void:
 
 	# The after-action report: a victory over 1 ship vs 3 ships renders
 	# different loot lines — the report window must hold its geometry.
+	# Phase 12: the first screen frees first — one live instance per layout
+	# screen id (the registry's contract), so the two probes boot clean.
 	var reports: Array = []
+	screen.queue_free()
+	await _settle()
 	for count in [1, 3]:
 		var screen2: Control = BattleScene.instantiate()
 		_host.add_child(screen2)
@@ -725,7 +728,7 @@ func _test_battle_windows() -> void:
 		await _settle()
 		screen2.call("run_to_completion", 30)
 		await _settle()
-		reports.append((screen2.get_node("AfterAction/Center/Panel") as Control).size)
+		reports.append((screen2.get_node("AfterAction/Panel") as Control).size)
 		screen2.queue_free()
 		await _settle()
 	_checks += 1
@@ -736,7 +739,6 @@ func _test_battle_windows() -> void:
 		print("PASS  after-action report window pinned across outcomes (%s)"
 			% str(reports[0]))
 
-	screen.queue_free()
 	await _settle()
 
 	# The sandbox hosts docked panels over a full-viewport root.

@@ -1,0 +1,273 @@
+{
+  "elements": {
+    "actions.board": {
+      "h": 2,
+      "w": 3,
+      "x": 38,
+      "y": 31
+    },
+    "actions.cannon": {
+      "h": 2,
+      "w": 3,
+      "x": 32,
+      "y": 31
+    },
+    "actions.hold": {
+      "h": 2,
+      "w": 3,
+      "x": 41,
+      "y": 31
+    },
+    "actions.ram": {
+      "h": 2,
+      "w": 3,
+      "x": 35,
+      "y": 31
+    },
+    "actions.target": {
+      "h": 2,
+      "w": 8,
+      "x": 22,
+      "y": 31
+    },
+    "after": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "after.dim": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "after.panel": {
+      "h": 13,
+      "w": 20,
+      "x": 20,
+      "y": 11
+    },
+    "after.panel.continue": {
+      "h": 2,
+      "w": 5,
+      "x": 14,
+      "y": 11
+    },
+    "after.panel.lines": {
+      "h": 8,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "after.panel.lines_viewport": {
+      "h": 8,
+      "w": 18,
+      "x": 1,
+      "y": 3
+    },
+    "after.panel.title": {
+      "h": 2,
+      "w": 18,
+      "x": 1,
+      "y": 1
+    },
+    "background": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "bottom.fit": {
+      "h": 2,
+      "w": 2,
+      "x": 20,
+      "y": 31
+    },
+    "bottom.heading": {
+      "h": 1,
+      "w": 3,
+      "x": 3,
+      "y": 31
+    },
+    "bottom.reload_port": {
+      "h": 1,
+      "w": 4,
+      "x": 6,
+      "y": 31
+    },
+    "bottom.reload_starboard": {
+      "h": 1,
+      "w": 4,
+      "x": 10,
+      "y": 31
+    },
+    "bottom.speed": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 31
+    },
+    "bottom.weather_label": {
+      "h": 1,
+      "w": 3,
+      "x": 17,
+      "y": 31
+    },
+    "bottom.wind": {
+      "h": 1,
+      "w": 3,
+      "x": 14,
+      "y": 31
+    },
+    "bottom_panel": {
+      "h": 3,
+      "w": 60,
+      "x": 0,
+      "y": 31
+    },
+    "log.0": {
+      "h": 1,
+      "w": 20,
+      "x": 0,
+      "y": 32
+    },
+    "log.1": {
+      "h": 1,
+      "w": 30,
+      "x": 0,
+      "y": 33
+    },
+    "log.2": {
+      "h": 1,
+      "w": 30,
+      "x": 30,
+      "y": 33
+    },
+    "menu": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "menu.dim": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "menu.panel": {
+      "h": 12,
+      "w": 15,
+      "x": 22,
+      "y": 11
+    },
+    "menu.panel.ai_animate": {
+      "h": 2,
+      "w": 13,
+      "x": 1,
+      "y": 6
+    },
+    "menu.panel.ai_instant": {
+      "h": 2,
+      "w": 13,
+      "x": 1,
+      "y": 8
+    },
+    "menu.panel.back": {
+      "h": 2,
+      "w": 13,
+      "x": 1,
+      "y": 10
+    },
+    "menu.panel.retreat": {
+      "h": 2,
+      "w": 13,
+      "x": 1,
+      "y": 2
+    },
+    "menu.panel.surrender": {
+      "h": 2,
+      "w": 13,
+      "x": 1,
+      "y": 4
+    },
+    "menu.panel.title": {
+      "h": 1,
+      "w": 13,
+      "x": 1,
+      "y": 1
+    },
+    "shots.armor_piercing": {
+      "h": 2,
+      "w": 4,
+      "x": 52,
+      "y": 31
+    },
+    "shots.chain": {
+      "h": 2,
+      "w": 4,
+      "x": 48,
+      "y": 31
+    },
+    "shots.grape": {
+      "h": 2,
+      "w": 4,
+      "x": 56,
+      "y": 31
+    },
+    "shots.round": {
+      "h": 2,
+      "w": 4,
+      "x": 44,
+      "y": 31
+    },
+    "top.day": {
+      "h": 2,
+      "w": 4,
+      "x": 8,
+      "y": 0
+    },
+    "top.round": {
+      "h": 2,
+      "w": 4,
+      "x": 12,
+      "y": 0
+    },
+    "top.title": {
+      "h": 2,
+      "w": 8,
+      "x": 0,
+      "y": 0
+    },
+    "top.weather": {
+      "h": 2,
+      "w": 44,
+      "x": 16,
+      "y": 0
+    },
+    "top_bar": {
+      "h": 2,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "lists": {
+    "after_lines": {
+      "base": {
+        "h": 2,
+        "w": 18,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 8,
+        "w": 18,
+        "x": 1,
+        "y": 3
+      }
+    }
+  }
+}

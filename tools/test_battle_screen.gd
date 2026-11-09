@@ -244,15 +244,17 @@ func _test_scene() -> void:
 	# viewport 1920×920 under the 2-tile (64px) top bar; bottom bar 3 tiles
 	# (96 px).
 	var view: Control = screen.get_node("GridView")
-	_check(view.size.is_equal_approx(Vector2(1920, 920)) and view.position.y == 64.0,
-		"the camera viewport is 1920×920 under the 2-tile top bar (§4.7.1)")
+	# Phase 12: the tile grid rounds the §4.7.1 bar to the 31st tile row —
+	# the viewport is 1920×928 under the 2-tile (64px) top bar.
+	_check(view.size.is_equal_approx(Vector2(1920, 928)) and view.position.y == 64.0,
+		"the camera viewport is 1920×928 under the 2-tile top bar (§4.7.1)")
 	var minimap: Control = screen.get_node("Minimap")
 	_check(minimap.size.is_equal_approx(Vector2(192, 120))
 			and minimap.position.is_equal_approx(Vector2(1720, 72)),
 		"the minimap is 192×120 at the viewport's top-right (§4.7.1)")
 	var bottom: ColorRect = screen.get_node("BottomPanel")
-	_check(bottom.position.y == 984.0 and bottom.size.y == 96.0,
-		"the bottom bar takes the rest of 1920×1080 (96 px, §4.7.1)")
+	_check(bottom.position.y == 992.0 and bottom.size.y == 96.0,
+		"the bottom bar is 1920×96 at the tile-aligned row 31 (§4.7.1)")
 	_check(ScreenLib.WORLD_PX.is_equal_approx(Vector2(3072, 1920))
 			and is_equal_approx(ScreenLib.TILE_PX, 64.0)
 			and ScreenLib.TOKEN_PX == 64,
@@ -275,7 +277,7 @@ func _test_scene() -> void:
 			shot_labels.append(button.text)
 	_check(not shot_labels.has("") and shot_labels.size() == 4,
 		"the four shot-selector buttons exist (§4.7.1)")
-	_check(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/Fit") != null,
+	_check(screen.get_node("Fit") != null,
 		"the [fit] button exists (§4.3 Home/[fit])")
 	_check(screen.menu_button("ai_animate") != null
 			and screen.menu_button("ai_instant") != null,
@@ -298,7 +300,7 @@ func _test_scene() -> void:
 			% str(_bottom_bar_texts(screen)))
 	_check(not _has_raw_key(_shot_labels_after(screen)),
 		"the shot-selector labels are localised (%s)" % str(_shot_labels_after(screen)))
-	_check(screen.get_node("TopRow/Title").text == screen._t("battle.title"),
+	_check(screen.get_node("Title").text == screen._t("battle.title"),
 		"the top bar carries battle.title")
 	_check(screen.ai_instant_mode() == false,
 		"the AI-turn speed defaults to animate (§4.7.1)")
@@ -897,8 +899,8 @@ func _test_after_action() -> void:
 				BattleLib.ARMOR_PIERCING_SHOT, BattleLib.GRAPE_SHOT]:
 			rendered.append((screen._shot_buttons[shot_id] as Button).text)
 		rendered.append_array(_bottom_bar_texts(screen))
-		rendered.append(screen.get_node("TopRow/Title").text)
-		rendered.append(screen.get_node("TopRow/Round").text)
+		rendered.append(screen.get_node("Title").text)
+		rendered.append(screen.get_node("Round").text)
 		_check(not _has_raw_key(rendered),
 			"no rendered label prints a raw <key> in locale '%s' (%s)"
 			% [locale, str(_raw_keys(rendered))])
@@ -1203,8 +1205,8 @@ func _test_ui_presentation_pins() -> void:
 					outside.append("%s %s" % [str(child.get_path()), str(r)])
 	_check(outside.is_empty(),
 		"every bottom-bar child stays inside the 1920×96 bar (%s)" % str(outside))
-	_check(bar_rect.is_equal_approx(Rect2(0, 984, 1920, 96)),
-		"the bottom bar itself is 1920×96 under the viewport (§4.7.1)")
+	_check(bar_rect.is_equal_approx(Rect2(0, 992, 1920, 96)),
+		"the bottom bar itself is 1920×96 at the tile row 31 (§4.7.1)")
 
 	# (c) Reload pips are readable glyphs: loaded `●` per cannon, reloading
 	# `○` pips + `(N)` — never a `#####` run. Closed-form pins on the
@@ -1233,10 +1235,8 @@ func _test_ui_presentation_pins() -> void:
 				pips_dirty = pips
 	_check(pips_dirty == "", "no side's pips contain a # (##### form is gone)")
 	screen._bind_stats()
-	var port_label: Label = screen.get_node(
-		"BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadPort")
-	var star_label: Label = screen.get_node(
-		"BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadStarboard")
+	var port_label: Label = screen.get_node("ReloadPort")
+	var star_label: Label = screen.get_node("ReloadStarboard")
 	_check(port_label.text.begins_with(screen._t("battle.reload.port") + " ")
 			and port_label.text.contains("●")
 			and not port_label.text.contains("#"),
@@ -1557,7 +1557,7 @@ func _test_phase10_fx_layer() -> void:
 	await get_tree().process_frame
 	var dialog: Control = portrait_screen.after_action_dialog()
 	var row: Control = dialog.get_node_or_null(
-		"Center/Panel/Margin/Body/Lines/PortraitRow")
+		"Panel/LinesViewport/Lines/PortraitRow")
 	_check(row != null and row.get_node_or_null("Portrait") != null
 			and (row.get_node("Portrait") as TextureRect).texture != null,
 		"the after-action dialog shows the opposing flagship captain's "
@@ -1581,7 +1581,7 @@ func _test_phase10_fx_layer() -> void:
 	plain_screen._finish_battle()
 	await get_tree().process_frame
 	_check(plain_screen.after_action_dialog().get_node_or_null(
-			"Center/Panel/Margin/Body/Lines/PortraitRow") == null,
+			"Panel/LinesViewport/Lines/PortraitRow") == null,
 		"without a captain the dialog stays exactly text-only")
 	await _free_screen(plain_screen)
 
@@ -1768,13 +1768,13 @@ func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 ## The bottom-bar label texts (the localisation sweep walks these).
 func _bottom_bar_texts(screen) -> Array:
 	return [
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/Speed") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/Heading") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadPort") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadStarboard") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/Wind") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/LeftCol/StatsRow/WeatherLabel") as Label).text,
-		(screen.get_node("BottomPanel/Margin/Columns/RightCol/ActionRow/Target") as Label).text,
+		(screen.get_node("Speed") as Label).text,
+		(screen.get_node("Heading") as Label).text,
+		(screen.get_node("ReloadPort") as Label).text,
+		(screen.get_node("ReloadStarboard") as Label).text,
+		(screen.get_node("Wind") as Label).text,
+		(screen.get_node("WeatherLabel") as Label).text,
+		(screen.get_node("Target") as Label).text,
 	]
 
 

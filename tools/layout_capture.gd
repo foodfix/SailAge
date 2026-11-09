@@ -78,6 +78,8 @@ const W2D_SCENES := {
 	"intel_window": INTEL_WINDOW_SCENE,
 	"reputation_view": "res://scenes/ui_shared/reputation_view.tscn",
 	"captain_view": "res://scenes/ui_shared/captain_view.tscn",
+	"battle": "res://scenes/combat/battle_screen.tscn",
+	"sandbox": "res://scenes/combat/battle_sandbox.tscn",
 }
 
 
@@ -122,9 +124,10 @@ func _capture_screen(screen_id: String) -> bool:
 	var screen_root: Control = scene.instantiate()
 	add_child(screen_root)
 	# A modal screen opens (and registers) through its open call, not its
-	# _ready — the per-screen `_open_<id>` hook runs it before the settle.
+	# _ready — the per-screen `_open_<id>` hook runs it before the settle
+	# (awaited: the battle rig plays the battle out to its after-action).
 	if has_method("_open_%s" % screen_id):
-		call("_open_%s" % screen_id, screen_root)
+		await call("_open_%s" % screen_id, screen_root)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
 	var fragment := _dump_fragment(screen_id)
@@ -401,6 +404,46 @@ func _open_duel(modal: Control) -> void:
 		"attacker_name": "You",
 		"defender_name": "Pirate captain",
 	})
+
+
+# --- rig: battle (W2-D) --------------------------------------------------------
+
+## A started battle (the window-sizes suite's pirate-encounter fixture) —
+## the chrome (top bar, bottom bar, command buttons) renders over it.
+func _rig_battle() -> void:
+	_rig_modal_run()
+	GameState.day = 9
+
+
+func _battle_encounter() -> Dictionary:
+	var ships: Array = []
+	for _index in 2:
+		ships.append({
+			"ship_type_id": "sloop",
+			"durability": 40, "crew": 12, "provisions": 0, "water": 0,
+			"cannons": 4, "equipment": {"figurehead": "", "sail": ""},
+			"cargo": {},
+		})
+	return {
+		"id": "hf_9_30_40_pirate", "kind": "pirate", "nation_id": "",
+		"position": {"x": 30, "y": 40}, "day": 9, "ships": ships,
+	}
+
+
+## A started battle, run to its after-action report — the chrome AND the
+## `after_lines` list block capture (the §4.9 bust needs a captain; the
+## composer override is not installed here, so row 0 is text-only).
+func _open_battle(screen: Control) -> void:
+	screen.set("route_to_world", false)
+	screen.call("open_battle", _battle_encounter())
+	await get_tree().process_frame
+	screen.call("run_to_completion", 30)
+
+
+# --- rig: sandbox (W2-D) -------------------------------------------------------
+
+func _rig_sandbox() -> void:
+	_rig_modal_run()
 
 
 # --- rig: intel_window (W2-D) --------------------------------------------------

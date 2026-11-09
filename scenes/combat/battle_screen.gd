@@ -95,6 +95,19 @@ const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const UiMotionLib := preload("res://scripts/ui_motion.gd")
 const PortraitComposerLib := preload("res://scripts/ui/portrait_composer.gd")
+## Phase 12 (docs/80-* §4.8.9): the chrome registers under the battle
+## screen's layout id; the world layers (grid/camera/minimap/fx) are
+## RENDERING, not layout, and register nothing.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This screen's layout id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "battle"
+
+## The after-action lines' list block (docs/10-* §4.23 — tiles,
+## content-node space); the shipped data row mirrors these constants.
+const LIST_AFTER_LINES := "after_lines"
+const AFTER_LINES_BASE_TILES := Rect2i(0, 0, 18, 2)
+const AFTER_LINES_ROW_H_TILES := 2
 
 ## ui_strings keys the preview needs that the shared table does not carry yet
 ## (the W5-C `FALLBACK_STRINGS` pattern — W6-D owns the residual merge).
@@ -390,51 +403,49 @@ var _water_layer: TileMapLayer = null
 @onready var _background: Panel = $Background
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _bottom_panel: ColorRect = $BottomPanel
-@onready var _title: Label = $TopRow/Title
-@onready var _day: Label = $TopRow/Day
-@onready var _round: Label = $TopRow/Round
-@onready var _weather: Label = $TopRow/Weather
+@onready var _title: Label = $Title
+@onready var _day: Label = $Day
+@onready var _round: Label = $Round
+@onready var _weather: Label = $Weather
 @onready var _grid_view: Control = $GridView
 @onready var _overlay: Control = $Overlay
 ## Phase-10 W5-A: the §4.7.17 FX sequencer node (scenes/combat/battle_fx_layer.gd;
 ## wired by the scene, like the grid overlay — no script preload cycle).
 @onready var _fx: Control = $FxLayer
 @onready var _minimap: Control = $Minimap
-@onready var _speed: Label = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Speed
-@onready var _heading: Label = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Heading
-@onready var _reload_port: Label = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadPort
-@onready var _reload_starboard: Label = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadStarboard
-@onready var _wind: Label = $BottomPanel/Margin/Columns/LeftCol/StatsRow/Wind
-@onready var _weather_label: Label = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/WeatherLabel
-@onready var _fit_button: Button = \
-	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Fit
+@onready var _speed: Label = $Speed
+@onready var _heading: Label = $Heading
+@onready var _reload_port: Label = $ReloadPort
+@onready var _reload_starboard: Label = $ReloadStarboard
+@onready var _wind: Label = $Wind
+@onready var _weather_label: Label = $WeatherLabel
+@onready var _fit_button: Button = $Fit
 @onready var _log_labels: Array = [
-	$BottomPanel/Margin/Columns/LeftCol/Log/Line0,
-	$BottomPanel/Margin/Columns/LeftCol/Log/Line1,
-	$BottomPanel/Margin/Columns/LeftCol/Log/Line2,
+	$LogLine0,
+	$LogLine1,
+	$LogLine2,
 ]
-@onready var _actions: HBoxContainer = \
-	$BottomPanel/Margin/Columns/RightCol/ActionRow
-@onready var _target_label: Label = $BottomPanel/Margin/Columns/RightCol/ActionRow/Target
-@onready var _shot_row: HBoxContainer = \
-	$BottomPanel/Margin/Columns/RightCol/ShotRow
+## The §4.7.1 command buttons — the phase-12 flat chrome keeps them as
+## direct children of the screen root; the wiring walks this fixed set
+## (the deleted ActionRow/ShotRow flow boxes are gone).
+@onready var _action_nodes: Array = [$Cannon, $Ram, $Board, $Hold]
+@onready var _target_label: Label = $Target
+@onready var _shot_nodes: Array = [
+	$ShotRound, $ShotChain, $ShotArmorPiercing, $ShotGrape,
+]
 @onready var _after_action: Control = $AfterAction
-@onready var _after_title: Label = $AfterAction/Center/Panel/Margin/Body/Title
-@onready var _after_lines: VBoxContainer = $AfterAction/Center/Panel/Margin/Body/Lines
-@onready var _after_continue: Button = \
-	$AfterAction/Center/Panel/Margin/Body/Footer/Continue
+@onready var _after_title: Label = $AfterAction/Panel/Title
+@onready var _after_lines: Control = $AfterAction/Panel/LinesViewport/Lines
+@onready var _after_lines_viewport: ScrollContainer = \
+	$AfterAction/Panel/LinesViewport
+@onready var _after_continue: Button = $AfterAction/Panel/Continue
 @onready var _menu: Control = $BattleMenu
-@onready var _menu_title: Label = $BattleMenu/Center/Panel/Margin/Body/Title
-@onready var _menu_retreat: Button = $BattleMenu/Center/Panel/Margin/Body/Retreat
-@onready var _menu_surrender: Button = $BattleMenu/Center/Panel/Margin/Body/Surrender
-@onready var _menu_ai_animate: Button = $BattleMenu/Center/Panel/Margin/Body/AiAnimate
-@onready var _menu_ai_instant: Button = $BattleMenu/Center/Panel/Margin/Body/AiInstant
-@onready var _menu_back: Button = $BattleMenu/Center/Panel/Margin/Body/Back
+@onready var _menu_title: Label = $BattleMenu/Panel/Title
+@onready var _menu_retreat: Button = $BattleMenu/Panel/Retreat
+@onready var _menu_surrender: Button = $BattleMenu/Panel/Surrender
+@onready var _menu_ai_animate: Button = $BattleMenu/Panel/AiAnimate
+@onready var _menu_ai_instant: Button = $BattleMenu/Panel/AiInstant
+@onready var _menu_back: Button = $BattleMenu/Panel/Back
 @onready var _confirm: Control = $ConfirmDialog
 
 ## `action_id` → Button, filled in `_ready`.
@@ -501,6 +512,64 @@ func _dismiss_captain_preview() -> void:
 		_preview = null
 
 
+## The id pass — the battle CHROME under its stable hierarchical ids (the
+## top bar, the 3-tile bottom panel's readouts, the command buttons, the
+## after-action + menu overlays and their plates). The world layers
+## (GridView / Overlay / FxLayer / Minimap) are rendering surfaces, not
+## layout — they register nothing (docs/IMPLEMENT-Phase12.md W2-D).
+func _register_chrome_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _background, "background",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _top_bar, "top_bar")
+	RegistryLib.register(SCREEN_ID, _title, "top.title")
+	RegistryLib.register(SCREEN_ID, _day, "top.day")
+	RegistryLib.register(SCREEN_ID, _round, "top.round")
+	RegistryLib.register(SCREEN_ID, _weather, "top.weather")
+	RegistryLib.register(SCREEN_ID, _bottom_panel, "bottom_panel")
+	RegistryLib.register(SCREEN_ID, _speed, "bottom.speed")
+	RegistryLib.register(SCREEN_ID, _heading, "bottom.heading")
+	RegistryLib.register(SCREEN_ID, _reload_port, "bottom.reload_port")
+	RegistryLib.register(SCREEN_ID, _reload_starboard,
+		"bottom.reload_starboard")
+	RegistryLib.register(SCREEN_ID, _wind, "bottom.wind")
+	RegistryLib.register(SCREEN_ID, _weather_label, "bottom.weather_label")
+	RegistryLib.register(SCREEN_ID, _fit_button, "bottom.fit",
+		{"role": "button"})
+	for index in _log_labels.size():
+		RegistryLib.register(SCREEN_ID, _log_labels[index], "log.%d" % index)
+	for button in _action_nodes:
+		RegistryLib.register(SCREEN_ID, button,
+			"actions.%s" % str(button.get_meta("action_id")),
+			{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _target_label, "actions.target")
+	for button in _shot_nodes:
+		RegistryLib.register(SCREEN_ID, button,
+			"shots.%s" % str(button.get_meta("shot_id")),
+			{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _after_action, "after")
+	RegistryLib.register(SCREEN_ID, _after_action.get_node("Dim"), "after.dim")
+	RegistryLib.register(SCREEN_ID,
+		_after_action.get_node("Panel"), "after.panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _after_title, "after.panel.title")
+	RegistryLib.register(SCREEN_ID, _after_lines_viewport,
+		"after.panel.lines_viewport")
+	RegistryLib.register(SCREEN_ID, _after_lines, "after.panel.lines")
+	RegistryLib.register(SCREEN_ID, _after_continue, "after.panel.continue",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _menu, "menu")
+	RegistryLib.register(SCREEN_ID, _menu.get_node("Dim"), "menu.dim")
+	RegistryLib.register(SCREEN_ID, _menu.get_node("Panel"), "menu.panel",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _menu_title, "menu.panel.title")
+	for pair in [
+		["retreat", _menu_retreat], ["surrender", _menu_surrender],
+		["ai_animate", _menu_ai_animate], ["ai_instant", _menu_ai_instant],
+		["back", _menu_back],
+	]:
+		RegistryLib.register(SCREEN_ID, pair[1], "menu.panel.%s" % pair[0],
+			{"role": "button", "data_ordered": true})
+
+
 func _ready() -> void:
 	_style()
 	_build_morale_hud()
@@ -540,6 +609,11 @@ func _ready() -> void:
 	_menu_back.pressed.connect(close_menu)
 	if _confirm.has_signal("confirmed"):
 		_confirm.confirmed.connect(_on_end_confirmed)
+	# Phase 12: the chrome registers + activates at build (a full screen —
+	# the applied data rects are the committed plate positions; the world
+	# layers keep their render geometry).
+	_register_chrome_ids()
+	RegistryLib.screen_active(SCREEN_ID, self)
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.game_over.connect(_on_game_over)
 	# Production queues the encounter on `GameState` and then routes here
@@ -1589,7 +1663,7 @@ func _style() -> void:
 
 func _wire_action_buttons() -> void:
 	_action_buttons.clear()
-	for node in _actions.get_children():
+	for node in _action_nodes:
 		if node is Button and node.has_meta("action_id"):
 			var button := node as Button
 			var action_id := str(button.get_meta("action_id"))
@@ -1597,7 +1671,7 @@ func _wire_action_buttons() -> void:
 				_on_action_pressed(str(button.get_meta("action_id"))))
 			_action_buttons[action_id] = button
 	_shot_buttons.clear()
-	for node in _shot_row.get_children():
+	for node in _shot_nodes:
 		if node is Button and node.has_meta("shot_id"):
 			var button := node as Button
 			_shot_buttons[str(button.get_meta("shot_id"))] = button
@@ -2893,34 +2967,66 @@ func _show_after_action() -> void:
 		child.queue_free()
 	var bust := _after_action_portrait()
 	var texts := _after_action_texts()
-	for index in texts.size():
+	# Phase 12 (docs/80-* §4.8.9): the after-action lines are the
+	# `after_lines` list block — row *i* at `base + i·row_h` inside the
+	# viewport's plain-Control content node; the §4.9 portrait row is the
+	# block's first member with its bust cell + wrapped text absolutely
+	# placed (the per-line flow boxes are deleted).
+	var tile := float(PaletteLib.CHROME_TILE)
+	var index := 0
+	for text_value in texts:
 		var label := Label.new()
-		label.text = texts[index] as String
+		label.text = text_value as String
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = 600
 		if index == 0 and bust != null:
 			# The §4.9 portrait slot: the 72×96 bust (§4.8.8, nearest) beside
 			# the result line — the outcome text wraps into the row's rest.
-			var row := HBoxContainer.new()
+			var row := Control.new()
 			row.name = "PortraitRow"
+			row.mouse_filter = Control.MOUSE_FILTER_PASS
+			var row_rect := RegistryLib.list_rect(SCREEN_ID, LIST_AFTER_LINES,
+				index)
+			if row_rect == Rect2():
+				row_rect = Rect2(0, 0, 18 * tile, 3 * tile)
+			row.position = row_rect.position
+			row.size = row_rect.size
 			var rect := TextureRect.new()
 			rect.name = "Portrait"
 			rect.texture = bust
 			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			rect.custom_minimum_size = Vector2(
+			rect.position = Vector2.ZERO
+			rect.size = Vector2(
 				float(PortraitComposerLib.CANVAS_W),
 				float(PortraitComposerLib.CANVAS_H))
 			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row.add_child(rect)
-			label.custom_minimum_size.x = 0
-			label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			label.size_flags_vertical = Control.SIZE_FILL
+			label.position = Vector2(rect.size.x, 0)
+			label.size = row_rect.size - Vector2(rect.size.x, 0)
 			row.add_child(label)
+			RegistryLib.register(SCREEN_ID, row, "after_lines.%d" % index,
+				{"list": LIST_AFTER_LINES, "data_ordered": true})
+			RegistryLib.register(SCREEN_ID, rect, "after_lines.%d.portrait"
+				% index)
+			RegistryLib.register(SCREEN_ID, label, "after_lines.%d.text"
+				% index)
 			_after_lines.add_child(row)
+			index += 1
 			continue
+		var line_rect := RegistryLib.list_rect(SCREEN_ID, LIST_AFTER_LINES,
+			index)
+		if line_rect == Rect2():
+			line_rect = Rect2(0, float(index * 2 * tile), 18 * tile, 2 * tile)
+		label.position = line_rect.position
+		label.size = line_rect.size
+		RegistryLib.register(SCREEN_ID, label, "after_lines.%d" % index,
+			{"list": LIST_AFTER_LINES, "data_ordered": true})
 		_after_lines.add_child(label)
+		index += 1
+	# The content node's stacked extent (the plain-Control scroll content).
+	_after_lines.custom_minimum_size = Vector2(
+		_after_lines_viewport.size.x, float(texts.size() * 2 * tile))
 	_after_continue.text = I18n.t_key("ui.ok")
 	_after_action.visible = true
 	if not _after_action.is_in_group("modal_overlay"):

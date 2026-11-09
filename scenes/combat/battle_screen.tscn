@@ -25,44 +25,44 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="TopBar" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
+layout_mode = 0
 offset_bottom = 64.0
-grow_horizontal = 2
 mouse_filter = 2
 color = Color(0.109804, 0.133333, 0.188235, 1)
 
-[node name="TopRow" type="HBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 16.0
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
 offset_top = 0.0
-offset_right = -16.0
+offset_right = 256.0
 offset_bottom = 64.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_constants/separation = 24
-
-[node name="Title" type="Label" parent="TopRow"]
-layout_mode = 2
 text = "Battle"
 vertical_alignment = 1
 
-[node name="Day" type="Label" parent="TopRow"]
-layout_mode = 2
+[node name="Day" type="Label" parent="."]
+layout_mode = 0
+offset_left = 256.0
+offset_top = 0.0
+offset_right = 384.0
+offset_bottom = 64.0
 text = "Day -"
 vertical_alignment = 1
 
-[node name="Round" type="Label" parent="TopRow"]
-layout_mode = 2
+[node name="Round" type="Label" parent="."]
+layout_mode = 0
+offset_left = 384.0
+offset_top = 0.0
+offset_right = 512.0
+offset_bottom = 64.0
 text = "Round -"
 vertical_alignment = 1
 
-[node name="Weather" type="Label" parent="TopRow"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Weather" type="Label" parent="."]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 0.0
+offset_right = 1920.0
+offset_bottom = 64.0
 text = "-"
 vertical_alignment = 1
 
@@ -71,7 +71,7 @@ layout_mode = 0
 offset_left = 0.0
 offset_top = 64.0
 offset_right = 1920.0
-offset_bottom = 984.0
+offset_bottom = 992.0
 mouse_filter = 2
 clip_contents = true
 
@@ -80,7 +80,7 @@ layout_mode = 0
 offset_left = 0.0
 offset_top = 64.0
 offset_right = 1920.0
-offset_bottom = 984.0
+offset_bottom = 992.0
 mouse_filter = 2
 clip_contents = true
 script = ExtResource("2_overlay")
@@ -90,7 +90,7 @@ layout_mode = 0
 offset_left = 0.0
 offset_top = 64.0
 offset_right = 1920.0
-offset_bottom = 984.0
+offset_bottom = 992.0
 mouse_filter = 2
 clip_contents = true
 script = ExtResource("4_fx")
@@ -105,181 +105,185 @@ mouse_filter = 0
 clip_contents = true
 
 [node name="BottomPanel" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = -96.0
-grow_horizontal = 2
-grow_vertical = 0
+layout_mode = 0
+offset_left = 0.0
+offset_top = 992.0
+offset_right = 1920.0
+offset_bottom = 1088.0
 mouse_filter = 2
 color = Color(0.109804, 0.133333, 0.188235, 1)
 
-[node name="Margin" type="MarginContainer" parent="BottomPanel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_constants/margin_left = 4
-theme_override_constants/margin_top = 2
-theme_override_constants/margin_right = 4
-theme_override_constants/margin_bottom = 2
-
-[node name="Columns" type="HBoxContainer" parent="BottomPanel/Margin"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="LeftCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-theme_override_constants/separation = 2
-
-[node name="StatsRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/LeftCol"]
-custom_minimum_size = Vector2(0, 24)
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="Speed" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(80, 0)
-layout_mode = 2
+[node name="Speed" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 992.0
+offset_right = 96.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="Heading" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(80, 0)
-layout_mode = 2
+[node name="Heading" type="Label" parent="."]
+layout_mode = 0
+offset_left = 96.0
+offset_top = 992.0
+offset_right = 192.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="ReloadPort" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(100, 0)
-layout_mode = 2
+[node name="ReloadPort" type="Label" parent="."]
+layout_mode = 0
+offset_left = 192.0
+offset_top = 992.0
+offset_right = 320.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="ReloadStarboard" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
+[node name="ReloadStarboard" type="Label" parent="."]
+layout_mode = 0
+offset_left = 320.0
+offset_top = 992.0
+offset_right = 448.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="Wind" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(72, 0)
-layout_mode = 2
+[node name="Wind" type="Label" parent="."]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 992.0
+offset_right = 544.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="WeatherLabel" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(88, 0)
-layout_mode = 2
+[node name="WeatherLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 544.0
+offset_top = 992.0
+offset_right = 640.0
+offset_bottom = 1024.0
 text = "-"
 vertical_alignment = 1
 
-[node name="Fit" type="Button" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(56, 22)
-layout_mode = 2
+[node name="Fit" type="Button" parent="."]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 992.0
+offset_right = 704.0
+offset_bottom = 1056.0
 text = "Fit"
 
-[node name="Log" type="VBoxContainer" parent="BottomPanel/Margin/Columns/LeftCol"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-theme_override_constants/separation = 1
-
-[node name="Line0" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
-theme_override_font_sizes/font_size = 11
-
-[node name="Line1" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
-theme_override_font_sizes/font_size = 11
-
-[node name="Line2" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
-theme_override_font_sizes/font_size = 11
-
-[node name="RightCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="ActionRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/RightCol"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="Cannon" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(84, 40)
-layout_mode = 2
-text = "Cannon"
-metadata/action_id = "cannon"
-
-[node name="Ram" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(72, 40)
-layout_mode = 2
-text = "Ram"
-metadata/action_id = "ram"
-
-[node name="Board" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(72, 40)
-layout_mode = 2
-text = "Board"
-metadata/action_id = "board"
-
-[node name="Hold" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(72, 40)
-layout_mode = 2
-text = "Hold"
-metadata/action_id = "hold"
-
-[node name="Target" type="Label" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Target" type="Label" parent="."]
+layout_mode = 0
+offset_left = 704.0
+offset_top = 992.0
+offset_right = 960.0
+offset_bottom = 1056.0
 text = "-"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="ShotRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/RightCol"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
+[node name="LogLine0" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 1024.0
+offset_right = 640.0
+offset_bottom = 1056.0
+text = ""
+clip_text = true
+theme_override_font_sizes/font_size = 11
 
-[node name="ShotRound" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="LogLine1" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 1056.0
+offset_right = 960.0
+offset_bottom = 1088.0
+text = ""
+clip_text = true
+theme_override_font_sizes/font_size = 11
+
+[node name="LogLine2" type="Label" parent="."]
+layout_mode = 0
+offset_left = 960.0
+offset_top = 1056.0
+offset_right = 1920.0
+offset_bottom = 1088.0
+text = ""
+clip_text = true
+theme_override_font_sizes/font_size = 11
+
+[node name="Cannon" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1024.0
+offset_top = 992.0
+offset_right = 1120.0
+offset_bottom = 1056.0
+text = "Cannon"
+metadata/action_id = "cannon"
+
+[node name="Ram" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1120.0
+offset_top = 992.0
+offset_right = 1216.0
+offset_bottom = 1056.0
+text = "Ram"
+metadata/action_id = "ram"
+
+[node name="Board" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1216.0
+offset_top = 992.0
+offset_right = 1312.0
+offset_bottom = 1056.0
+text = "Board"
+metadata/action_id = "board"
+
+[node name="Hold" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1312.0
+offset_top = 992.0
+offset_right = 1408.0
+offset_bottom = 1056.0
+text = "Hold"
+metadata/action_id = "hold"
+
+[node name="ShotRound" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1408.0
+offset_top = 992.0
+offset_right = 1536.0
+offset_bottom = 1056.0
 text = "1 Round"
 metadata/shot_id = "round"
 
-[node name="ShotChain" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="ShotChain" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1536.0
+offset_top = 992.0
+offset_right = 1664.0
+offset_bottom = 1056.0
 text = "2 Chain"
 metadata/shot_id = "chain"
 
-[node name="ShotArmorPiercing" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="ShotArmorPiercing" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1664.0
+offset_top = 992.0
+offset_right = 1792.0
+offset_bottom = 1056.0
 text = "3 AP"
 metadata/shot_id = "armor_piercing"
 
-[node name="ShotGrape" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="ShotGrape" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1792.0
+offset_top = 992.0
+offset_right = 1920.0
+offset_bottom = 1056.0
 text = "4 Grape"
 metadata/shot_id = "grape"
 
@@ -301,45 +305,41 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.4)
 
-[node name="Center" type="CenterContainer" parent="AfterAction"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
+[node name="Panel" type="Panel" parent="AfterAction"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 352.0
+offset_right = 1280.0
+offset_bottom = 768.0
+mouse_filter = 0
 
-[node name="Panel" type="PanelContainer" parent="AfterAction/Center"]
-custom_minimum_size = Vector2(640, 0)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="AfterAction/Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="Body" type="VBoxContainer" parent="AfterAction/Center/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="AfterAction/Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Title" type="Label" parent="AfterAction/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 32.0
+offset_right = 608.0
+offset_bottom = 96.0
 text = "-"
 
-[node name="Lines" type="VBoxContainer" parent="AfterAction/Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 4
+[node name="LinesViewport" type="ScrollContainer" parent="AfterAction/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 96.0
+offset_right = 608.0
+offset_bottom = 352.0
+horizontal_scroll_mode = 0
 
-[node name="Footer" type="HBoxContainer" parent="AfterAction/Center/Panel/Margin/Body"]
-layout_mode = 2
-alignment = 2
+[node name="Lines" type="Control" parent="AfterAction/Panel/LinesViewport"]
+layout_mode = 1
+anchors_preset = 0
+mouse_filter = 2
 
-[node name="Continue" type="Button" parent="AfterAction/Center/Panel/Margin/Body/Footer"]
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
+[node name="Continue" type="Button" parent="AfterAction/Panel"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 352.0
+offset_right = 608.0
+offset_bottom = 416.0
 text = "OK"
 
 [node name="BattleMenu" type="Control" parent="."]
@@ -360,57 +360,60 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.4)
 
-[node name="Center" type="CenterContainer" parent="BattleMenu"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
+[node name="Panel" type="Panel" parent="BattleMenu"]
+layout_mode = 0
+offset_left = 704.0
+offset_top = 352.0
+offset_right = 1184.0
+offset_bottom = 736.0
+mouse_filter = 0
 
-[node name="Panel" type="PanelContainer" parent="BattleMenu/Center"]
-custom_minimum_size = Vector2(480, 0)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="BattleMenu/Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="Body" type="VBoxContainer" parent="BattleMenu/Center/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="BattleMenu/Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Title" type="Label" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 32.0
+offset_right = 448.0
+offset_bottom = 64.0
 text = "-"
 
-[node name="Retreat" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
+[node name="Retreat" type="Button" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 64.0
+offset_right = 448.0
+offset_bottom = 128.0
 text = "Retreat"
 
-[node name="Surrender" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
+[node name="Surrender" type="Button" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 128.0
+offset_right = 448.0
+offset_bottom = 192.0
 text = "Surrender"
 
-[node name="AiAnimate" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
+[node name="AiAnimate" type="Button" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 192.0
+offset_right = 448.0
+offset_bottom = 256.0
 text = "Animate turns"
 
-[node name="AiInstant" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
+[node name="AiInstant" type="Button" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 256.0
+offset_right = 448.0
+offset_bottom = 320.0
 text = "Instant turns"
 
-[node name="Back" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
+[node name="Back" type="Button" parent="BattleMenu/Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 320.0
+offset_right = 448.0
+offset_bottom = 384.0
 text = "Back"
 
 [node name="ConfirmDialog" parent="." instance=ExtResource("3_confirm")]
