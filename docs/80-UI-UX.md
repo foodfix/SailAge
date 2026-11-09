@@ -3467,47 +3467,58 @@ visibly jumped at every opening/closing hour.)
   (`30-*` §4.3) re-enables it on the next crossing hour. Routing, gating and
   the rebuild signature never move — only the rendering is fixed.
 
-#### 4.8.9 Layout overrides & the studio layout editor *(added 2026-11-09, user direction — the studio layout loop)*
+#### 4.8.9 Absolute tile layout & the studio layout editor *(Phase 12 — rewrites the Phase-11 override mechanism; user-locked 2026-11-09)*
 
-UI placement is editable **visually, live, in the SailAge Model Studio**:
-the user drags/resizes controls on the chrome-tile grid and re-assigns
+**Every element is absolutely placed on the 32×32 chrome-tile grid; the
+data file IS the layout.** There is no container flow anywhere under a
+registered element: no FILL stretch, no sibling re-flow, no separation
+math, no per-frame sort cascades. Every layout bug of the 2026-11-09
+live studio sessions traced to flow — this section removes flow at the
+root. UI stays editable **visually, live, in the SailAge Model Studio**:
+the user drags/resizes element rects on the tile grid and re-assigns
 chrome sheets per element, and the result is committed as reviewable
-data. The default path is byte-stable: the override file ships **empty
-(`{}`)** and every pin below keeps holding.
+data.
 
-- **Data seam:** `data/ui_layout.json` (normative spec `10-*` §4.23;
-  validator group 14, `10-*` §8.9) — per-screen, per-element overrides
-  in **tile units** (integers, 1 tile = `Palette.CHROME_TILE` = 32 px;
-  the §4.8 sizing grid is the editor's snap grid). Absent override ⇒ the
-  code-pinned default, so the locale layout regression suites pin
-  defaults unchanged.
-- **Grid caps:** the 1920×1080 design canvas is 60 × 33.75 tiles ⇒
-  `x + w ≤ 60`, `y + h ≤ 33` (floor). The bottom 24 px sliver belongs to
-  anchored elements.
-- **Anchor flags:** edge-docked free elements (the top/bottom bars) use
-  `anchor: top|bottom|left|right` with the span from that edge in tiles
-  — absolute tiles cannot express "pinned to the true bottom"
-  (1080 is not tile-integral). `anchor` and `y` are mutually exclusive.
+- **The model:** every static element carries `{x, y, w, h}` in
+  `data/ui_layout.json` v2 (`10-*` §4.23; validator group 14, `10-*`
+  §8.9) — integers, 32 px tiles, **parent-relative** (a child's tiles
+  address space is its parent's rect; top-level elements are screen
+  tiles on the 60 × 33.75 canvas). Point anchors everywhere; nothing is
+  ever stretched. **No code defaults underneath** — the data row is the
+  whole truth for each static element.
+- **Node tree = element tree:** a registered element's Godot parent is
+  its registered parent (or the screen root). Intermediate layout
+  containers (`MarginContainer → VBox → …` chains) are DELETED from the
+  `.tscn` scenes and build code; group parents are plain
+  `Control`/`Panel` nodes placed at their data rects.
+- **The only layout rules** (both kept from Phase 11):
+  1. a child cannot leave its parent's rect (clamp on move/resize);
+  2. a parent cannot shrink below its registered children's extent
+     (children-extent floor).
+  Everything else is a rect.
+- **Dynamic lists** (market goods rows, officer rosters, rumor lists
+  …): the screen declares a list block —
+  `{base: {x,y,w,h}, row_h, viewport}` in the data — and places row *i*
+  at `base.y + i·row_h` absolutely (`LayoutRegistry.list_rect`). A
+  `ScrollContainer` survives ONLY as the clipped viewport for such
+  lists (its content node is a plain `Control` sized to the stacked
+  extent). Nothing inside it is flow-laid.
 - **Id registry:** `scripts/ui/layout_registry.gd` (`LayoutRegistry`,
-  §4.9 placement rule: a `class_name` static, no autoload). Every named
-  control on a port screen registers at build time with a hierarchical
-  id (`market.toolbar.invest`, `market.rows.<good_id>.qty_field` —
-  dynamic children use data-derived segments). Duplicate id in one
-  screen = `push_error`, last-wins.
-- **Override semantics (the every-control reconciliation):**
-
-| Control kind | Move | Resize | Tileset |
-|---|---|---|---|
-| Free child (screen root / free layer) | `x`, `y` tiles | `w`, `h` tiles | any of the 7 |
-| Anchored free child (bars) | edge fixed; along-edge span | `h` (or `w`) tiles | any of the 7 |
-| Container child | `order` (sibling index) — or **drag = leave the flow**: an `x/y` move re-parents the element to the screen root, CONFINED to the registered parent's rect (facility_grid for the cards; amended 2026-11-09, user direction — drag must move anything); revert re-inserts it at its baseline slot; locked rows keep `order` locked but can still drag | `min_w`, `min_h` tiles (`custom_minimum_size`) — **a min override also pins BOTH size flags to shrink-begin**, so the dragged size is authoritative on both axes (the default FILL stretch would re-win over the min; amended 2026-11-09 after the live drag-resize session); revert restores the captured flags | any of the 7 |
-| Plain (ColorRect/dividers/labels) | as per kind | as per kind | `sheet` n/a |
-
-- **Locked order:** data-pinned orderings (the §4.8.1 facility-card
-  grid, market row order) register with `data_ordered = true`; their
-  `order` overrides are IGNORED at runtime and reported locked back to
-  the studio — the §4.1 fixed order is a data contract, not a layout
-  preference.
+  §4.9 placement rule: a `class_name` static, no autoload). Every
+  persistent control on EVERY screen registers at build time with a
+  hierarchical id (`market.header.back`,
+  `market.rows.<good_id>.qty_field` — dynamic children use data-derived
+  segments). Duplicate id in one screen = `push_error`, last-wins.
+  `apply_layout(screen_id)` walks parents-first at `screen_active` and
+  after every bridge edit: point anchors + `position = (x,y)·32`,
+  `size = max((w,h)·32, content-min quantized up, children extent)`,
+  clamped inside the parent. A registered static element with NO data
+  rect ⇒ `push_error` + the authored fallback `(0,0,2,2)` — loud in
+  the trail, never a crash.
+- **Edits (bridge):** `{x, y, w, h}` + `sheet` only — every element
+  edits its rect, one path for all. `min_w/min_h`, `order`, `anchor`
+  are RETIRED (`90-*` §5.7; v1 messages tolerated without effect until
+  the studio's W3 lands). Revert re-applies the data rect.
 - **Per-element sheet assignment:** exactly **7 assignable sheets** —
   the 3×3 chrome nine-patches `panel`, `button`, `button_hover`,
   `button_pressed`, `button_focus`, `field`, `backdrop` (§4.8.8). The
@@ -3517,29 +3528,35 @@ data. The default path is byte-stable: the override file ships **empty
   stylebox construction stays in `ui_theme.gd`, so the §4.9
   no-per-screen-styling rule and the styling-audit empty allowlist hold.
   Revert removes the override; the theme variation resolves again.
+- **Deleted Phase-11 machinery:** break-out-of-flow +
+  `flow_parent`/`flow_bounds` + the co-flow freeze; min-override
+  shrink-begin flag pins; the child/free/anchored kind split in the
+  apply paths (the `tree()` dump still reports a kind for the
+  inspector's wording); the 4-frame settle-delay reply (one deferred
+  frame remains); the min-tiles content-floor override dance (the
+  content min stays as a clamp against text clipping, not a flow).
 - **Live bridge (debug-gated):** the game launched with
   `godot --path . -- --layout-bridge` runs `LayoutBridge` (autoload #7,
   `90-*` §5.7) — a one-client `WebSocketPeer` server on
-  `127.0.0.1:8765` carrying the JSON protocol (tree dump, throttled
-  viewport PNG frames, live move/resize/reorder/assign_sheet/revert,
-  `screen_changed`). Without the flag the autoload is a disabled no-op:
-  no listener, no cost. Normal play, saves and the EventBus are
-  untouched.
+  `127.0.0.1:8765` carrying the JSON protocol (tree dump, viewport PNG
+  frames, live rect edits, assign_sheet/revert, `screen_changed`).
+  Without the flag the autoload is a disabled no-op: no listener, no
+  cost. Normal play, saves and the EventBus are untouched.
 - **Single writer:** the GAME never writes files. The studio serializes
   its edit session (sorted keys, 2-space indent, trailing newline —
-  deterministic bytes), runs `tools/validate_data.py` in-process, and
-  writes `data/ui_layout.json` only on validator pass; git add/commit
-  stays with the user (the studio's standing rule).
-- **Both-locale guard:** the committed file ships into the suites — the
-  existing port-screen layout regression suites measure live rects for
-  zh + en against it, so a commit that clips either locale fails the
-  suite. The studio cannot run Godot: "run the suite after layout
-  commits" is a manual discipline the Commit button's output banner
-  reminds about.
-- **Scope:** the pilot covers the 8 port screens (`port`, `market`,
-  `inn`, `guild`, `provisions`, `palace`, `tavern`, `shipyard`). The
-  HUD and `ui_shared` modals are fast-follows (same mechanism, `hud.*`
-  ids under whichever screen hosts them).
+  deterministic bytes, group-14-checked), runs
+  `tools/validate_data.py` in-process, and writes
+  `data/ui_layout.json` only on validator pass; git add/commit stays
+  with the user (the studio's standing rule).
+- **Both-locale guard:** the v2 file ships into the suites — the locale
+  layout regression suites measure live rects for zh + en against it,
+  so a commit that clips either locale fails the suite. The studio
+  cannot run Godot: "run the suite after layout commits" is a manual
+  discipline the Commit button's output banner reminds about.
+- **Scope:** ALL screens (the locked Phase-12 decision) — the 32-screen
+  set enumerated in `10-*` §4.23. The initial tables are the Phase-12
+  capture of today's settled look (`tools/layout_capture.gd`); restyle
+  happens afterwards, in the studio, visually.
 
 ### 4.9 Shared theme & widget kit (Phase 10)
 

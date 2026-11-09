@@ -113,7 +113,7 @@ SailAge/
 │   ├── ui_theme.gd             # Phase 10: build_theme() — one code-built Theme from palette constants (80-* §4.9); applied at startup, no .tres, no autoload
 │   ├── ui_kit.gd               # Phase 10: the six widget atoms, static factory (80-* §4.9); + the tile grid pass (2026-11-09): install_tile_grid() once at the S1 theme point snaps every sheeted control's min size to whole chrome tiles (§4.8 sizing grid)
 │   ├── ui_motion.gd            # Phase 10: the UiMotion motion-gate static (80-* §4.7.17 timings)
-│   ├── ui/layout_registry.gd   # Phase 11: layout-override id registry + applier (80-* §4.8.9); reads DataLoader.ui_layout, applies after build, dumps the bridge tree
+│   ├── ui/layout_registry.gd   # Phase 12: the absolute-tile layout registry (80-* §4.8.9); applies data/ui_layout.json v2 rects after build, dumps the bridge tree
 │   └── ui/portrait_composer.gd # Phase 10: 72×96 procedural busts from a captain's `appearance` + role cloth; override file wins (80-* §4.8)
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
 │   ├── wind_regions.json        # Phase 6: prevailing-wind regions (10-* §4.16)
@@ -125,7 +125,7 @@ SailAge/
 │   ├── skill_gates.json         # Phase 8: data-driven skill/stat gates (10-* §4.20)
 │   ├── officer_posts.json       # Phase 8: officer posts — prereqs + advice triggers (10-* §4.21)
 │   ├── backgrounds.json         # Phase 8: 6 new-game backgrounds (10-* §4.22)
-│   ├── ui_layout.json           # Phase 11: studio layout overrides (10-* §4.23) — ships empty; the studio is the single writer
+│   ├── ui_layout.json           # Phase 12: THE absolute layout file, v2 (10-* §4.23) — every static element's rect + list blocks; populated by the capture, single writer = the studio
 │   ├── maps/world.png           # generated, tool-owned (§9)
 │   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
 │   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)
@@ -408,7 +408,7 @@ marked •):
 - `replace_sim()` is the test seam (the `world_map.fleet_sim()` contract
   delegates here). Registered **last**, after SaveSystem.
 
-### 5.7 LayoutBridge (`autoload/layout_bridge.gd`) *(added 2026-11-09, Phase 11 — debug-gated)*
+### 5.7 LayoutBridge (`autoload/layout_bridge.gd`) *(added 2026-11-09, Phase 11; protocol amended Phase 12 — debug-gated)*
 
 The studio layout editor's game-side endpoint (`80-*` §4.8.9). Registered
 **last, after FleetSim**; it touches only UI trees and the network.
@@ -419,21 +419,30 @@ The studio layout editor's game-side endpoint (`80-*` §4.8.9). Registered
   Saves, the save format and the EventBus contract are untouched.
 - **Enabled:** a one-client `WebSocketPeer` server bound to
   `127.0.0.1:8765` (port is a file constant), `_process` pumps the peer.
-  Protocol (JSON text frames; frozen by the §4.8.9 amendment):
+  Protocol (JSON text frames):
   | Direction | Message | Payload |
   |---|---|---|
-  | game→studio | `hello` | `{screens, grid:{w:60,h:33}, tile:32}` |
+  | game→studio | `hello` | `{screens, grid:{w:60,h:34}, tile:32}` |
   | game→studio | `screen_changed` | `{screen}` |
-  | game→studio | `tree` | `{screen, elements:[{id, kind, role, rect_tiles, sheet, locked}…]}` |
+  | game→studio | `tree` | `{screen, elements:[{id, kind, role, rect_tiles, sheet, locked, parent, clipped, min_tiles, kids_tiles?}…]}` |
   | game→studio | `frame` | `{png_b64}` (viewport capture — on connect, `screen_changed`, after edits, on `get_frame`) |
   | game→studio | `error` | `{code, msg}` |
   | studio→game | `get_tree` / `get_frame` | `{}` |
-  | studio→game | `move` / `resize` / `reorder` / `assign_sheet` / `revert` | `{screen, id, …}` |
+  | studio→game | `move` / `resize` | `{screen, id, x?, y?, w?, h?}` — tiles; an element edits its rect, every element alike (the Phase-12 kind split is retired) |
+  | studio→game | `assign_sheet` / `revert` | `{screen, id, sheet?}` |
   | studio→game | `reset_screen` | `{screen}` |
   | studio→game | `commit` | `{}` — replies `ok`; the game NEVER writes files |
+- **Retired fields (Phase 12):** `min_w`/`min_h`, `order`, `anchor`
+  leave the protocol — there is no stretch, no sibling re-flow and no
+  edge dock to override. Until the studio's W3 lands, v1 messages are
+  TOLERATED for one campaign: a `reorder`, or `resize` carrying only
+  `min_w`/`min_h`, is answered `error` (`retired_field`) without
+  touching the tree — never a crash (unknown keys ignored).
 - Every edit is applied to the running tree immediately through
   `LayoutRegistry` (the user watches the real screen move); the reply
-  carries the fresh `tree` + a `frame`.
+  is DEFERRED ONE FRAME (no container cascades remain — the single
+  deferred frame is a safety margin, replacing the Phase-11 4-frame
+  settle wait) and carries the fresh `tree` + a `frame`.
 - **Single-writer rule:** the studio serializes its session, runs
   `tools/validate_data.py` in-process and writes `data/ui_layout.json`
   on validator pass. The bridge never touches the filesystem.
