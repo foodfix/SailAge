@@ -776,13 +776,28 @@ function layRenderTree() {
     host.appendChild(s);
     return;
   }
+  // The parent/child depth per row (2026-11-09 user direction — the
+  // hierarchy shows as indentation): each row carries its nearest
+  // registered ancestor (`parent`), so the depth is the parent-chain
+  // length. Cycles are impossible (the walk follows registration
+  // order), but the step cap keeps a pathological dump bounded.
+  const parentOf = {};
+  for (const e of LAY.tree) parentOf[e.id] = e.parent || "";
+  const depthOf = (id) => {
+    let d = 0, p = parentOf[id];
+    while (p && d < 32) { d += 1; p = parentOf[p]; }
+    return d;
+  };
   for (const e of LAY.tree) {
+    const depth = depthOf(e.id);
     const row = document.createElement("div");
     row.className = "lay-el" + (e.id === LAY.sel ? " active" : "");
+    row.style.paddingLeft = (6 + depth * 18) + "px";
     const id = document.createElement("span");
     id.className = "lay-el-id";
-    id.textContent = e.id;
-    id.title = `${e.id} — ${layKind(e)}${e.role ? ` · ${e.role}` : ""}`;
+    id.textContent = (depth > 0 ? "└ " : "") + e.id;
+    id.title = `${e.id} — ${layKind(e)}${e.role ? ` · ${e.role}` : ""}`
+      + (depth > 0 ? ` · depth ${depth}` : "");
     row.appendChild(id);
     const ovr = layOvr(e.id);
     if (ovr) {
@@ -845,6 +860,18 @@ function layBoxPos(r) {
     width: (r.w * LAY.tile / DESIGN_W) * 100,
     height: (r.h * LAY.tile / DESIGN_H) * 100,
   };
+}
+
+function layParentRect(e) {
+  // The parent-bounds clamp (2026-11-09 user direction): an element
+  // cannot move or resize outside its parent — the drag clamps to the
+  // parent row's rect from the tree (the game enforces the same bound
+  // for typed values); no registered parent = the whole canvas.
+  const p = e.parent && LAY.tree.find(x => x.id === e.parent);
+  const pr = p && layRect(p);
+  if (pr) return { x: pr.x, y: pr.y,
+                   w: Math.max(1, pr.w), h: Math.max(1, pr.h) };
+  return { x: 0, y: 0, w: LAY.grid.w || 60, h: 33 };
 }
 
 function layRect(e) {
@@ -946,6 +973,7 @@ function layDragMove(ev) {
   const kind = layKind(e);
   const anchor = layAnchor(e.id);
   const p = layPointerTiles(ev);
+  const pr = layParentRect(e);
   const patchBox = (nr) => {
     const box = layEl("lay-boxes").querySelector(
       `.lay-box[data-id="${CSS.escape(e.id)}"]`);
@@ -964,14 +992,14 @@ function layDragMove(ev) {
       // anchored: along-edge drag only (§4.8.9) — top/bottom drag x,
       // left/right drag y; the edge span itself never moves
       if (!anchor || anchor === "top" || anchor === "bottom") {
-        const nx = Math.max(0, Math.min(tx, 60 - r.w));
+        const nx = Math.max(pr.x, Math.min(tx, pr.x + pr.w - r.w));
         if (nx === r.x) return;
         LAY.drag.r = Object.assign({}, r, { x: nx });
         patchBox(LAY.drag.r);
         laySend("move", { screen: LAY.screen, id: e.id, x: nx });
         layPatch(e.id, { x: nx });
       } else {
-        const ny = Math.max(0, Math.min(ty, 33 - r.h));
+        const ny = Math.max(pr.y, Math.min(ty, pr.y + pr.h - r.h));
         if (ny === r.y) return;
         LAY.drag.r = Object.assign({}, r, { y: ny });
         patchBox(LAY.drag.r);
@@ -979,9 +1007,11 @@ function layDragMove(ev) {
         layPatch(e.id, { y: ny });
       }
     } else {
-      // free/plain: both axes, quantized to tiles, clamped to the grid
-      const nx = Math.max(0, Math.min(tx, 60 - r.w));
-      const ny = Math.max(0, Math.min(ty, 33 - r.h));
+      // free/plain: both axes, quantized to tiles, clamped INSIDE the
+      // parent rect (the parent-bounds rule)
+      const pr = layParentRect(e);
+      const nx = Math.max(pr.x, Math.min(tx, pr.x + pr.w - r.w));
+      const ny = Math.max(pr.y, Math.min(ty, pr.y + pr.h - r.h));
       if (nx === r.x && ny === r.y) return;
       LAY.drag.r = Object.assign({}, r, { x: nx, y: ny });
       patchBox(LAY.drag.r);
@@ -1005,8 +1035,8 @@ function layDragMove(ev) {
       // the parent owns, which lands at drag end. Sends are throttled:
       // one message per tile would flood tree+frame replies that
       // re-render the box mid-drag.
-      const nw = Math.max(floorW, Math.min(p.x - r.x, LAY.grid.w || 60));
-      const nh = Math.max(floorH, Math.min(p.y - r.y, 33));
+      const nw = Math.max(floorW, Math.min(p.x - r.x, pr.x + pr.w - r.x));
+      const nh = Math.max(floorH, Math.min(p.y - r.y, pr.y + pr.h - r.y));
       if (nw === (LAY.drag.lastW || 0) && nh === (LAY.drag.lastH || 0)) return;
       LAY.drag.lastW = nw; LAY.drag.lastH = nh;
       patchBox({ x: r.x, y: r.y, w: nw, h: nh });
@@ -1047,8 +1077,11 @@ function layDragMove(ev) {
         layPatch(e.id, { w: nw });
       }
     } else {  // free/plain: SE handle drives w/h
-      const nw = Math.max(floorW, Math.min(p.x - r.x, 60 - r.x));
-      const nh = Math.max(floorH, Math.min(p.y - r.y, 33 - r.y));
+      // resize clamps INSIDE the parent rect (the parent-bounds rule):
+      // the dragged size can never extend past the parent's edges.
+      const pr = layParentRect(e);
+      const nw = Math.max(floorW, Math.min(p.x - r.x, pr.x + pr.w - r.x));
+      const nh = Math.max(floorH, Math.min(p.y - r.y, pr.y + pr.h - r.y));
       if (nw === r.w && nh === r.h) return;
       LAY.drag.r = Object.assign({}, r, { w: nw, h: nh });
       patchBox(LAY.drag.r);

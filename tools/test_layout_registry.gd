@@ -151,6 +151,40 @@ func _test_free_child() -> void:
 			"free child: revert restores the baseline position")
 	_drop_root(root)
 	await get_tree().process_frame
+	await _test_parent_bounds_clamp()
+
+
+## The parent-bounds rule (2026-11-09 user direction): an element cannot
+## move or resize outside its parent — an x/y/w/h override is clamped to
+## the parent panel's rect (the free child sits INSIDE a registered
+## 10×2-tile parent panel here, and the override tries to escape it).
+func _test_parent_bounds_clamp() -> void:
+	RegistryLib._reset_for_tests()
+	var root := Control.new()
+	root.size = Vector2(1920, 1080)
+	add_child(root)
+	var host := Panel.new()
+	host.size = Vector2(10 * RegistryLib.TILE, 2 * RegistryLib.TILE)
+	root.add_child(host)
+	RegistryLib.register("market", host, "toolbar",
+			{"kind": "free", "role": "panel"})
+	var child := Panel.new()
+	host.add_child(child)
+	RegistryLib.register("market", child, "toolbar.child",
+			{"kind": "free", "role": "panel"})
+	RegistryLib.screen_active("market", root)
+	RegistryLib.set_table_for_tests({
+		"market": {"toolbar.child":
+				{"x": 20, "y": 9, "w": 40, "h": 8}},
+	})
+	RegistryLib.apply_screen("market")
+	_check(child.size == Vector2(10 * RegistryLib.TILE,
+				2 * RegistryLib.TILE),
+			"parent bounds: the resize clamps to the parent's size")
+	_check(child.position == Vector2.ZERO,
+			"parent bounds: the move clamps to the parent's origin")
+	_drop_root(root)
+	await get_tree().process_frame
 	await _test_free_resize_only_no_collapse()
 
 

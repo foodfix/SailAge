@@ -341,6 +341,20 @@ static func _apply(rec: Dictionary, control: Control,
 		var content := control.get_minimum_size()
 		size.x = max(size.x, float(ceili(content.x / float(TILE)) * TILE))
 		size.y = max(size.y, float(ceili(content.y / float(TILE)) * TILE))
+		# The parent-bounds clamp (2026-11-09 user direction): an
+		# element cannot move or resize outside its parent — the clamp
+		# runs in the DIRECT parent's local space, which is exact for
+		# the plain-translation hierarchies this game builds (no
+		# rotations/scales). The screen root is the outermost parent.
+		var lp := control.get_parent()
+		if lp is Control:
+			var psize: Vector2 = (lp as Control).size
+			size.x = minf(size.x, psize.x)
+			size.y = minf(size.y, psize.y)
+			control.size = size
+			pos.x = clampf(pos.x, 0.0, maxf(0.0, psize.x - size.x))
+			pos.y = clampf(pos.y, 0.0, maxf(0.0, psize.y - size.y))
+		control.position = pos
 		control.size = size
 	# 4. `sheet` — skinned roles only; `plain` ignores it by contract.
 	if overrides.has("sheet"):

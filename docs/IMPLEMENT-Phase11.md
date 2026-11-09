@@ -249,6 +249,16 @@ slot's file inventory:
   newer edit resets the countdown and coalesces. Bridge suite 31,
   registry 53 (the two-phase live-sequence repro pinned), validator
   groups 1–14 green.
+- **The parent-bounds rule + the indented tree (2026-11-09, user
+  direction — "only move/resize within its parent" and "show the
+  parent/child relationship via 缩进"):** an element cannot move or
+  resize outside its parent — the game clamps every applied x/y/w/h to
+  the DIRECT parent's rect (local-space clamp, exact for this game's
+  translation-only hierarchies; the screen root is the outermost
+  parent), and the studio drag clamps to the parent row's rect from
+  the tree. The element list indents by parent-chain depth (└ prefix +
+  18 px per level) so the hierarchy reads at a glance. Registry suite
+  55 checks (the parent-bounds clamp pinned).
 - **The grid guarantee (2026-11-09, drag-resize round 4, user
   direction — "make ALL elements on the 32×32 grid"):** the resize
   fight's root cause — content minimums are font-metric and off-grid,
