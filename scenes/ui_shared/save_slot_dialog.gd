@@ -22,8 +22,22 @@ extends Control
 ##
 ## Modals consume all input while open (§4.7): `Esc` cancels, `Enter` activates
 ## the focused row. Re-binds on `EventBus.locale_changed`.
+##
+## Phase 12 (docs/80-* §4.8.9): the absolute-tile layout. The flow chain
+## (`Center → Panel → Margin → Body → Rows/Footer`) is deleted; the plate is
+## the fixed `20,10,20,14` tile rect and its children hang directly off the
+## registered panel. The slot rows are the screen's list block `slots`
+## (`slots.<i>` ids, `RegistryLib.list_rect` stacking inside the
+## `panel.slots_viewport` scroll — the viewport survives only as the clipped
+## list window, its content node a plain Control sized to the stacked
+## extent). Activation at each OPEN; the committed data rects re-apply.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This modal's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "save_slot"
+
 ## Mode ids, mirrored by `SaveSystem` (which preloads this script).
 const MODE_SAVE := 0
 const MODE_LOAD := 1
@@ -35,15 +49,24 @@ signal closed
 
 const DIM_ALPHA := 0.4
 const MODAL_GROUP := "modal_overlay"
-const DIALOG_W := 640
-const ROW_H := 64
+
+## The slot rows' list block (docs/10-* §4.23 — tiles, content-node space):
+## rows stack at `base.y + i·row_h` inside the `panel.slots_viewport`
+## viewport; the shipped data row mirrors these constants exactly.
+const LIST_SLOTS := "slots"
+const SLOTS_BASE_TILES := Rect2i(0, 0, 18, 2)
+const SLOTS_ROW_H_TILES := 2
+
+## The id pass runs once per instance (records persist across closes).
+var _ids_registered := false
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _prompt: Label = $Center/Panel/Margin/Body/Prompt
-@onready var _rows: VBoxContainer = $Center/Panel/Margin/Body/Rows
-@onready var _cancel_button: Button = $Center/Panel/Margin/Body/Footer/Cancel
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _prompt: Label = $Panel/Prompt
+@onready var _viewport: ScrollContainer = $Panel/SlotsViewport
+@onready var _slots: Control = $Panel/SlotsViewport/Slots
+@onready var _cancel_button: Button = $Panel/Cancel
 
 ## [constant MODE_SAVE] or [constant MODE_LOAD]; set by [method open].
 var _mode: int = MODE_SAVE
@@ -57,13 +80,28 @@ func _ready() -> void:
 	# §4.9 sweep (W4-B): panel chrome from the theme; the prompt is secondary
 	# text → the `Dim` variation. The title's 28px is the scene's own pin
 	# (`save_slot_dialog.tscn`).
-	_panel.custom_minimum_size.x = float(DIALOG_W)
 	_prompt.theme_type_variation = "Dim"
-	_cancel_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_cancel_button.pressed.connect(cancel)
 	EventBus.locale_changed.connect(_on_locale_changed)
 	if _buttons.is_empty():
 		_build_rows()
+
+
+## The id pass — every persistent control under its stable hierarchical id.
+## Modals register AT OPEN (host scenes embed idle dialog instances that
+## must stay unregistered until they show); see confirm_dialog.gd.
+func _register_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _dim, "dim")
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _prompt, "panel.prompt")
+	RegistryLib.register(SCREEN_ID, _viewport, "panel.slots_viewport")
+	RegistryLib.register(SCREEN_ID, _slots, "panel.slots")
+	RegistryLib.register(SCREEN_ID, _cancel_button, "panel.cancel",
+		{"role": "button"})
+	for index in _buttons.size():
+		RegistryLib.register(SCREEN_ID, _buttons[index], "slots.%d" % index,
+			{"list": LIST_SLOTS, "data_ordered": true, "role": "button"})
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -81,6 +119,10 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Shows the dialog in `mode` with freshly rebuilt summaries.
 func open(mode: int = MODE_SAVE) -> void:
 	_mode = mode
+	if not _ids_registered:
+		_register_ids()
+		_ids_registered = true
+	RegistryLib.screen_active(SCREEN_ID, self)
 	_bind()
 	visible = true
 	add_to_group(MODAL_GROUP)
@@ -185,15 +227,41 @@ func _close() -> void:
 
 # --- Binding ---------------------------------------------------------------
 
+## Row *i*'s rect: the list block's `list_rect` when the screen's v2 table
+## is live, else the same authored constants (the interim pre-merge state —
+## the shipped data row mirrors them exactly, so both paths agree).
+func _slot_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, LIST_SLOTS, index)
+	if rect != Rect2():
+		return rect
+	var tile := float(PaletteLib.CHROME_TILE)
+	return Rect2(
+		float(SLOTS_BASE_TILES.position.x) * tile,
+		float(index * SLOTS_ROW_H_TILES) * tile,
+		float(SLOTS_BASE_TILES.size.x) * tile,
+		float(SLOTS_BASE_TILES.size.y) * tile)
+
+
 func _build_rows() -> void:
-	for slot in range(SaveSystem.SLOT_MIN, SaveSystem.SLOT_MIN + SaveSystem.SLOT_COUNT):
+	var slot_index := 0
+	for slot in range(SaveSystem.SLOT_MIN,
+			SaveSystem.SLOT_MIN + SaveSystem.SLOT_COUNT):
 		var button := Button.new()
 		button.name = "Slot%d" % slot
-		button.custom_minimum_size = Vector2(0, ROW_H)
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.pressed.connect(func() -> void: _on_row_pressed(slot))
-		_rows.add_child(button)
+		# Computed stacking (docs/10-* §4.23): row *i* at `base + i·row_h`
+		# inside the viewport's content node — no flow underneath.
+		button.position = _slot_rect(slot_index).position
+		button.size = _slot_rect(slot_index).size
+		_slots.add_child(button)
 		_buttons.append(button)
+		slot_index += 1
+	# The content node's stacked extent (the plain-Control scroll content).
+	_slots.custom_minimum_size = Vector2(
+		_viewport.size.x,
+		float(SaveSystem.SLOT_COUNT * SLOTS_ROW_H_TILES
+			* PaletteLib.CHROME_TILE))
 
 
 func _bind() -> void:
@@ -232,5 +300,3 @@ func _nation_name(nation_id: String) -> String:
 	if nation.is_empty():
 		return nation_id
 	return I18n.t(nation.get("name", {}))
-
-

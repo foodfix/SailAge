@@ -283,3 +283,49 @@ func _rig_dialog_box() -> void:
 ## The fixture message (the suite's short line — text-only dialog).
 func _open_dialog_box(dialog: Control) -> void:
 	dialog.call("open_text", "A short line.")
+
+
+# --- rig: save_slot (W2-D) -----------------------------------------------------
+
+func _rig_save_slot() -> void:
+	_rig_modal_run()
+	GameState.day = 12
+	GameState.gold = 7830
+	# One filled slot + one empty + one corrupt (the §4.6 row states) — the
+	# summary rows need entries; the slots list block derives from the live
+	# rows.
+	DirAccess.make_dir_recursive_absolute(SaveSystem.SLOT_DIR)
+	# The v9 Person block carries no `stats` key (docs/50-* §4.8) — the rig
+	# player's stat block is stripped so slot 1 reads VALID.
+	var player: Dictionary = GameState.player.duplicate(true)
+	player.erase("stats")
+	var save := {
+		"save_version": 9, "saved_at": 1793119712, "phase": 9,
+		"locale": "en", "day": 12, "gold": 7830,
+		"player": player, "fleet": GameState.fleet,
+		"morale": 70,
+		"world": {"position": {"x": 0, "y": 0}, "map_id": "world",
+			"weather": "calm", "sail_trim": "normal", "heading": "E",
+			"wind_dir": "E"},
+		"current_port": "lisbon", "known_ports": ["lisbon"],
+		"explored_tiles": "", "port_investments": {}, "quests": [],
+		"discoveries_found": [], "npc_fleets": [], "officer_states": {},
+		"captain_states": {}, "proximity_cooldowns": {},
+		"market_stocks": {}, "wrecks": [], "npc_preset": "normal",
+		"market_events": [],
+		"control_prefs": {"input_mode": "step", "current_mode": "modifier"},
+		"permits": {"home": false, "foreign": {}},
+		"port_allegiance": {}, "month_invested": {},
+		"nation_treasuries": {}, "fame_commended": {},
+	}
+	var f := FileAccess.open(SaveSystem.slot_path(1), FileAccess.WRITE)
+	f.store_string(JSON.stringify(save))
+	f.close()
+	f = FileAccess.open(SaveSystem.slot_path(2), FileAccess.WRITE)
+	f.store_string("{\"save_version\": 4}")
+	f.close()
+
+
+## The fixture dialog: SAVE mode (all three §4.6 row states on screen).
+func _open_save_slot(dialog: Control) -> void:
+	dialog.call("open", 0)

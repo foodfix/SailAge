@@ -369,7 +369,10 @@ func _test_save_slot_dialog() -> void:
 	var dialog: Control = SaveSlotScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/save_slot.json`; the slot rows are the
+	# `slots` list block inside it).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open(0)
 	await assert_window_size_invariant("save-slot dialog", panel, [
 		func() -> void:
