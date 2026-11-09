@@ -134,13 +134,19 @@ static func register(screen_id: String, control: Control, id: String,
 		"sheet": "",
 	}
 	if per_screen.has(id):
-		# The rebuild flow (2026-11-09 master adjudication): a rebuilt row
-		# re-registers while the OLD node still lives inside its
-		# `queue_free` window — that replacement is the DESIGNED path and
-		# must not log. Only a live, not-dying duplicate is the contract
-		# breach (the ids are the contract, §4.8.9).
+		# The rebuild flow (2026-11-09 master adjudication, amended after
+		# the live port-hub session): a rebuilt row re-registers while the
+		# OLD nodes still exist inside their teardown window — and a
+		# queued WRAPPER frees its descendants WITHOUT setting their own
+		# `is_queued_for_deletion()` flag (the port hub's facility pairs:
+		# the pair is queued, its `cards.<id>.status` labels are not — the
+		# user-reported duplicate-id notice was exactly this). The reliable
+		# doomed predicate is tree membership: a replacement always removes
+		# the old node (directly, or via its queued ancestor) BEFORE the
+		# new registration, so only a control STILL INSIDE the tree is a
+		# genuine contract breach (the ids are the contract, §4.8.9).
 		var existing := _live(per_screen[id])
-		if existing != null and not existing.is_queued_for_deletion():
+		if existing != null and existing.is_inside_tree():
 			push_error("LayoutRegistry: %s duplicate id '%s'"
 					% [screen_id, id])
 	per_screen[id] = rec

@@ -316,6 +316,53 @@ func _test_idempotence_pruning() -> void:
 			"apply_screen prunes a freed record")
 	_drop_root(root)
 	await get_tree().process_frame
+	await _test_wrapper_queued_rebuild()
+
+
+## The live port-hub session's report (2026-11-09): a rebuilt pair is
+## `remove_child` + `queue_free`d as a WRAPPER — its descendants (the
+## `cards.<id>.status` labels) die with it WITHOUT their own
+## `is_queued_for_deletion()` flag. The re-register over such a doomed
+## record is the DESIGNED rebuild flow (the guard's tree-membership
+## predicate owns the silence); the replacement must land cleanly and
+## the tree must list only the new node.
+func _test_wrapper_queued_rebuild() -> void:
+	var root := _rig()
+	var grid := VBoxContainer.new()
+	root.add_child(grid)
+	var wrapper := HBoxContainer.new()
+	grid.add_child(wrapper)
+	var old_label := Label.new()
+	wrapper.add_child(old_label)
+	RegistryLib.register("port", old_label, "cards.guild.status")
+	RegistryLib.screen_active("port", root)
+	# The teardown: remove + queue the WRAPPER (the descendants keep
+	# is_queued_for_deletion() == false until the frame ends).
+	grid.remove_child(wrapper)
+	wrapper.queue_free()
+	# The rebuild: a fresh wrapper + label under the same id.
+	var new_wrapper := HBoxContainer.new()
+	grid.add_child(new_wrapper)
+	var new_label := Label.new()
+	new_wrapper.add_child(new_label)
+	RegistryLib.register("port", new_label, "cards.guild.status")
+	RegistryLib.apply_screen("port")
+	var rows := RegistryLib.tree("port")
+	_check(rows.size() == 1 and rows[0]["id"] == "cards.guild.status",
+			"wrapper-queued rebuild: the record is replaced, tree clean")
+	_check(RegistryLib._live(
+			RegistryLib._screens["port"]["cards.guild.status"])
+			== new_label,
+			"wrapper-queued rebuild: the record points at the NEW node")
+	# The doomed old label is out of the tree — tree membership, not its
+	# own deletion flag, is what silenced the duplicate (the new label is
+	# the live one inside the tree).
+	_check(not old_label.is_inside_tree() and new_label.is_inside_tree(),
+			"wrapper-queued rebuild: old node out, new node in")
+	old_label.free()
+	new_label.free()
+	_drop_root(root)
+	await get_tree().process_frame
 
 
 # --- 8. Data seam -------------------------------------------------------------
