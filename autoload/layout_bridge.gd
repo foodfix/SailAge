@@ -484,8 +484,8 @@ func _send_settled_update() -> void:
 	var rows := RegistryLib.tree(screen)
 	for row: Dictionary in rows:
 		var state := RegistryLib.debug_state(screen, String(row["id"]))
-		_debug_log("SETTLED screen=%s id=%s rect_tiles=%s | %s"
-				% [screen, String(row["id"]),
+		_debug_log("SETTLED screen=%s id=%s parent=%s rect_tiles=%s | %s"
+				% [screen, String(row["id"]), String(row.get("parent", "")),
 				JSON.stringify(row["rect_tiles"]), _fmt_state(state)])
 
 

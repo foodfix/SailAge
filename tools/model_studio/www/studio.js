@@ -788,7 +788,33 @@ function layRenderTree() {
     while (p && d < 32) { d += 1; p = parentOf[p]; }
     return d;
   };
+  // HIERARCHICAL ORDER (the 2026-11-09 tree-readability fix): rows
+  // arrive in registration order — a parent may sit far above its
+  // children, and an indented child next to an unrelated row reads as
+  // belonging to THAT row (the reported "cards.market belongs to
+  // footer"). Render the forest instead: every parent is immediately
+  // followed by its descendants (DFS over the parent links, in
+  // registration order within each group); orphans (a parent id that
+  // is absent from the dump) keep their registration position at the
+  // end so no row is lost.
+  const children = {};
   for (const e of LAY.tree) {
+    const p = e.parent || "";
+    (children[p] = children[p] || []).push(e);
+  }
+  const ordered = [];
+  const visit = (pid) => {
+    for (const e of (children[pid] || [])) {
+      ordered.push(e);
+      visit(e.id);
+    }
+  };
+  visit("");
+  const listed = new Set(ordered.map(x => x.id));
+  for (const e of LAY.tree) {
+    if (!listed.has(e.id)) ordered.push(e);
+  }
+  for (const e of ordered) {
     const depth = depthOf(e.id);
     const row = document.createElement("div");
     row.className = "lay-el" + (e.id === LAY.sel ? " active" : "");

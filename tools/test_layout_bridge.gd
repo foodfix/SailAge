@@ -206,6 +206,7 @@ func _test_tree_and_edits() -> void:
 	RegistryLib.set_table_for_tests({})
 	var root := Control.new()
 	root.name = "RigRoot"
+	root.size = Vector2(1920, 1080)
 	add_child(root)
 	var panel := Panel.new()
 	root.add_child(panel)

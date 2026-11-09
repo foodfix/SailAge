@@ -259,6 +259,21 @@ slot's file inventory:
   the tree. The element list indents by parent-chain depth (└ prefix +
   18 px per level) so the hierarchy reads at a glance. Registry suite
   55 checks (the parent-bounds clamp pinned).
+- **The hierarchical element list + the trail's parent field (2026-11-09,
+  tree readability round 2):** the list rendered rows in REGISTRATION
+  order — a parent sat far above its children and an indented child
+  next to an unrelated row read as belonging to that row (the reported
+  "cards.market belongs to footer, totally outside footer" — its box
+  at tile 1,6 is nowhere near the footer at 1,30). The list now renders
+  the FOREST: every parent immediately followed by its descendants
+  (DFS over the parent links; orphans keep their position at the end).
+  The SETTLED trail lines gain `parent=` for future audits.
+- **The clamp's zero-size guard (2026-11-09, bridge-suite catch):** the
+  parent-bounds clamp collapsed elements to 0×0 when the DIRECT parent
+  reported no size yet (the bridge suite's unsized rig root caught it —
+  the suite rig now carries the real 1920×1080 screen size). A parent
+  with no measured size has no reliable bounds — the clamp skips until
+  it measures up. Registry 55, bridge 31, validator 1–14 green.
 - **The facility-grid re-parent (2026-11-09, user direction — "cards
   belong to facility_grid; why do we need pair.0?"):** the §4.8.1
   two-per-line pair HBoxes are the grid's PLUMBING, not meaningful

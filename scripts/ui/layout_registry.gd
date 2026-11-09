@@ -349,11 +349,14 @@ static func _apply(rec: Dictionary, control: Control,
 		var lp := control.get_parent()
 		if lp is Control:
 			var psize: Vector2 = (lp as Control).size
-			size.x = minf(size.x, psize.x)
-			size.y = minf(size.y, psize.y)
-			control.size = size
-			pos.x = clampf(pos.x, 0.0, maxf(0.0, psize.x - size.x))
-			pos.y = clampf(pos.y, 0.0, maxf(0.0, psize.y - size.y))
+			# A parent that reports no size yet (pre-layout, an unsized
+			# rig) has NO reliable bounds — the clamp must not collapse
+			# the element to zero. Skip until the parent measures up.
+			if psize.x > 0 and psize.y > 0:
+				size.x = minf(size.x, psize.x)
+				size.y = minf(size.y, psize.y)
+				pos.x = clampf(pos.x, 0.0, maxf(0.0, psize.x - size.x))
+				pos.y = clampf(pos.y, 0.0, maxf(0.0, psize.y - size.y))
 		control.position = pos
 		control.size = size
 	# 4. `sheet` — skinned roles only; `plain` ignores it by contract.
