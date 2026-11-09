@@ -411,9 +411,12 @@ static func reset_screen(screen_id: String) -> void:
 
 ## The per-screen element dump for the bridge's `tree` message: one row
 ## per live record — `{id, kind, role, rect_tiles, sheet, locked,
-## parent}` — in registration order. `rect_tiles` is the control's rect
-## relative to the screen root, floored to tiles; `parent` is the
-## nearest registered ancestor's id (`""` when none).
+## parent, clipped}` — in registration order. `rect_tiles` is the
+## control's rect relative to the screen root, floored to tiles;
+## `parent` is the nearest registered ancestor's id (`""` when none);
+## `clipped` is true when a ScrollContainer ancestor owns the control's
+## visibility (its content rect may legitimately exceed the canvas —
+## the containment guard skips clipped rows).
 static func tree(screen_id: String) -> Array:
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var root_ref: WeakRef = _roots.get(screen_id)
@@ -444,8 +447,19 @@ static func tree(screen_id: String) -> Array:
 			"sheet": String(rec.get("sheet", "")),
 			"locked": bool(rec.get("data_ordered")),
 			"parent": _registered_ancestor(screen_id, control),
+			"clipped": _inside_scroll(control),
 		})
 	return rows
+
+
+## True when a ScrollContainer ancestor owns the control's visibility.
+static func _inside_scroll(control: Control) -> bool:
+	var node := control.get_parent()
+	while node is Control:
+		if node is ScrollContainer:
+			return true
+		node = node.get_parent()
+	return false
 
 
 ## The nearest registered ancestor's id (the bridge draws the nesting).
