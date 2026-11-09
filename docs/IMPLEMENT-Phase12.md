@@ -234,6 +234,24 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   silently crashing since the partial (103 → 185 checks). Gates:
   battle_sandbox 155 / character_card 141 / fleet 185 / intel_window
   65 ALL PASS; D2's structural probe 98 records, 0 flow containers.
+- **Post-acceptance fix (2026-11-10, user-reported — the empty-port
+  coverage errors):** the facility screens' conditionally-BUILT empty
+  markers (`market captains.empty`, `inn captains.rows.empty`,
+  `palace board.rows.empty`, `tavern captains_table.empty`) carried no
+  rect rows — the seeded capture rigs always had sightings, so the
+  coverage check fired the (0,0,2,2) fallback on every real
+  empty-port boot. Each marker is now its owning list's MEMBER placed
+  at the block's row 0. The static-id cross-check sweep then found
+  five more of the class (tavern `officers.recruitable.empty`,
+  `rumors.rows.invest_header`, the fleet_picker dock/appoint buttons,
+  `spar.result`) — all closed; `spar.result` became the guild's
+  persistent-label pattern with its row authored from
+  `SPAR_RESULT_RECT` (the capture fixpoint holds). New permanent
+  suite `test_layout_empty_states` (12 checks: zero-sightings boots,
+  membership + row-0 placement pins); the sweep reports 0
+  unaccounted ids. Gates: tavern/market/inn/palace/hail/fleet + the
+  layout quartet + the audit 32/32 + assemble --check + validator
+  ALL PASS.
 - **W4 acceptance (2026-11-10): ✅** — the §5 block above, all boxes
   checked. The record's highlights: the structural audit lives in the
   capture tool (`--audit`, 32/32 OK); the capture ⇔ file fixpoint
