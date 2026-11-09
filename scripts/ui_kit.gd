@@ -58,6 +58,94 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const MotionLib := preload("res://scripts/ui_motion.gd")
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
 
+# --- Tile grid (§4.8 sizing grid, 2026-11-09 tile-measured chrome) -----------
+#
+# The §4.8.8 consumption rule: the chrome sheets render their tile margins
+# 1:1 only on controls ≥ 2×2 tiles, so EVERY sheeted control measures in
+# whole chrome tiles with a 2-tile floor — both axes. This pass makes the
+# invariant structural: install once at the S1 theme application point and
+# every sheeted control that ever enters the scene tree snaps its
+# `custom_minimum_size` onto the grid (deferred one frame, so a screen's
+# `_ready` mutations land first). Godot's StyleBoxTexture proportional
+# margin compression — which squashed the rim of every 40px button and thin
+# field — becomes unreachable by construction. Authoring hints in
+# `.tscn`/`.gd` may stay pixel literals; the grid corrects them at runtime,
+# so a future `Palette.CHROME_TILE` change + art regen needs no scene edits.
+
+## Installed flag — the pass installs exactly once per session (the
+## SceneTree survives scene swaps; returning to S1 is a no-op).
+static var _tile_grid_installed := false
+
+
+## True for the sheeted chrome classes (§4.8.8): anything skinned by a
+## nine-patch chrome sheet. `OptionButton`/`CheckBox` ride the `Button`
+## branch (both extend it).
+static func _is_chrome(node: Node) -> bool:
+	return node is Button or node is Panel or node is PanelContainer \
+		or node is LineEdit or node is TextEdit or node is SpinBox
+
+
+## Snaps one length up to whole chrome tiles (§4.8): `0` stays `0` (an axis
+## the container drives), anything positive gets the 2-tile floor. Closed
+## form, pinned by `test_ui_tile_grid`.
+static func snap_to_tiles(px: int) -> int:
+	if px <= 0:
+		return 0
+	return maxi(ceili(px / float(PaletteLib.CHROME_TILE)), 2) \
+		* PaletteLib.CHROME_TILE
+
+
+## Snaps one sheeted control's `custom_minimum_size` onto the tile grid —
+## both axes, `0` axes left container-driven. Idempotent.
+static func snap_control(control: Control) -> void:
+	if control == null:
+		return
+	control.custom_minimum_size = Vector2(
+		snap_to_tiles(int(control.custom_minimum_size.x)),
+		snap_to_tiles(int(control.custom_minimum_size.y)))
+
+
+## Snaps every sheeted control in `root`'s subtree onto the tile grid.
+static func apply_tile_grid(root: Node) -> void:
+	if root == null:
+		return
+	if root is Control and _is_chrome(root):
+		snap_control(root)
+	for child in root.get_children():
+		apply_tile_grid(child)
+
+
+## The one-time §4.8 tile grid pass (2026-11-09) — called at the S1 theme
+## application point in `title_screen._ready` (the texture-registry
+## pattern: one startup side effect, no new autoload). Connects the tree's
+## `node_added` and snaps everything already present. Headless direct-boot
+## suites never install (they pin the constants and closed forms directly).
+## Idempotent.
+static func install_tile_grid(tree: SceneTree) -> void:
+	if _tile_grid_installed or tree == null:
+		return
+	_tile_grid_installed = true
+	tree.node_added.connect(_on_tile_grid_node_added)
+	apply_tile_grid(tree.root)
+
+
+## The `node_added` handler: sheeted controls only, snapped deferred (see
+## the block comment — `_ready` mutations must land first).
+static func _on_tile_grid_node_added(node: Node) -> void:
+	if not _is_chrome(node):
+		return
+	var snap := func() -> void: _snap_later(node)
+	snap.call_deferred()
+
+
+## The deferred snap body — freed-node safe (a node can die inside its own
+## entry frame).
+static func _snap_later(node: Node) -> void:
+	if not is_instance_valid(node):
+		return
+	if node is Control and _is_chrome(node):
+		snap_control(node)
+
 # --- §4.8 skin routing: chrome bands (amended 2026-11-05) ---------------------
 
 ## Band inner-edge selectors for [method route_band]: the edge that faces the
@@ -145,8 +233,9 @@ static func _skin_strip(host: Control, suffix: String, color: Color,
 
 ## `button(text_key, kind = "default", icon_id = "")` (§4.9 atom contract).
 ## `kind` ∈ default/primary/danger (also quiet) → the theme variations
-## "Primary"/"Danger"/"Quiet"; default carries no variation. Min height 40
-## (`PaletteLib.BUTTON_H`). Text = `I18n.t_key(text_key)`. Press flash 100 ms
+## "Primary"/"Danger"/"Quiet"; default carries no variation. Min height 2
+## tiles (`PaletteLib.BUTTON_H`; the §4.8 tile grid pass enforces the
+## 2×2-tile floor). Text = `I18n.t_key(text_key)`. Press flash 100 ms
 ## (§4.7.17): modulate lifts toward an ACCENT tint on `button_down` and
 ## restores on `button_up`/focus-out — instant when `UiMotion` is off.
 ## Unknown kind logs and falls back to default; absent icon id ⇒ no icon.

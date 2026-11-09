@@ -20,6 +20,8 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-10 shared theme (docs/80-UI-UX.md §4.9). Preloaded like PaletteLib so
 ## the scene also runs before Godot's global-class cache exists.
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
+## §4.9 kit (the §4.8 tile grid pass installs from here, 2026-11-09).
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 ## Phase-10 W4-D texture registry (decision 10): the one-time `assets/ui/`
 ## bootstrap feeding `UiKit`'s id → texture map.
 const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
@@ -67,6 +69,13 @@ func _ready() -> void:
 	# map ONCE — icons, tokens, terrain/shore, FX and portrait sheets resolve
 	# from here on (headless-safe: missing dirs/files skip silently).
 	TextureRegistryLib.ensure_registered()
+	# §4.8 tile grid (2026-11-09, tile-measured chrome): right after the
+	# texture registry — the same one-time startup pattern — the tile grid
+	# pass connects the tree's `node_added` and snaps every sheeted
+	# control's min size onto whole chrome tiles (2-tile floor), disabling
+	# Godot's nine-patch margin compression by construction. Idempotent;
+	# headless direct-boot suites never install (they pin the closed forms).
+	UiKitLib.install_tile_grid(get_tree())
 	# §4.9 Label row: the secondary lines read through the theme's `Dim`
 	# variation (PANEL_LINE) — no per-screen color overrides remain here.
 	_subtitle.theme_type_variation = "Dim"

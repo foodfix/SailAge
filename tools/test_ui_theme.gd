@@ -316,7 +316,8 @@ func _test_scope_guard() -> void:
 
 func _test_button_min_height() -> void:
 	_check(UiThemeLib.BUTTON_MIN_H == PaletteLib.BUTTON_H,
-		"BUTTON_MIN_H == Palette.BUTTON_H == 40 (doc pin)")
+		"BUTTON_MIN_H == Palette.BUTTON_H == 2 tiles / %dpx (doc pin)"
+		% PaletteLib.BUTTON_H)
 	var button := Button.new()
 	button.text = "New game"
 	button.custom_minimum_size = Vector2(0, PaletteLib.BUTTON_H)

@@ -296,6 +296,10 @@ func _ready() -> void:
 	# canvas itself is painted by the root [_draw] (chart-content pins).
 	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
 	UiKitLib.route_band(_bottom_bar, UiKitLib.BAND_EDGE_TOP)
+	# §4.8 tile grid (2026-11-09): the bars measure 2 chrome tiles each —
+	# the offsets derive from the constants (the tscn literals only author).
+	_top_bar.offset_bottom = float(PaletteLib.TOP_BAR_H)
+	_bottom_bar.offset_top = -float(PaletteLib.BOTTOM_BAR_H)
 	# Phase-10 sweep: the debug panel/title/legend chrome retired to the
 	# theme (§4.9 Panel + Label rows); secondary legend text carries the
 	# theme's Dim variation.
@@ -1220,7 +1224,7 @@ func _show_hover_window(text: String, at: Vector2) -> void:
 ## no-autowrap discipline, `80-*` §4.6: Label wrap minimums once blew a
 ## panel up to a screen-filling empty block) and its height cap (a fraction
 ## of the viewport — the world stays visible behind it).
-const PORT_PANEL_W := 440.0
+const PORT_PANEL_W := 14.0 * PaletteLib.CHROME_TILE  # 448 (§4.6.2, the 2026-11-09 tile grid)
 const PORT_PANEL_H_RATIO := 0.62
 ## The fold width minus the theme stylebox margins and the scrollbar slack.
 const PORT_PANEL_FOLD_W := PORT_PANEL_W - 36.0

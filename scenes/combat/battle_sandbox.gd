@@ -41,7 +41,8 @@ extends Control
 ## §4.7.16 regions (player panel / enemy panel / conditions strip) sit at
 ## the pinned 1920×1080 full-surface geometry (2026-11-09 re-layout — the
 ## player panel at (16, 72) 944×848, the enemy panel at (960, 72) 944×848,
-## the conditions strip at (16, 936) 1888×128); their CONTENT is
+## the conditions strip re-pinned 2026-11-09 tile grid to (16, 928)
+## 1888×136 for its 2-tile controls); their CONTENT is
 ## container-driven (one header, the fixed editors block, the ship-rows
 ## scroll, the add/remove buttons) so the rows keep the 32 px grid and no
 ## label clips or control overflows. Ship editors are COMPACT 2-line blocks
@@ -91,7 +92,7 @@ const ROW_HEADER_W := 72
 ## 2026-11-09): player panel, enemy panel, conditions strip.
 const PLAYER_PANEL_RECT := Rect2(16, 72, 944, 848)
 const ENEMY_PANEL_RECT := Rect2(960, 72, 944, 848)
-const CONDITIONS_RECT := Rect2(16, 936, 1888, 128)
+const CONDITIONS_RECT := Rect2(16, 928, 1888, 136)
 
 ## The nine battle kinds (`10-*` §4.10 `ai_profiles` key set / `60-*` §4.9a):
 ## the 7 pass-through kinds + `navy` (hunter battles) + `tournament`.
@@ -269,9 +270,9 @@ func _build_static_widgets() -> void:
 	_toast = Label.new()
 	_toast.name = "Toast"
 	_toast.visible = false
-	# Bottom-center toast slot in the gap between the panels' bottom edge
-	# (y = 920) and the conditions strip (y = 936).
-	_toast.position = Vector2(660, 908)
+	# Bottom-center toast slot, riding the panels' bottom edge (y = 920)
+	# just above the conditions strip (y = 928; §4.8 tile grid re-pin).
+	_toast.position = Vector2(660, 896)
 	_toast.size = Vector2(600, 22)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
@@ -395,6 +396,10 @@ func _field_label(text: String, min_width := 0) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.custom_minimum_size = Vector2(min_width, float(PaletteLib.ROW_H))
+	# Fill the row's cross axis: sheeted controls in the row measure 2
+	# tiles (the §4.8 tile grid pass), so a 1-tile label stretches to share
+	# the row's top edge with them (the compose-beside contract).
+	label.size_flags_vertical = Control.SIZE_FILL
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
 
@@ -774,40 +779,40 @@ func _build_conditions_row() -> void:
 	grid.columns = 12
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
-	_day_spin = _spin(DAY_MIN, 9999, 1, 90)
+	_day_spin = _spin(DAY_MIN, 9999, 1, 96)
 	grid.add_child(_field_label(_t("sandbox.day"), LABEL_W_SHORT))
 	grid.add_child(_day_spin)
 	# The seed pair: the value spin rides beside its mode option (it shows
 	# only for `seed_mode = fixed` — the §4.7.16 resolution rules).
-	_seed_mode_option = _option(150)
+	_seed_mode_option = _option(128)
 	_fill_option(_seed_mode_option, SEED_MODES, "sandbox.seed")
 	grid.add_child(_field_label(_t("sandbox.seed"), LABEL_W_SHORT))
-	_seed_spin = _spin(0, SEED_MAX, 1, 140)
+	_seed_spin = _spin(0, SEED_MAX, 1, 128)
 	_seed_mode_option.item_selected.connect(func(_index: int) -> void:
 		_seed_spin.visible = str(_option_value(_seed_mode_option)) == "fixed")
 	var seed_box := HBoxContainer.new()
 	seed_box.add_child(_seed_mode_option)
 	seed_box.add_child(_seed_spin)
 	grid.add_child(seed_box)
-	_weather_option = _option(130)
+	_weather_option = _option(128)
 	_fill_option(_weather_option, WEATHERS, "world.weather")
 	grid.add_child(_field_label(_t("sandbox.weather"), LABEL_W_STD))
 	grid.add_child(_weather_option)
 
-	_wind_option = _option(100)
+	_wind_option = _option(96)
 	_fill_option(_wind_option, WIND_DIRS, "sandbox.dir")
 	grid.add_child(_field_label(_t("sandbox.wind_dir"), LABEL_W_LONG))
 	grid.add_child(_wind_option)
 	# The current pair: the 0..3 strength spin beside its direction option.
-	_current_dir_option = _option(100)
+	_current_dir_option = _option(96)
 	_fill_option(_current_dir_option, CURRENT_DIRS, "sandbox.dir")
-	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 90)
+	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 96)
 	var current_box := HBoxContainer.new()
 	current_box.add_child(_current_dir_option)
 	current_box.add_child(_current_strength_spin)
 	grid.add_child(_field_label(_t("sandbox.current"), LABEL_W_STD))
 	grid.add_child(current_box)
-	_deployment_option = _option(150)
+	_deployment_option = _option(128)
 	_fill_option(_deployment_option, DEPLOYMENTS, "sandbox.deployment")
 	grid.add_child(_field_label(_t("sandbox.deployment"), LABEL_W_LONG))
 	grid.add_child(_deployment_option)

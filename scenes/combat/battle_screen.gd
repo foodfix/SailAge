@@ -9,7 +9,7 @@ extends Control
 ## formula, the outcome block and every reward number) lives in the engine;
 ## this file only
 ##   * draws the §4.7.1 wireframe — a 48×30 tile world at 32 px (1536×960)
-##     under a free camera in a 1280×584 viewport, a 192×120 minimap
+##     under a free camera in a 1920×920 viewport, a 192×120 minimap
 ##     top-right, and the 96 px bottom bar (`‖vel‖` · heading8 · per-side
 ##     reload pips · wind · weather · the four-shot selector · `[fit]`);
 ##   * owns ALL camera math as pure static functions (§4.7.1): world↔screen,
@@ -135,17 +135,18 @@ const GRID_W := BattleSimLib.GRID_WIDTH
 const GRID_H := BattleSimLib.GRID_HEIGHT
 const WORLD_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)  # 3072×1920
 ## The camera viewport (the bottom bar takes the rest of 1920×1080, §4.7.1
-## as amended by the 2026-11-08 resolution bump).
-const VIEW_SIZE := Vector2(1920, 944)
-const TOP_BAR_H := 40.0
-const BOTTOM_BAR_H := 96.0
+## as amended by the 2026-11-08 resolution bump; 2026-11-09 tile grid —
+## top 2 tiles, bottom 3 tiles, viewport 1920×920).
+const VIEW_SIZE := Vector2(1920, 1080) - Vector2(0.0, TOP_BAR_H + BOTTOM_BAR_H)
+const TOP_BAR_H := 2.0 * PaletteLib.CHROME_TILE
+const BOTTOM_BAR_H := 3.0 * PaletteLib.CHROME_TILE
 ## The minimap: 192×120 at 4 px/cell, top-right (§4.7.1).
 const MINIMAP_SIZE := Vector2(192, 120)
 const MINIMAP_MARGIN := 8.0
 const MINIMAP_SCALE := 0.0625  # 4 px/cell ÷ 64 px/cell
 ## Camera zoom bounds and the per-notch wheel step (§4.3/§4.7.1: 0.6×–1.5×,
 ## anchored at the cursor; the step follows the S17 chart's ×1.25 precedent).
-const ZOOM_MIN := 0.45  # the [fit] view is height-bound 944/1920 = 0.4917
+const ZOOM_MIN := 0.45  # the [fit] view is height-bound 920/1920 = 0.4792
 const ZOOM_MAX := 1.5
 const ZOOM_STEP := 1.25
 ## Edge scroll: a 16 px screen band pans at 600 px/s (§4.3).
@@ -608,7 +609,7 @@ static func zoom_at(old_zoom: float, wheel_delta: float, anchor_screen: Vector2,
 	return {"zoom": new_zoom, "cam": clamp_cam(new_cam, new_zoom)}
 
 
-## The zoom that fits the whole 1536×960 world into the 1280×584 viewport
+## The zoom that fits the whole 1536×960 world into the 1920×920 viewport
 ## (`Home` / `[fit]`, §4.3), clamped into the 0.6×–1.5× window.
 static func fit_zoom() -> float:
 	return clampf(
@@ -1565,6 +1566,10 @@ func _style() -> void:
 	# remain the reduced-graphics fallback.
 	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
 	UiKitLib.route_band(_bottom_panel, UiKitLib.BAND_EDGE_TOP)
+	# §4.8 tile grid (2026-11-09): the top bar measures 2 chrome tiles — the
+	# offset derives from the constant (the tscn literal only authors); the
+	# bottom panel is code-positioned off BOTTOM_BAR_H already.
+	_top_bar.offset_bottom = TOP_BAR_H
 	_weather.theme_type_variation = "Dim"
 	_speed.theme_type_variation = "Accent"
 	# The log lines' 11px ink is load-bearing for the §4.7.1 96px bottom bar

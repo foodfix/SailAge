@@ -34,11 +34,14 @@ const TOOLTIP_PAD := 8
 const SCROLLBAR_W := 8
 ## Minimum grabber length along the scroll axis (§4.9: min grabber 24px).
 const GRABBER_MIN := 24
-## Themed Button minimum height (§4.9 atom contract; §4.8 `Palette.BUTTON_H`).
+## Themed Button minimum height (§4.9 atom contract; §4.8 `Palette.BUTTON_H`
+## = 2 chrome tiles since the 2026-11-09 tile-measured-chrome amendment —
+## the value derives from `Palette.CHROME_TILE`, this constant re-states it
+## for the kit/tests).
 ## The pin is carried by control floors (`custom_minimum_size.y`, set by this
 ## screen family and by the kit atom) — see `_button_box` for why the
-## stylebox padding itself stays on the grid instead of absorbing the 40px.
-const BUTTON_MIN_H := 40
+## stylebox padding itself stays on the grid instead of absorbing the height.
+const BUTTON_MIN_H := PaletteLib.BUTTON_H
 ## LineEdit/TextEdit inset border width (§4.9: border `PANEL_LINE` — the
 ## 1px inset look; borders contribute no minimum size in this Godot release).
 const FIELD_BORDER_W := 1
@@ -122,7 +125,12 @@ static func surface_fill() -> Color:
 ## 48x16 sheet outside the theme); the stylebox tiles the middle regions
 ## (§4.9, the 2026-11-08
 ## tile-mode amendment — the prompted parchment/leather texture repeats
-## instead of smearing) and the edges stay margin-fixed.
+## instead of smearing) and the edges stay margin-fixed. Since the
+## 2026-11-09 tile-measured-chrome amendment each sheet's margin derives
+## from the LOADED TEXTURE (`width / 3` — the sheets are always 3×3
+## tiles), so a future `Palette.CHROME_TILE` change + art regen needs no
+## theme edit; `SHEET_MARGIN` stays as the declared pin the guard suite
+## cross-checks against the real sheets.
 const SHEET_MARGIN := 32
 const SHEET_PATHS := {
 	"panel": "res://assets/ui/chrome/ninepatch_panel.png",
@@ -159,10 +167,14 @@ static func _texture_box(tex: Texture2D, pad: int = 0,
 		factor: float = 1.0) -> StyleBoxTexture:
 	var sb := StyleBoxTexture.new()
 	sb.texture = tex
-	sb.texture_margin_left = SHEET_MARGIN
-	sb.texture_margin_top = SHEET_MARGIN
-	sb.texture_margin_right = SHEET_MARGIN
-	sb.texture_margin_bottom = SHEET_MARGIN
+	# 2026-11-09 tile-measured chrome: the margin derives from the sheet
+	# itself — 3×3 tiles, so width / 3 (96 / 3 = 32 today; a future tile
+	# size flows through with the art regen, §4.8.8).
+	var margin := tex.get_width() / 3
+	sb.texture_margin_left = margin
+	sb.texture_margin_top = margin
+	sb.texture_margin_right = margin
+	sb.texture_margin_bottom = margin
 	# §4.9 tile-mode amendment (2026-11-08): the middle regions TILE so the
 	# prompted parchment/leather texture repeats instead of smearing (the
 	# wang fill tile self-tiles by construction; the authored-flat sheets
@@ -193,8 +205,8 @@ static func _flat(bg: Color, border: Color, border_w: int) -> StyleBoxFlat:
 ## vertical margin is the same BASE_UNIT 8. Button height is enforced by
 ## control floors (`custom_minimum_size.y = BUTTON_MIN_H`, set by scenes and
 ## the kit atom) because this Godot release derives a text button's height as
-## stylebox margins + font height — absorbing 40px into the margins would
-## render ~60px buttons and break the §4.8 grid.
+## stylebox margins + font height — absorbing the 2-tile floor into the
+## margins would render ~60px buttons and break the §4.8 tile grid.
 static func _button_box(bg: Color, border: Color, border_w: int = BORDER_W) -> StyleBoxFlat:
 	var sb := _flat(bg, border, border_w)
 	sb.set_content_margin_all(CONTENT_PAD)

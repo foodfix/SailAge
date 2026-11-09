@@ -116,8 +116,8 @@ func _test_button_atom() -> void:
 	var plain := UiKitLib.button("ui.ok")
 	_holder_node().add_child(plain)
 	_check(plain.custom_minimum_size.y == PaletteLib.BUTTON_H,
-		"button min height 40 (PaletteLib.BUTTON_H, got %f)"
-		% plain.custom_minimum_size.y)
+		"button min height 2 tiles / %dpx (PaletteLib.BUTTON_H, got %f)"
+		% [PaletteLib.BUTTON_H, plain.custom_minimum_size.y])
 	_check(plain.theme_type_variation == "",
 		"default kind carries no variation")
 	_check(plain.text == str(DataLoader.ui_strings["ui.ok"][I18n.get_locale()]),

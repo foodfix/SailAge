@@ -209,6 +209,10 @@ func _ready() -> void:
 	# flat fills (reduced-graphics fallback) — `UiKit.route_band`.
 	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
 	UiKitLib.route_band(_bottom_bar, UiKitLib.BAND_EDGE_TOP)
+	# §4.8 tile grid (2026-11-09): the bars measure 2 chrome tiles each —
+	# the offsets derive from the constants (the tscn literals only author).
+	_top_bar.offset_bottom = float(PaletteLib.TOP_BAR_H)
+	_bottom_bar.offset_top = -float(PaletteLib.BOTTOM_BAR_H)
 	# §4.9: label ink is the theme's (Label = TEXT); no per-screen overrides.
 	# The minimap caption is secondary text → the theme's `Dim` variation.
 	_minimap_title.theme_type_variation = "Dim"

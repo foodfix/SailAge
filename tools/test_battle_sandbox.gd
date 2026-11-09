@@ -888,7 +888,7 @@ func _test_layout_geometry() -> void:
 			["enemy panel", sandbox.enemy_panel(),
 				Vector2(960, 72), Vector2(944, 848)],
 			["conditions", sandbox.conditions_panel(),
-				Vector2(16, 936), Vector2(1888, 128)],
+				Vector2(16, 928), Vector2(1888, 136)],
 		]
 		var rects_ok := true
 		var rects_note := ""
@@ -902,7 +902,7 @@ func _test_layout_geometry() -> void:
 		_check(rects_ok,
 			("[%s] the three §4.7.16 regions sit at the pinned rects "
 			+ "(player 16,72 944×848 / enemy 960,72 944×848 / conditions "
-			+ "16,936 1888×128)") % locale + rects_note)
+			+ "16,928 1888×136)") % locale + rects_note)
 
 		sandbox.queue_free()
 		await get_tree().process_frame

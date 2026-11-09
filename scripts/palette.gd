@@ -43,15 +43,36 @@ const BAD := Color("#b3341f")
 ## (`10-*` §7.1 neutral tier; symbol pinned by the Phase-6 UI doc task).
 const PORT_NEUTRAL := Color("#9a9a9a")
 
-# --- Sizing grid (px, docs/80-UI-UX.md §4.8) --------------------------------
+# --- Sizing grid (chrome tiles, docs/80-UI-UX.md §4.8) -----------------------
+#
+# Amended 2026-11-09 (tile-measured chrome): CHROME_TILE is the ONLY chrome
+# pixel number in the codebase (80-* §4.8). Every chrome size below derives
+# from it in tiles, so a future tile-size change is this one constant + a
+# `build_ui_art.py` regeneration. Sheeted controls measure ≥ 2×2 tiles with
+# both axes exact tile multiples — the runtime tile grid pass
+# (`UiKit.install_tile_grid`) enforces the floor (80-* §4.8.8 consumption
+# rule). Values at the current tile: BASE_UNIT 8, MARGIN 16, BUTTON_H 64,
+# TOP_BAR_H 64, BOTTOM_BAR_H 64, ROW_H 32, DIALOG_W 480 (was 8/16/40/40/32/
+# 32/480 pre-amendment).
 
-const BASE_UNIT := 8
-const MARGIN := 16
-const BUTTON_H := 40
-const TOP_BAR_H := 40
-const BOTTOM_BAR_H := 32
-const ROW_H := 32
-const DIALOG_W := 480
+## The chrome tile itself — 1 tile, today 32px (the PixelLab chrome
+## tilesets' tile; the nine-patch sheets are 3×3 tiles).
+const CHROME_TILE := 32
+## ¼ tile — inner padding unit.
+const BASE_UNIT := CHROME_TILE / 4
+## ½ tile — container margins.
+const MARGIN := CHROME_TILE / 2
+## 2 tiles — button height floor (the 2×2-tile minimum axis).
+const BUTTON_H := CHROME_TILE * 2
+## 2 tiles — HUD/chart top bar.
+const TOP_BAR_H := CHROME_TILE * 2
+## 2 tiles — HUD/chart bottom bar (the battle bottom panel is its own 3
+## tiles, `battle_screen.gd`).
+const BOTTOM_BAR_H := CHROME_TILE * 2
+## 1 tile — icon-less table row.
+const ROW_H := CHROME_TILE
+## 15 tiles — standard dialog width.
+const DIALOG_W := CHROME_TILE * 15
 
 # --- Terrain block (docs/80-UI-UX.md §4.8) ----------------------------------
 # (`SEA`, `COAST_SEA`, `LAND`, `REEF`, `ICE` and `PORT_NEUTRAL` above are

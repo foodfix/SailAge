@@ -12,7 +12,7 @@ extends Node
 ##   1 the §4.7.1 camera pure functions — fixed-value assertions (world↔screen
 ##     round trip, clamp corners, zoom-anchor identity, minimap mapping of the
 ##     four corners + centre, edge-scroll band math, the 4 px threshold);
-##   2 the scene: 1920×944 viewport over the 3072×1920 world, the 192×120
+##   2 the scene: 1920×920 viewport over the 3072×1920 world, the 192×120
 ##     minimap top-right, the 96 px bottom bar, the shot selector + [fit];
 ##   3 open_battle deploys per §4.11.2 (48×30), passes `wind_dir`/`current`
 ##     through, consumes the pending descriptor once;
@@ -35,7 +35,7 @@ extends Node
 ##     formation keys are byte-harmless pre-A, and the `battle.log.strike` /
 ##     `battle.log.surrender_enemy` surfacing through the generic pipeline.
 ##  12 the S10 UI presentation pins (Phase-9 battle-UI fix): the minimap is
-##     visible, 192×120 top-right inside the 1280×584 viewport area and owns
+##     visible, 192×120 top-right inside the 1920×920 viewport area and owns
 ##     input before the world view through the connected `draw` handlers;
 ##     every bottom-bar child stays inside the 1280×96 bar (no overflow or
 ##     clipped labels); the reload pips print `●`/`○`+`(N)` and never a
@@ -109,12 +109,12 @@ func _test_camera_functions() -> void:
 	# world_to_screen: the camera centre lands at the viewport centre at
 	# zoom 1.0; the world origin is offset by the half-extents.
 	_check(ScreenLib.world_to_screen(Vector2(1536, 960), Vector2(1536, 960), 1.0)
-			.is_equal_approx(Vector2(960, 472)),
+			.is_equal_approx(Vector2(960, 460)),
 		"world_to_screen: the camera centre maps to the viewport centre "
-			+ "(1536,960 → 960,472 @ zoom 1)")
+			+ "(1536,960 → 960,460 @ zoom 1)")
 	_check(ScreenLib.world_to_screen(Vector2.ZERO, Vector2(1536, 960), 1.0)
-			.is_equal_approx(Vector2(-576, -488)),
-		"world_to_screen: the world origin maps to (-576,-488) @ cam "
+			.is_equal_approx(Vector2(-576, -500)),
+		"world_to_screen: the world origin maps to (-576,-500) @ cam "
 			+ "(1536,960) zoom 1")
 	# screen_to_world is the exact inverse: round trip on three states.
 	var round_trip_ok := true
@@ -135,20 +135,20 @@ func _test_camera_functions() -> void:
 			+ "zoom 0.6 / 1.25 / 1.5, within 0.001 px)")
 
 	# clamp_cam: at zoom 1 both axes clamp — x to [960, 2112] (1920px
-	# view of a 3072px world), y to [472, 1448] (944px view of a 1920px
+	# view of a 3072px world), y to [460, 1460] (920px view of a 1920px
 	# world); the world centre (1536,960) is a fixed point.
-	_check(ScreenLib.clamp_cam(Vector2.ZERO, 1.0).is_equal_approx(Vector2(960, 472)),
-		"clamp_cam: the top-left corner clamps to the half-extents (960,472)")
+	_check(ScreenLib.clamp_cam(Vector2.ZERO, 1.0).is_equal_approx(Vector2(960, 460)),
+		"clamp_cam: the top-left corner clamps to the half-extents (960,460)")
 	_check(ScreenLib.clamp_cam(Vector2(4000, 4000), 1.0)
-			.is_equal_approx(Vector2(2112, 1448)),
+			.is_equal_approx(Vector2(2112, 1460)),
 		"clamp_cam: the bottom-right corner clamps to world − half "
-			+ "(2112,1448)")
+			+ "(2112,1460)")
 	_check(ScreenLib.clamp_cam(Vector2(500, 500), 0.6).is_equal_approx(
-			Vector2(1536, 786.666)),
+			Vector2(1536, 766.666)),
 		"clamp_cam: at zoom 0.6 x centres (the world fits) and y clamps "
-			+ "into [786.7, 1133.3] (500 → 786.7)")
-	_check(ScreenLib.clamp_cam(Vector2(1536, 100), 1.0).is_equal_approx(Vector2(1536, 472)),
-		"clamp_cam: only the offending axis clamps (1536,100 → 1536,472)")
+			+ "into [766.7, 1153.3] (500 → 766.7)")
+	_check(ScreenLib.clamp_cam(Vector2(1536, 100), 1.0).is_equal_approx(Vector2(1536, 460)),
+		"clamp_cam: only the offending axis clamps (1536,100 → 1536,460)")
 	_check(ScreenLib.clamp_cam(Vector2(1536, 960), 1.0).is_equal_approx(Vector2(1536, 960)),
 		"clamp_cam: a centred camera is a fixed point")
 
@@ -156,13 +156,13 @@ func _test_camera_functions() -> void:
 	# viewport centre axis: at the 1920px view the 1536px world fits
 	# horizontally, so a zoom re-centres x and the anchor identity only
 	# holds through the centre axis (the y axis stays clamped at zoom 1).
-	var zoom_center := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 472), Vector2(1536, 960))
+	var zoom_center := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 460), Vector2(1536, 960))
 	_check(is_equal_approx(float(zoom_center["zoom"]), 1.25)
 			and (zoom_center["cam"] as Vector2).is_equal_approx(Vector2(1536, 960)),
 		"zoom_at: a notch at the viewport centre zooms ×1.25 and keeps the cam")
 	var zoom_corner := ScreenLib.zoom_at(1.0, 1.0, Vector2.ZERO, Vector2(1536, 960))
-	_check((zoom_corner["cam"] as Vector2).is_equal_approx(Vector2(1344, 865.6)),
-		"zoom_at: a notch at the screen corner re-anchors the cam (1344,865.6)")
+	_check((zoom_corner["cam"] as Vector2).is_equal_approx(Vector2(1344, 868.0)),
+		"zoom_at: a notch at the screen corner re-anchors the cam (1344,868)")
 	var anchored := ScreenLib.zoom_at(1.0, 1.0, Vector2(960, 400), Vector2(1536, 960))
 	var anchor_world := ScreenLib.screen_to_world(Vector2(960, 400),
 		Vector2(1536, 960), 1.0)
@@ -172,19 +172,19 @@ func _test_camera_functions() -> void:
 		"zoom_at: the world point under the cursor stays put (anchor identity "
 			+ "at screen (960,400))")
 	_check(is_equal_approx(float(ScreenLib.zoom_at(1.5, 1.0,
-			Vector2(960, 472), Vector2(1536, 960))["zoom"]), 1.5),
+			Vector2(960, 460), Vector2(1536, 960))["zoom"]), 1.5),
 		"zoom_at: the zoom clamps at the 1.5× ceiling")
 	_check(is_equal_approx(float(ScreenLib.zoom_at(0.5, -1.0,
-			Vector2(960, 472), Vector2(1536, 960))["zoom"]), 0.45),
+			Vector2(960, 460), Vector2(1536, 960))["zoom"]), 0.45),
 		"zoom_at: the zoom clamps at the 0.45× floor")
-	var zoom_out := ScreenLib.zoom_at(1.0, -1.0, Vector2(960, 472), Vector2(1536, 960))
+	var zoom_out := ScreenLib.zoom_at(1.0, -1.0, Vector2(960, 460), Vector2(1536, 960))
 	_check(is_equal_approx(float(zoom_out["zoom"]), 0.8)
 			and (zoom_out["cam"] as Vector2).is_equal_approx(Vector2(1536, 960)),
 		"zoom_at: a notch out divides by 1.25 (1.0 → 0.8)")
 
-	# fit_zoom: 944/1920 — height-bound (0.4917), inside the zoom window.
-	_check(is_equal_approx(ScreenLib.fit_zoom(), 944.0 / 1920.0),
-		"fit_zoom is the height-bound 944/1920 (the [fit]/Home view)")
+	# fit_zoom: 920/1920 — height-bound (0.4792), inside the zoom window.
+	_check(is_equal_approx(ScreenLib.fit_zoom(), 920.0 / 1920.0),
+		"fit_zoom is the height-bound 920/1920 (the [fit]/Home view)")
 
 	# minimap_map: 4 px per cell ⇒ world px × 0.0625; corners + centre.
 	_check(ScreenLib.minimap_map(Vector2.ZERO).is_equal_approx(Vector2.ZERO),
@@ -201,16 +201,16 @@ func _test_camera_functions() -> void:
 	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(5, 300), 0.5)
 			.is_equal_approx(Vector2(-300, 0)),
 		"edge_scroll: the left band scrolls −600 px/s (5,300 × 0.5s → −300,0)")
-	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(1915, 939), 0.5)
+	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(1915, 915), 0.5)
 			.is_equal_approx(Vector2(300, 300)),
 		"edge_scroll: the bottom-right corner scrolls both axes (+300,+300)")
-	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(960, 472), 0.5)
+	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(960, 460), 0.5)
 			.is_equal_approx(Vector2.ZERO),
 		"edge_scroll: the viewport centre is dead — no scroll")
 	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(16, 16), 0.5)
 			.is_equal_approx(Vector2.ZERO),
 		"edge_scroll: exactly 16 px off the edge is outside the band")
-	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(1910, 472), 0.25)
+	_check(ScreenLib.edge_scroll(Vector2(768, 480), Vector2(1910, 460), 0.25)
 			.is_equal_approx(Vector2(150, 0)),
 		"edge_scroll: the right band scales with delta_time (0.25s → 150)")
 
@@ -240,14 +240,15 @@ func _test_scene() -> void:
 	_check(screen != null, "S10 instantiates from battle_screen.tscn (headless boot)")
 	if screen == null:
 		return
-	# §4.7.1 as amended (2026-11-08): viewport 1920×944 under the 40 px top
-	# bar; bottom bar 96 px.
+	# §4.7.1 as amended (2026-11-08 resolution bump; 2026-11-09 tile grid):
+	# viewport 1920×920 under the 2-tile (64px) top bar; bottom bar 3 tiles
+	# (96 px).
 	var view: Control = screen.get_node("GridView")
-	_check(view.size.is_equal_approx(Vector2(1920, 944)) and view.position.y == 40.0,
-		"the camera viewport is 1920×944 under the 40 px top bar (§4.7.1)")
+	_check(view.size.is_equal_approx(Vector2(1920, 920)) and view.position.y == 64.0,
+		"the camera viewport is 1920×920 under the 2-tile top bar (§4.7.1)")
 	var minimap: Control = screen.get_node("Minimap")
 	_check(minimap.size.is_equal_approx(Vector2(192, 120))
-			and minimap.position.is_equal_approx(Vector2(1720, 48)),
+			and minimap.position.is_equal_approx(Vector2(1720, 72)),
 		"the minimap is 192×120 at the viewport's top-right (§4.7.1)")
 	var bottom: ColorRect = screen.get_node("BottomPanel")
 	_check(bottom.position.y == 984.0 and bottom.size.y == 96.0,
@@ -1159,16 +1160,16 @@ func _test_ui_presentation_pins() -> void:
 	var minimap: Control = screen.get_node("Minimap")
 	var view: Control = screen.get_node("GridView")
 	# (a) The minimap renders: visible, 192×120, top-right INSIDE the
-	# 1280×584 viewport area (below the 40 px top bar, §4.7.1), and it owns
+	# 1920×920 viewport area (below the 2-tile top bar, §4.7.1), and it owns
 	# input before the world view through its connected handlers.
 	_check(minimap.visible and minimap.is_visible_in_tree(),
 		"the minimap node is visible (visible + in tree)")
-	_check(minimap.position.is_equal_approx(Vector2(1720, 48))
+	_check(minimap.position.is_equal_approx(Vector2(1720, 72))
 			and minimap.size.is_equal_approx(Vector2(192, 120)),
-		"the minimap is 192×120 at the viewport's top-right (1720,48)")
-	_check(Rect2(Vector2.ZERO, Vector2(1920, 40 + 944))
+		"the minimap is 192×120 at the viewport's top-right (1720,72)")
+	_check(Rect2(Vector2.ZERO, Vector2(1920, 64 + 920))
 			.encloses(minimap.get_global_rect()),
-		"the minimap sits inside the 1920×944 camera-viewport area")
+		"the minimap sits inside the 1920×920 camera-viewport area")
 	_check(minimap.mouse_filter == Control.MOUSE_FILTER_STOP
 			and view.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 		"the minimap owns input before the world view (§4.7.1)")
