@@ -251,12 +251,13 @@ func _test_confirm_dialog() -> void:
 	var dialog: Control = ConfirmScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the flow chain is deleted — the plate IS the registered
+	# `panel` element (a fixed tile rect, `data/layout_fragments/confirm.json`).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open_key("fleet.jettison.confirm",
 		{"ship": "Ship 1", "good": "Wine", "qty": 30})
-	# Message boxes hug their message (80-* edge-case table: "text wraps;
-	# dialog grows vertically to max 400px then scrolls") — the height is
-	# resizable BY DESIGN; the 480px width must never drift.
+	# The absolute-tile plate is a fixed rect: the width must never drift (the
+	# body viewport scrolls long messages, `panel.body`).
 	await assert_window_size_invariant(
 		"confirm dialog (width; height by design)", panel, [
 			func() -> void:

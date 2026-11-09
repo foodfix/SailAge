@@ -45,6 +45,35 @@ const PORT_SCENES := {
 	"tavern": "res://scenes/port/tavern_screen.tscn",
 }
 
+# --- W2 rigs (each slot appends between its own markers) ----------------------
+
+# --- rig: confirm (W2-D) ---
+const CONFIRM_SCENE := "res://scenes/ui_shared/confirm_dialog.tscn"
+# --- rig: dialog_box (W2-D) ---
+const DIALOG_BOX_SCENE := "res://scenes/ui_shared/dialog_box.tscn"
+# --- rig: save_slot (W2-D) ---
+const SAVE_SLOT_SCENE := "res://scenes/ui_shared/save_slot_dialog.tscn"
+# --- rig: settings (W2-D) ---
+const SETTINGS_SCENE := "res://scenes/ui_shared/settings_panel.tscn"
+# --- rig: gameover (W2-D) ---
+const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
+# --- rig: ending (W2-D) ---
+const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
+# --- rig: duel (W2-D) ---
+const DUEL_SCENE := "res://scenes/combat/duel_modal.tscn"
+
+## The W2-D shared/combat screens captured so far (extended per commit).
+## The lookup falls back here after PORT_SCENES.
+const W2D_SCENES := {
+	"confirm": CONFIRM_SCENE,
+	"dialog_box": DIALOG_BOX_SCENE,
+	"save_slot": SAVE_SLOT_SCENE,
+	"settings": SETTINGS_SCENE,
+	"gameover": GAMEOVER_SCENE,
+	"ending": ENDING_SCENE,
+	"duel": DUEL_SCENE,
+}
+
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -74,14 +103,22 @@ func _capture_screen(screen_id: String) -> bool:
 	if not (screen_id in RegistryLib.SCREENS):
 		push_error("layout_capture: unknown screen '%s'" % screen_id)
 		return false
-	if not PORT_SCENES.has(screen_id):
+	if not PORT_SCENES.has(screen_id) and not W2D_SCENES.has(screen_id):
 		push_error("layout_capture: no rig for '%s' yet (its W2 wave "
 				+ "adds one)" % screen_id)
 		return false
-	_rig_port()
-	var scene: PackedScene = load(PORT_SCENES[screen_id])
+	if PORT_SCENES.has(screen_id):
+		_rig_port()
+	else:
+		call("_rig_%s" % screen_id)  # the per-screen W2 rig
+	var scene: PackedScene = load(
+			PORT_SCENES.get(screen_id, W2D_SCENES.get(screen_id, "")))
 	var screen_root: Control = scene.instantiate()
 	add_child(screen_root)
+	# A modal screen opens (and registers) through its open call, not its
+	# _ready — the per-screen `_open_<id>` hook runs it before the settle.
+	if has_method("_open_%s" % screen_id):
+		call("_open_%s" % screen_id, screen_root)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
 	var fragment := _dump_fragment(screen_id)
@@ -199,3 +236,39 @@ func _tiles(pos: Vector2, size: Vector2) -> Dictionary:
 		"w": maxi(1, roundi(size.x / float(TILE))),
 		"h": maxi(1, roundi(size.y / float(TILE))),
 	}
+
+
+# --- W2-D rigs (scenes/combat + ui_shared) ------------------------------------
+
+## The modal rigs' shared minimal run (the suites' `new_game`-free shape:
+## direct GameState fields, a caravel, no NPCs — enough for any modal that
+## reads state, harmless for those that don't).
+func _rig_modal_run() -> void:
+	GameState.player = {
+		"nation_id": "portugal",
+		"stats": {"leadership": 10, "seamanship": 10, "combat": 10,
+			"navigation": 10, "luck": 10},
+		"xp": 0, "level": 1, "officers": [], "reputation": {},
+	}
+	for nation in ["portugal", "spain", "england", "holland", "ottoman",
+			"italy"]:
+		GameState.player["reputation"][nation] = 0
+	GameState.fleet = [FleetLib.new_ship("caravel", 0)]
+	GameState.day = 1
+	GameState.gold = 10000
+	GameState.morale = 70
+	GameState.current_port = ""
+	GameState.npc_fleets = []
+
+
+# --- rig: confirm (W2-D) -------------------------------------------------------
+
+func _rig_confirm() -> void:
+	_rig_modal_run()
+
+
+## The fixture message (the window-sizes suite's jettison confirm — a
+## two-line wrapped body, deterministic via `ui_strings.json`).
+func _open_confirm(dialog: Control) -> void:
+	dialog.call("open_key", "fleet.jettison.confirm",
+		{"ship": "Ship 1", "good": "Wine", "qty": 30})
