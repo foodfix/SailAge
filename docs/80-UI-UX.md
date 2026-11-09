@@ -252,14 +252,14 @@ Layout (1920×1080; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
-| Day 12 08:30 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]   [情报 Intel]   top bar 40px
+| Day 12 08:30 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]   [情报 Intel]   top bar 64px (2 tiles)
 +------------------------------------------------------------------+
 | [minimap 256×192]                                   (viewport)   |
 |  explored tiles only                                             |
 |                                                                  |
 |                               [fleet ship sprite placeholder]    |
 +------------------------------------------------------------------+
-| Provisions 45 (15d) · Water 45 (15d) · Crew 15/45 · Cargo 120/120 t · Speed 4.2 kn | bottom bar 32px
+| Provisions 45 (15d) · Water 45 (15d) · Crew 15/45 · Cargo 120/120 t · Speed 4.2 kn | bottom bar 64px (2 tiles)
 +------------------------------------------------------------------+
 ```
 
@@ -684,7 +684,7 @@ mutates state** — a pure view of the session.
 
 ```
 +------------------------------------------------------------------+
-| 海图 / Chart                                        [关闭海图]     | top 40px
+| 海图 / Chart                                        [关闭海图]     | top 64px (2 tiles)
 +------------------------------------------------------------------+
 |  whole world 4320×2160 downscaled to fit (≈0.44× at 1920×1080)     |
 |   explored tiles: SEA/COAST_SEA at low alpha                      |
@@ -693,7 +693,7 @@ mutates state** — a pure view of the session.
 |   discovery leads: ACCENT cross icons                             |
 |   fleet: white 5px square with black outline                      |
 +------------------------------------------------------------------+
-| 已探索海域 · 已知港口 · 船队 · 发现物线索            (legend)      | bottom 32px
+| 已探索海域 · 已知港口 · 船队 · 发现物线索            (legend)      | bottom 64px (2 tiles)
 +------------------------------------------------------------------+
 ```
 
@@ -842,7 +842,8 @@ chart adds:
   a press on a port is a click, never a pan; clicking elsewhere closes the
   panel and pans as before; `Esc` closes the panel first). The panel reads
   at the hover window's 13 px font, pre-wraps with the panel's own font to
-  a fixed **440 px** width and caps at **62 % of the viewport height**
+  a fixed **448 px** width (14 chrome tiles — the authored 440 snaps up
+  under the 2026-11-09 tile grid, §4.8) and caps at **62 % of the viewport height**
   (the no-autowrap discipline — Label wrap minimums never drive the
   geometry; the world stays visible behind it). The panel has
   eight sections (`debug.port.sec.*`): 概览 overview (the hover summary),
@@ -927,15 +928,15 @@ Phase 9 rebuilds the presentation: the Phase-2 16×10 MP grid becomes a
 
 ```
 +------------------------------------------------------------------+
-| Battle · Day 12 · Round 3        [weather]      [Esc: menu]      | top 40px
+| Battle · Day 12 · Round 3        [weather]      [Esc: menu]      | top 64px (2 tiles)
 +------------------------------------------------------------------+
 | battle world 48×30 tiles @ 32px = 1536×960                       |
-| camera viewport 1280×584 (the bottom bar takes the rest)         | 584px
+| camera viewport 1920×920 (the bottom bar takes the rest)         | 920px
 |  ship tokens: 24×24 squares with a letter (§4.8)                 |
 |  overlays: reachable vectors · arc fans · side marks · hook ring |
 |                                [minimap 192×120, top-right]      |
 +------------------------------------------------------------------+
-| ‖vel‖ · heading8 · port/starboard reload pips · wind · weather   | bottom 96px
+| ‖vel‖ · heading8 · port/starboard reload pips · wind · weather   | bottom 96px (3 tiles)
 | [1 round] [2 chain] [3 armor-piercing] [4 grape]         [fit]   |
 +------------------------------------------------------------------+
 ```
@@ -1012,8 +1013,8 @@ Below the per-ship repair row, each hull gains:
 
 ### 4.7.3 Phase-3 screens (S12, S13, S16) and their tabs
 
-Same palette, 8px grid, 32px table rows and 40px buttons as every other
-screen; no textures.
+Same palette, the tile grid (§4.8), 1-tile table rows and 2-tile buttons as
+every other screen; no textures.
 
 **S12 `guild_screen.tscn`** (wireframe: `30-*` §4.8 "Guild"). Two stacked
 sections:
@@ -3296,6 +3297,15 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    16×16, splash/impact
    32×32; portraits 72×96 (3:4 bust); discoveries 64×64;
    `sea_pattern.png` 64×64.
+   **Consumption rule (amended 2026-11-09 — tile-measured chrome):** the
+   sheets render their 32px margins 1:1 only on controls ≥ 2×2 tiles, so
+   every sheeted control measures in whole tiles with a 2-tile floor
+   (`UiKit.install_tile_grid`, §4.8 sizing grid) — the StyleBoxTexture
+   proportional margin compression never fires. Changing the tile size is
+   one `Palette.CHROME_TILE` edit + a `build_ui_art.py` regeneration (the
+   sheets stay 3×3 tiles; `ui_theme.gd` derives each sheet's margin from
+   the loaded texture, and the guard suite cross-checks `CHROME_TILE`
+   against the real sheet width).
 9. **LOD pins.** world-map NPC fleets stay colored squares (§4.5.2); S10
    minimap dots unchanged; chart + minimap stay flat raster; the S3
    player fleet token becomes the 8-dir directional sprite
@@ -3351,8 +3361,22 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
   (`line_ahead`/`column`, W4) = `PANEL_LINE` `#465468`; the
   hookable-target ring (`60-*` §4.6a) = `GOOD` `#4e9e4e`.
 
-- Sizing grid: 8px base unit; margins 16px; button height 40px; bar heights
-  40/32px (§4.5); table row height 32px; dialog width 480px.
+- Sizing grid (amended 2026-11-09, user direction — **tile-measured
+  chrome**): the **chrome tile** is the master unit — `Palette.CHROME_TILE`
+  (32px today), the ONLY chrome pixel number in the codebase; every other
+  chrome size derives from it (`UiKit.tiles(n)` or the derived `Palette`
+  constants), so a future tile-size change is one constant edit + an art
+  regen. Derived pins: button height **2 tiles**; top bar **2 tiles**;
+  bottom bar **2 tiles** (§4.5); table row **1 tile**; margins **½ tile**;
+  the 8px base unit = **¼ tile** (inner padding only); dialog width 480px
+  (15 tiles). Every sheeted control (Button / Panel / PanelContainer /
+  LineEdit / TextEdit / SpinBox / OptionButton) measures **≥ 2×2 tiles**
+  with **both axes exact tile multiples** — margins always render 1:1 and
+  Godot's nine-patch too-small margin compression is structurally
+  unreachable (§4.8.8). Authoring hints in `.tscn`/`.gd` may stay pixel
+  literals; the one-time tile grid pass (`UiKit.install_tile_grid`, §4.9)
+  snaps every sheeted control's `custom_minimum_size` up to the next tile
+  multiple (2-tile floor, zero axes left alone) at runtime.
 - **Audio (placeholder note):** silence in Phase 1; hook method
   `EventBus.play_sfx(name)` exists as a no-op; free-asset replacement pass is
   a Phase-3 task.
@@ -3431,11 +3455,12 @@ autoload: both `ui_theme.gd` and `ui_kit.gd` are `class_name` statics.
 Motion gating is the `UiMotion` static (§4.7.17).
 
 **Pinned numbers** (each row = a named constant in `ui_theme.gd`; all
-hexes resolve to existing `palette.gd` constants):
+hexes resolve to existing `palette.gd` constants; sizes are chrome tiles
+per the §4.8 sizing grid — 1 tile = `Palette.CHROME_TILE`, 32px today):
 
 | Control | Pins |
 |---|---|
-| Button | normal bg `PANEL_BG` + 2px border `PANEL_LINE`; hover border `ACCENT`; pressed bg `PANEL_LINE`; disabled text `PANEL_LINE`; keyboard focus = extra 2px `ACCENT` ring |
+| Button | normal bg `PANEL_BG` + 2px border `PANEL_LINE`; hover border `ACCENT`; pressed bg `PANEL_LINE`; disabled text `PANEL_LINE`; keyboard focus = extra 2px `ACCENT` ring; **min 2×2 tiles** (`Palette.BUTTON_H`, the tile grid pass enforces the floor) |
 | V/HScrollBar | trough transparent; 8px grabber `PANEL_LINE`, hover/pressed `ACCENT`; min grabber 24px |
 | Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px (nine-patch sheets layered at W3; flat StyleBoxFlat remains the fallback when a texture id is absent) |
 | LineEdit / TextEdit | bg `PANEL_BG`, border `PANEL_LINE`, focus border `ACCENT` |
@@ -3464,12 +3489,12 @@ the toast atom):
 
 | Atom | Contract |
 |---|---|
-| `button(text_key, kind, icon_id = "")` | `kind` ∈ default/primary/danger; min height 40px; optional icon id; press flash per §4.7.17 |
-| `frame(title_key)` | titled PanelContainer: header + 16px-margin VBox |
-| `row(cols, height = 32)` | horizontal row of `cols` cells |
+| `button(text_key, kind, icon_id = "")` | `kind` ∈ default/primary/danger; min height 2 tiles (`Palette.BUTTON_H`); optional icon id; press flash per §4.7.17 |
+| `frame(title_key)` | titled PanelContainer: header + 16px-margin (½ tile) VBox |
+| `row(cols, height = 32)` | horizontal row of `cols` cells (height = 1 tile) |
 | `footer(buttons)` | right-aligned button row |
 | `value_bar(value, max, tier)` | GOOD/WARN/BAD colors by tier |
-| `field_row(label_key, control)` | label + control on one 32px row |
+| `field_row(label_key, control)` | label + control on one 1-tile row (a sheeted control snaps the row to 2 tiles) |
 | `toast(...)` | kit toast atom for private modal toasts (fade per §4.7.17) |
 
 Labels resolve through `I18n.t_key`; screens keep their

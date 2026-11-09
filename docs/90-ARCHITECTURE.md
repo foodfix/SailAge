@@ -110,7 +110,7 @@ SailAge/
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   ├── fleet/fleet.gd          # fleet composition, cargo maths
 │   ├── ui_theme.gd             # Phase 10: build_theme() — one code-built Theme from palette constants (80-* §4.9); applied at startup, no .tres, no autoload
-│   ├── ui_kit.gd               # Phase 10: the six widget atoms, static factory (80-* §4.9)
+│   ├── ui_kit.gd               # Phase 10: the six widget atoms, static factory (80-* §4.9); + the tile grid pass (2026-11-09): install_tile_grid() once at the S1 theme point snaps every sheeted control's min size to whole chrome tiles (§4.8 sizing grid)
 │   ├── ui_motion.gd            # Phase 10: the UiMotion motion-gate static (80-* §4.7.17 timings)
 │   └── ui/portrait_composer.gd # Phase 10: 72×96 procedural busts from a captain's `appearance` + role cloth; override file wins (80-* §4.8)
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md

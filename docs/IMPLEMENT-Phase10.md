@@ -1101,3 +1101,27 @@ _Waves ledger entries are appended here by the master as merges land
 - Gates: validator **groups 1–13 OK**; `build_ui_art --check`
   **271 files byte-identical** (double run); `test_ui_theme` GREEN;
   full suite gate **62/62 GREEN** (442.1s, -j4).
+
+### W7.5 — tile-measured chrome (2026-11-09) — COMPLETE
+
+- User direction: buttons and frames are measured in chrome TILES, not
+  pixels — a future tile-size change must be one constant + an art regen.
+  `Palette.CHROME_TILE` (32) becomes the only chrome pixel number; the
+  sizing constants derive from it (`BUTTON_H`/`TOP_BAR_H`/`BOTTOM_BAR_H`
+  = 2 tiles, `ROW_H` = 1 tile, `MARGIN` = ½ tile, `BASE_UNIT` = ¼ tile).
+  Every sheeted control (Button / Panel / PanelContainer / LineEdit /
+  TextEdit / SpinBox / OptionButton) measures ≥ 2×2 tiles, both axes
+  exact tile multiples: `UiKit.install_tile_grid()` — installed ONCE at
+  the S1 theme application point (the texture-registry pattern, no new
+  autoload) — connects `node_added` and defers a snap of every sheeted
+  control's `custom_minimum_size` up to the next tile multiple (2-tile
+  floor, 0 axes untouched), so Godot's StyleBoxTexture proportional
+  margin compression (the 40px-button squashed rim) is structurally
+  unreachable. `ui_theme.gd` derives each sheet margin from the loaded
+  texture (`width / 3`, the sheets stay 3×3 tiles); the HUD/chart/battle
+  walnut bands grow 40/32 → 64 and the battle viewport re-pins to
+  1920×920. Doc pins amended in `80-*` §4.5/§4.5.5/§4.7/§4.8/§4.8.8/§4.9
+  and the §4.6.2 debug panel (440 → 448 = 14 tiles).
+- Gates: `test_ui_tile_grid` NEW (constants, closed forms, install
+  observation, sheet-width cross-check); full suite green; art rebuilds
+  untouched (byte-identical — CHROME_TILE stays 32 this amendment).
