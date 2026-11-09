@@ -233,10 +233,12 @@ func _test_provisions_dialog() -> void:
 		])
 	# The §4.6.1 window pins itself at the widest observed state: every
 	# open/fill/stepper/buy state renders exactly this geometry (both locales
-	# exercised through the class sweep's flip below).
+	# exercised through the class sweep's flip below). 2026-11-09 tile grid:
+	# the frame re-pins to 27×21 chrome tiles (864×672) — its 2-tile
+	# controls grew the content minimum past the retired 862×568.
 	_checks += 1
-	if sizes[0].x != 862.0 or sizes[0].y != 568.0:
-		_failures.append("provisions dialog renders %s, expected (862, 568)"
+	if sizes[0].x != 864.0 or sizes[0].y != 672.0:
+		_failures.append("provisions dialog renders %s, expected (864, 672)"
 			% str(sizes[0]))
 	dialog.close()
 	dialog.queue_free()

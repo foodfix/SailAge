@@ -591,8 +591,8 @@ func _test_port_debug() -> void:
 	chart._open_port_panel("lisbon")
 	_check(chart._port_panel != null and chart._port_panel.visible,
 		"clicking lisbon opens the pinned report")
-	_check(chart._port_panel.size.x <= 441.0,
-		"the report panel keeps its pinned width (%.0f px)"
+	_check(chart._port_panel.size.x <= 449.0,
+		"the report panel keeps its pinned width (448 = 14 tiles, %.0f px)"
 			% chart._port_panel.size.x)
 	_check(chart._port_panel.size.y
 		<= chart.get_viewport_rect().size.y * 0.62 + 1.0,
