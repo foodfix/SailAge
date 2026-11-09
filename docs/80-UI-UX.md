@@ -1599,40 +1599,36 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
 
 - **Entry.** S1 gains the 海战 button (`sandbox.title`) in its button
   stack, between New Game and Load. `Esc` returns to S1 (§4.2).
-- **Layout (1920×1080 — re-pinned 2026-11-09, the fleet/editor split
-  re-layout).** Four regions, each field one unclipped label + one
-  sheeted control (controls ride the §4.8.8 2-tile floor — 64 px tall;
-  every region rect and column floor is pinned by the layout regression
-  test for BOTH locales):
-  the **player fleet panel** `(16, 72)` 710×848 and the **enemy fleet
-  panel** `(734, 72)` 710×848 carry ONLY their per-ship rows plus the
-  Add/Remove buttons — each ship editor renders as the COMPACT 2-line
-  block (line 1 = `Ship {index}` + ship type + cannons + crew +
-  durability, line 2 = captain (expanding) + figurehead + sail), so the
-  5-ship fleet fits its rows area with NO scrolling;
-  the **editors panel** `(1452, 72)` 452×848 carries the three shared
-  sections in labeled rows — captain stats (the five attributes 0–100,
-  labels `char.attr.*`; the weapon/armor slots — injected through the
-  `60-*` §4.12.1 `player_stats` seam; the initial morale), the enemy
-  profile (kind, compose toggle, the FLAGSHIP captain id — synced with
-  enemy row 0 —, `ai_level`, `archetype`, `formation`, enemy morale),
-  and the encounter conditions (day, seed mode + value, weather,
-  `wind_dir`, current dir + strength, deployment); wide pairs
-  (`ai_level`/`archetype`, enemy `morale`/`formation`, the current
-  pair, `deployment`) render as label-above blocks so every
-  localized string fits the 452 px column unclipped;
-  the **actions strip** `(16, 928)` 1888×136 carries the four buttons
-  `[开战] [随机全部] [导入] [导出]` as one right-aligned row.
+- **Layout (1920×1080 — re-pinned 2026-11-09, the horizontal-bands
+  re-layout; supersedes the same-day fleet/editor split, which the §4.8.8
+  2-tile width floor makes unworkable: SpinBoxes measure ≥ 96 px wide,
+  so a 452 px editor column cannot hold a ship line).** Three full-width
+  bands, every field one unclipped label + one sheeted control, one
+  64 px control row per line (all rects/column floors pinned by the
+  layout regression test for BOTH locales):
+  the **player panel** `(16, 72)` 1888×416 — row 1 = the captain stats
+  (the five attributes 0–100, labels `char.attr.*`; the weapon/armor
+  slots — injected through the `60-*` §4.12.1 `player_stats` seam; the
+  initial morale, short label `sandbox.morale.short`) on ONE row, then
+  five ship rows — each ship is ONE 64 px line: `Ship {index}` + ship
+  type + cannons + crew + durability + captain (expanding) + figurehead
+  + sail — so all five ships are visible with NO scrolling;
+  the **enemy panel** `(16, 496)` 1888×416 — row 1 = the enemy profile
+  on ONE row (kind, compose toggle, the FLAGSHIP captain id — synced
+  with enemy row 0 — `ai_level`, `archetype`, `formation`, enemy
+  morale), then its five one-line ship rows;
+  the **conditions strip** `(16, 912)` 1888×168 — row 1 = the encounter
+  conditions (day, seed mode + value, weather, `wind_dir`, current dir
+  + the labeled strength `sandbox.current.strength`, deployment), row 2
+  = the four buttons `[开战] [随机全部] [导入] [导出]` right-aligned.
   The fullscreen background rides the `Backdrop` panel variation
   (§4.9 — the `frame` tileset's ocean-chart water, the flat `PANEL_BLUE`
   fallback). Every label comes from the `sandbox.*` family inventoried
-  in `10-*` §7.12; the strength spinbox and the flagship captain get
-  their own labels (`sandbox.current.strength`,
-  `sandbox.enemy.flagship`), and the short morale label is
-  `sandbox.morale.short`. Dropdown widths follow the longest localized
-  item text (+ arrow + the sheet padding) per column — an OptionButton
-  never clips its selected text over a neighbor, and no row exceeds its
-  panel's inner width (the EN longest forms are the binding case).
+  in `10-*` §7.12. Dropdown widths follow the longest localized item
+  text (+ arrow + the sheet padding) per column — an OptionButton never
+  clips its selected text over a neighbor, and no row exceeds its
+  panel's inner width (the EN longest forms are the binding case; the
+  layout test measures the live control mins).
 - **Fleet fields.** 1–5 ships per side, one editable row per ship: ship
   type (the 16 hulls), cannons (0 … `armament_slots`), crew
   (`crew_min` … `crew_max`), durability (1 … max), the figurehead +
@@ -1655,10 +1651,12 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   the mode toggle only ever hides the per-ship rows + fleet buttons, never
   the enemy editors block); equipment dropdowns show the authored
   localized item `name`s (the `shipyard_screen` convention — metadata
-  stays the id); each ship editor renders as a compact 2-line block
-  (2026-11-09 re-layout — see the Layout bullet) so no label clips, every
-  control stays inside its panel, and the 5-ship fleet never needs the
-  rows scroll.
+  stays the id); each ship editor renders as a ONE-LINE row (2026-11-09
+  horizontal-bands re-layout — see the Layout bullet) so no label clips,
+  every control stays inside its panel, and the 5-ship fleet never needs
+  the rows scroll. The per-side Add/Remove fleet buttons ride the first
+  row's right end as compact 2-tile-wide `+`/`−` buttons (the layout
+  test pins their rects).
 - **Add-ship visibility + cap feedback (2026-11-09, the "add ship shows
   nothing" fix).** After a successful `添加舰船` the side's rows scroll
   auto-scrolls so the new row's rect is inside the scroll viewport
@@ -3550,7 +3548,7 @@ the toast atom):
 | Atom | Contract |
 |---|---|
 | `button(text_key, kind, icon_id = "")` | `kind` ∈ default/primary/danger; min height 2 tiles (`Palette.BUTTON_H`); optional icon id; press flash per §4.7.17 |
-| `frame(title_key)` | titled PanelContainer: header + body VBox; the inset comes from the panel sheet's 16px content margins — the inner MarginContainer carries 0 overrides (re-pinned 2026-11-09; body still via `frame.meta["body"]`) |
+| `frame(title_key)` | titled PanelContainer: header + body VBox; in texture mode the inset comes from the panel sheet's 16px content margins (the inner MarginContainer carries 0 overrides), the flat fallback keeps the 16px margins — the frame measures the same either way (re-pinned 2026-11-09; body still via `frame.meta["body"]`) |
 | `row(cols, height = 32)` | horizontal row of `cols` cells (height = 1 tile) |
 | `footer(buttons)` | right-aligned button row |
 | `value_bar(value, max, tier)` | GOOD/WARN/BAD colors by tier |
