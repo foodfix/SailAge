@@ -321,6 +321,10 @@ SPECIAL_REQUIRE_VERSION.add("facility_hours.json")
 # vocabularies.
 SPECIAL_FILES.add("captain_name_parts.json")
 SPECIAL_REQUIRE_VERSION.add("captain_name_parts.json")
+# Phase 11 (§4.23, 2026-11-09): ui_layout.json is the studio layout-override
+# table — top level IS the screen map, no envelope at all; group 14 owns its
+# shape.
+SPECIAL_FILES.add("ui_layout.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -11512,6 +11516,256 @@ def _g13_probe_root(icons_dir: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
+# Check group 14 — Layout overrides (docs/10-DATA-SCHEMA.md §8.9; Phase 11)
+# ---------------------------------------------------------------------------
+
+
+# The 8 pilot screen ids (§4.23).
+LAYOUT_SCREENS = frozenset({
+    "port", "market", "inn", "guild", "provisions", "palace",
+    "tavern", "shipyard",
+})
+
+# The legal element-object keys (§4.23).
+LAYOUT_KEYS = frozenset({
+    "x", "y", "w", "h", "min_w", "min_h", "order", "anchor", "sheet",
+})
+
+# The 7 assignable nine-patch sheet ids (80-* §4.8.9 — the 48×16 value-bar
+# band is not assignable).
+LAYOUT_SHEETS = frozenset({
+    "panel", "button", "button_hover", "button_pressed", "button_focus",
+    "field", "backdrop",
+})
+
+LAYOUT_ANCHORS = frozenset({"top", "bottom", "left", "right"})
+
+# The 1920×1080 design canvas = 60 × 33.75 chrome tiles (80-* §4.8.9).
+LAYOUT_GRID_W = 60
+LAYOUT_GRID_H = 33
+
+LAYOUT_ELEMENT_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
+
+
+def check_group14(docs: dict[str, object], verbose: bool) -> None:
+    """Layout overrides: docs/10-DATA-SCHEMA.md section 8.9 — the
+    `data/ui_layout.json` shape, ranges, sheet ids and anchor/`y`
+    exclusivity. The file must exist but MAY be `{}` (the shipped
+    default: every override absent, every code pin intact)."""
+    path = DATA_DIR / "ui_layout.json"
+    if not path.is_file():
+        fail("layout", "ui_layout.json", "file is absent "
+             "(ships as {} — group 14 requires the file to exist)", 14)
+    table = docs.get("ui_layout.json")
+    if not isinstance(table, dict):
+        fail("layout", "ui_layout.json", "top-level value must be an object "
+             "(§8.9 item 1)", 14)
+
+    elements_total = 0
+    for screen, elements in table.items():
+        # -- item 1: known screen ids, per-screen object --------------------
+        if screen not in LAYOUT_SCREENS:
+            fail("layout", "ui_layout.json",
+                 f"unknown screen '{screen}' (§8.9 item 1)", 14)
+        if not isinstance(elements, dict):
+            fail("layout", "ui_layout.json",
+                 f"'{screen}' must be an object (§8.9 item 1)", 14)
+        for element, overrides in elements.items():
+            elements_total += 1
+            label = f"{screen}.{element}"
+            # -- item 2: dotted hierarchical id format -----------------------
+            if not isinstance(element, str) or not LAYOUT_ELEMENT_RE.match(element):
+                fail("layout", "ui_layout.json",
+                     f"element id '{element}' does not match the dotted-id "
+                     f"regex (§8.9 item 2)", 14)
+            if not isinstance(overrides, dict):
+                fail("layout", "ui_layout.json",
+                     f"{label}: element value must be an object "
+                     f"(§8.9 item 3)", 14)
+            # -- item 3: key whitelist + types --------------------------------
+            unknown = sorted(set(overrides) - LAYOUT_KEYS)
+            if unknown:
+                fail("layout", "ui_layout.json",
+                     f"{label}: unknown key(s) {unknown} (§8.9 item 3)", 14)
+            for key in ("x", "y", "w", "h", "min_w", "min_h", "order"):
+                if key in overrides and not (
+                        isinstance(overrides[key], int)
+                        and not isinstance(overrides[key], bool)
+                        and overrides[key] >= 0):
+                    fail("layout", "ui_layout.json",
+                         f"{label}.{key}: must be a non-negative integer "
+                         f"tile count (§8.9 item 3)", 14)
+            if "anchor" in overrides and overrides["anchor"] not in LAYOUT_ANCHORS:
+                fail("layout", "ui_layout.json",
+                     f"{label}.anchor: {overrides['anchor']!r} is not one of "
+                     f"{sorted(LAYOUT_ANCHORS)} (§8.9 item 3)", 14)
+            if "sheet" in overrides and overrides["sheet"] not in LAYOUT_SHEETS:
+                fail("layout", "ui_layout.json",
+                     f"{label}.sheet: {overrides['sheet']!r} is not one of "
+                     f"the 7 assignable sheets (§8.9 item 3)", 14)
+            # -- item 4: grid bounds (60 × 33.75 tiles) -----------------------
+            x = overrides.get("x", 0)
+            w = overrides.get("w", 0)
+            y = overrides.get("y", 0)
+            h = overrides.get("h", 0)
+            if x + w > LAYOUT_GRID_W:
+                fail("layout", "ui_layout.json",
+                     f"{label}: x({x}) + w({w}) exceeds the {LAYOUT_GRID_W}-"
+                     f"tile grid width (§8.9 item 4)", 14)
+            if y + h > LAYOUT_GRID_H:
+                fail("layout", "ui_layout.json",
+                     f"{label}: y({y}) + h({h}) exceeds the {LAYOUT_GRID_H}-"
+                     f"tile grid height (§8.9 item 4)", 14)
+            if overrides.get("min_w", 0) > LAYOUT_GRID_W or \
+                    overrides.get("min_h", 0) > LAYOUT_GRID_H:
+                fail("layout", "ui_layout.json",
+                     f"{label}: min_w/min_h exceed the grid "
+                     f"(§8.9 item 4)", 14)
+            if overrides.get("order", 0) > 64:
+                fail("layout", "ui_layout.json",
+                     f"{label}.order exceeds 64 (§8.9 item 4)", 14)
+            # -- item 5: anchor/y exclusivity ---------------------------------
+            if "anchor" in overrides and "y" in overrides:
+                fail("layout", "ui_layout.json",
+                     f"{label}: an anchored element must not carry 'y' "
+                     f"(§8.9 item 5)", 14)
+
+    if verbose:
+        print(f"PASS group 14 layout ({elements_total} elements across "
+              f"{len(table)} screens)")
+
+
+# ---------------------------------------------------------------------------
+# Group 14 mutation harness (`--self-test-g14`)
+# ---------------------------------------------------------------------------
+
+
+def run_group14_self_test() -> int:
+    """Negative harness for group 14: `{}` passes; every §8.9 rule has
+    one negative probe that must fail with exit 14 naming the rule."""
+    global DATA_DIR
+    results: list[bool] = []
+    saved_data_dir = DATA_DIR
+
+    def with_table(table: dict, action) -> None:
+        """Runs `action` with `table` as the docs entry and a tmp
+        DATA_DIR holding the serialized fixture (the check reads the
+        file-existence path from DATA_DIR)."""
+        global DATA_DIR
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir()
+            (data_dir / "ui_layout.json").write_text(
+                json.dumps(table, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8")
+            DATA_DIR = data_dir
+            try:
+                action({"ui_layout.json": table})
+            finally:
+                DATA_DIR = saved_data_dir
+
+    def expect_green(case: str, table: dict) -> None:
+        def action(docs: dict) -> None:
+            check_group14(docs, False)
+        try:
+            with_table(table, action)
+        except CheckFailure as exc:
+            results.append(False)
+            print(f"FAIL g14-self-test {case}: fixture should pass but "
+                  f"rejected: {exc.check_id} {exc.details}")
+            return
+        except Exception as exc:
+            results.append(False)
+            print(f"FAIL g14-self-test {case}: unexpected "
+                  f"{type(exc).__name__}: {exc}")
+            return
+        results.append(True)
+        print(f"PASS g14 positive {case}")
+
+    def expect_failure(case: str, needle: str, table: dict) -> None:
+        def action(docs: dict) -> None:
+            check_group14(docs, False)
+        try:
+            with_table(table, action)
+        except CheckFailure as exc:
+            ok = (exc.code == 14
+                  and needle.lower() in f"{exc.check_id} {exc.details}".lower())
+            results.append(ok)
+            if ok:
+                print(f"PASS g14 negative {case}: rejected "
+                      f"({exc.check_id} {exc.details})")
+            else:
+                print(f"FAIL g14-self-test {case}: rejection does not name "
+                      f"{needle!r} at exit 14: {exc.check_id} "
+                      f"{exc.details}")
+            return
+        except Exception as exc:
+            results.append(False)
+            print(f"FAIL g14-self-test {case}: unexpected "
+                  f"{type(exc).__name__}: {exc}")
+            return
+        results.append(False)
+        print(f"FAIL g14-self-test {case}: group 14 stayed green; the "
+              "mutation was not detected")
+
+    # Positive 1: the shipped empty table.
+    expect_green("empty", {})
+    # Positive 2: a well-formed fixture across the §4.23 key set.
+    expect_green("fixture", {
+        "market": {
+            "toolbar": {"x": 2, "y": 1},
+            "invest": {"min_w": 4, "min_h": 2, "sheet": "backdrop"},
+            "rows.copper.qty_field": {"min_w": 3, "sheet": "field"},
+        },
+        "port": {
+            "footer.set_sail": {"anchor": "bottom", "h": 2, "w": 8, "x": 26},
+            "card": {"order": 3},
+        },
+    })
+    # Rule 1: unknown screen id.
+    expect_failure("rule1-screen", "unknown screen", {"market_x": {}})
+    # Rule 1: per-screen value not an object.
+    expect_failure("rule1-shape", "must be an object",
+                   {"market": []})
+    # Rule 2: bad element id.
+    expect_failure("rule2-id", "dotted-id regex",
+                   {"market": {"Rows.Copper..qty": {}}})
+    # Rule 3a: unknown key.
+    expect_failure("rule3-key", "unknown key",
+                   {"market": {"toolbar": {"left": 1}}})
+    # Rule 3b: non-integer coordinate.
+    expect_failure("rule3-int", "non-negative integer",
+                   {"market": {"toolbar": {"x": 1.5}}})
+    # Rule 3c: bad anchor enum.
+    expect_failure("rule3-anchor", "anchor",
+                   {"port": {"footer": {"anchor": "middle"}}})
+    # Rule 3d: bad sheet id (the 8th sheet — the value-bar band — is
+    # not assignable, as is any invented id).
+    expect_failure("rule3-sheet", "assignable sheets",
+                   {"market": {"panel": {"sheet": "bar"}}})
+    # Rule 4a: width overflow.
+    expect_failure("rule4-w", "grid width",
+                   {"market": {"toolbar": {"x": 58, "w": 4}}})
+    # Rule 4b: height overflow (the 33.75 sliver).
+    expect_failure("rule4-h", "grid height",
+                   {"market": {"toolbar": {"y": 32, "h": 2}}})
+    # Rule 4c: min-size overflow.
+    expect_failure("rule4-min", "min_w/min_h",
+                   {"market": {"panel": {"min_h": 40}}})
+    # Rule 5: anchor + y contradiction.
+    expect_failure("rule5-anchor-y", "must not carry 'y'",
+                   {"port": {"footer": {"anchor": "bottom", "h": 2, "y": 1}}})
+
+    if not all(results):
+        print(f"FAIL g14-self-test: {results.count(False)} of "
+              f"{len(results)} cases red")
+        return 1
+    print(f"OK g14-self-test ({len(results)} cases)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -11545,8 +11799,9 @@ def main(argv: list[str]) -> int:
     self_test = "--self-test-g6" in rest or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
     self_test_g9 = "--self-test-g9" in rest
     self_test_g10 = "--self-test-g10" in rest
+    self_test_g14 = "--self-test-g14" in rest
     known = {"--verbose", "--self-test-g6", "--self-test-g9",
-             "--self-test-g10"}
+             "--self-test-g10", "--self-test-g14"}
     unknown = [arg for arg in rest[1:] if arg not in known]
     if unknown:
         print("usage: python3 tools/validate_data.py [--verbose] "
@@ -11569,6 +11824,8 @@ def main(argv: list[str]) -> int:
         return run_group9_self_test()
     if self_test_g10:
         return run_group10_self_test()
+    if self_test_g14:
+        return run_group14_self_test()
 
     docs: dict[str, object] = {}
     groups = (
@@ -11585,6 +11842,7 @@ def main(argv: list[str]) -> int:
         ("11", check_group11),
         ("12", check_group12),
         ("13", check_group13),
+        ("14", check_group14),
     )
 
     for group_id, check in groups:

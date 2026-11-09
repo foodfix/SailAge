@@ -194,6 +194,71 @@ static func _texture_box(tex: Texture2D, pad: int = 0,
 	return sb
 
 
+# --- Per-control sheet overrides (§4.8.9, Phase 11) ---------------------------
+
+## Cache for the override seam (one load per sheet id, process-wide).
+static var _override_sheets: Dictionary = {}
+
+
+## One override-sheet texture by id (null when the id is unknown or the
+## file is absent — the flat fallback rule, unchanged).
+static func _sheet_texture(sheet_id: String) -> Texture2D:
+	if not SHEET_PATHS.has(sheet_id):
+		return null
+	if _override_sheets.has(sheet_id):
+		return _override_sheets[sheet_id]
+	var path: String = SHEET_PATHS[sheet_id]
+	var tex: Texture2D = null
+	if ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	_override_sheets[sheet_id] = tex
+	return tex
+
+
+## The per-control sheet assignment (docs/80-UI-UX.md §4.8.9; Phase 11):
+## installs `sheet_id`'s nine-patch as the control's BASE plate via
+## `add_theme_stylebox_override` — panel-role controls ride the `panel`
+## stylebox name, button-role the `normal` state box (hover/pressed/focus
+## keep theme-resolving — the assigned sheet is the resting plate only),
+## field-role the `normal` box. All stylebox construction stays HERE (the
+## §4.9 styling-owner rule; the styling-audit allowlist stays empty).
+## Returns false when the role/sheet pair is not applicable — the caller
+## (`LayoutRegistry`) reports it; this never raises.
+static func sheet_override(control: Control, role: String,
+		sheet_id: String) -> bool:
+	var tex := _sheet_texture(sheet_id)
+	if tex == null:
+		return false
+	if role == "panel" and (control is Panel or control is PanelContainer):
+		control.add_theme_stylebox_override("panel",
+				_texture_box(tex, PANEL_PAD))
+		return true
+	if role == "button" and control is Button:
+		control.add_theme_stylebox_override("normal",
+				_texture_box(tex, CONTENT_PAD))
+		return true
+	if role == "field" and (control is LineEdit or control is TextEdit):
+		control.add_theme_stylebox_override("normal",
+				_texture_box(tex, FIELD_PAD))
+		return true
+	return false
+
+
+## Removes one control's sheet override — the theme variation resolves
+## again (the revert path; matching name per role, mirroring
+## [method sheet_override]).
+static func clear_sheet_override(control: Control, role: String) -> void:
+	var name := ""
+	if role == "panel" and (control is Panel or control is PanelContainer):
+		name = "panel"
+	elif role == "button" and control is Button:
+		name = "normal"
+	elif role == "field" and (control is LineEdit or control is TextEdit):
+		name = "normal"
+	if name != "":
+		control.remove_theme_stylebox_override(name)
+
+
 # --- Shared stylebox builders -------------------------------------------------
 
 ## A square-cornered StyleBoxFlat. Corner radius 0 everywhere unless the

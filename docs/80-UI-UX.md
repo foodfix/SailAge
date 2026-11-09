@@ -3467,6 +3467,80 @@ visibly jumped at every opening/closing hour.)
   (`30-*` §4.3) re-enables it on the next crossing hour. Routing, gating and
   the rebuild signature never move — only the rendering is fixed.
 
+#### 4.8.9 Layout overrides & the studio layout editor *(added 2026-11-09, user direction — the studio layout loop)*
+
+UI placement is editable **visually, live, in the SailAge Model Studio**:
+the user drags/resizes controls on the chrome-tile grid and re-assigns
+chrome sheets per element, and the result is committed as reviewable
+data. The default path is byte-stable: the override file ships **empty
+(`{}`)** and every pin below keeps holding.
+
+- **Data seam:** `data/ui_layout.json` (normative spec `10-*` §4.23;
+  validator group 14, `10-*` §8.9) — per-screen, per-element overrides
+  in **tile units** (integers, 1 tile = `Palette.CHROME_TILE` = 32 px;
+  the §4.8 sizing grid is the editor's snap grid). Absent override ⇒ the
+  code-pinned default, so the locale layout regression suites pin
+  defaults unchanged.
+- **Grid caps:** the 1920×1080 design canvas is 60 × 33.75 tiles ⇒
+  `x + w ≤ 60`, `y + h ≤ 33` (floor). The bottom 24 px sliver belongs to
+  anchored elements.
+- **Anchor flags:** edge-docked free elements (the top/bottom bars) use
+  `anchor: top|bottom|left|right` with the span from that edge in tiles
+  — absolute tiles cannot express "pinned to the true bottom"
+  (1080 is not tile-integral). `anchor` and `y` are mutually exclusive.
+- **Id registry:** `scripts/ui/layout_registry.gd` (`LayoutRegistry`,
+  §4.9 placement rule: a `class_name` static, no autoload). Every named
+  control on a port screen registers at build time with a hierarchical
+  id (`market.toolbar.invest`, `market.rows.<good_id>.qty_field` —
+  dynamic children use data-derived segments). Duplicate id in one
+  screen = `push_error`, last-wins.
+- **Override semantics (the every-control reconciliation):**
+
+| Control kind | Move | Resize | Tileset |
+|---|---|---|---|
+| Free child (screen root / free layer) | `x`, `y` tiles | `w`, `h` tiles | any of the 7 |
+| Anchored free child (bars) | edge fixed; along-edge span | `h` (or `w`) tiles | any of the 7 |
+| Container child | `order` (sibling index) | `min_w`, `min_h` tiles (`custom_minimum_size`) | any of the 7 |
+| Plain (ColorRect/dividers/labels) | as per kind | as per kind | `sheet` n/a |
+
+- **Locked order:** data-pinned orderings (the §4.8.1 facility-card
+  grid, market row order) register with `data_ordered = true`; their
+  `order` overrides are IGNORED at runtime and reported locked back to
+  the studio — the §4.1 fixed order is a data contract, not a layout
+  preference.
+- **Per-element sheet assignment:** exactly **7 assignable sheets** —
+  the 3×3 chrome nine-patches `panel`, `button`, `button_hover`,
+  `button_pressed`, `button_focus`, `field`, `backdrop` (§4.8.8). The
+  8th shipped sheet (the 48×16 authored value-bar band) is NOT
+  assignable (not a nine-patch; wrong geometry). The override installs
+  through `UiTheme.sheet_override(control, role, sheet_id)` — all
+  stylebox construction stays in `ui_theme.gd`, so the §4.9
+  no-per-screen-styling rule and the styling-audit empty allowlist hold.
+  Revert removes the override; the theme variation resolves again.
+- **Live bridge (debug-gated):** the game launched with
+  `godot --path . -- --layout-bridge` runs `LayoutBridge` (autoload #7,
+  `90-*` §5.7) — a one-client `WebSocketPeer` server on
+  `127.0.0.1:8765` carrying the JSON protocol (tree dump, throttled
+  viewport PNG frames, live move/resize/reorder/assign_sheet/revert,
+  `screen_changed`). Without the flag the autoload is a disabled no-op:
+  no listener, no cost. Normal play, saves and the EventBus are
+  untouched.
+- **Single writer:** the GAME never writes files. The studio serializes
+  its edit session (sorted keys, 2-space indent, trailing newline —
+  deterministic bytes), runs `tools/validate_data.py` in-process, and
+  writes `data/ui_layout.json` only on validator pass; git add/commit
+  stays with the user (the studio's standing rule).
+- **Both-locale guard:** the committed file ships into the suites — the
+  existing port-screen layout regression suites measure live rects for
+  zh + en against it, so a commit that clips either locale fails the
+  suite. The studio cannot run Godot: "run the suite after layout
+  commits" is a manual discipline the Commit button's output banner
+  reminds about.
+- **Scope:** the pilot covers the 8 port screens (`port`, `market`,
+  `inn`, `guild`, `provisions`, `palace`, `tavern`, `shipyard`). The
+  HUD and `ui_shared` modals are fast-follows (same mechanism, `hud.*`
+  ids under whichever screen hosts them).
+
 ### 4.9 Shared theme & widget kit (Phase 10)
 
 **Texture-mode state mapping (amended 2026-11-08, the PixelLab

@@ -1392,6 +1392,53 @@ that section's numbers, not this file's.)
 }
 ```
 
+### 4.23 UILayout — `data/ui_layout.json` *(Phase 11)*
+
+The studio layout editor's override table (`80-*` §4.8.9): per-screen,
+per-element layout overrides in **tile units** (1 tile =
+`Palette.CHROME_TILE` = 32 px). **Not an envelope file** — the top level
+is the screen map directly (the `ui_strings.json` pattern; group-1
+exception). Ships as `{}` (empty) — every absent override means the
+code-pinned default, so the locale layout regression suites pin defaults
+unchanged.
+
+- **Top level:** screen id → element map. Screen ids are the fixed pilot
+  set: `port`, `market`, `inn`, `guild`, `provisions`, `palace`,
+  `tavern`, `shipyard`.
+- **Element ids:** hierarchical dotted strings
+  `^[a-z0-9_]+(\.[a-z0-9_]+)*$` — static segments authored in code,
+  dynamic segments data-derived (`rows.<good_id>`,
+  `cards.<facility_id>`). The validator checks format only; the runtime
+  set is open.
+- **Element object:** all keys optional; only the keys below are legal.
+
+| Key | Type | Applies to | Meaning |
+|---|---|---|---|
+| `x`, `y` | int ≥ 0, tiles | free children only | absolute position (px = tiles × 32) |
+| `w`, `h` | int ≥ 0, tiles | free children | size; with `anchor`, the span from that edge |
+| `min_w`, `min_h` | int ≥ 0, tiles | any control | `custom_minimum_size` override |
+| `order` | int ≥ 0 ≤ 64 | container children | sibling index (ignored+locked for `data_ordered` registrations) |
+| `anchor` | enum | free children | `top` \| `bottom` \| `left` \| `right` — exclusive with `y` for `bottom`/`top`… (normative: `anchor` present ⇒ no `y` at all) |
+| `sheet` | enum | skinned controls | one of the **7** assignable nine-patch sheets: `panel`, `button`, `button_hover`, `button_pressed`, `button_focus`, `field`, `backdrop` (`80-*` §4.8.9 — the 48×16 value-bar band is not assignable) |
+
+- **Ranges:** `x + w ≤ 60`, `y + h ≤ 33`, `min_w ≤ 60`, `min_h ≤ 33`
+  (the 1920×1080 canvas = 60 × 33.75 tiles; the bottom sliver belongs to
+  anchored elements). Group 14 owns the exact bounds (§8.9).
+- **No strings at all** — no i18n rule applies (group 2 skips it).
+- **Single writer:** the studio writes this file (deterministic bytes:
+  sorted keys, 2-space indent, trailing newline) after an in-process
+  validator pass; the game and bridge never write it.
+
+```json
+{
+  "market": {
+    "toolbar": {"x": 2, "y": 1},
+    "invest": {"min_w": 4, "min_h": 2, "sheet": "backdrop"},
+    "rows.copper.qty_field": {"min_w": 3, "sheet": "field"}
+  }
+}
+```
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in
@@ -2458,6 +2505,7 @@ the code below. All checks run in order.
 | 11 | Captain canon | `npc_captains.json` **absent**; `captains.json` + `officers.json` rebuild determinism (`tools/build_captains.py --check`); canon coverage ≥ the computed extreme-preset total; the artifact `quota_table` matches the roster; name uniqueness across all captains + officers; `named_pirates.json` v2 ≡ its canon copies with the `drop` → rare pin; generated-card formula conformance — normative spec §8.6 |
 | 12 | RPG data | officers v2 shape (96 = 24 + 72, 11 skill keys, wage & main-skill bands, specialty coverage ≥ 10 per skill at ≥ 20, captain-qualified ≥ 12, recruit-port rules); `skill_gates.json` rows incl. `sail.autopilot`; `officer_posts.json` exactly 7 with the locked prereqs; `backgrounds.json` exactly 6 with the key/range rules; ui_strings Phase-8 family presence — normative spec §8.7 |
 | 13 | Generated UI art & shore raster | `assets/ui/` inventory == manifest ids for every contract class (`IMPLEMENT-Phase10.md` A.1–A.7); per-sprite palette-block membership + color budgets; 8-direction transform relations; hull ingest audit (raw dedupe: 16 × 8 shared grid + provenance ledger, owner ids resolved by the runtime fallback — classic: 16 × 9 × 8 remap coverage); tier footprint bands (waived for the raw family); seam checks; `world_shore.png` integrity (§6.6); `art_prompts.json` coverage; byte-identical `build_ui_art.py` / `build_shore.py` rebuilds — normative spec §8.8; PixelLab coast family: `assets/ui/terrain/terrain_coast_wang_*.png` inventory via the §4.8 2026-11-06 ledger (`tools/assets/pixellab_raw/pixellab_coast_ledger.json`), palette/budget/ring waived (raw-pixellab ruling), `build_ui_art --check` copies the committed tiles); PixelLab waterline VFX family (2026-11-07): `assets/ui/fx/fx_waterline_{back,front}_{dir}.png` (8 dirs × 2) + `fx_waterline.json` inventory via the `tools/assets/pixellab_raw/pixellab_vfx_ledger.json` (raw-pixellab ruling — palette/budget waived; canvas fit + anchor bounds + sheet sha256 match enforced), `build_ui_art --check` copies the committed family |
+| 14 | Layout overrides | `data/ui_layout.json` shape, ranges, sheet ids and anchor/`y` exclusivity — normative spec §8.9 (Phase 11) |
 
 ### 8.1 Group 6 — world map, normative spec
 
@@ -2961,6 +3009,33 @@ mismatch / a non-torus edge tile).
 (`build_captains.py --check`), the byte-compare lives in the builders'
 own `--check` modes: `python3 tools/build_ui_art.py --check` and
 `python3 tools/build_shore.py --check`.
+
+### 8.9 Group 14 — layout overrides, normative spec *(Phase 11)*
+
+Group 14 exits 14. It runs after groups 1–13 in the single
+`validate_data.py` pass and reads only `data/ui_layout.json` (§4.23).
+The file must exist but MAY be `{}` (the shipped default). It checks:
+
+1. **Top-level shape.** A JSON object; every top-level key is one of
+   the 8 pilot screen ids (`port`, `market`, `inn`, `guild`,
+   `provisions`, `palace`, `tavern`, `shipyard`); every screen value is
+   an object. An empty object `{}` passes (all defaults).
+2. **Element id format.** Every element key matches
+   `^[a-z0-9_]+(\.[a-z0-9_]+)*$` (dotted hierarchical ids; no leading /
+   trailing / doubled dots). The runtime element set is open — the
+   validator checks format only.
+3. **Key whitelist + types.** Every element object's keys ⊆
+   `{x, y, w, h, min_w, min_h, order, anchor, sheet}`; ints are
+   non-negative integers (no floats, no strings); `anchor` ∈
+   `{top, bottom, left, right}`; `sheet` ∈ the 7 assignable ids
+   (`panel`, `button`, `button_hover`, `button_pressed`,
+   `button_focus`, `field`, `backdrop`).
+4. **Grid bounds.** `x + (w or 0) ≤ 60`; `y + (h or 0) ≤ 33`;
+   `min_w ≤ 60`; `min_h ≤ 33`; `order ≤ 64` (the 1920×1080 design
+   canvas = 60 × 33.75 chrome tiles).
+5. **Anchor/`y` exclusivity.** An element carrying `anchor` must NOT
+   carry `y` (an anchored element's position derives from the named
+   edge; an absolute `y` contradicts it).
 
 ## 9. Edge Cases & Fail States
 

@@ -46,7 +46,8 @@ SailAge/
 │   ├── data_loader.gd     # DataLoader singleton
 │   ├── i18n.gd            # I18n singleton
 │   ├── save_system.gd     # SaveSystem singleton
-│   └── event_bus.gd       # EventBus singleton
+│   ├── event_bus.gd       # EventBus singleton
+│   └── layout_bridge.gd   # Phase 11: debug-gated WS layout bridge (§5.7) — a disabled no-op without `--layout-bridge`
 ├── scenes/
 │   ├── title/
 │   │   ├── title_screen.tscn
@@ -112,6 +113,7 @@ SailAge/
 │   ├── ui_theme.gd             # Phase 10: build_theme() — one code-built Theme from palette constants (80-* §4.9); applied at startup, no .tres, no autoload
 │   ├── ui_kit.gd               # Phase 10: the six widget atoms, static factory (80-* §4.9); + the tile grid pass (2026-11-09): install_tile_grid() once at the S1 theme point snaps every sheeted control's min size to whole chrome tiles (§4.8 sizing grid)
 │   ├── ui_motion.gd            # Phase 10: the UiMotion motion-gate static (80-* §4.7.17 timings)
+│   ├── ui/layout_registry.gd   # Phase 11: layout-override id registry + applier (80-* §4.8.9); reads DataLoader.ui_layout, applies after build, dumps the bridge tree
 │   └── ui/portrait_composer.gd # Phase 10: 72×96 procedural busts from a captain's `appearance` + role cloth; override file wins (80-* §4.8)
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
 │   ├── wind_regions.json        # Phase 6: prevailing-wind regions (10-* §4.16)
@@ -123,6 +125,7 @@ SailAge/
 │   ├── skill_gates.json         # Phase 8: data-driven skill/stat gates (10-* §4.20)
 │   ├── officer_posts.json       # Phase 8: officer posts — prereqs + advice triggers (10-* §4.21)
 │   ├── backgrounds.json         # Phase 8: 6 new-game backgrounds (10-* §4.22)
+│   ├── ui_layout.json           # Phase 11: studio layout overrides (10-* §4.23) — ships empty; the studio is the single writer
 │   ├── maps/world.png           # generated, tool-owned (§9)
 │   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
 │   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)
@@ -405,6 +408,36 @@ marked •):
 - `replace_sim()` is the test seam (the `world_map.fleet_sim()` contract
   delegates here). Registered **last**, after SaveSystem.
 
+### 5.7 LayoutBridge (`autoload/layout_bridge.gd`) *(added 2026-11-09, Phase 11 — debug-gated)*
+
+The studio layout editor's game-side endpoint (`80-*` §4.8.9). Registered
+**last, after FleetSim**; it touches only UI trees and the network.
+
+- **Gating:** disabled unless the game is launched with
+  `-- --layout-bridge` (read from `OS.get_cmdline_user_args()`). Disabled
+  = `_ready` returns immediately: no listener, no polling, no cost.
+  Saves, the save format and the EventBus contract are untouched.
+- **Enabled:** a one-client `WebSocketPeer` server bound to
+  `127.0.0.1:8765` (port is a file constant), `_process` pumps the peer.
+  Protocol (JSON text frames; frozen by the §4.8.9 amendment):
+  | Direction | Message | Payload |
+  |---|---|---|
+  | game→studio | `hello` | `{screens, grid:{w:60,h:33}, tile:32}` |
+  | game→studio | `screen_changed` | `{screen}` |
+  | game→studio | `tree` | `{screen, elements:[{id, kind, role, rect_tiles, sheet, locked}…]}` |
+  | game→studio | `frame` | `{png_b64}` (viewport capture — on connect, `screen_changed`, after edits, on `get_frame`) |
+  | game→studio | `error` | `{code, msg}` |
+  | studio→game | `get_tree` / `get_frame` | `{}` |
+  | studio→game | `move` / `resize` / `reorder` / `assign_sheet` / `revert` | `{screen, id, …}` |
+  | studio→game | `reset_screen` | `{screen}` |
+  | studio→game | `commit` | `{}` — replies `ok`; the game NEVER writes files |
+- Every edit is applied to the running tree immediately through
+  `LayoutRegistry` (the user watches the real screen move); the reply
+  carries the fresh `tree` + a `frame`.
+- **Single-writer rule:** the studio serializes its session, runs
+  `tools/validate_data.py` in-process and writes `data/ui_layout.json`
+  on validator pass. The bridge never touches the filesystem.
+
 ## 6. `project.godot` Requirements (locked values)
 
 | Setting | Value |
@@ -414,7 +447,7 @@ marked •):
 | `display/window/stretch/mode` | `canvas_items` |
 | `display/window/stretch/aspect` | `keep` |
 | Main scene | `scenes/title/title_screen.tscn` |
-| Autoloads | EventBus, DataLoader, I18n, GameState, SaveSystem, FleetSim (in that order; FleetSim added 2026-11-02) |
+| Autoloads | EventBus, DataLoader, I18n, GameState, SaveSystem, FleetSim, LayoutBridge (in that order; FleetSim added 2026-11-02, LayoutBridge added 2026-11-09 — §5.7, a disabled no-op without `--layout-bridge`) |
 | Input | keyboard+mouse only; no joypad actions in Phase 1 |
 
 UI is authored at the 1920×1080 design canvas (`canvas_items` stretch, keep aspect); no per-screen responsive logic.

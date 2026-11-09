@@ -116,6 +116,12 @@ var npc_config: Dictionary = {}
 ## `id: "world"`.
 var map_index: Array = []
 
+## The studio layout-override table (`data/ui_layout.json`, docs/10-* §4.23,
+## docs/80-* §4.8.9): per-screen, per-element overrides in chrome tiles.
+## Ships `{}` — every absent override means the code-pinned default. Light
+## shape checks here; the heavy validation is group 14 (docs/10-* §8.9).
+var ui_layout: Dictionary = {}
+
 ## MapLoader instance over `data/maps/world.png` (docs/90-* §9). Null until the
 ## world scene (or [method ensure_map]) loads it.
 var map = null
@@ -193,6 +199,7 @@ func load_all() -> void:
 
 	ui_strings = _load_ui_strings()
 	map_legend = _load_map_legend()
+	ui_layout = _load_ui_layout()
 	_load_map_index()
 
 	load_ok = load_errors.is_empty()
@@ -542,6 +549,52 @@ func _load_ui_strings() -> Dictionary:
 			if not (text is String) or (text as String).strip_edges().is_empty():
 				_record("ui_strings.json: '%s.%s' is missing or empty" % [key, locale])
 		table[key] = value
+	return table
+
+
+## Reads `data/ui_layout.json` — the studio layout-override table
+## (docs/10-* §4.23, docs/80-* §4.8.9). Not an envelope file: the top
+## level is the screen map directly (the ui_strings pattern). Light shape
+## checks only — key whitelist, type and screen-id membership; the heavy
+## validation (bounds, sheet/anchor enums, id regex) is group 14
+## (docs/10-* §8.9). Absent file ⇒ `{}` ⇒ every default (the shipped
+## state; a missing file is NOT an error — the overrides are optional by
+## design, unlike the entity tables).
+func _load_ui_layout() -> Dictionary:
+	if not FileAccess.file_exists(DATA_DIR.path_join("ui_layout.json")):
+		return {}
+	var raw = _read_json("ui_layout.json")
+	var table: Dictionary = {}
+	if raw == null:
+		return table
+	if not (raw is Dictionary):
+		_record("ui_layout.json: top-level value must be an object")
+		return table
+	const SCREENS := ["port", "market", "inn", "guild", "provisions",
+		"palace", "tavern", "shipyard"]
+	const KEYS := ["x", "y", "w", "h", "min_w", "min_h", "order",
+		"anchor", "sheet"]
+	for screen in raw:
+		if not (screen in SCREENS):
+			_record("ui_layout.json: unknown screen '%s'" % screen)
+			continue
+		var elements = raw[screen]
+		if not (elements is Dictionary):
+			_record("ui_layout.json: '%s' must be an object" % screen)
+			continue
+		var screen_table: Dictionary = {}
+		for element in elements:
+			var overrides = elements[element]
+			if not (overrides is Dictionary):
+				_record("ui_layout.json: '%s.%s' must be an object"
+						% [screen, element])
+				continue
+			for key in overrides:
+				if not (key in KEYS):
+					_record("ui_layout.json: '%s.%s': unknown key '%s'"
+							% [screen, element, key])
+			screen_table[element] = overrides
+		table[screen] = screen_table
 	return table
 
 
