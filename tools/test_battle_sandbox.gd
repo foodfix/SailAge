@@ -275,34 +275,40 @@ func _test_add_ship_visibility() -> void:
 	if sandbox == null:
 		return
 	# After EVERY successful add the NEW row must sit inside its side's
-	# rows scroll viewport — the reported "add ship shows nothing" defect.
+	# panel — the rows region has no scroll (the 2026-11-09 horizontal-
+	# bands re-layout: five one-line rows fit the pinned panel), so
+	# "visible" means geometrically inside the panel's rect.
 	for side in ["player", "enemy"]:
 		for step in 4:
 			_check(sandbox.add_ship_row(side),
 				"%s ship %d added" % [side, step + 2])
 			await get_tree().process_frame
 			await get_tree().process_frame
-			var scroll: ScrollContainer = sandbox.rows_scroll(side)
+			var panel: Control = sandbox.player_panel() if side == "player" \
+				else sandbox.enemy_panel()
 			var rows: Array = sandbox.ship_rows(side)
 			var last: Control = rows[rows.size() - 1]["root"]
-			var viewport := Rect2(scroll.global_position, scroll.size)
+			var panel_rect := Rect2(panel.global_position, panel.size)
 			var row_rect := Rect2(last.global_position, last.size)
-			var inside := viewport.encloses(row_rect)
-			var note: String = "" if inside else " (row %s vs viewport %s)" \
-				% [row_rect, viewport]
+			var inside := panel_rect.encloses(row_rect)
+			var note: String = "" if inside else " (row %s vs panel %s)" \
+				% [row_rect, panel_rect]
 			var message: String = ("after the %s add, the new ship row is "
-				+ "inside the rows scroll viewport (scroll_v %d)%s") \
-				% [side, int(scroll.scroll_vertical), note]
+				+ "inside the panel rect (all rows visible, no scroll)%s") \
+				% [side, note]
 			_check(inside, message)
 
-	# The 5-ship fleet needs NO rows scroll (the 2-line compact blocks).
+	# The 5-ship fleet fits its panel with NO scrolling: the rows content
+	# stays inside the pinned panel height.
 	for side in ["player", "enemy"]:
 		var content: float = (sandbox.rows_box(side)
 			as VBoxContainer).get_combined_minimum_size().y
-		var viewport_h: float = sandbox.rows_scroll(side).size.y
-		_check(content <= viewport_h + 1.0,
-			("%s: 5-ship rows content (%.0f px) fits the scroll viewport "
-			+ "(%.0f px) — no scrolling needed") % [side, content, viewport_h])
+		var panel: Control = sandbox.player_panel() if side == "player" \
+			else sandbox.enemy_panel()
+		_check(content <= panel.size.y + 1.0,
+			("%s: 5-ship rows content (%.0f px) fits the panel height "
+			+ "(%.0f px) — no scrolling needed") % [side, content,
+			panel.size.y])
 
 	# Cap: the 6th add refuses, shows the sandbox.ship.max toast, and the
 	# Add button disables. Floor: Remove disables at 1, re-enables above.
@@ -692,8 +698,8 @@ func _test_randomize_fuzz() -> void:
 		_check(false, "the compose-ON prestate imports")
 	else:
 		_check(sandbox.compose_check().button_pressed
-				and not sandbox.rows_scroll("enemy").visible,
-			"prestate: compose ON hides the enemy ship rows scroll (the "
+				and not sandbox.rows_box("enemy").visible,
+			"prestate: compose ON hides the enemy ship rows box (the "
 			+ "defect's setup)")
 		sandbox.randomize_all(4242)
 		var rows: int = sandbox.enemy_rows().size()
@@ -701,7 +707,7 @@ func _test_randomize_fuzz() -> void:
 			+ "OFF and the enemy panel's ship rows visible again (%d rows) "
 			+ "— the 'enemy sometimes empty' defect is pinned") % rows
 		_check(not sandbox.compose_check().button_pressed
-				and sandbox.rows_scroll("enemy").visible
+				and sandbox.rows_box("enemy").visible
 				and rows >= 1 and rows <= 5
 				and sandbox.rows_box("enemy").get_child_count() == rows
 				and (sandbox.rows_box("enemy").get_child(0) as Control)
@@ -755,8 +761,8 @@ func _randomize_invariant_problems(sandbox) -> Array[String]:
 		if box.get_child_count() != rows.size():
 			problems.append("%s rows_box holds %d of %d rows"
 				% [side, box.get_child_count(), rows.size()])
-		if not sandbox.rows_scroll(side).visible:
-			problems.append("%s rows scroll hidden" % side)
+		if not sandbox.rows_box(side).visible:
+			problems.append("%s rows box hidden" % side)
 		for index in rows.size():
 			var row: Dictionary = rows[index]
 			if not (row["root"] as Control).is_visible_in_tree():
@@ -844,51 +850,38 @@ func _test_layout_geometry() -> void:
 				"[%s] the %s panel shows exactly ONE '%s' header (found %d)"
 					% [locale, side_def[0], header.text, count])
 
-		# The compose checkbox sits directly beside its label (same line,
-		# adjacent — not detached at the far edge).
+		# The compose toggle carries its OWN localized text (the whole
+		# checkbox is clickable — the 2026-11-09 re-layout).
 		var compose_text: String = I18n.t_key("sandbox.enemy.compose")
-		var compose_label: Label = null
-		for control in _panel_controls(sandbox.enemy_panel()):
-			if control is Label and control.text == compose_text:
-				compose_label = control
 		var check: Control = sandbox.compose_check()
-		var beside := compose_label != null \
-			and absf(check.global_position.y - compose_label.global_position.y) < 8.0 \
-			and check.global_position.x >= compose_label.global_position.x \
-			and absf(check.global_position.x
-				- (compose_label.global_position.x + compose_label.size.x)) <= 12.0
-		var beside_note: String = "" if beside \
-			else " (label at %.0f, checkbox at %.0f)" % [
-				compose_label.global_position.x if compose_label != null
-					else -1.0, check.global_position.x]
-		_check(beside,
-			"[%s] the compose checkbox sits directly beside its label"
-			% locale + beside_note)
+		_check(check is CheckBox and (check as CheckBox).text == compose_text,
+			"[%s] the compose toggle carries its own localized label" % locale)
 
-		# The fleet Add/Remove buttons sit directly under the rows scroll
-		# (no dead band between the rows and the buttons).
+		# The fleet +/− buttons sit on the panel's FIRST row (the shared
+		# editors row) at its right end, inside the panel (the 2026-11-09
+		# horizontal-bands re-layout).
 		for side in ["player", "enemy"]:
-			var scroll: ScrollContainer = sandbox.rows_scroll(side)
-			var add: Button = sandbox.player_add_button() if side == "player" \
-				else sandbox.enemy_add_button()
-			var gap: float = add.global_position.y \
-				- (scroll.global_position.y + scroll.size.y)
-			var gap_ok := add.global_position.x >= scroll.global_position.x \
-				and gap >= -1.0 and gap <= 12.0
-			var gap_note: String = "" if gap_ok else " (gap %.0f px)" % gap
-			var gap_text: String = "[%s] the %s Add ship button sits " \
-				+ "directly under the rows area"
-			_check(gap_ok, (gap_text % [locale, side]) + gap_note)
+			var panel: Control = sandbox.player_panel() if side == "player" \
+				else sandbox.enemy_panel()
+			var add: Button = sandbox.player_add_button() \
+				if side == "player" else sandbox.enemy_add_button()
+			var row_ok := add.global_position.y \
+				< panel.global_position.y + 72.0 \
+				and add.global_position.x + add.size.x \
+					<= panel.global_position.x + panel.size.x + 1.0
+			_check(row_ok,
+				("[%s] the %s fleet +/− buttons sit on the editors row's "
+				+ "right end inside the panel") % [locale, side])
 
 		# The three §4.7.16 regions sit at their EXACT pinned 1920×1080
 		# rects (2026-11-09 full-surface re-layout; §4.7.16).
 		var rects := [
 			["player panel", sandbox.player_panel(),
-				Vector2(16, 72), Vector2(944, 848)],
+				Vector2(16, 72), Vector2(1888, 416)],
 			["enemy panel", sandbox.enemy_panel(),
-				Vector2(960, 72), Vector2(944, 848)],
+				Vector2(16, 496), Vector2(1888, 416)],
 			["conditions", sandbox.conditions_panel(),
-				Vector2(16, 928), Vector2(1888, 136)],
+				Vector2(16, 912), Vector2(1888, 168)],
 		]
 		var rects_ok := true
 		var rects_note := ""
@@ -901,8 +894,8 @@ func _test_layout_geometry() -> void:
 					control.size]
 		_check(rects_ok,
 			("[%s] the three §4.7.16 regions sit at the pinned rects "
-			+ "(player 16,72 944×848 / enemy 960,72 944×848 / conditions "
-			+ "16,928 1888×136)") % locale + rects_note)
+			+ "(player 16,72 1888×416 / enemy 16,496 1888×416 / conditions "
+			+ "16,912 1888×168)") % locale + rects_note)
 
 		sandbox.queue_free()
 		await get_tree().process_frame
@@ -917,18 +910,6 @@ func _panel_controls(root: Control) -> Array:
 			out.append(child)
 			out.append_array(_panel_controls(child))
 	return out
-
-
-## True when any ancestor of `control` is a ScrollContainer — those children
-## are intentionally clipped (the rows scroll vertically); their WIDTH fit is
-## pinned separately via the rows-box assertion below.
-func _inside_a_scroll(control: Control) -> bool:
-	var parent = control.get_parent()
-	while parent is Control:
-		if parent is ScrollContainer:
-			return true
-		parent = parent.get_parent()
-	return false
 
 
 ## The geometric layout audit over the live control rects: every non-scroll
@@ -957,7 +938,7 @@ func _layout_problems(sandbox) -> Array[String]:
 		var limit_bottom: float = region["bottom"] if panel == sandbox \
 			else panel.global_position.y + panel.size.y
 		for control in _panel_controls(panel):
-			if control == panel or _inside_a_scroll(control):
+			if control == panel:
 				continue
 			var right: float = control.global_position.x + control.size.x
 			var bottom: float = control.global_position.y + control.size.y
@@ -978,12 +959,13 @@ func _layout_problems(sandbox) -> Array[String]:
 					% [region["name"], _ctrl_path(control, panel),
 					text_problem])
 	for side in ["player", "enemy"]:
-		var scroll: ScrollContainer = sandbox.rows_scroll(side)
+		var panel: Control = sandbox.player_panel() if side == "player" \
+			else sandbox.enemy_panel()
 		var box: VBoxContainer = sandbox.rows_box(side)
-		if box.size.x > scroll.size.x + 1.0:
-			problems.append("%s ship rows are wider (%.0f) than their scroll "
+		if box.size.x > panel.size.x + 1.0:
+			problems.append("%s ship rows are wider (%.0f) than their panel "
 				+ ("(%.0f) — horizontal clip"
-				% [side, box.size.x, scroll.size.x]))
+				% [side, box.size.x, panel.size.x]))
 	return problems
 
 

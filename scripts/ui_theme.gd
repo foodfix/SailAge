@@ -45,11 +45,18 @@ const BUTTON_MIN_H := PaletteLib.BUTTON_H
 ## LineEdit/TextEdit inset border width (§4.9: border `PANEL_LINE` — the
 ## 1px inset look; borders contribute no minimum size in this Godot release).
 const FIELD_BORDER_W := 1
-## Button content padding (§4.9 Button row: content margins ≥ 8px horizontal;
-## the same BASE_UNIT 8 is the vertical padding so heights stay on the grid).
-const CONTENT_PAD := 8
-## Field (LineEdit/TextEdit) inner padding (§4.8 sizing grid: BASE_UNIT / 2).
-const FIELD_PAD := 4
+## Button content padding (§4.9 Button row: content margins ≥ 8px
+## horizontal; re-pinned 2026-11-09 to 16px (½ tile) on BOTH axes — the
+## chrome plates' carved rim spans ~12–13px inside each 32px tile, so an
+## 8px pad let glyphs ride the rim art; 16 lands text on the plate FACE).
+const CONTENT_PAD := 16
+## Field (LineEdit/TextEdit) inner padding (§4.8 sizing grid; re-pinned
+## 2026-11-09 to 16 — the same rim rule as Button).
+const FIELD_PAD := 16
+## Panel/PanelContainer sheet content margins (§4.9 Panel row, 2026-11-09):
+## ½ tile — kit-frame headers and panel content must clear the carved
+## rim (content margins 0 let the header start under the rim art).
+const PANEL_PAD := 16
 ## Slider groove padding — 8px groove on the drawn axis (§4.8 BASE_UNIT).
 const GROOVE_PAD := 4
 ## Fully transparent color — Quiet normal/hover bg + scrollbar trough
@@ -139,6 +146,7 @@ const SHEET_PATHS := {
 	"button_pressed": "res://assets/ui/chrome/ninepatch_button_pressed.png",
 	"button_focus": "res://assets/ui/chrome/ninepatch_button_focus.png",
 	"field": "res://assets/ui/chrome/ninepatch_field.png",
+	"backdrop": "res://assets/ui/chrome/ninepatch_backdrop.png",
 }
 
 
@@ -389,14 +397,28 @@ static func _panel_box() -> StyleBoxFlat:
 
 static func _setup_panels(theme: Theme, sheets: Dictionary = {}) -> void:
 	# §4.9 Panel/PanelContainer row: PANEL_BG + 2px PANEL_LINE, radius 4
-	# (nine-patch sheets layer over this flat fallback at W3).
+	# (nine-patch sheets layer over this flat fallback at W3). Texture
+	# mode (2026-11-09): the sheet carries PANEL_PAD content margins so
+	# panel content clears the carved rim — the kit `frame` atom drops
+	# its own inner margin override in texture mode (the sheet provides
+	# the inset; the flat fallback keeps the kit's 16px margins).
 	var panel_box: StyleBox = null
 	if sheets.has("panel"):
-		panel_box = _texture_box(sheets["panel"])
+		panel_box = _texture_box(sheets["panel"], PANEL_PAD)
 	else:
 		panel_box = _panel_box()
 	theme.set_stylebox("panel", "Panel", panel_box)
 	theme.set_stylebox("panel", "PanelContainer", panel_box)
+	# §4.9 `Backdrop` variation (2026-11-09 third-tileset amendment): the
+	# `frame` tileset's ocean-chart water as a DECORATIVE surface — the
+	# S21 fullscreen background, the S10 battle viewport frame, the S1
+	# title panels. Flat fallback: the pinned navy panel box.
+	theme.set_type_variation("Backdrop", "Panel")
+	if sheets.has("backdrop"):
+		theme.set_stylebox("panel", "Backdrop",
+			_texture_box(sheets["backdrop"], PANEL_PAD))
+	else:
+		theme.set_stylebox("panel", "Backdrop", _panel_box())
 
 
 ## The §4.9 ink seam (2026-11-08 chrome amendment): true when the texture
@@ -426,9 +448,13 @@ static func _setup_fields(theme: Theme, sheets: Dictionary = {},
 				FIELD_BORDER_W)
 			normal.set_content_margin_all(FIELD_PAD)
 		theme.set_stylebox("normal", type_name, normal)
-		var focus := _flat(PaletteLib.PANEL_BG, PaletteLib.ACCENT, FIELD_BORDER_W)
-		focus.set_content_margin_all(FIELD_PAD)
-		theme.set_stylebox("focus", type_name, focus)
+		# §4.9 focused cell (re-pinned 2026-11-09): a transparent-center
+		# ACCENT ring drawn OVER the untouched plate — Godot paints the
+		# focus stylebox on top of normal, so a filled focus box REPLACED
+		# the plate and the field visibly changed size/shape on click.
+		# draw_center stays off; the plate never swaps.
+		theme.set_stylebox("focus", type_name,
+			_focus_ring(PaletteLib.ACCENT))
 		var read_only := _flat(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE, FIELD_BORDER_W)
 		read_only.set_content_margin_all(FIELD_PAD)
 		theme.set_stylebox("read_only", type_name, read_only)
@@ -442,6 +468,28 @@ static func _setup_fields(theme: Theme, sheets: Dictionary = {},
 	# against this Godot release).
 	theme.set_color("font_uneditable_color", "LineEdit", PaletteLib.PANEL_LINE)
 	theme.set_color("font_readonly_color", "TextEdit", PaletteLib.PANEL_LINE)
+	# §4.9 PopupMenu row (2026-11-09): the dropdown LIST rides the field
+	# vocabulary — the parchment plate (the field sheet / flat PANEL_BG +
+	# PANEL_LINE), an ACCENT_LO-tinted hover cell, ink text. Before this
+	# row the popup rendered the engine-default white list.
+	var popup_panel: StyleBox
+	if sheets.has("field"):
+		popup_panel = _texture_box(sheets["field"], FIELD_PAD)
+	else:
+		popup_panel = _flat(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE,
+			FIELD_BORDER_W)
+		popup_panel.set_content_margin_all(FIELD_PAD)
+	theme.set_stylebox("panel", "PopupMenu", popup_panel)
+	var hover_ink: Color = (PaletteLib.ACCENT_LO
+			if _ink_mode(use_textures, sheets) else PaletteLib.ACCENT)
+	var hover_box := _flat(hover_ink, TRANSPARENT, 0)
+	theme.set_stylebox("hover", "PopupMenu", hover_box)
+	var popup_ink: Color = (PaletteLib.INK_WARM
+			if _ink_mode(use_textures, sheets) else PaletteLib.TEXT)
+	theme.set_color("font_color", "PopupMenu", popup_ink)
+	theme.set_color("font_hover_color", "PopupMenu", popup_ink)
+	theme.set_color("font_accelerator_color", "PopupMenu",
+			Color(popup_ink, 0.7))
 
 
 # --- HSlider / VSlider ---------------------------------------------------------

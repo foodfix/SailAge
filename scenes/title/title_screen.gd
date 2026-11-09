@@ -64,6 +64,10 @@ func _ready() -> void:
 	# `UiTheme.build_theme()` themselves (the documented direct-boot pattern).
 	if get_window() != null:
 		get_window().theme = UiThemeLib.build_theme()
+	# §4.8 Skin coverage / §4.9 `Backdrop` variation (2026-11-09
+	# third-tileset amendment): the S1 fullscreen background rides the
+	# `frame` tileset's ocean-chart water (the navy flat fallback).
+	_background.theme_type_variation = "Backdrop"
 	# Phase-10 W4-D (decision 10 / §4.9 icon params): right after the theme
 	# application point, the texture registry populates UiKit's id → texture
 	# map ONCE — icons, tokens, terrain/shore, FX and portrait sheets resolve

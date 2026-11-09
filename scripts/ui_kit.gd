@@ -301,8 +301,15 @@ static func frame(title_key: String) -> PanelContainer:
 	header.text = I18n.t_key(title_key)
 	vbox.add_child(header)
 	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, PaletteLib.MARGIN)
+	# §4.9 frame atom (re-pinned 2026-11-09): in texture mode the panel
+	# sheet's PANEL_PAD content margins provide the 16px inset — the
+	# inner margin carries 0 overrides (the old double inset of sheet +
+	# margin pushed headers under the rim art and wasted 16px per side);
+	# the flat fallback keeps the 16px margins (the flat panel box has no
+	# content margins). Either mode insets the body exactly 16px.
+	if not UiThemeLib.texture_mode():
+		for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+			margin.add_theme_constant_override(side, PaletteLib.MARGIN)
 	vbox.add_child(margin)
 	var body := VBoxContainer.new()
 	margin.add_child(body)

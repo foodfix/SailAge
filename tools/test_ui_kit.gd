@@ -17,6 +17,7 @@ extends Node
 
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const UiMotionLib := preload("res://scripts/ui_motion.gd")
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
 const GalleryScene := preload("res://tools/widget_gallery.tscn")
@@ -179,11 +180,19 @@ func _test_frame_atom() -> void:
 		DataLoader.ui_strings["ui.kit.gallery.title"][I18n.get_locale()]),
 		"frame header resolves the title key")
 	var margin: MarginContainer = vbox.get_child(1)
+	# §4.9 frame atom (re-pinned 2026-11-09): the inset is mode-split —
+	# in texture mode the panel sheet's PANEL_PAD content margins provide
+	# the 16px inset and the inner margin carries 0 overrides; the flat
+	# fallback keeps the 16px margin overrides. Either way the body
+	# insets exactly 16px (the closed form this check pins).
+	var margins_expected := 0 if UiThemeLib.texture_mode() \
+			else int(PaletteLib.MARGIN)
 	var margins_ok := true
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		if margin.get_theme_constant(side) != PaletteLib.MARGIN:
+		if margin.get_theme_constant(side) != margins_expected:
 			margins_ok = false
-	_check(margins_ok, "frame body margins are 16 on all four sides")
+	_check(margins_ok,
+		"frame body margins are mode-split (0 textured / 16 flat)")
 	var body: VBoxContainer = frame.get_meta(UiKitLib.META_BODY)
 	_check(body != null and body == margin.get_child(0),
 		"meta[\"body\"] is the MarginContainer's inner VBox")

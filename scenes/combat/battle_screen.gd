@@ -1562,8 +1562,11 @@ func _style() -> void:
 	# §4.8 Skin coverage (amended 2026-11-05): the top bar and the 96px
 	# bottom panel render the walnut band vocabulary at bar scale
 	# (`UiKit.route_band`); the full-screen Background is a theme-styled
-	# Panel (nine-patch walnut, navy flat fallback). The pinned navy fills
-	# remain the reduced-graphics fallback.
+	# Panel — the `Backdrop` variation since the 2026-11-09 third-tileset
+	# amendment (the `frame` tileset's ocean-chart water, the navy flat
+	# fallback; §4.9). The pinned navy fills remain the
+	# reduced-graphics fallback.
+	_background.theme_type_variation = "Backdrop"
 	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
 	UiKitLib.route_band(_bottom_panel, UiKitLib.BAND_EDGE_TOP)
 	# §4.8 tile grid (2026-11-09): the top bar measures 2 chrome tiles — the

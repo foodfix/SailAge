@@ -39,21 +39,24 @@ extends Control
 ## `Accent`/`Warn`/`Dim`) — this file carries NO per-screen styling (the
 ## sweep-guard audit `tools/test_ui_styling_audit.gd` pins that). The three
 ## §4.7.16 regions (player panel / enemy panel / conditions strip) sit at
-## the pinned 1920×1080 full-surface geometry (2026-11-09 re-layout — the
-## player panel at (16, 72) 944×848, the enemy panel at (960, 72) 944×848,
-## the conditions strip re-pinned 2026-11-09 tile grid to (16, 928)
-## 1888×136 for its 2-tile controls); their CONTENT is
-## container-driven (one header, the fixed editors block, the ship-rows
-## scroll, the add/remove buttons) so the rows keep the 32 px grid and no
-## label clips or control overflows. Ship editors are COMPACT 2-line blocks
-## so the 5-ship fleet never needs the rows scroll. Field labels are never
+## the pinned 1920×1080 full-surface geometry (2026-11-09 horizontal-bands
+## re-layout — the same-day fleet/editor split was WITHDRAWN: the §4.8.8
+## tile grid floors every sheeted control at 2×2 tiles, so a SpinBox
+## measures ~96px wide and no side column can hold a ship line):
+## the player panel (16, 72) 1888×416 — row 1 = the captain stats (five
+## attributes, weapon/armor, the short-label morale) then FIVE ONE-LINE
+## ship rows, every field on one 64px line; the enemy panel (16, 496)
+## 1888×416 — row 1 = the enemy profile (kind, compose, flagship captain,
+## ai_level, archetype, formation, morale) then its five one-line ship
+## rows; the conditions strip (16, 912) 1888×168 — the encounter
+## conditions row + the four action buttons right-aligned. All five ships
+## per side are visible with NO scrolling. Field labels are never
 ## `clip_text`ed: each column floor (the `LABEL_W*` constants) fits the
 ## longest localized string, and the layout regression test pins the live
 ## control rects for both locales.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
-const UiThemeLib := preload("res://scripts/ui_theme.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -74,25 +77,26 @@ const SEED_MAX := 999999999
 ## Toast seconds (80-* §4.7: toasts are transient, 2.5 s).
 const TOAST_SECONDS := 2.5
 
-## Field-label column floors (px, re-layout of §4.7.16 — 80-* §4.8 grid).
-## Labels are unclipped, so the floor is a column width, not a truncation:
-## each constant fits the LONGEST localized string of its column (the EN
-## forms — "Player initial morale", "Wind direction", "Constitution" — are
-## the longest; zh is always shorter).
-const LABEL_W := 176
+## Field-label column floors (px, the 2026-11-09 horizontal-bands
+## re-layout — 80-* §4.8 grid). Labels are unclipped, so the floor is a
+## column width, not a truncation: each constant fits the LONGEST
+## localized string of its column (the EN forms — "Wind direction",
+## "Deployment", "Constitution" — are the longest; zh is always shorter).
 const LABEL_W_LONG := 128
 const LABEL_W_MID := 100
-const LABEL_W_ATTR := 112
+const LABEL_W_ATTR := 104
 const LABEL_W_STD := 72
 const LABEL_W_SHORT := 56
-const LABEL_W_DURABILITY := 96
-const ROW_HEADER_W := 72
+const LABEL_W_DURABILITY := 88
+const LABEL_W_MORALE := 60
+const LABEL_W_STRENGTH := 88
+const ROW_HEADER_W := 64
 
-## The pinned §4.7.16 region rects (1920×1080 full-surface re-layout,
+## The pinned §4.7.16 region rects (1920×1080 horizontal-bands re-layout,
 ## 2026-11-09): player panel, enemy panel, conditions strip.
-const PLAYER_PANEL_RECT := Rect2(16, 72, 944, 848)
-const ENEMY_PANEL_RECT := Rect2(960, 72, 944, 848)
-const CONDITIONS_RECT := Rect2(16, 928, 1888, 136)
+const PLAYER_PANEL_RECT := Rect2(16, 72, 1888, 416)
+const ENEMY_PANEL_RECT := Rect2(16, 496, 1888, 416)
+const CONDITIONS_RECT := Rect2(16, 912, 1888, 168)
 
 ## The nine battle kinds (`10-*` §4.10 `ai_profiles` key set / `60-*` §4.9a):
 ## the 7 pass-through kinds + `navy` (hunter battles) + `tournament`.
@@ -163,7 +167,7 @@ var _programming := false
 
 # --- Widget handles (filled in `_ready`; tests read them) -------------------
 
-var _background: ColorRect
+var _background: Panel
 var _title: Label
 var _zero_write: Label
 var _back_hint: Label
@@ -177,8 +181,8 @@ var _enemy_box: VBoxContainer
 var _conditions_panel: PanelContainer
 var _player_rows_box: VBoxContainer
 var _enemy_rows_box: VBoxContainer
-var _player_rows_scroll: ScrollContainer
-var _enemy_rows_scroll: ScrollContainer
+var _player_stats_row_h: HBoxContainer
+var _enemy_profile_row_h: HBoxContainer
 var _player_add: Button
 var _player_remove: Button
 var _enemy_add: Button
@@ -228,11 +232,13 @@ func _ready() -> void:
 # --- Build ------------------------------------------------------------------
 
 func _build_static_widgets() -> void:
-	_background = ColorRect.new()
+	# §4.8 Skin coverage (amended 2026-11-05 + the 2026-11-09
+	# third-tileset amendment): the fullscreen surface rides the
+	# `Backdrop` panel variation — the `frame` tileset's ocean-chart
+	# water, the pinned navy flat fill in the reduced-graphics fallback.
+	_background = Panel.new()
 	_background.name = "Background"
-	# §4.8 Skin coverage (amended 2026-11-05): walnut in texture mode, the
-	# pinned navy flat fill in the reduced-graphics fallback.
-	_background.color = UiThemeLib.surface_fill()
+	_background.theme_type_variation = "Backdrop"
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_background)
 
@@ -270,19 +276,21 @@ func _build_static_widgets() -> void:
 	_toast = Label.new()
 	_toast.name = "Toast"
 	_toast.visible = false
-	# Bottom-center toast slot, riding the panels' bottom edge (y = 920)
-	# just above the conditions strip (y = 928; §4.8 tile grid re-pin).
-	_toast.position = Vector2(660, 896)
+	# Bottom-center toast slot, riding the enemy panel's bottom edge just
+	# above the conditions strip (y = 912; the horizontal-bands rects).
+	_toast.position = Vector2(660, 890)
 	_toast.size = Vector2(600, 22)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
 
 
 func _build_panels() -> void:
-	# The §4.7.16 regions: left = the player panel, right = the enemy panel —
-	# kit frames at fixed geometry (§4.9 sweep), each carrying a container
-	# column so the rows keep the 32 px grid and nothing overflows the panel
-	# edges.
+	# The §4.7.16 regions: top = the player panel, middle = the enemy
+	# panel — kit frames at fixed geometry (§4.9 sweep), each carrying a
+	# container column (row 1 = the shared editors row with the side's
+	# compact +/− fleet buttons, then the one-line ship rows; the frame's
+	# header Label stays in the tree hidden — the band rows carry no
+	# title line, the title rides the panel tooltip).
 	var player := _panel_column("PlayerPanel", "sandbox.player",
 		PLAYER_PANEL_RECT.position, PLAYER_PANEL_RECT.size)
 	_player_panel = player["panel"]
@@ -294,76 +302,66 @@ func _build_panels() -> void:
 	_enemy_box = enemy["box"]
 	_enemy_header = enemy["header"]
 
-	# The fixed editors blocks sit between the header and the ship rows.
-	_build_player_stats_block()
-	_build_enemy_options()
+	# Row 1 = the shared editors row (built FIRST so the ship rows
+	# follow it); its right end carries the compact +/− fleet buttons.
+	_build_player_stats_row()
+	_build_enemy_profile_row()
 
-	# Per-ship rows live in a scroll so five ship blocks always fit; the
-	# scroll is the expanding column member and the Add/Remove buttons sit
-	# DIRECTLY under it (no reserved dead band between rows and buttons).
-	_player_rows_scroll = _rows_scroll("PlayerShipRows")
-	_player_box.add_child(_player_rows_scroll)
+	# The one-line ship rows follow the editors row directly (no scroll:
+	# five rows fit the pinned 416px panel by construction — the
+	# horizontal-bands re-layout's whole point).
 	_player_rows_box = _rows_box()
-	_player_rows_scroll.add_child(_player_rows_box)
-	_enemy_rows_scroll = _rows_scroll("EnemyShipRows")
-	_enemy_box.add_child(_enemy_rows_scroll)
+	_player_box.add_child(_player_rows_box)
 	_enemy_rows_box = _rows_box()
-	_enemy_rows_scroll.add_child(_enemy_rows_box)
-
+	_enemy_box.add_child(_enemy_rows_box)
 	_player_add = _fleet_button("sandbox.ship.add")
 	_player_remove = _fleet_button("sandbox.ship.remove")
 	_player_add.pressed.connect(func() -> void: add_ship_row("player"))
 	_player_remove.pressed.connect(func() -> void: remove_ship_row("player"))
-	_player_box.add_child(_side_buttons_row(_player_add, _player_remove))
+	_player_stats_row().add_child(_player_add)
+	_player_stats_row().add_child(_player_remove)
 	_enemy_add = _fleet_button("sandbox.ship.add")
 	_enemy_remove = _fleet_button("sandbox.ship.remove")
 	_enemy_add.pressed.connect(func() -> void: add_ship_row("enemy"))
 	_enemy_remove.pressed.connect(func() -> void: remove_ship_row("enemy"))
-	_enemy_box.add_child(_side_buttons_row(_enemy_add, _enemy_remove))
+	_enemy_profile_row().add_child(_enemy_add)
+	_enemy_profile_row().add_child(_enemy_remove)
 	_refresh_fleet_buttons()
 
 
-## One side panel: the kit `frame` atom (§4.9 — titled PanelContainer with
-## the 16px-margin body; the atom carries the margins the old hand-built
-## MarginContainer set) at `at` × `panel_size`; the header is the frame's own
-## first row carrying the theme's `Accent` variation. The frame's
-## MarginContainer EXPANDS vertically (2026-11-09) so the body column — and
-## with it the ship-rows scroll — receives the panel's leftover height;
-## without it the scroll collapsed to 0 px and NO ship row ever rendered
-## (the reported "add ship shows nothing" root cause; the shared kit atom
-## itself is left untouched for the other screens). Returns
-## `{panel, box, header}` (`box` = the kit body column, `frame.meta["body"]`).
+## One side panel: the kit `frame` atom (§4.9 — titled PanelContainer; the
+## sheet's PANEL_PAD content margins provide the 16px inset in texture
+## mode, the atom's flat fallback margins in flat mode) at `at` ×
+## `panel_size`. The frame's header Label stays in the tree HIDDEN — the
+## horizontal-bands rows carry no title line, and the panel title rides
+## `tooltip_text` (the `sandbox.player`/`sandbox.enemy` keys stay
+## referenced). The frame's MarginContainer EXPANDS vertically so the
+## body column receives the panel's leftover height. Returns
+## `{panel, box, header}` (`box` = the kit body column,
+## `frame.meta["body"]`).
 func _panel_column(panel_name: String, title_key: String, at: Vector2,
 		panel_size: Vector2) -> Dictionary:
 	var panel := UiKitLib.frame(title_key)
 	panel.name = panel_name
 	panel.position = at
 	panel.size = panel_size
+	panel.tooltip_text = _t(title_key)
 	add_child(panel)
 	var header: Label = (panel.get_child(0) as Container).get_child(0) as Label
 	header.name = "Header"
 	header.theme_type_variation = "Accent"
+	header.visible = false
 	var margin: Container = (panel.get_child(0) as Container).get_child(1)
 	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var box: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
 	box.name = "Box"
+	box.add_theme_constant_override("separation", 0)
 	return {"panel": panel, "box": box, "header": header}
 
 
-## The ship-rows scroll of a side panel: expands into the panel's leftover
-## height, horizontal scrolling disabled (the rows must always fit the panel
-## width — the layout regression test pins that geometrically).
-func _rows_scroll(scroll_name: String) -> ScrollContainer:
-	var scroll := ScrollContainer.new()
-	scroll.name = scroll_name
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	return scroll
-
-
-## The rows column inside a rows scroll: width tracks the scroll, height
-## sizes to the rows (no dead band under the last row).
+## The ship-rows column of a side panel: width tracks the panel body,
+## height sizes to the rows (five one-line rows fit the pinned panel —
+## the horizontal-bands layout needs no scroll).
 func _rows_box() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.name = "Rows"
@@ -371,27 +369,25 @@ func _rows_box() -> VBoxContainer:
 	return box
 
 
-## An Add/Remove fleet button (`sandbox.ship.add` / `.remove`) — the kit
-## `button` atom (§4.9) at the 160px column width.
+## The compact per-side fleet button: a 2-tile-wide `+`/`-` glyph button
+## (theme-styled, no per-screen styling; the localized label rides
+## `tooltip_text` — the `sandbox.ship.add`/`sandbox.ship.remove` keys
+## stay referenced).
 func _fleet_button(key: String) -> Button:
-	var button := UiKitLib.button(key)
-	button.custom_minimum_size = Vector2(160, float(PaletteLib.BUTTON_H))
+	var button := Button.new()
+	button.text = "+" if key == "sandbox.ship.add" else "-"
+	button.tooltip_text = _t(key)
+	button.custom_minimum_size = Vector2(64, float(PaletteLib.BUTTON_H))
 	return button
 
 
-## The Add/Remove button row under a side's rows scroll.
-func _side_buttons_row(add: Button, remove: Button) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.name = "FleetButtons"
-	row.add_child(add)
-	row.add_child(remove)
-	return row
-
-
-## A field label on the 32 px row grid (TEXT is the theme's Label default,
+## A field label on the band rows (TEXT is the theme's Label default,
 ## §4.9). Labels are NEVER clipped (`clip_text` stays off — the text grows
 ## the label), so `min_width` is a column floor that lines the field column
 ## up; pick it ≥ the longest localized string (the `LABEL_W*` constants).
+## `SIZE_FILL` + vertical center: the sheeted controls in the row measure
+## 2 tiles tall (the §4.8 tile grid pass), so the 1-tile label centers on
+## the control line.
 func _field_label(text: String, min_width := 0) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -492,61 +488,56 @@ func _hull_row(hull_id: String) -> Dictionary:
 	return {}
 
 
-## One editable ship block (§4.7.16 panel shape, the 2026-11-09 2-line
-## compact re-layout): line 1 = "Ship {index}" header + hull + cannons /
-## crew / durability, line 2 = escort captain id (expanding) + the
-## figurehead + sail slots. Two 32 px lines per ship keep the 5-ship fleet
-## inside the rows area with no scrolling (the panel's 944 px width fits
-## both lines' column floors — the longest localized EN forms included).
-## Every field is one unclipped label + one control sized inside the panel.
+## One editable ship row (§4.7.16, the 2026-11-09 horizontal-bands
+## ONE-LINE re-layout): `Ship {index}` header + hull + cannons / crew /
+## durability + escort captain (expanding) + the figurehead + sail slots —
+## all seven fields on ONE 64px line, so the 5-ship fleet is fully visible
+## with no scrolling (the panel's 1888 px width fits the line's column
+## floors — the longest localized EN forms included). Every field is one
+## unclipped label + one control sized inside the panel.
 func _make_ship_row(side: String) -> Dictionary:
-	var root := VBoxContainer.new()
-	root.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
+	var line := HBoxContainer.new()
+	line.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
 
-	var line1 := HBoxContainer.new()
 	var header := _field_label("", ROW_HEADER_W)
-	line1.add_child(header)
-	var type := _option(150)
+	line.add_child(header)
+	var type := _option(160)
 	type.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for hull in DataLoader.ship_types_list:
 		if not (hull is Dictionary) or str(hull.get("id", "")).is_empty():
 			continue
 		type.add_item(str(hull["id"]))
 		type.set_item_metadata(type.item_count - 1, str(hull["id"]))
-	line1.add_child(type)
-	line1.add_child(_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD))
-	var cannons := _spin(0, 0, 0, 72)
-	line1.add_child(cannons)
-	line1.add_child(_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT))
-	var crew := _spin(0, 0, 0, 72)
-	line1.add_child(crew)
-	line1.add_child(
+	line.add_child(type)
+	line.add_child(_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD))
+	var cannons := _spin(0, 0, 0, 96)
+	line.add_child(cannons)
+	line.add_child(_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT))
+	var crew := _spin(0, 0, 0, 96)
+	line.add_child(crew)
+	line.add_child(
 		_field_label(_t("sandbox.ship.durability"), LABEL_W_DURABILITY))
-	var durability := _spin(1, 1, 1, 72)
-	line1.add_child(durability)
-	root.add_child(line1)
-
-	var line2 := HBoxContainer.new()
-	line2.add_child(_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
+	var durability := _spin(1, 1, 1, 96)
+	line.add_child(durability)
+	line.add_child(_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
 	var captain := LineEdit.new()
 	captain.placeholder_text = ""
-	captain.custom_minimum_size = Vector2(120, float(PaletteLib.ROW_H))
+	captain.custom_minimum_size = Vector2(128, float(PaletteLib.ROW_H))
 	captain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line2.add_child(captain)
-	var figurehead := _option(130)
+	line.add_child(captain)
+	var figurehead := _option(160)
 	_fill_equipment_option(figurehead, "figurehead")
-	line2.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
+	line.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
 	figurehead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line2.add_child(figurehead)
-	var sail := _option(130)
+	line.add_child(figurehead)
+	var sail := _option(160)
 	_fill_equipment_option(sail, "sail")
-	line2.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
+	line.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
 	sail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line2.add_child(sail)
-	root.add_child(line2)
+	line.add_child(sail)
 
 	var row := {
-		"root": root, "header": header, "type": type, "cannons": cannons,
+		"root": line, "header": header, "type": type, "cannons": cannons,
 		"crew": crew, "durability": durability, "figurehead": figurehead,
 		"sail": sail, "captain": captain,
 	}
@@ -556,7 +547,7 @@ func _make_ship_row(side: String) -> Dictionary:
 		if side == "enemy":
 			_sync_enemy_captain(true))
 	var box := _player_rows_box if side == "player" else _enemy_rows_box
-	box.add_child(root)
+	box.add_child(line)
 	if side == "player":
 		_player_rows.append(row)
 	else:
@@ -592,122 +583,121 @@ func _clamp_row(row: Dictionary) -> void:
 	_programming = false
 
 
-## The §4.7.16 "beside the ships" block (left panel, between the panel header
-## and the ship rows): five player attributes + weapon/armor — injected into
-## the battle through the `60-*` §4.12.1 `player_stats` seam — plus the
-## initial morale. NO second title row: the panel header is the title (the
-## old build repeated `sandbox.player` here). Defaults read the live run's
-## values — reads are zero-write.
-func _build_player_stats_block() -> void:
-	var block := VBoxContainer.new()
-	block.name = "PlayerStats"
+## The §4.7.16 player stats — ONE row of the player panel (the
+## horizontal-bands re-layout): the five attributes (each 0–100, labels
+## `char.attr.*`) + the weapon/armor slots — injected into the battle
+## through the `60-*` §4.12.1 `player_stats` seam — + the initial morale
+## (short label `sandbox.morale.short`). The per-side +/− fleet buttons
+## join this row's right end (appended by `_build_panels`). Defaults read
+## the live run's values — reads are zero-write.
+func _build_player_stats_row() -> void:
+	var row := HBoxContainer.new()
+	row.name = "PlayerStats"
+	_player_stats_row_h = row
 
-	# The five attributes: a 4-column grid (label + spin, twice per line) so
-	# all five pairs fit the 580 px panel width — no label shrinks or clips.
-	var attrs_grid := GridContainer.new()
-	attrs_grid.name = "Attributes"
-	attrs_grid.columns = 4
 	for key in ATTRIBUTES:
-		attrs_grid.add_child(
-			_field_label(_t("char.attr.%s" % key), LABEL_W_ATTR))
-		var spin := _spin(ATTR_MIN, ATTR_MAX, _default_attribute(key), 72)
+		row.add_child(_field_label(_t("char.attr.%s" % key), LABEL_W_ATTR))
+		var spin := _spin(ATTR_MIN, ATTR_MAX, _default_attribute(key), 96)
 		_attribute_spins[key] = spin
-		attrs_grid.add_child(spin)
-	block.add_child(attrs_grid)
+		row.add_child(spin)
 
-	var gear_row := HBoxContainer.new()
-	_weapon_option = _option(150)
-	_armor_option = _option(150)
+	_weapon_option = _option(160)
+	_armor_option = _option(160)
 	_fill_equipment_option(_weapon_option, "weapon")
 	_fill_equipment_option(_armor_option, "armor")
-	gear_row.add_child(_field_label(_t("shipyard.slot.weapon"), LABEL_W_STD))
-	gear_row.add_child(_weapon_option)
-	gear_row.add_child(_field_label(_t("shipyard.slot.armor"), LABEL_W_SHORT))
-	gear_row.add_child(_armor_option)
-	block.add_child(gear_row)
+	row.add_child(_field_label(_t("shipyard.slot.weapon"), LABEL_W_SHORT))
+	row.add_child(_weapon_option)
+	row.add_child(_field_label(_t("shipyard.slot.armor"), LABEL_W_SHORT))
+	row.add_child(_armor_option)
 
-	var morale_row := HBoxContainer.new()
-	morale_row.add_child(_field_label(_t("sandbox.morale.player"), LABEL_W))
-	_player_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 100)
-	morale_row.add_child(_player_morale_spin)
-	block.add_child(morale_row)
+	row.add_child(_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE))
+	_player_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 96)
+	row.add_child(_player_morale_spin)
 
-	_player_box.add_child(block)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	_player_box.add_child(row)
 
 
-## The enemy panel's static editors (kind / compose / captain / ai_level /
-## archetype / formation / morale) — a FIXED block in the panel column,
-## between the header and the ship rows. The old build added this block to
-## the rows box INSIDE the rows scroll, so hiding the scroll (the compose
-## toggle) blanked the whole enemy panel — the "enemy sometimes empty"
-## defect. `formation` + the initial morale take effect as of W4 (the
-## §4.9b profile override + the §4.12.1 morale keys); `ai_level` /
-## `archetype` take effect as of W5-C (the same true-override emission into
-## the fixture, folded into the battle's profile row by the screen).
-func _build_enemy_options() -> void:
-	var block := VBoxContainer.new()
-	block.name = "EnemyOptions"
+## The private row holders (the +/− buttons append to these in
+## `_build_panels`).
+func _player_stats_row() -> HBoxContainer:
+	return _player_stats_row_h
 
-	# Kind + the compose toggle — the checkbox sits DIRECTLY beside its label.
-	var kind_row := HBoxContainer.new()
-	_kind_option = _option(150)
+
+func _enemy_profile_row() -> HBoxContainer:
+	return _enemy_profile_row_h
+
+
+## The enemy panel's profile — ONE row of the enemy panel (the
+## horizontal-bands re-layout): the kind (9 kinds), the compose toggle
+## (the checkbox carries its own localized text, so the whole toggle is
+## clickable), the FLAGSHIP captain id (synced with enemy row 0 — the
+## export schema has no enemy-level key, the value rides per-ship
+## `captain_id`), `ai_level` ∈ {0,1}, `archetype`, `formation` and the
+## initial morale. `formation` + morale took effect at W4 (§4.9b /
+## §4.12.1); `ai_level` / `archetype` at W5-C (the true-override emission
+## into the fixture, folded into the battle's profile row by the screen).
+## The per-side +/− fleet buttons join the row's right end (appended by
+## `_build_panels`).
+func _build_enemy_profile_row() -> void:
+	var row := HBoxContainer.new()
+	row.name = "EnemyProfile"
+	_enemy_profile_row_h = row
+
+	_kind_option = _option(160)
 	_fill_option(_kind_option, KINDS, "sandbox.kind")
 	_kind_option.item_selected.connect(func(_index: int) -> void:
 		_apply_kind_profile(str(_option_value(_kind_option))))
-	kind_row.add_child(_field_label(_t("sandbox.enemy.kind"), LABEL_W_MID))
-	kind_row.add_child(_kind_option)
-	kind_row.add_child(_field_label(_t("sandbox.enemy.compose"), 120))
+	row.add_child(_field_label(_t("sandbox.enemy.kind"), LABEL_W_MID))
+	row.add_child(_kind_option)
 	_compose_check = CheckBox.new()
-	_compose_check.custom_minimum_size = Vector2(60, float(PaletteLib.ROW_H))
+	_compose_check.text = _t("sandbox.enemy.compose")
 	_compose_check.toggled.connect(_on_compose_toggled)
-	kind_row.add_child(_compose_check)
-	block.add_child(kind_row)
+	row.add_child(_compose_check)
 
-	var captain_row := HBoxContainer.new()
-	captain_row.add_child(
-		_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
+	row.add_child(
+		_field_label(_t("sandbox.enemy.flagship"), LABEL_W_STD))
 	_enemy_captain_edit = LineEdit.new()
-	_enemy_captain_edit.custom_minimum_size = Vector2(200, float(PaletteLib.ROW_H))
+	_enemy_captain_edit.custom_minimum_size = Vector2(128, float(PaletteLib.ROW_H))
+	_enemy_captain_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_enemy_captain_edit.text_changed.connect(func(_text: String) -> void:
 		_sync_enemy_captain(false))
-	captain_row.add_child(_enemy_captain_edit)
-	block.add_child(captain_row)
+	row.add_child(_enemy_captain_edit)
 
-	var ai_row := HBoxContainer.new()
-	_ai_level_option = _option(150)
+	_ai_level_option = _option(164)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t2"))
 	_ai_level_option.set_item_metadata(0, 0)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t3"))
 	_ai_level_option.set_item_metadata(1, 1)
 	_ai_level_option.select(0)
-	ai_row.add_child(_field_label(_t("sandbox.ai_level"), LABEL_W_STD))
-	ai_row.add_child(_ai_level_option)
-	_archetype_option = _option(140)
+	row.add_child(_field_label(_t("sandbox.ai_level"), LABEL_W_STD))
+	row.add_child(_ai_level_option)
+	_archetype_option = _option(136)
 	_fill_option(_archetype_option, ARCHETYPES, "sandbox.archetype")
-	ai_row.add_child(_field_label(_t("sandbox.archetype"), LABEL_W_MID))
-	ai_row.add_child(_archetype_option)
-	block.add_child(ai_row)
+	row.add_child(_field_label(_t("sandbox.archetype"), LABEL_W_MID))
+	row.add_child(_archetype_option)
 
-	var morale_row := HBoxContainer.new()
 	_formation_option = _option(140)
 	_fill_option(_formation_option, FORMATIONS, "battle.formation")
-	morale_row.add_child(_field_label(_t("sandbox.morale.enemy"), LABEL_W))
-	_enemy_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 100)
-	morale_row.add_child(_enemy_morale_spin)
-	morale_row.add_child(_field_label(_t("sandbox.formation"), LABEL_W_MID))
-	morale_row.add_child(_formation_option)
-	block.add_child(morale_row)
+	row.add_child(_field_label(_t("sandbox.formation"), LABEL_W_MID))
+	row.add_child(_formation_option)
+	row.add_child(_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE))
+	_enemy_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 96)
+	row.add_child(_enemy_morale_spin)
 
-	_enemy_box.add_child(block)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	_enemy_box.add_child(row)
 
 
 ## One-click `compose_enemy` generation toggle (§4.7.16): ON hides ONLY the
-## per-ship rows and the fleet add/remove buttons — the enemy editors above
-## stay visible (composing replaces the rows, not the panel). The old build
-## hid the rows scroll that CONTAINED the whole enemy block, so a rolled-ON
-## toggle (随机全部 used to dice it) blanked the enemy side.
+## per-ship rows and the fleet add/remove buttons — the enemy profile row
+## above stays visible (composing replaces the rows, not the panel).
 func _on_compose_toggled(pressed: bool) -> void:
-	_enemy_rows_scroll.visible = not pressed
+	_enemy_rows_box.visible = not pressed
 	_enemy_add.visible = not pressed
 	_enemy_remove.visible = not pressed
 
@@ -756,13 +746,15 @@ func _profile_default(kind: String) -> Dictionary:
 	})
 
 
-## The bottom strip (§4.7.16, the 2026-11-09 pinned rect): the conditions
-## grid — six label+control pairs on ONE row (a 12-cell GridContainer,
-## ~1506 px against the 1888 px strip) — plus the four action buttons as a
-## 2×2 block at the strip's right end (a single 4-across row would add
-## ~500 px and overflow — the layout audit caught exactly that). The
-## strip's panel chrome is the theme's (§4.9 PanelContainer row); its
-## content joins the panel directly (the chart-screen convention).
+## The bottom strip (§4.7.16, the 2026-11-09 horizontal-bands pinned
+## rect): row 1 = the encounter conditions — day; the seed pair (the mode
+## option + the value spin that shows only for `seed_mode = fixed`);
+## weather; `wind_dir`; the current pair (direction + the LABELED strength
+## `sandbox.current.strength`); deployment — row 2 = the four action
+## buttons right-aligned (`sandbox.start` 开战 / `sandbox.random_all` /
+## `sandbox.import` / `sandbox.export`). The strip's panel chrome is the
+## theme's (§4.9 PanelContainer row); its content joins the panel
+## directly (the chart-screen convention).
 func _build_conditions_row() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "ConditionsPanel"
@@ -770,13 +762,14 @@ func _build_conditions_row() -> void:
 	panel.size = CONDITIONS_RECT.size
 	_conditions_panel = panel
 	add_child(panel)
-	var strip := HBoxContainer.new()
-	strip.name = "Strip"
-	panel.add_child(strip)
+	var column := VBoxContainer.new()
+	column.name = "Strip"
+	column.add_theme_constant_override("separation", 8)
+	panel.add_child(column)
 
-	var grid := GridContainer.new()
+	# Row 1: the encounter conditions on one 64px line.
+	var grid := HBoxContainer.new()
 	grid.name = "Conditions"
-	grid.columns = 12
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	_day_spin = _spin(DAY_MIN, 9999, 1, 96)
@@ -784,7 +777,7 @@ func _build_conditions_row() -> void:
 	grid.add_child(_day_spin)
 	# The seed pair: the value spin rides beside its mode option (it shows
 	# only for `seed_mode = fixed` — the §4.7.16 resolution rules).
-	_seed_mode_option = _option(128)
+	_seed_mode_option = _option(190)
 	_fill_option(_seed_mode_option, SEED_MODES, "sandbox.seed")
 	grid.add_child(_field_label(_t("sandbox.seed"), LABEL_W_SHORT))
 	_seed_spin = _spin(0, SEED_MAX, 1, 128)
@@ -794,56 +787,53 @@ func _build_conditions_row() -> void:
 	seed_box.add_child(_seed_mode_option)
 	seed_box.add_child(_seed_spin)
 	grid.add_child(seed_box)
-	_weather_option = _option(128)
+	_weather_option = _option(112)
 	_fill_option(_weather_option, WEATHERS, "world.weather")
 	grid.add_child(_field_label(_t("sandbox.weather"), LABEL_W_STD))
 	grid.add_child(_weather_option)
 
-	_wind_option = _option(96)
+	_wind_option = _option(88)
 	_fill_option(_wind_option, WIND_DIRS, "sandbox.dir")
 	grid.add_child(_field_label(_t("sandbox.wind_dir"), LABEL_W_LONG))
 	grid.add_child(_wind_option)
-	# The current pair: the 0..3 strength spin beside its direction option.
-	_current_dir_option = _option(96)
+	# The current pair: the direction option + the LABELED 0..3 strength
+	# spin (the strength was an unlabeled mystery box before 2026-11-09).
+	_current_dir_option = _option(84)
 	_fill_option(_current_dir_option, CURRENT_DIRS, "sandbox.dir")
 	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 96)
-	var current_box := HBoxContainer.new()
-	current_box.add_child(_current_dir_option)
-	current_box.add_child(_current_strength_spin)
 	grid.add_child(_field_label(_t("sandbox.current"), LABEL_W_STD))
-	grid.add_child(current_box)
-	_deployment_option = _option(128)
+	grid.add_child(_current_dir_option)
+	grid.add_child(_field_label(_t("sandbox.current.strength"),
+		LABEL_W_STRENGTH))
+	grid.add_child(_current_strength_spin)
+	_deployment_option = _option(150)
 	_fill_option(_deployment_option, DEPLOYMENTS, "sandbox.deployment")
 	grid.add_child(_field_label(_t("sandbox.deployment"), LABEL_W_LONG))
 	grid.add_child(_deployment_option)
-	strip.add_child(grid)
+	column.add_child(grid)
 
-	var spacer := Control.new()
-	spacer.name = "Spacer"
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	strip.add_child(spacer)
-
-	# The four actions as a 2×2 block at the strip's right end (§4.7.16: the
-	# conditions row and 开战/随机全部/导入/导出 share the bottom strip). A
-	# single 4-across row would add ~500 px to the strip's minimum width and
-	# overflow the 1248 px panel — the layout audit caught exactly that.
-	var buttons := GridContainer.new()
-	buttons.name = "Actions"
-	buttons.columns = 2
-	buttons.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# Row 2: the four actions, right-aligned (a single 4-across row fits
+	# the 1888 px strip now that the conditions carry their own row).
+	var actions := HBoxContainer.new()
+	actions.name = "Actions"
+	actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_start_button = UiKitLib.button("sandbox.start")
 	_random_all_button = UiKitLib.button("sandbox.random_all")
 	_import_button = UiKitLib.button("sandbox.import")
 	_export_button = UiKitLib.button("sandbox.export")
 	for button in [_start_button, _random_all_button, _import_button,
 			_export_button]:
-		button.custom_minimum_size = Vector2(120, float(PaletteLib.BUTTON_H))
-		buttons.add_child(button)
+		button.custom_minimum_size = Vector2(160, float(PaletteLib.BUTTON_H))
+		actions.add_child(button)
 	_start_button.pressed.connect(start_battle)
 	_random_all_button.pressed.connect(randomize_all)
 	_import_button.pressed.connect(_on_import_pressed)
 	_export_button.pressed.connect(_on_export_pressed)
-	strip.add_child(buttons)
+	var push := Control.new()
+	push.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(push)
+	actions.move_child(push, 0)
+	column.add_child(actions)
 
 
 # --- Editors & clamps (§4.7.16: the clamp table is IMMEDIATE) ---------------
@@ -863,9 +853,9 @@ func enemy_rows() -> Array:
 
 ## Adds one ship row (a fresh default of the side's flagship hull). Refused
 ## beyond [constant MAX_SHIPS] (§4.7.16: 1–5 ships per side) with the
-## `sandbox.ship.max` toast; on success the side's rows scroll auto-scrolls
-## so the NEW row lands inside the viewport (2026-11-09 — the "add ship
-## shows nothing" fix; deferred one frame so the layout pass settles).
+## `sandbox.ship.max` toast; on success the row lands in the side's rows
+## column — all five rows stay visible (the horizontal-bands layout has no
+## rows scroll).
 func add_ship_row(side: String) -> bool:
 	if ship_rows(side).size() >= MAX_SHIPS:
 		_show_toast(_t("sandbox.ship.max"))
@@ -878,7 +868,6 @@ func add_ship_row(side: String) -> bool:
 		_default_ship_state(hull))
 	_refresh_row_headers(side)
 	_refresh_fleet_buttons()
-	_ensure_last_row_visible(side)
 	return true
 
 
@@ -913,21 +902,6 @@ func _refresh_fleet_buttons() -> void:
 	_player_remove.disabled = ship_rows("player").size() <= MIN_SHIPS
 	_enemy_add.disabled = ship_rows("enemy").size() >= MAX_SHIPS
 	_enemy_remove.disabled = ship_rows("enemy").size() <= MIN_SHIPS
-
-
-## One frame later (the layout pass settled), brings the side's LAST ship
-## row inside its scroll viewport. Guards a scene already torn down.
-func _ensure_last_row_visible(side: String) -> void:
-	if not is_inside_tree():
-		return
-	await get_tree().process_frame
-	if not is_inside_tree():
-		return
-	var rows := ship_rows(side)
-	if rows.is_empty():
-		return
-	rows_scroll(side).ensure_control_visible(
-		(rows[rows.size() - 1] as Dictionary)["root"])
 
 
 func _refresh_row_headers(side: String) -> void:
@@ -1518,12 +1492,8 @@ func enemy_header() -> Label:
 	return _enemy_header
 
 
-## The rows scroll / rows column of `side` (the ship-row region; the enemy
-## scroll is what the compose toggle hides).
-func rows_scroll(side: String) -> ScrollContainer:
-	return _player_rows_scroll if side == "player" else _enemy_rows_scroll
-
-
+## The rows column of `side` (the one-line ship-row region; the enemy
+## column is what the compose toggle hides).
 func rows_box(side: String) -> VBoxContainer:
 	return _player_rows_box if side == "player" else _enemy_rows_box
 
