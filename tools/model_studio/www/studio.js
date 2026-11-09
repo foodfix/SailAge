@@ -980,61 +980,94 @@ function layDragMove(ev) {
       layPatch(e.id, { x: nx, y: ny });
     }
   } else if (mode === "resize") {
+    // The §4.8.8 sheet floor: skinned controls measure ≥2×2 tiles, so a
+    // resize below that clamps at the control's own min anyway — the
+    // optimistic box draws the same floor instead of fighting the reply.
+    const floor = kind !== "child" && e.role !== "plain" ? 2 : 1;
     if (kind === "child") {
-      // container child: SE handle drives custom_minimum_size
-      const nw = Math.max(1, p.x - r.x);
-      const nh = Math.max(1, p.y - r.y);
+      // container child: SE handle drives custom_minimum_size — the box
+      // FOLLOWS the handle (drawing the requested min rect); the
+      // authoritative reply may keep the parent-stretched rect on axes
+      // the parent owns, which lands at drag end. Sends are throttled:
+      // one message per tile would flood tree+frame replies that
+      // re-render the box mid-drag.
+      const nw = Math.max(floor, Math.min(p.x - r.x, LAY.grid.w || 60));
+      const nh = Math.max(floor, Math.min(p.y - r.y, 33));
       if (nw === (LAY.drag.lastW || 0) && nh === (LAY.drag.lastH || 0)) return;
       LAY.drag.lastW = nw; LAY.drag.lastH = nh;
-      laySend("resize", { screen: LAY.screen, id: e.id,
+      patchBox({ x: r.x, y: r.y, w: nw, h: nh });
+      layThrottledSend("resize", { screen: LAY.screen, id: e.id,
                           min_w: nw, min_h: nh });
       layPatch(e.id, { min_w: nw, min_h: nh });
     } else if (kind === "anchored") {
       // anchored: resize = the span from the anchored edge
       if (!anchor || anchor === "top") {
-        const nh = Math.max(1, p.y - r.y);
+        const nh = Math.max(floor, p.y - r.y);
         if (nh === r.h) return;
         LAY.drag.r = Object.assign({}, r, { h: nh });
         patchBox(LAY.drag.r);
-        laySend("resize", { screen: LAY.screen, id: e.id, h: nh });
+        layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
         layPatch(e.id, { h: nh });
       } else if (anchor === "bottom") {
-        const nh = Math.max(1, r.y + r.h - p.y);
+        const nh = Math.max(floor, r.y + r.h - p.y);
         const ny = r.y + r.h - nh;
         if (nh === r.h) return;
         LAY.drag.r = Object.assign({}, r, { y: ny, h: nh });
         patchBox(LAY.drag.r);
-        laySend("resize", { screen: LAY.screen, id: e.id, h: nh });
+        layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
         layPatch(e.id, { h: nh });
       } else if (anchor === "left") {
-        const nw = Math.max(1, p.x - r.x);
+        const nw = Math.max(floor, p.x - r.x);
         if (nw === r.w) return;
         LAY.drag.r = Object.assign({}, r, { w: nw });
         patchBox(LAY.drag.r);
-        laySend("resize", { screen: LAY.screen, id: e.id, w: nw });
+        layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw });
         layPatch(e.id, { w: nw });
       } else {  // right
-        const nw = Math.max(1, r.x + r.w - p.x);
+        const nw = Math.max(floor, r.x + r.w - p.x);
         const nx = r.x + r.w - nw;
         if (nw === r.w) return;
         LAY.drag.r = Object.assign({}, r, { x: nx, w: nw });
         patchBox(LAY.drag.r);
-        laySend("resize", { screen: LAY.screen, id: e.id, w: nw });
+        layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw });
         layPatch(e.id, { w: nw });
       }
     } else {  // free/plain: SE handle drives w/h
-      const nw = Math.max(1, Math.min(p.x - r.x, 60 - r.x));
-      const nh = Math.max(1, Math.min(p.y - r.y, 33 - r.y));
+      const nw = Math.max(floor, Math.min(p.x - r.x, 60 - r.x));
+      const nh = Math.max(floor, Math.min(p.y - r.y, 33 - r.y));
       if (nw === r.w && nh === r.h) return;
       LAY.drag.r = Object.assign({}, r, { w: nw, h: nh });
       patchBox(LAY.drag.r);
-      laySend("resize", { screen: LAY.screen, id: e.id, w: nw, h: nh });
+      layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw, h: nh });
       layPatch(e.id, { w: nw, h: nh });
     }
   }
 }
 
+/* The drag-send throttle (the 2026-11-09 resize feel fix): one WS message
+ * per tile change floods the bridge's tree+frame replies, and each reply
+ * re-renders the box from the authoritative rect — mid-drag that fights
+ * the optimistic box. Sends coalesce to one per 150 ms, and `layDragEnd`
+ * flushes the trailing one so the last state always lands. */
+let laySendTimer = null;
+let layPendingSend = null;
+function layThrottledSend(type, payload) {
+  layPendingSend = { type, payload };
+  if (laySendTimer != null) return;
+  laySendTimer = setTimeout(() => {
+    laySendTimer = null;
+    if (!layPendingSend) return;
+    laySend(layPendingSend.type, layPendingSend.payload);
+    layPendingSend = null;
+  }, 150);
+}
+
 function layDragEnd() {
+  if (laySendTimer != null) { clearTimeout(laySendTimer); laySendTimer = null; }
+  if (layPendingSend) {
+    laySend(layPendingSend.type, layPendingSend.payload);
+    layPendingSend = null;
+  }
   if (!LAY.drag) return;
   const box = layEl("lay-boxes").querySelector(
     `.lay-box[data-id="${CSS.escape(LAY.drag.e.id)}"]`);
