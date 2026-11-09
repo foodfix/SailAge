@@ -16,6 +16,16 @@ extends Control
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
+##
+## **Absolute tile layout (Phase 12 W2-A, docs/80-* §4.8.9; 10-* §4.23).** The
+## node tree IS the element tree: header/offers/reports are plain Controls at
+## their authored tile rects and every leaf hangs directly off its registered
+## parent — the flow containers are deleted (the empty HBox footer and the
+## unused toast label/timer with them). The two dynamic sections are list
+## blocks: rows register `{"list": ...}` and take
+## [method LayoutRegistry.list_rect] positions inside the section's scroll
+## viewport (the ONLY surviving containers); a row's parts are
+## absolutely-placed children of the row node.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-10 sweep (§4.9): styling retires to the shared theme/kit — buttons
@@ -31,10 +41,8 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## hour charges go through the one clock seam.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
-## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
-## every persistent control registers at build time with a stable
-## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
-## no-op (registration only, nothing moves).
+## The Phase-12 absolute-tile layout registry (docs/80-* §4.8.9): the data
+## file is the layout; the registration below feeds the capture fragment.
 const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -48,6 +56,37 @@ const TYPE_KEYS := {
 	"royal": "quest.type.royal",
 }
 
+## --- The authored tile table (parent-relative 32-px tiles; Phase 12) ---------
+## One tile = `Palette.CHROME_TILE`. The screen root is the canvas; group
+## parents carry their own rects and their children address the group's space.
+const TILE := PaletteLib.CHROME_TILE
+## The offers list block (content-node tiles): row *i* at `(0, i·row_h)` —
+## a 3-tile row (the identity line over the reward/action line). The
+## viewport is the scroll's rect in the offers group's space; the authored
+## fallback block carries the same tiles, so the interim apply is idempotent.
+const OFFERS_LIST := "offers"
+const OFFERS_W := 58
+const OFFERS_ROW_H := 3
+## The reports list block: a 2-tile row (the 64-px Report button sets the
+## pitch).
+const REPORTS_LIST := "reports"
+const REPORTS_W := 58
+const REPORTS_ROW_H := 2
+## Offer-row internals (row-local tiles): the identity line (tag · objective
+## · days) over the action line (reward · Accept · Hint).
+const OFFER_TAG_RECT := Rect2i(0, 0, 3, 1)
+const OFFER_OBJECTIVE_RECT := Rect2i(3, 0, 51, 1)
+const OFFER_DAYS_RECT := Rect2i(54, 0, 4, 1)
+const OFFER_REWARD_RECT := Rect2i(0, 1, 49, 1)
+const OFFER_ACCEPT_RECT := Rect2i(49, 1, 5, 2)
+const OFFER_ACCEPT_NO_HINT_RECT := Rect2i(53, 1, 5, 2)
+const OFFER_REWARD_NO_HINT_RECT := Rect2i(0, 1, 53, 1)
+const OFFER_HINT_RECT := Rect2i(54, 1, 4, 2)
+## Report-row internals (row-local tiles): name · reward · the Report verb.
+const REPORT_NAME_RECT := Rect2i(0, 0, 45, 2)
+const REPORT_REWARD_RECT := Rect2i(45, 0, 8, 2)
+const REPORT_BUTTON_RECT := Rect2i(53, 0, 5, 2)
+
 ## Routing switch for headless tests (the `port_screen.route_to_world`
 ## convention): with `false` the screen states and emits without swapping.
 var route_to_port: bool = true
@@ -59,25 +98,30 @@ signal discovery_reported(block: Dictionary)
 
 @onready var _background: Panel = $Background
 @onready var _hud: Control = get_node_or_null("HUD")
-@onready var _title: Label = $Layout/VBox/Header/Title
-@onready var _gold: Label = $Layout/VBox/Header/Gold
-@onready var _fame: Label = $Layout/VBox/Header/Fame
-@onready var _back_button: Button = $Layout/VBox/Header/Back
-@onready var _offers_heading: Label = $Layout/VBox/Offers/Heading
-@onready var _offers_hint: Label = $Layout/VBox/Offers/Refresh
-@onready var _announce: Label = $Layout/VBox/Offers/Announce
-@onready var _offers_rows: VBoxContainer = $Layout/VBox/Offers/Scroll/Rows
-@onready var _offers_empty: Label = $Layout/VBox/Offers/Empty
-@onready var _reports_heading: Label = $Layout/VBox/Reports/Heading
-@onready var _reports_rows: VBoxContainer = $Layout/VBox/Reports/Scroll/Rows
-@onready var _reports_empty: Label = $Layout/VBox/Reports/Empty
+@onready var _header: Control = $header
+@onready var _title: Label = $header/Title
+@onready var _gold: Label = $header/Gold
+@onready var _fame: Label = $header/Fame
+@onready var _back_button: Button = $header/Back
+@onready var _offers: Control = $offers
+@onready var _offers_heading: Label = $offers/Heading
+@onready var _offers_hint: Label = $offers/Refresh
+@onready var _announce: Label = $offers/Announce
+@onready var _offers_scroll: ScrollContainer = $offers/Scroll
+@onready var _offers_rows: Control = $offers/Scroll/Rows
+@onready var _offers_empty: Label = $offers/Empty
+@onready var _reports: Control = $reports
+@onready var _reports_heading: Label = $reports/Heading
+@onready var _reports_scroll: ScrollContainer = $reports/Scroll
+@onready var _reports_rows: Control = $reports/Scroll/Rows
+@onready var _reports_empty: Label = $reports/Empty
 
 ## Port id read at open time ("" when launched standalone from the editor).
 var _port_id: String = ""
 ## The offer rows currently rendered, in order (tests read them).
-var _offers: Array = []
+var _offers_data: Array = []
 ## The discovery ids currently listed for report.
-var _reports: Array = []
+var _reports_data: Array = []
 ## Phase-11 (§4.8.9): per dynamic section, true once its first build has
 ## registered (see [_register_dynamic] for the first-build/rebuild split).
 var _layout_built: Dictionary = {}
@@ -98,17 +142,52 @@ func _ready() -> void:
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
 
+	# Phase 12 (§4.8.9): the authored tile rects — every static at its data
+	# rect, the groups as plain Controls, before anything registers.
+	_place_statics()
+
 	_port_id = _read_current_port()
 	_register_layout()
 	refresh()
 	# Phase-11 (§4.8.9): the build is registered — activate the screen (pins
-	# the root, captures baselines, applies the committed table; ships {}).
+	# the root, captures baselines, applies the committed table; the interim
+	# `{}` file leaves the authored rects standing).
 	RegistryLib.screen_active(LAYOUT_SCREEN, self)
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.quests_changed.connect(refresh)
 	EventBus.fame_changed.connect(_on_fame_changed)
 	EventBus.discovery_reported.connect(_on_discovery_reported)
+
+
+## Phase 12 (§4.8.9): one authored rect = one `position`/`size` write, in
+## the DIRECT parent's tile space (point anchors everywhere; nothing is
+## stretched).
+func _place(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(TILE)
+	control.size = Vector2(rect.size) * float(TILE)
+
+
+## The authored tile table — today's captured look, flattened to the grid
+## (see the fragment this screen's capture emits: `data/layout_fragments/
+## guild.json`).
+func _place_statics() -> void:
+	_place(_header, Rect2i(1, 1, 58, 2))
+	_place(_title, Rect2i(0, 0, 48, 1))
+	_place(_gold, Rect2i(49, 1, 2, 1))
+	_place(_fame, Rect2i(52, 1, 2, 1))
+	_place(_back_button, Rect2i(54, 0, 4, 2))
+	_place(_offers, Rect2i(1, 3, 58, 21))
+	_place(_offers_heading, Rect2i(0, 0, 58, 1))
+	_place(_offers_hint, Rect2i(0, 1, 58, 1))
+	_place(_announce, Rect2i(0, 2, 58, 1))
+	_place(_offers_scroll, Rect2i(0, 3, 58, 18))
+	_place(_offers_empty, Rect2i(0, 3, 58, 2))
+	_place(_reports, Rect2i(1, 25, 58, 6))
+	_place(_reports_heading, Rect2i(0, 0, 58, 1))
+	_place(_reports_scroll, Rect2i(0, 1, 58, 4))
+	_place(_reports_empty, Rect2i(0, 1, 58, 2))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -127,14 +206,14 @@ func port_id() -> String:
 ## The `instance_id`s of the offers currently listed, in display order.
 func offer_rows() -> Array:
 	var out: Array = []
-	for offer in _offers:
+	for offer in _offers_data:
 		out.append(str((offer as Dictionary).get("instance_id", "")))
 	return out
 
 
 ## The discovery ids currently listed for report, in display order.
 func report_rows() -> Array:
-	return _reports.duplicate()
+	return _reports_data.duplicate()
 
 
 ## Every player-facing line this screen currently shows (the "no raw `<key>`"
@@ -156,9 +235,9 @@ func all_text() -> Array:
 ## §4.1b (added 2026-11-02): the counter must be open and the signing takes
 ## one hour.
 func accept_offer(index: int) -> Dictionary:
-	if index < 0 or index >= _offers.size():
+	if index < 0 or index >= _offers_data.size():
 		return {}
-	var offer: Dictionary = _offers[index]
+	var offer: Dictionary = _offers_data[index]
 	var reason := QuestGenLib.accept_block_reason(offer)
 	if not reason.is_empty():
 		_show_toast(reason)
@@ -264,115 +343,104 @@ func _tournament_announcement() -> String:
 	return text
 
 
+## Row *i*'s rect for a list block — px in the section's content-node space:
+## the data block when managed, the same tiles authored otherwise.
+func _list_row_rect(list_id: String, index: int, w: int, row_h: int) -> Rect2:
+	var rect := RegistryLib.list_rect(LAYOUT_SCREEN, list_id, index)
+	if rect != Rect2():
+		return rect
+	return Rect2(
+		Vector2(0, index * row_h) * float(TILE),
+		Vector2(w, row_h) * float(TILE))
+
+
 func _bind_offers() -> void:
 	_clear(_offers_rows)
-	_offers = []
+	_offers_data = []
 	if _port_id.is_empty():
 		_offers_empty.visible = true
 		_offers_empty.text = I18n.t_key("ui.not_available")
+		_offers_rows.custom_minimum_size = Vector2(
+			OFFERS_W * float(TILE), 0)
 		return
-	_offers = QuestGenLib.available_offers(_port_id, GameState.day)
-	_offers_empty.visible = _offers.is_empty()
+	_offers_data = QuestGenLib.available_offers(_port_id, GameState.day)
+	_offers_empty.visible = _offers_data.is_empty()
 	# The empty line states the real reason: no free slot, else "all taken".
 	_offers_empty.text = I18n.t_key(
 		"quest.slots_full"
 		if QuestGenLib.active_count() >= QuestGenLib.max_active_quests()
 		else "ui.empty")
-	if _offers.is_empty():
-		return
 	var entries: Array = []
-	for index in _offers.size():
-		_offers_rows.add_child(_build_offer_row(_offers[index], index,
-			entries))
+	for index in _offers_data.size():
+		_build_offer_row(_offers_data[index], index, entries)	# The scroll's stacked extent: the plain content Control sized to the
+	# rows' total pitch (viewport math, not flow).
+	_offers_rows.custom_minimum_size = Vector2(
+		OFFERS_W * float(TILE),
+		_offers_data.size() * OFFERS_ROW_H * float(TILE))
 	_register_dynamic("offers", entries)
 
 
-func _build_offer_row(offer: Dictionary, index: int,
-		entries: Array) -> Control:
+func _build_offer_row(offer: Dictionary, index: int, entries: Array) -> void:
 	var row_id := str(offer.get("instance_id", ""))
 	if row_id.is_empty():
 		row_id = "%d" % index
-	var row := VBoxContainer.new()
+	var row := Control.new()
 	row.name = "Offer_%d" % index
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_offers_rows.add_child(row)
+	var rect := _list_row_rect(OFFERS_LIST, index, OFFERS_W, OFFERS_ROW_H)
+	row.position = rect.position
+	row.size = rect.size
 	entries.append({
 		"control": row, "id": "offers.rows.%s" % row_id, "opts": {
-			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+			"list": OFFERS_LIST},
 	})
 
-	var top := HBoxContainer.new()
+	# The identity line: type tag · objective · days — absolutely-placed
+	# children of the row (no per-row flow containers, §4.8.9).
 	var tag := _make_label(I18n.t_key(str(TYPE_KEYS.get(
 		str(offer.get("type", "")), "ui.not_available"))), "Tag")
-	tag.custom_minimum_size.x = 96
 	# The §4.8 ACCENT tag tint rides the theme's `Accent` variation.
 	tag.theme_type_variation = "Accent"
-	top.add_child(tag)
+	row.add_child(tag)
+	_place(tag, OFFER_TAG_RECT)
 	var line := _make_label(_objective_text(offer), "Objective")
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(line)
+	row.add_child(line)
+	_place(line, OFFER_OBJECTIVE_RECT)
 	var days := _make_label(I18n.fmt("quest.days_left", {
 		"days": int(offer.get("expiry_days", 0)),
 	}), "Days")
-	days.custom_minimum_size.x = 120
 	days.theme_type_variation = "Dim"
-	top.add_child(days)
-	row.add_child(top)
-	entries.append({
-		"control": top, "id": "offers.rows.%s.top" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
-	entries.append({
-		"control": tag, "id": "offers.rows.%s.top.tag" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
-	entries.append({
-		"control": line, "id": "offers.rows.%s.top.objective" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
-	entries.append({
-		"control": days, "id": "offers.rows.%s.top.days" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
+	row.add_child(days)
+	_place(days, OFFER_DAYS_RECT)
 
-	var bottom := HBoxContainer.new()
+	# The action line: reward · Accept, plus the Hint verb for exploration
+	# offers — the accept/hint pair shifts left when the hint is present.
+	var has_hint := str(offer.get("type", "")) == "exploration"
 	var reward := _make_label(_reward_text(offer), "Reward")
-	reward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# The §4.8 GOOD reward tint rides the theme's `Good` variation.
 	reward.theme_type_variation = "Good"
-	bottom.add_child(reward)
+	row.add_child(reward)
+	_place(reward, OFFER_REWARD_RECT if has_hint \
+		else OFFER_REWARD_NO_HINT_RECT)
 	var reason := QuestGenLib.accept_block_reason(offer)
 	var accept := UiKitLib.button("quest.accept", "primary")
 	accept.name = "Accept"
-	accept.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 	accept.disabled = not reason.is_empty()
 	if not reason.is_empty():
 		accept.tooltip_text = I18n.t_key(reason)
 	accept.pressed.connect(func() -> void: accept_offer(index))
-	bottom.add_child(accept)
-	if str(offer.get("type", "")) == "exploration":
+	row.add_child(accept)
+	_place(accept, OFFER_ACCEPT_RECT if has_hint \
+		else OFFER_ACCEPT_NO_HINT_RECT)
+	if has_hint:
 		var hint := UiKitLib.button("quest.hint")
 		hint.name = "Hint"
-		hint.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 		hint.disabled = true
 		hint.tooltip_text = I18n.t(_hint_text(offer))
-		bottom.add_child(hint)
-		entries.append({
-			"control": hint, "id": "offers.rows.%s.bottom.hint" % row_id,
-			"opts": {"role": RegistryLib.ROLE_BUTTON},
-		})
-	row.add_child(bottom)
-	entries.append({
-		"control": bottom, "id": "offers.rows.%s.bottom" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
-	entries.append({
-		"control": reward, "id": "offers.rows.%s.bottom.reward" % row_id,
-		"opts": {"role": RegistryLib.ROLE_PLAIN},
-	})
-	entries.append({
-		"control": accept, "id": "offers.rows.%s.bottom.accept" % row_id,
-		"opts": {"role": RegistryLib.ROLE_BUTTON},
-	})
-	return row
+		row.add_child(hint)
+		_place(hint, OFFER_HINT_RECT)
 
 
 ## The composed objective line (§4.9.3 names; numbers by the UI, `10-*` §3.3).
@@ -405,76 +473,77 @@ func _hint_text(offer: Dictionary) -> Dictionary:
 
 func _bind_reports() -> void:
 	_clear(_reports_rows)
-	_reports = DiscoveryLib.unreported()
-	_reports_empty.visible = _reports.is_empty()
+	_reports_data = DiscoveryLib.unreported()
+	_reports_empty.visible = _reports_data.is_empty()
 	_reports_empty.text = I18n.t_key("guild.report.none")
 	var entries: Array = []
-	for discovery_id in _reports:
-		_reports_rows.add_child(_build_report_row(str(discovery_id), entries))
+	var index := 0
+	for discovery_id in _reports_data:
+		_build_report_row(str(discovery_id), index, entries)
+		index += 1
+	_reports_rows.custom_minimum_size = Vector2(
+		REPORTS_W * float(TILE),
+		_reports_data.size() * REPORTS_ROW_H * float(TILE))
 	_register_dynamic("reports", entries)
 
 
-func _build_report_row(discovery_id: String, entries: Array) -> Control:
+func _build_report_row(discovery_id: String, index: int,
+		entries: Array) -> void:
 	var discovery: Dictionary = DataLoader.get_discovery(discovery_id)
-	var row := HBoxContainer.new()
+	var row := Control.new()
 	row.name = "Report_%s" % discovery_id
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reports_rows.add_child(row)
+	var rect := _list_row_rect(REPORTS_LIST, index, REPORTS_W, REPORTS_ROW_H)
+	row.position = rect.position
+	row.size = rect.size
+	var row_id := "reports.rows.%s" % discovery_id
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+			"list": REPORTS_LIST},
+	})
 	var name_label := _make_label(I18n.t(discovery.get("name", {})), "Name")
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
+	_place(name_label, REPORT_NAME_RECT)
 	var reward := _make_label(I18n.fmt("guild.report_reward", {
 		"gold": HudLib.format_thousands(int(discovery.get("report_reward_gold", 0))),
 		"fame": int(discovery.get("fame", 0)),
 	}), "Reward")
-	reward.custom_minimum_size.x = 240
 	# The §4.8 GOOD reward tint rides the theme's `Good` variation.
 	reward.theme_type_variation = "Good"
 	row.add_child(reward)
+	_place(reward, REPORT_REWARD_RECT)
 	var button := UiKitLib.button("guild.report.action", "primary")
 	button.name = "Report"
-	button.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 	button.pressed.connect(func() -> void: report_discovery(discovery_id))
 	row.add_child(button)
-	var row_id := "reports.rows.%s" % discovery_id
-	entries.append_array([
-		{"control": row, "id": row_id, "opts": {
-			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
-		{"control": name_label, "id": "%s.name" % row_id,
-			"opts": {"role": RegistryLib.ROLE_PLAIN}},
-		{"control": reward, "id": "%s.reward" % row_id,
-			"opts": {"role": RegistryLib.ROLE_PLAIN}},
-		{"control": button, "id": "%s.report" % row_id,
-			"opts": {"role": RegistryLib.ROLE_BUTTON}},
-	])
-	return row
+	_place(button, REPORT_BUTTON_RECT)
 
 
-# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
+# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase 12 W2-A) -------------
 
-## Registers every persistent control with its stable hierarchical id —
-## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
-## apply walk changes nothing (no moves, no resizes, no restyles).
+## Registers every persistent control with its stable hierarchical id. The
+## statics carry the authored rects above (the capture emits them as the
+## screen's fragment); the offer/report rows are list members — their ids
+## carry the `list` flag and take `list_rect` positions.
 func _register_layout() -> void:
 	_reg(_background, "background", RegistryLib.ROLE_PANEL)
-	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_header, "header", RegistryLib.ROLE_PLAIN)
 	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
 	_reg(_gold, "header.gold", RegistryLib.ROLE_PLAIN)
 	_reg(_fame, "header.fame", RegistryLib.ROLE_PLAIN)
 	_reg(_back_button, "header.back", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Offers, "offers", RegistryLib.ROLE_PLAIN)
+	_reg(_offers, "offers", RegistryLib.ROLE_PLAIN)
 	_reg(_offers_heading, "offers.heading", RegistryLib.ROLE_PLAIN)
 	_reg(_offers_hint, "offers.refresh_hint", RegistryLib.ROLE_PLAIN)
 	_reg(_announce, "offers.announce", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Offers/Scroll, "offers.scroll", RegistryLib.ROLE_PLAIN)
-	_reg(_offers_rows, "offers.rows", RegistryLib.ROLE_PLAIN)
+	_reg(_offers_scroll, "offers.scroll", RegistryLib.ROLE_PLAIN)
 	_reg(_offers_empty, "offers.empty", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Reports, "reports", RegistryLib.ROLE_PLAIN)
+	_reg(_reports, "reports", RegistryLib.ROLE_PLAIN)
 	_reg(_reports_heading, "reports.heading", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Reports/Scroll, "reports.scroll", RegistryLib.ROLE_PLAIN)
-	_reg(_reports_rows, "reports.rows", RegistryLib.ROLE_PLAIN)
+	_reg(_reports_scroll, "reports.scroll", RegistryLib.ROLE_PLAIN)
 	_reg(_reports_empty, "reports.empty", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Toast, "toast", RegistryLib.ROLE_PLAIN)
 
 
 ## One static registration — kind omitted (auto-derives from the parent).
@@ -508,7 +577,7 @@ func _register_dynamic(section: String, entries: Array) -> void:
 				continue
 			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
 				entry["opts"])
-		RegistryLib.apply_screen(LAYOUT_SCREEN)
+		RegistryLib.apply_layout(LAYOUT_SCREEN)
 	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 
