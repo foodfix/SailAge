@@ -148,9 +148,11 @@ static func _load_sheets() -> Dictionary:
 	return sheets
 
 
-## A nine-patch stylebox over one sheet (texture margins 16, draw region
-## full — the default region_rect — and the flat box's content margins, so
-## a textured button measures exactly like its flat fallback). `factor`
+## A nine-patch stylebox over one sheet (texture margins SHEET_MARGIN —
+## 32 on the 96x96 chrome sheets since the 2026-11-09 32px amendment;
+## draw region full — the default region_rect — and the flat box's
+## content margins, so a textured button measures exactly like its flat
+## fallback). `factor`
 ## is the §4.9 texture-mode state dimming: an RGB multiply on
 ## `modulate_color` (alpha kept at 1) that never changes measured margins.
 static func _texture_box(tex: Texture2D, pad: int = 0,

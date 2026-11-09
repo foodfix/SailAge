@@ -387,11 +387,11 @@ def coast_mock_png(result: dict) -> bytes:
 # ---------- chrome tileset family (§4.8 2026-11-08, one card per family) -
 # The studio's chrome path drives tools/pixellab_pass.py
 # run_chrome_tileset IN-PROCESS: ONE /v2/create-tileset pro tileset per
-# family ("frame" = parchment panel plate, "click" = the light parchment
-# click plate — the pinned descriptions/seeds live in
-# px.CHROME_TILESETS / 80-* §4.8, seeds 20261108 / 20261110; the
-# 2026-11-08 evening revision retired the chestnut leather "button"
-# set). Re-rolls
+# family ("frame" = the ocean-chart panel plate, "click" = the light
+# parchment click plate — the pinned descriptions/seeds live in
+# px.CHROME_TILESETS / 80-* §4.8, seeds 20261116 / 20261115 since the
+# 2026-11-09 32px ornate re-pin; the 2026-11-08 evening revision retired
+# the chestnut leather "button" set). Re-rolls
 # STAGE into the studio cache (the coast pattern): the pass tool vendors
 # the trio into its pinned CHROME_RAW_DIR (tools/assets/pixellab_raw/),
 # and chrome_reroll immediately MOVES the fresh trio into the cache — a
@@ -400,12 +400,14 @@ def coast_mock_png(result: dict) -> bytes:
 # previous canonical trio for the family (the ingest requires exactly
 # ONE tileset_chrome_<family>_*.json — build_ui_art
 # _chrome_find_tileset), and runs build_ui_art --import-chrome-pixellab
-# (green-key + the 18 derived singles + the chrome{} ledger gate).
+# (green-key + the native nine-slot singles + the chrome{} ledger gate).
 
 CHROME_FAMILIES = ("frame", "click")
 CHROME_CARD_PREFIX = "chrome_"
-CHROME_TILE = 16           # px — the pinned tile size (px.CHROME_SHARED_REQUEST)
-CHROME_SHEET = 48          # px — the 3x3 nine-patch sheet (build_ui_art SHEET)
+CHROME_TILE = 32           # px — the pinned tile size (px.CHROME_SHARED_REQUEST,
+                           # the 2026-11-09 32px amendment; build_ui_art
+                           # CHROME_SOURCE_PX agrees)
+CHROME_SHEET = 96          # px — the 3x3 nine-patch sheet (build_ui_art)
 CHROME_GREEN_MARGIN = 32   # key: g ≥ r+32 and g ≥ b+32 → keyed
 #                          (build_ui_art CHROME_GREEN_MARGIN, 80-* §4.8)
 CHROME_REVIEW_BG = "#343a44"  # muted review backdrop behind keyed pixels
@@ -532,9 +534,10 @@ def chrome_tiles_of(result: dict) -> dict[int, dict]:
 
 
 def chrome_strip_png(result: dict) -> bytes:
-    """The 16 wang tiles as an 8x2 strip (512x128) — the card thumbnail;
-    keyed-unaware (the raw vendored pixels, green lower material
-    included — the coast draft convention)."""
+    """The 16 wang tiles as an 8x2 strip (256x64 at the pinned 32px
+    tiles) — the card thumbnail; keyed-unaware (the raw vendored
+    pixels, green lower material included — the coast draft
+    convention)."""
     tiles = chrome_tiles_of(result)
     cell = max(t["w"] for t in tiles.values()) if tiles else CHROME_TILE
     cols, row_count = 8, 2
@@ -565,57 +568,35 @@ def _chrome_green_key(rows: list[list]) -> list[list]:
     return out
 
 
-def _chrome_orient(rows: list[list], op: str | None) -> list[list]:
-    """One FRAME_OPS orientation (build_ui_art _oriented_px semantics)
-    on a square 16x16 hex-row grid."""
-    n = len(rows)
-    if op is None:
-        return rows
-
-    def f(x: int, y: int) -> str:
-        if op == "mirror_x":
-            return rows[y][n - 1 - x]
-        if op == "mirror_y":
-            return rows[n - 1 - y][x]
-        if op == "mirror_xy":
-            return rows[n - 1 - y][n - 1 - x]
-        if op == "rot_ccw":
-            return rows[x][n - 1 - y]
-        if op == "rot_cw":
-            return rows[y][n - 1 - x]
-        raise ValueError(f"unknown chrome orientation {op!r}")
-
-    return [[f(x, y) for x in range(n)] for y in range(n)]
-
-
-# per-sheet cell (in TILE units) -> (wang index, orientation op) —
-# build_ui_art FRAME_OPS with CHROME_WANG {corner: 1, edge: 3, fill: 15}
-# substituted in (upper = material; the tiles are authored TOP-LEFT
-# corner / TOP edge only, every other cell is a lossless orientation of
-# those — the same dihedral relations the ingest assembles with).
+# native nine-slot mapping (build_ui_art CHROME_SLOTS; the 2026-11-09
+# §4.8 rule — the PixelLab tilesets ship every orientation as-authored):
+# per-sheet cell (in TILE units) -> the cell's OWN wang tile, NO
+# orientation ops anywhere (the retired 2026-11-08 3-tile FRAME_OPS
+# mapping is gone).
 _CHROME_SHEET_OPS = {
-    (0, 0): (1, None),         # TL corner — as authored
-    (2, 0): (1, "mirror_x"),   # TR
-    (0, 2): (1, "mirror_y"),   # BL
-    (2, 2): (1, "mirror_xy"),  # BR
-    (1, 0): (3, None),         # top edge — as authored
-    (1, 2): (3, "mirror_y"),   # bottom
-    (0, 1): (3, "rot_ccw"),    # left
-    (2, 1): (3, "rot_cw"),     # right
-    (1, 1): (15, None),        # fill
+    (0, 0): 1,   # TL corner — wang_1
+    (1, 0): 3,   # top edge — wang_3
+    (2, 0): 2,   # TR corner — wang_2
+    (0, 1): 5,   # left edge — wang_5
+    (1, 1): 15,  # fill — wang_15
+    (2, 1): 10,  # right edge — wang_10
+    (0, 2): 4,   # BL corner — wang_4
+    (1, 2): 12,  # bottom edge — wang_12
+    (2, 2): 8,   # BR corner — wang_8
 }
 
 
 def chrome_sheet_rows(result: dict) -> list[list]:
-    """The 48x48 nine-patch sheet (hex rows) assembled from the 16
-    keyed-unaware wang tiles: green-keyed, then the §4.8 mapping via
-    _CHROME_SHEET_OPS. Keyed-out pixels carry the review backdrop."""
+    """The 96x96 nine-patch sheet (hex rows) assembled from the 16
+    keyed-unaware wang tiles: green-keyed, then the §4.8 native
+    nine-slot mapping via _CHROME_SHEET_OPS (each cell its OWN
+    as-authored tile, no transforms). Keyed-out pixels carry the
+    review backdrop."""
     tiles = chrome_tiles_of(result)
     t = CHROME_TILE
     cells = {}
-    for (cx, cy), (wang, op) in _CHROME_SHEET_OPS.items():
-        cells[(cx, cy)] = _chrome_orient(_chrome_green_key(tiles[wang]["rows"]),
-                                         op)
+    for (cx, cy), wang in _CHROME_SHEET_OPS.items():
+        cells[(cx, cy)] = _chrome_green_key(tiles[wang]["rows"])
     n = CHROME_SHEET
     rows: list = [[None] * n for _ in range(n)]
     for (cx, cy), crows in cells.items():
@@ -625,10 +606,10 @@ def chrome_sheet_rows(result: dict) -> list[list]:
 
 
 def _chrome_panel_rows(sheet: list[list], w: int, h: int) -> list[list]:
-    """A wxh nine-patch rect cut from the assembled sheet: 16px corners
+    """A wxh nine-patch rect cut from the assembled sheet: 32px corners
     at the four corners, the edge tiles tiled along each side, wang_15
-    fill tiled in the interior (margin-16 slicing, tile-aligned sizes).
-    When h < 32 the bottom band overdraws the top band's lower rows —
+    fill tiled in the interior (margin-32 slicing, tile-aligned sizes).
+    When h < 64 the bottom band overdraws the top band's lower rows —
     the naive nine-patch squeeze (review aid only; never shipped)."""
     t = CHROME_TILE
     rows: list = [[None] * w for _ in range(h)]
@@ -677,15 +658,16 @@ def _nearest_upscale(rows: list[list], k: int) -> list[list]:
 
 
 def chrome_mock_png(result: dict, family: str) -> bytes:
-    """The nine-patch review mock: the assembled 48x48 sheet itself plus
-    a sample 160x64 panel rect (corners + tiled edges/fill) — and, for
-    the button family, a 96x28 button rect — on the muted review
-    backdrop, composed 1:1 then NEAREST-upscaled 3x."""
+    """The nine-patch review mock: the assembled 96x96 sheet itself plus
+    a sample 224x96 panel rect (corners + tiled edges/fill) — and, for
+    the click family, a 192x64 button rect (both tile-aligned on the
+    32px grid) — on the muted review backdrop, composed 1:1 then
+    NEAREST-upscaled 3x."""
     sheet = chrome_sheet_rows(result)
     panels = [(sheet, CHROME_SHEET, CHROME_SHEET),
-              (_chrome_panel_rows(sheet, 160, 64), 160, 64)]
+              (_chrome_panel_rows(sheet, 224, 96), 224, 96)]
     if family == "click":
-        panels.append((_chrome_panel_rows(sheet, 96, 28), 96, 28))
+        panels.append((_chrome_panel_rows(sheet, 192, 64), 192, 64))
     pad, gap = 8, 12
     lw = pad + sum(pw for _r, pw, _ph in panels) + gap * (len(panels) - 1) \
         + pad

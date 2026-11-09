@@ -74,7 +74,7 @@ const SKIN_STRIP_PREFIX := "SkinStrip_"
 
 ## Routes one chrome band — a HUD/chart/battle status-bar `ColorRect` —
 ## through the §4.8 band vocabulary **at bar scale**: a 32/40px bar cannot
-## carry the 16px-margin nine-patch, so the band paints the sheet's frame
+## carry the 32px-margin nine-patch, so the band paints the sheet's frame
 ## language with 1px anchor-tracked ColorRect strips — `PANEL_WOOD` fill,
 ## `PANEL_WOOD_LO` dark outer edge, `PANEL_WOOD_HI` bevel line and an
 ## `ACCENT` gold hairline flush with the inner (content-side) edge. Strips

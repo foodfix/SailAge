@@ -12,7 +12,7 @@ extends Node
 ##
 ## **Texture mode** (W3 layering; §4.9): a dedicated section builds
 ## `build_theme(true)` against the governor-assembled nine-patch sheets and
-## pins the StyleBoxTexture config (48x48 region, 16px texture margins) plus
+## pins the StyleBoxTexture config (96x96 region, 32px texture margins) plus
 ## pixel-exact sheet samples at the stylebox's corner/edge/center layout
 ## anchors — since the UW2 chrome reskin (§4.8 amended 2026-11-04) those are
 ## the wood/brass hexes: frame outline `PANEL_WOOD_LO` (+ bevel
@@ -641,7 +641,7 @@ func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
 		("texture mode: %s transparent at the four sheet corners "
 			+ "(the keyed plate silhouette)") % sheet_id)
 	# Boundary-distinct pin (§4.8 raw-plate rule, 2026-11-09): on the
-	# click families every ring cell (a 16x16 corner or edge cell of
+	# click families every ring cell (a 32x32 corner or edge cell of
 	# the sheet) must carry ≥ 2 distinct opaque colors — the model's
 	# drawn outline differs from the face. The shipped d6d235bd
 	# collapse (outline == face, one flat color per tile) rendered

@@ -23,17 +23,18 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    share a byte-identical outer 1 px ring; ``sea_pattern.png`` must be
    torus-safe (80-* §4.8.2 seam rules).  Verify only, never alters.
 5. Nine-patch assembly (chrome class) — ``assets/ui/chrome/ninepatch_
-   {panel,button,button_focus,field,bar}.png`` (48×48) from the 16×16 chrome
-   tiles: the tiles are authored as the TOP-LEFT corner / TOP edge, so every
-   frame cell carries the orientation-matched lossless transform of them
-   (mirror_x/mirror_y/mirror_xy corners, rot_ccw/rot_cw left/right,
-   mirror_y bottom — blitting raw tiles everywhere misaligned the sheet and
-   broke every themed Button), fill in the 16×16 center (48 = 16 + 16 + 16,
-   so margins are exactly one tile); every sheet is pixel-exact
-   self-verified at assembly (build FAIL on any mismatch).  Bar sheet layout
-   (pinned): rows 16..31 form the horizontal midline band the kit's
-   value_bar samples — left cap tile at x 0..15, line tile tiled x 16..31,
-   right cap tile at x 32..47; the rest transparent.
+   {panel,button,button_hover,button_pressed,button_focus,field}.png``
+   96×96 from the 32×32 PixelLab chrome tiles (the 2026-11-09 32px
+   amendment): native nine-slot assembly — each sheet cell blits from
+   ITS OWN as-authored wang tile (1 tl, 2 tr, 4 bl, 8 br, 3 top,
+   12 bottom, 5 left, 10 right, 15 fill), NO transforms (the authored-
+   era orientation math — frame_ops() — remains only for the retired
+   generator fallback), margins exactly one tile (96 = 32 + 32 + 32);
+   every sheet is pixel-exact self-verified at assembly (build FAIL on
+   any mismatch).  Bar sheet layout (authored 16px tiles, pinned):
+   ``ninepatch_bar.png`` 48×48, rows 16..31 form the horizontal midline
+   band the kit's value_bar samples — left cap tile at x 0..15, line
+   tile tiled x 16..31, right cap tile at x 32..47; the rest transparent.
 6. Hull footprint check — per hull, the §4.8.7 band is measured on the side
    view (e/w long axis, the profile that shows the ship's length; final
    outlined file): t1 28–36, t2 40–52, t3 52–60 px on the 64 canvas
@@ -491,8 +492,9 @@ DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
 NINEPATCH_SETS = ("panel", "button", "button_hover", "button_pressed",
                   "button_focus", "field")
 BAR_PARTS = ("left", "right", "line")  # A.1 chrome ids: bar_left/bar_right/bar_line (master reconciliation)
-SHEET = 48   # 16px margins -> exactly one 16px middle tile (§4.8.8)
-TILE = 16
+SHEET = 48   # authored-bar sheet: 16px margins -> one 16px middle tile (§4.8.8)
+TILE = 16    # (chrome sheets take T/S from the tiles themselves: 96/96,
+             # the 2026-11-09 32px amendment)
 
 # ---- PixelLab chrome tileset ingestion pins (80-* §4.8, 2026-11-08) ----
 # Wang→nine-patch slot mapping (upper = plate material, bit

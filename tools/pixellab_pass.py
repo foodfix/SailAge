@@ -31,13 +31,13 @@ heritage); raws land gitignored under model_raw/pixellab_glyphs/<id>/.
   python3 tools/pixellab_pass.py --glyphs snap [id ...]
   python3 tools/pixellab_pass.py --glyphs status
 
-Chrome tileset mode (2026-11-08, 80-* §4.8 parchment amendment): two
-pro-mode Wang corner tilesets (16px) — `frame` (parchment panel plate)
-and `button` (chestnut leather plate); the lower material is the
-authoring-only green chroma key. Vendored trios land in
-tools/assets/pixellab_raw/; ingest = build_ui_art
---import-chrome-pixellab.
-  python3 tools/pixellab_pass.py --chrome run [frame|button]
+Chrome tileset mode (2026-11-08, 80-* §4.8 parchment amendment; 32px
+since the 2026-11-09 ornate re-pin): two pro-mode Wang corner tilesets
+(32x32 tiles) — `frame` (the ocean-chart panel plate) and `click` (the
+light parchment click plate); the lower material is the authoring-only
+green chroma key. Vendored trios land in tools/assets/pixellab_raw/;
+ingest = build_ui_art --import-chrome-pixellab.
+  python3 tools/pixellab_pass.py --chrome run [frame|click]
   python3 tools/pixellab_pass.py --chrome status
 
 Legacy Pro-Flash 8-dir hull mode (RETIRED by the 2026-11-07 top-down
