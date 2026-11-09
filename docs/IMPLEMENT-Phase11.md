@@ -235,7 +235,20 @@ slot's file inventory:
   exactly the dragged min (the drag is authoritative on both axes) —
   and child revert restores the captured flags. Registry suite 40
   checks; port_hub/market suites green. The 80-* §4.8.9 child-resize
+  checks; port_hub/market suites green. The 80-* §4.8.9 child-resize
   cell gains the flag-pin note.
+- **The settle-delay reply (2026-11-09, drag-resize round 6):** the
+  trail + a two-phase headless repro (committed 46×12 loads and sorts,
+  then the drag pulls to 42×14) proved the engine sorts correctly — but
+  the bridge's reply fired ONE FRAME after an edit while the re-sort
+  CASCADE runs one level per frame (Margin → VBox → Facilities → Rows),
+  so the studio drew a mid-cascade rect during the drag and, with no
+  further edits after release, never re-read the settled state (the
+  reported "keeps fighting back, wrong size after release"). The reply
+  now waits `UPDATE_SETTLE_FRAMES` (4) frames after the LAST edit — a
+  newer edit resets the countdown and coalesces. Bridge suite 31,
+  registry 53 (the two-phase live-sequence repro pinned), validator
+  groups 1–14 green.
 - **The grid guarantee (2026-11-09, drag-resize round 4, user
   direction — "make ALL elements on the 32×32 grid"):** the resize
   fight's root cause — content minimums are font-metric and off-grid,

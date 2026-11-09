@@ -361,6 +361,9 @@ func _test_idempotence_pruning() -> void:
 	var guild_rows: Array = RegistryLib.tree("guild")
 	_check(guild_rows.size() == 1 and "min_tiles" in guild_rows[0],
 			"tree() lists the live record with min_tiles (the drag floor)")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _test_vbox_chain_min_authoritative()
 	panel.free()  # an immediate free (not queue_free) — the pruned rec
 	RegistryLib.apply_screen("guild")
 	_check(RegistryLib.tree("guild").is_empty(),
@@ -427,6 +430,79 @@ func _test_wrapper_queued_rebuild() -> void:
 			"wrapper-queued rebuild: old node out, new node in")
 	old_label.free()
 	new_label.free()
+	_drop_root(root)
+	await get_tree().process_frame
+	await _test_vbox_chain_min_authoritative()
+
+
+# --- 7b. The live port-hub wrapper chain (the drag-resize repro) --------------
+
+## The live session's exact wrapper chain (2026-11-09): MarginContainer →
+## VBox → Facilities (VBox, EXPAND_FILL vertical) → Rows (the registered
+## element, holding an HBox pair with a 320px card). A min_w/min_h
+## override with the flag pin must make the element settle at EXACTLY the
+## dragged min (1344×448) — the user's live session settled at 1472 wide
+## (the parent's width) instead.
+func _test_vbox_chain_min_authoritative() -> void:
+	RegistryLib._reset_for_tests()
+	var root := Control.new()
+	root.size = Vector2(1920, 1080)
+	add_child(root)
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top",
+			"margin_bottom"]:
+		margin.add_theme_constant_override(side, 32)
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(margin)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	margin.add_child(vbox)
+	var facilities := VBoxContainer.new()
+	facilities.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	facilities.add_theme_constant_override("separation", 8)
+	vbox.add_child(facilities)
+	var heading := Label.new()
+	heading.text = "Facilities"
+	facilities.add_child(heading)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 8)
+	facilities.add_child(rows)
+	var pair := HBoxContainer.new()
+	pair.add_theme_constant_override("separation", 8)
+	rows.add_child(pair)
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(320, 64)
+	pair.add_child(card)
+	RegistryLib.register("port", rows, "facility_grid", {"role": "panel"})
+	RegistryLib.screen_active("port", root)
+	var tile := float(RegistryLib.TILE)
+	# The live sequence: the COMMITTED override (46×12) applies and sorts
+	# first; the drag then pulls the min DOWN to 42×14.
+	RegistryLib.set_table_for_tests({
+		"port": {"facility_grid": {"min_w": 46, "min_h": 12}},
+	})
+	RegistryLib.apply_screen("port")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(rows.size == Vector2(46 * tile, 12 * tile),
+			"vbox chain: the committed load sorts to 46x12 (got %s)"
+					% str(rows.size))
+	RegistryLib.set_table_for_tests({
+		"port": {"facility_grid": {"min_w": 42, "min_h": 14}},
+	})
+	RegistryLib.apply_overrides("port", "facility_grid",
+			{"min_w": 42, "min_h": 14})
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(rows.size_flags_horizontal == Control.SIZE_SHRINK_BEGIN
+			and rows.size_flags_vertical == Control.SIZE_SHRINK_BEGIN,
+			"vbox chain: the min override pins shrink-begin flags")
+	_check(rows.custom_minimum_size == Vector2(42 * tile, 14 * tile),
+			"vbox chain: custom min == the dragged tiles")
+	_check(rows.size == Vector2(42 * tile, 14 * tile),
+			"vbox chain: the SETTLED size == the dragged min (got %s)"
+					% str(rows.size))
 	_drop_root(root)
 	await get_tree().process_frame
 

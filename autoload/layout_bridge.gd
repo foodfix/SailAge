@@ -57,6 +57,15 @@ const BIND_ADDRESS := "127.0.0.1"
 ## 1920×1080 / 32 px ⇒ 60 × 33 floor; the bottom sliver is anchored).
 const GRID_W := 60
 const GRID_H := 33
+## The reply cascade delay (the 2026-11-09 resize settle fix): a
+## container re-sort cascades down ONE LEVEL PER FRAME — each container
+## queues its children's re-sort deferred — so a reply sent one frame
+## after an edit reads a MID-CASCADE rect (outer levels settled, inner
+## levels stale). The studio box then fights the still-settling layout
+## during the drag and, with no further edits after release, lands on
+## the wrong size permanently. The reply waits this many frames after
+## the LAST edit; a newer edit resets the countdown and coalesces.
+const UPDATE_SETTLE_FRAMES := 4
 ## The WS peer buffer floors (the 2026-11-09 outbound-overflow fix): the
 ## engine's default outbound buffer is 64 KiB while a `frame` message
 ## carries a full-viewport PNG in base64 (hundreds of KiB to a few MB) —
@@ -107,6 +116,10 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	if _update_frames_left > 0:
+		_update_frames_left -= 1
+		if _update_frames_left == 0:
+			_send_settled_update()
 	if _listener != null:
 		_pump_modern()
 	elif _legacy_server != null:
@@ -443,21 +456,23 @@ func on_screen_changed(screen_id: String) -> void:
 ## The screen id awaiting its deferred tree+frame reply (`""` = none).
 ## Coalesced: several edits in one frame answer once.
 var _pending_update: String = ""
+## The countdown to the settled reply (see UPDATE_SETTLE_FRAMES).
+var _update_frames_left: int = 0
 
 
-## Queues the post-edit reply ONE FRAME OUT. A synchronous reply reads
-## the control's rect BEFORE the containers have re-sorted (container
-## sort is deferred by the engine), so the studio received a stale
-## pre-layout rect and re-rendered its box from it — mid-drag that
-## fought the optimistic box and on release it landed on the wrong
-## size. The deferred call runs after the frame's container sorts, so
-## the reply carries the settled, on-grid rect.
+## Queues the post-edit reply `UPDATE_SETTLE_FRAMES` frames out. A
+## synchronous reply reads the control's rect BEFORE the containers have
+## re-sorted (the sort cascades one level per frame), so the studio
+## received a stale mid-cascade rect and re-rendered its box from it —
+## mid-drag that fought the optimistic box and on release it landed on
+## the wrong size. The countdown resets on every newer edit, so bursts
+## coalesce into one settled reply.
 func _queue_update(screen_id: String) -> void:
 	_pending_update = screen_id
-	_deferred_update.call_deferred()
+	_update_frames_left = UPDATE_SETTLE_FRAMES
 
 
-func _deferred_update() -> void:
+func _send_settled_update() -> void:
 	var screen := _pending_update
 	_pending_update = ""
 	if screen.is_empty() or not _enabled or _active_peer() == null:
