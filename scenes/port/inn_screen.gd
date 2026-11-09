@@ -31,8 +31,15 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Task L (docs/80-* §4.7.8): the "captains resting" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
+## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
+## every persistent control registers at build time with a stable
+## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
+## no-op (registration only, nothing moves).
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
+## This screen's id in the registry (LayoutRegistry.SCREENS).
+const LAYOUT_SCREEN := "inn"
 
 ## Phase-8 W5-C (docs/80-* §4.11.1): the limited-talk `ui_strings` keys —
 ## reported for the W6-D residual merge; until then the rows render from this
@@ -95,6 +102,9 @@ var _odd_job_reason: String = ""
 var _captains_header: Label = null
 var _captains_box: VBoxContainer = null
 var _captain_rows: Array = []
+## Phase-11 (§4.8.9): per dynamic section, true once its first build has
+## registered (see [_register_dynamic] for the first-build/rebuild split).
+var _layout_built: Dictionary = {}
 
 
 func _ready() -> void:
@@ -117,8 +127,13 @@ func _ready() -> void:
 	_hud.set_minimap_visible(false)
 
 	_build_captains_section()
+	_register_layout()
 
 	_bind()
+
+	# Phase-11 (§4.8.9): the build is registered — activate the screen (pins
+	# the root, captures baselines, applies the committed table; ships {}).
+	RegistryLib.screen_active(LAYOUT_SCREEN, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
@@ -227,6 +242,10 @@ func _refresh_morale_bar() -> void:
 	_morale_bar = UiKitLib.value_bar(GameState.morale, 100, tier)
 	parent.add_child(_morale_bar)
 	parent.move_child(_morale_bar, _morale_label.get_index() + 1)
+	_register_dynamic("morale_bar", [{
+		"control": _morale_bar, "id": "status.morale_bar",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	}])
 
 
 func _bind_rest() -> void:
@@ -326,7 +345,12 @@ func _bind_captains() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
+		_register_dynamic("captains", [{
+			"control": empty, "id": "captains.rows.empty",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		}])
 		return
+	var entries: Array = []
 	for entry in _captain_rows:
 		var row := HBoxContainer.new()
 		row.name = "Captain_%s" % str(entry["id"])
@@ -339,6 +363,7 @@ func _bind_captains() -> void:
 		# captain's role badge; an absent id renders nothing (the flat
 		# fallback — the registry fills at W4-D).
 		var badge := UiKitLib.hero_texture("role_%s" % str(entry["role"]))
+		var badge_icon: Control = null
 		if badge != null:
 			var icon := TextureRect.new()
 			icon.name = "RoleBadge"
@@ -348,6 +373,7 @@ func _bind_captains() -> void:
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			row.add_child(icon)
 			row.move_child(icon, 0)
+			badge_icon = icon
 		# Phase-8 W5-C (docs/80-* §4.11.1): the 受限谈话 limited-talk verb —
 		# +1 extra familiarity for one sighted captain, once per port visit.
 		var talk := UiKitLib.button("interact.verb.talk")
@@ -364,6 +390,21 @@ func _bind_captains() -> void:
 				str(entry["name"])))
 		row.add_child(talk)
 		_captains_box.add_child(row)
+		var row_id := "captains.rows.%s" % str(entry["id"])
+		entries.append_array([
+			{"control": row, "id": row_id, "opts": {
+				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
+			{"control": text, "id": "%s.text" % row_id,
+				"opts": {"role": RegistryLib.ROLE_PLAIN}},
+			{"control": talk, "id": "%s.talk" % row_id,
+				"opts": {"role": RegistryLib.ROLE_BUTTON}},
+		])
+		if badge_icon != null:
+			entries.append({
+				"control": badge_icon, "id": "%s.badge" % row_id,
+				"opts": {"role": RegistryLib.ROLE_PLAIN},
+			})
+	_register_dynamic("captains", entries)
 
 
 ## The limited-talk click (§4.11.1): one +1 familiarity per port visit, the
@@ -412,6 +453,66 @@ func _port_name() -> String:
 		return "-"
 	var port := DataLoader.get_port(value)
 	return I18n.t(port.get("name", {})) if not port.is_empty() else "-"
+
+
+# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
+
+## Registers every persistent control with its stable hierarchical id —
+## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
+## apply walk changes nothing (no moves, no resizes, no restyles).
+func _register_layout() -> void:
+	_reg(_background, "background", RegistryLib.ROLE_PANEL)
+	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Status, "status", RegistryLib.ROLE_PANEL)
+	_reg(_morale_label, "status.morale", RegistryLib.ROLE_PLAIN)
+	_reg(_gold_label, "status.gold", RegistryLib.ROLE_PLAIN)
+	_reg(_day_label, "status.day", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Actions, "actions", RegistryLib.ROLE_PLAIN)
+	_reg(_rest_button, "actions.rest", RegistryLib.ROLE_BUTTON)
+	_reg(_rest_hint, "actions.rest_hint", RegistryLib.ROLE_PLAIN)
+	_reg(_odd_job_button, "actions.work_odd_job", RegistryLib.ROLE_BUTTON)
+	_reg(_odd_job_hint, "actions.odd_job_hint", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
+	_reg(_back_button, "footer.back", RegistryLib.ROLE_BUTTON)
+	_reg(_captains_header, "captains.header", RegistryLib.ROLE_PLAIN)
+	_reg(_captains_box, "captains.rows", RegistryLib.ROLE_PLAIN)
+
+
+## One static registration — kind omitted (auto-derives from the parent).
+func _reg(control: Control, id: String, role: String) -> void:
+	RegistryLib.register(LAYOUT_SCREEN, control, id, {"role": role})
+
+
+## Registers one rebuilt dynamic row set (the captain rows, the morale bar).
+## `entries` = [{control, id, opts}]. A section's FIRST build registers
+## synchronously — inside `_ready`, ahead of `screen_active`, so the
+## activation walk captures the rows' baselines. A REbuild defers one frame:
+## the cleared rows are queue_freed but still live within this frame, and a
+## same-frame re-register would read as a duplicate id — after the frame's
+## delete flush the same-id replacement is silent. A pass whose screen died
+## meanwhile has only dead nodes to visit: the instance-bound one-shot dies
+## with it (nothing left to register).
+func _register_dynamic(section: String, entries: Array) -> void:
+	if not _layout_built.has(section):
+		_layout_built[section] = true
+		for entry in entries:
+			RegistryLib.register(LAYOUT_SCREEN, entry["control"],
+				entry["id"], entry["opts"])
+		return
+	var apply := func() -> void:
+		for entry in entries:
+			var candidate: Variant = entry["control"]
+			# The Variant guard comes first: a freed node fails
+			# `is_instance_valid` safely, while a typed assignment of it
+			# would be a runtime error.
+			if not is_instance_valid(candidate) or not (candidate is Control):
+				continue
+			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
+				entry["opts"])
+		RegistryLib.apply_screen(LAYOUT_SCREEN)
+	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 
 # --- Actions ---------------------------------------------------------------
