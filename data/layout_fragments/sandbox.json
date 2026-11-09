@@ -9,19 +9,19 @@
     "actions.import": {
       "h": 2,
       "w": 5,
-      "x": 50,
+      "x": 52,
       "y": 3
     },
     "actions.random": {
       "h": 2,
       "w": 5,
-      "x": 45,
+      "x": 47,
       "y": 3
     },
     "actions.start": {
       "h": 2,
       "w": 5,
-      "x": 40,
+      "x": 42,
       "y": 3
     },
     "back_hint": {

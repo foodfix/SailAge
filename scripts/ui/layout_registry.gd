@@ -311,13 +311,18 @@ static func apply_layout(screen_id: String) -> void:
 	var elements: Dictionary = data.get("elements", {})
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var dead: Array[String] = []
-	# Parents-first: bucket the ids by registered-ancestor depth (a
-	# parent's rect must be settled before its children clamp inside
-	# it). Insertion order within a depth.
-	var max_depth := 0
+	# The parent map (one ancestor pass per apply — the O(n²) walk must
+	# not run per element; the chart's 177-record open blew the §4.6
+	# budget before this memoization) + the depths derived from it.
+	var parent_of := _parent_map(screen_id)
 	var depth_of := {}
+	var max_depth := 0
 	for id in per_screen:
-		var d := _registered_depth(screen_id, id, per_screen)
+		var d := 0
+		var cur: String = id
+		while not parent_of.get(cur, "").is_empty() and d < 32:
+			cur = String(parent_of[cur])
+			d += 1
 		depth_of[id] = d
 		max_depth = maxi(max_depth, d)
 	for depth in range(0, max_depth + 1):
@@ -333,7 +338,7 @@ static func apply_layout(screen_id: String) -> void:
 				continue  # a dynamic row — its builder owns the placement
 			var rect: Variant = elements.get(id, null)
 			if rect is Dictionary and not rect.is_empty():
-				_apply_rect(screen_id, id, control, rect)
+				_apply_rect(screen_id, id, control, rect, parent_of)
 				rec["applied"] = rect.duplicate()
 				rec["data_rect"] = rect.duplicate()
 				# A `sheet` assignment rides along (docs/10-* §4.23) —
@@ -363,11 +368,27 @@ static func apply_layout(screen_id: String) -> void:
 					"w": FALLBACK_TILES.size.x,
 					"h": FALLBACK_TILES.size.y,
 				}
-				_apply_rect(screen_id, id, control, fb)
+				_apply_rect(screen_id, id, control, fb, parent_of)
 				rec["applied"] = fb.duplicate()
 				rec["data_rect"] = fb.duplicate()
 	for id in dead:
 		per_screen.erase(id)
+
+
+## One ancestor pass for a whole dump/apply: id → registered parent id
+## for every live record. The O(n²) walk must run ONCE per pass, not
+## per element (the chart's 177-record open blew the §4.6 budget before
+## this memoization).
+static func _parent_map(screen_id: String) -> Dictionary:
+	var per_screen: Dictionary = _screens.get(screen_id, {})
+	var map := {}
+	for id in per_screen:
+		var rec: Dictionary = per_screen[id]
+		var control := _live(rec)
+		if control == null:
+			continue
+		map[id] = _registered_ancestor(screen_id, control)
+	return map
 
 
 ## The Phase-11 name (the dynamic-rebuild re-apply) — the screens
@@ -448,7 +469,7 @@ static func _last_rect(screen_id: String, id: String, rec: Dictionary,
 ## content-min quantized up, children extent)`, clamped inside the
 ## direct parent's rect. Deterministic and idempotent.
 static func _apply_rect(screen_id: String, id: String, control: Control,
-		rect: Dictionary) -> void:
+		rect: Dictionary, parent_of: Dictionary = {}) -> void:
 	var px := float(int(rect.get("x", 0))) * TILE
 	var py := float(int(rect.get("y", 0))) * TILE
 	var pw := float(int(rect.get("w", 0))) * TILE
@@ -464,7 +485,7 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 	var content := control.get_minimum_size()
 	size.x = maxf(size.x, float(ceili(content.x / float(TILE)) * TILE))
 	size.y = maxf(size.y, float(ceili(content.y / float(TILE)) * TILE))
-	var kids := _children_extent(screen_id, id, control)
+	var kids := _children_extent(screen_id, id, control, parent_of)
 	size.x = maxf(size.x, float(ceili(kids.x / float(TILE)) * TILE))
 	size.y = maxf(size.y, float(ceili(kids.y / float(TILE)) * TILE))
 	# The parent-bounds clamp (rule 1): an element cannot leave its
@@ -494,9 +515,11 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 ## The children-extent floor (rule 2): the right/bottom edge (px, in
 ## `parent`'s LOCAL space) of every registered child whose registered
 ## parent is `parent_id`. Dead records are skipped; the caller
-## quantizes UP to whole tiles.
+## quantizes UP to whole tiles. `parent_of` is the pass's memoized map
+## (built by `apply_layout`/`tree`/`capture_rows` via `_parent_map`);
+## an empty map falls back to the per-record ancestor walk.
 static func _children_extent(screen_id: String, parent_id: String,
-		parent: Control) -> Vector2:
+		parent: Control, parent_of: Dictionary = {}) -> Vector2:
 	var extent := Vector2.ZERO
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var pr := Rect2(parent.global_position, parent.size)
@@ -505,34 +528,15 @@ static func _children_extent(screen_id: String, parent_id: String,
 		var child := _live(rec)
 		if child == null or child == parent:
 			continue
-		if _registered_ancestor(screen_id, child) != parent_id:
+		var child_parent: String = String(parent_of.get(id, ""))
+		if parent_of.is_empty():
+			child_parent = _registered_ancestor(screen_id, child)
+		if child_parent != parent_id:
 			continue
 		var edge := (child.global_position - pr.position) + child.size
 		extent.x = maxf(extent.x, edge.x)
 		extent.y = maxf(extent.y, edge.y)
 	return extent
-
-
-## The registered-ancestor depth of one record ("" parent = depth 0).
-## Missing ancestors (a dead record mid-walk) count 0 — the parents-
-## first bucket still applies them before their children.
-static func _registered_depth(screen_id: String, id: String,
-		per_screen: Dictionary) -> int:
-	var depth := 0
-	var current: String = id
-	while true:
-		var rec: Dictionary = per_screen.get(current, {})
-		var control := _live(rec)
-		if control == null:
-			break
-		var parent_id := _registered_ancestor(screen_id, control)
-		if parent_id.is_empty():
-			break
-		depth += 1
-		current = parent_id
-		if depth > 32:
-			break  # a cycle guard; the ids are authored acyclic
-	return depth
 
 
 ## The nearest registered ancestor's id ("" = the screen root).
@@ -595,6 +599,7 @@ static func tree(screen_id: String) -> Array:
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var root_ref: WeakRef = _roots.get(screen_id)
 	var root = root_ref.get_ref() if root_ref != null else null
+	var parent_of := _parent_map(screen_id)
 	var rows: Array = []
 	for id in per_screen:
 		var rec: Dictionary = per_screen[id]
@@ -625,14 +630,14 @@ static func tree(screen_id: String) -> Array:
 			},
 			"sheet": String(rec.get("sheet", "")),
 			"locked": bool(rec.get("data_ordered")),
-			"parent": _registered_ancestor(screen_id, control),
+			"parent": String(parent_of.get(id, "")),
 			"clipped": _inside_scroll(control),
 			"min_tiles": _content_min_tiles(control),
 		}
 		# The children-extent drag floor — only present when the element
 		# has registered children (otherwise the key is omitted and the
 		# studio falls back to min_tiles alone).
-		var kids := _children_extent(screen_id, id, control)
+		var kids := _children_extent(screen_id, id, control, parent_of)
 		if kids.x > 0 or kids.y > 0:
 			row["kids_tiles"] = {
 				"w": ceili(kids.x / float(TILE)),
@@ -675,13 +680,14 @@ static func capture_rows(screen_id: String) -> Array:
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var root_ref: WeakRef = _roots.get(screen_id)
 	var root = root_ref.get_ref() if root_ref != null else null
+	var parent_of := _parent_map(screen_id)
 	var rows: Array = []
 	for id in per_screen:
 		var rec: Dictionary = per_screen[id]
 		var control := _live(rec)
 		if control == null:
 			continue
-		var parent_id := _registered_ancestor(screen_id, control)
+		var parent_id := String(parent_of.get(id, ""))
 		var parent_global := Vector2.ZERO
 		if root != null:
 			parent_global = root.global_position

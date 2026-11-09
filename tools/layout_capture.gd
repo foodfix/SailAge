@@ -92,28 +92,164 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var screen := ""
 	var all := false
+	var audit := false
 	for arg in args:
 		if arg.begins_with("--screen="):
 			screen = arg.get_slice("=", 1)
 		elif arg == "--all":
 			all = true
-	if all:
+		elif arg == "--audit":
+			audit = true
+	if audit:
+		# The W4.3 structural audit (docs/IMPLEMENT-Phase12.md §5.3):
+		# every rigged screen boots, then every registered-child →
+		# registered-parent chain is walked — only registered/plain
+		# Controls allowed between them, no Container subclass except
+		# the list viewports' ScrollContainers — and every registered
+		# row must nest inside its registered parent.
 		var ok := true
-		for rig_screen in PORT_SCENES:
+		for rig_screen in _all_rig_screens():
+			if not await _audit_screen(rig_screen):
+				ok = false
+		get_tree().quit(0 if ok else 1)
+	elif all:
+		var ok := true
+		for rig_screen in _all_rig_screens():
 			if not await _capture_screen(rig_screen):
 				ok = false
-		# --- rig: title (W2-B) ---
-		for rig_screen in W2B_SCENES:
-			if not await _capture_screen(rig_screen):
-				ok = false
-		# --- end rig: title (W2-B) ---
 		get_tree().quit(0 if ok else 1)
 	elif screen != "":
 		var ok := await _capture_screen(screen)
 		get_tree().quit(0 if ok else 1)
 	else:
-		push_error("layout_capture: pass --screen=<id> or --all")
+		push_error("layout_capture: pass --screen=<id>, --all or --audit")
 		get_tree().quit(1)
+
+
+## Every rigged screen id (the four rig maps).
+func _all_rig_screens() -> Array:
+	var ids := []
+	for map: Dictionary in [PORT_SCENES, W2B_SCENES, WORLD_RIG_SCENES,
+			W2D_SCENES]:
+		for id: String in map:
+			ids.append(id)
+	ids.sort()
+	return ids
+
+
+## Boots one screen (the capture rig) and runs the two W4.3 checks:
+## the chain rule (no flow containers between registered elements) and
+## the nest rule (every registered row inside its registered parent).
+func _audit_screen(screen_id: String) -> bool:
+	if _rig_scene_path(screen_id).is_empty():
+		push_error("layout_audit: no rig for '%s'" % screen_id)
+		return false
+	_rig_boot(screen_id)
+	var scene: PackedScene = load(_rig_scene_path(screen_id))
+	var screen_root: Control = scene.instantiate()
+	add_child(screen_root)
+	await _rig_post(screen_id, screen_root)
+	if has_method("_open_%s" % screen_id):
+		await call("_open_%s" % screen_id, screen_root)
+	if screen_root.has_method("open_on"):
+		screen_root.open_on(null)
+	for i in range(SETTLE_FRAMES):
+		await get_tree().process_frame
+	var tree_rows: Array = RegistryLib.tree(screen_id)
+	var violations := _structural_violations(screen_id, screen_root,
+			tree_rows)
+	var nest := _nest_violations(tree_rows)
+	screen_root.queue_free()
+	RegistryLib._reset_for_tests()
+	if violations.is_empty() and nest.is_empty():
+		print("AUDIT %s OK — %d rows, 0 flow containers, 0 nest "
+				+ "violations" % [screen_id, tree_rows.size()])
+		return true
+	for v: String in violations:
+		push_error("AUDIT %s CHAIN: %s" % [screen_id, v])
+	for v: String in nest:
+		push_error("AUDIT %s NEST: %s" % [screen_id, v])
+	print("AUDIT %s FAIL — %d chain + %d nest violations of %d rows"
+			% [screen_id, violations.size(), nest.size(),
+			tree_rows.size()])
+	return false
+
+
+## The chain rule: for every registered element, every node between it
+## and its registered parent (or the screen root) must be a plain
+## Control — no Container subclass, EXCEPT a ScrollContainer whose row
+## is clipped (a list viewport's scrolled content — the same exception
+## the containment guard's `clipped` field carries).
+func _structural_violations(screen_id: String, screen_root: Control,
+		tree_rows: Array) -> Array[String]:
+	var clipped := {}
+	for row: Dictionary in tree_rows:
+		clipped[String(row["id"])] = bool(row.get("clipped"))
+	var out: Array[String] = []
+	var per_screen: Dictionary = RegistryLib._screens.get(screen_id, {})
+	for id: String in per_screen:
+		var rec: Dictionary = per_screen[id]
+		var ref: WeakRef = rec.get("control")
+		var control = ref.get_ref() if ref != null else null
+		if control == null:
+			continue
+		var node: Node = (control as Control).get_parent()
+		while node != null and node is Control and node != screen_root:
+			if node is Container:
+				var registered_wrapper := false
+				for other_id: String in per_screen:
+					var other: Dictionary = per_screen[other_id]
+					var oref: WeakRef = other.get("control")
+					var oc = oref.get_ref() if oref != null else null
+					if oc == node:
+						registered_wrapper = true
+						break
+				if node is ScrollContainer and (bool(clipped.get(id,
+						false)) or registered_wrapper):
+					node = node.get_parent()
+					continue
+				out.append("%s: %s chain crosses the Container %s"
+						% [id, node.get_class(),
+						_generate_path(node, screen_root)])
+			node = node.get_parent()
+	return out
+
+
+## The nest rule (the original nest_audit check, 1-tile slack): every
+## registered row's rect inside its registered parent's rect. Clipped
+## rows are skipped (scrolled list members legitimately extend past
+## their viewport's visible rect — the containment guard's convention).
+func _nest_violations(rows: Array) -> Array[String]:
+	var out: Array[String] = []
+	var by_id := {}
+	for row: Dictionary in rows:
+		by_id[row["id"]] = row
+	for row: Dictionary in rows:
+		if bool(row.get("clipped")):
+			continue
+		var pid: String = row.get("parent", "")
+		if pid.is_empty() or not by_id.has(pid):
+			continue
+		var c: Dictionary = row["rect_tiles"]
+		var pr: Dictionary = by_id[pid]["rect_tiles"]
+		var inside: bool = c.x >= pr.x - 1 and c.y >= pr.y - 1 \
+			and c.x + c.w <= pr.x + pr.w + 1 \
+			and c.y + c.h <= pr.y + pr.h + 1
+		if not inside:
+			out.append("%s (x%d y%d w%d h%d) outside %s (x%d y%d w%d h%d)"
+					% [row["id"], c.x, c.y, c.w, c.h, pid,
+					pr.x, pr.y, pr.w, pr.h])
+	return out
+
+
+## A short node path for the violation messages.
+func _generate_path(node: Node, stop: Node) -> String:
+	var path := String(node.name)
+	var walk: Node = node.get_parent()
+	while walk != null and walk != stop:
+		path = "%s/%s" % [String(walk.name), path]
+		walk = walk.get_parent()
+	return path
 
 
 ## Boots one screen, waits out the layout, writes its fragment.

@@ -52,7 +52,7 @@
       "h": 1,
       "w": 15,
       "x": 0,
-      "y": 27
+      "y": 28
     },
     "career.header": {
       "h": 1,
@@ -82,7 +82,7 @@
       "h": 1,
       "w": 15,
       "x": 0,
-      "y": 27
+      "y": 28
     },
     "identity": {
       "h": 3,
@@ -142,7 +142,7 @@
       "h": 1,
       "w": 15,
       "x": 0,
-      "y": 24
+      "y": 25
     },
     "relations.header": {
       "h": 1,
@@ -154,7 +154,7 @@
       "h": 1,
       "w": 15,
       "x": 0,
-      "y": 24
+      "y": 25
     },
     "relations.post": {
       "h": 1,
@@ -199,10 +199,10 @@
       "y": 0
     },
     "stat_columns.skill_column": {
-      "h": 12,
+      "h": 18,
       "w": 15,
       "x": 0,
-      "y": 6
+      "y": 0
     },
     "stat_columns.skill_column.header": {
       "h": 1,

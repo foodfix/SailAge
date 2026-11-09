@@ -55,7 +55,7 @@
       "y": 1
     },
     "header.title": {
-      "h": 1,
+      "h": 2,
       "w": 46,
       "x": 0,
       "y": 0
@@ -230,8 +230,8 @@
     },
     "rows.tournament.action": {
       "h": 2,
-      "w": 8,
-      "x": 50,
+      "w": 9,
+      "x": 49,
       "y": 0
     },
     "rows.tournament.label": {
