@@ -60,6 +60,10 @@ const UiMotionLib := preload("res://scripts/ui_motion.gd")
 ## §4.8 Skin coverage (amended 2026-11-05): the texture-mode seam the
 ## minimap frame reads (walnut+gold frame vs the navy fallback frame).
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the HUD's chrome registers under the
+## absolute-tile layout registry — the data rows in the `world` screen table
+## ARE the layout; the authored tile constants below are their source.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 ## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
 ## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
@@ -84,11 +88,13 @@ const STORM_FLASH_HALF_SECONDS := STORM_FLASH_CYCLE_SECONDS * 0.5
 ## Phase-6 indicator layout (§4.5): the wind arrow + caption share the weather
 ## glyph's row under the minimap; the current arrow + caption share the
 ## minimap-title row. Offsets are relative to the weather label / title label
-## positions that [_apply_minimap_rect] owns.
+## positions that [_apply_minimap_rect] owns. (Phase 12: the captions are
+## registered elements — `wind` at tile (5,8), `current` at (6,9) — so the
+## caption offsets re-author the captured tile rects in px.)
 const WIND_ARROW_OFFSET := Vector2(96, 12)
-const WIND_CAPTION_OFFSET := Vector2(108, 0)
+const WIND_CAPTION_OFFSET := Vector2(128, 0)
 const CURRENT_ARROW_OFFSET := Vector2(104, 12)
-const CURRENT_CAPTION_OFFSET := Vector2(120, 0)
+const CURRENT_CAPTION_OFFSET := Vector2(160, 0)
 ## Compass-arrow placeholder size in px (drawn, no texture — §4.8).
 const ARROW_LENGTH := 14.0
 ## The wind/current arrow *sprites* are 32×32 (§4.8.8: icons render 1× inline);
@@ -121,7 +127,7 @@ signal explore_requested
 @onready var _minimap: Control = $Minimap
 @onready var _minimap_title: Label = $MinimapTitle
 @onready var _weather_label: Label = $Weather
-@onready var _toast: PanelContainer = $Toast
+@onready var _toast: Panel = $Toast
 @onready var _toast_label: Label = $Toast/ToastLabel
 @onready var _modal_host: Control = $ModalHost
 @onready var _explore_hint: Label = $ExploreHint
@@ -268,6 +274,48 @@ func _ready() -> void:
 	if tree != null and not tree.process_frame.is_connected(_on_process_frame):
 		tree.process_frame.connect(_on_process_frame)
 
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): every chrome element registers its
+	# hierarchical id, then the activation applies the `world` screen table
+	# (the authored tile constants above are the data rows' source, so the
+	# apply reproduces today's look exactly).
+	_register_layout_ids()
+	RegistryLib.screen_active("world", self)
+
+
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the HUD's registered chrome — the two
+## bar bands, the flattened stat clusters (`hud.*` top, `status.*` bottom),
+## the minimap block and its captions, the toast funnel, and the Explore
+## affordance. The modal host is plumbing (no id); the alloc badge is an
+## authored overlay on the intel button (its pin (-22,-6) cannot be a data
+## row — parent-relative tiles are non-negative).
+func _register_layout_ids() -> void:
+	RegistryLib.register("world", _top_bar, "top_bar")
+	RegistryLib.register("world", _day_label.get_parent() as Control, "hud")
+	RegistryLib.register("world", _day_label, "hud.day")
+	RegistryLib.register("world", _calendar_label, "hud.calendar")
+	RegistryLib.register("world", _gold_label, "hud.gold")
+	RegistryLib.register("world", _morale_label, "hud.morale")
+	RegistryLib.register("world", _area_label, "hud.area")
+	RegistryLib.register("world", _intel_button, "hud.intel", {"role": "button"})
+	RegistryLib.register("world", _bottom_bar, "bottom_bar")
+	RegistryLib.register(
+		"world", _provisions_label.get_parent() as Control, "status")
+	RegistryLib.register("world", _provisions_label, "status.provisions")
+	RegistryLib.register("world", _water_label, "status.water")
+	RegistryLib.register("world", _crew_label, "status.crew")
+	RegistryLib.register("world", _cargo_label, "status.cargo")
+	RegistryLib.register("world", _speed_label, "status.speed")
+	RegistryLib.register("world", _trim_chip, "status.trim")
+	RegistryLib.register("world", _minimap, "minimap")
+	RegistryLib.register("world", _weather_label, "weather")
+	RegistryLib.register("world", _wind_label, "wind")
+	RegistryLib.register("world", _minimap_title, "minimap_title")
+	RegistryLib.register("world", _current_label, "current")
+	RegistryLib.register("world", _toast, "toast", {"role": "panel"})
+	RegistryLib.register("world", _toast_label, "toast.label")
+	RegistryLib.register("world", _explore_hint, "explore_hint")
+	RegistryLib.register("world", _explore_button, "explore", {"role": "button"})
+
 
 ## §4.12.2 (W6-A): the alloc_pending badge has no EventBus signal (the
 ## level-up grant happens deep in `Character.award_xp`, and spending happens
@@ -282,9 +330,12 @@ func _on_process_frame() -> void:
 		_apply_alloc_badge()
 
 
-## §4.8.8: one 32px icon inline before a readout label, inserted in the same
-## bar row (HBox). Registry miss ⇒ nothing is added — the text-only readout
-## is the fallback (§4.9 icon params; the registry fills at the W4 merges).
+## §4.8.8: one 32px icon inline before a readout label, placed at the
+## label's authored 2-tile icon slot (the slot is reserved left of the
+## label in the flattened cluster — the icon is an authored overlay child,
+## never a flow sibling). Registry miss ⇒ nothing is added — the
+## text-only readout is the fallback (§4.9 icon params; the registry fills
+## at the W4 merges).
 func _attach_resource_icon(icon_id: String, label: Control) -> void:
 	# §4.8 hero-64 display rule: the resource icon renders the 64 hero
 	# 1:1 (a hero miss keeps the inline 32 — the flat fallback chain).
@@ -298,12 +349,14 @@ func _attach_resource_icon(icon_id: String, label: Control) -> void:
 	icon.texture = tex
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.custom_minimum_size = Vector2(RESOURCE_ICON_PX, RESOURCE_ICON_PX)
-	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var row := label.get_parent() as Container
+	# The authored slot: one 2-tile box directly left of the label, inside
+	# the label's 64px row (the cluster is absolutely placed).
+	icon.size = Vector2(RESOURCE_ICON_PX, RESOURCE_ICON_PX)
+	icon.position = label.position \
+		+ Vector2(-RESOURCE_ICON_PX, (label.size.y - RESOURCE_ICON_PX) * 0.5)
+	var row := label.get_parent() as Control
 	row.add_child(icon)
-	row.move_child(icon, label.get_index())
 
 
 ## The badge: a dot + count on the intel button (§4.12.2, amended 2026-11-03),
@@ -989,20 +1042,38 @@ func _on_port_entered(_port_id: String) -> void:
 
 # --- Minimap (docs/20-* §4.12, docs/80-* §4.5) ----------------------------
 
-## Places the fixed 256×192 box (16px margin under the 40px top bar, §4.8) and
-## the weather/title captions underneath it. Phase 4 has one mode: the crop
-## (`M`'s 512×384 enlarged view is retired, `80-*` §4.3).
+## Places the fixed 256×192 box (the minimap block is an authored tile
+## cluster: box `minimap` at tile (1,2), the weather/title captions and the
+## Phase-6 wind/current indicator rows beneath it — §4.8, §4.5, `20-*`
+## §4.12). Phase 4 has one mode: the crop (`M`'s 512×384 enlarged view is
+## retired, `80-*` §4.3). Phase 12: when the `world` screen table is
+## committed, the registry owns these rects — the authored constants only
+## run on the unmanaged path (pre-assembly), so a studio edit to a data row
+## is never stomped by a locale rebind.
 func _apply_minimap_rect() -> void:
 	var size := MINIMAP_SIZE
-	_minimap.size = size
-	_minimap.position = Vector2(PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN)
-	_weather_label.position = _minimap.position + Vector2(0, size.y + PaletteLib.BASE_UNIT)
-	_minimap_title.position = _weather_label.position + Vector2(0, 24)
 	_minimap_title.text = I18n.t_key("world.minimap")
+	if _layout_managed():
+		# The registry owns these rects once the table ships — text-only
+		# rebind here (a studio edit to a data row is never stomped).
+		return
+	_minimap.size = size
+	_minimap.position = Vector2(PaletteLib.CHROME_TILE,
+		PaletteLib.TOP_BAR_H)
+	_weather_label.position = _minimap.position \
+		+ Vector2(0, size.y)
+	_minimap_title.position = _weather_label.position \
+		+ Vector2(0, PaletteLib.CHROME_TILE)
 	# Phase-6 §2.9 captions ride the same two rows (the weather row and the
 	# title row), so the whole indicator block moves with the minimap box.
 	_wind_label.position = _weather_label.position + WIND_CAPTION_OFFSET
 	_current_label.position = _minimap_title.position + CURRENT_CAPTION_OFFSET
+
+
+## True when the committed `ui_layout` table carries a `world` screen (the
+## registry owns the HUD's rects then — docs/10-* §4.23).
+func _layout_managed() -> bool:
+	return not RegistryLib._screen_data("world").is_empty()
 
 
 ## **Phase-4 compatibility shim.** The enlarged `M` minimap is gone (`80-*`

@@ -765,7 +765,12 @@ func _test_real_settings_symbol() -> void:
 		"the real static exists and defaults OFF")
 	# Live-follow through V's OWN write path (the instance method that assigns
 	# the static): `Script.get` must reflect it in this engine version.
-	var panel_view = panel.new()
+	# (Phase 12 W2-C: instanced through the SCENE — a bare `Script.new()` never
+	# runs `_ready`, so the rebuild's @onready nodes were nil and every
+	# rebuild() call spilled two script errors.)
+	var panel_view: Control = (load(
+		"res://scenes/ui_shared/settings_panel.tscn") as PackedScene).instantiate()
+	add_child(panel_view)
 	panel_view.apply_debug_overlays(true)
 	_check(chart.debug_available() == true,
 		"the real S19 row ON (via apply_debug_overlays) enables the debug gate")
@@ -786,6 +791,7 @@ func _test_real_settings_symbol() -> void:
 	_check(not chart.omniscient_on(),
 		"the real row off: `D` is ignored again")
 	chart.close_chart()
+	panel_view.queue_free()
 
 
 # --- 9. Redraw-trigger discipline (§2.12: no per-frame work) -----------------
@@ -896,9 +902,19 @@ func _test_legend_panel_and_lanes() -> void:
 			"no full-rect ColorRect child masks the root draw (%s)" % child.name)
 	# The panel is pinned to its §4.6 rect (width == DEBUG_PANEL_W) and scrolls
 	# instead of growing (grow_* = BEGIN would push it over the Close button).
-	var panel: PanelContainer = chart.get_node("DebugPanel")
-	_check(absf(-panel.offset_left - 16.0 - float(chart.DEBUG_PANEL_W)) < 0.01,
-		"the panel's left offset matches DEBUG_PANEL_W (%d)" % int(-panel.offset_left))
+	var panel: Panel = chart.get_node("DebugPanel")
+	# Phase 12 re-pin (the W2-C absolute layout): the side legend's rect is
+	# the data row (the authored offset is gone) — the pinned guarantee is
+	# the same: the panel reserves its DEBUG_PANEL_W band on the right edge
+	# (tile-quantized), so the world shrinks left of it.
+	_check(absf(panel.size.x - float(chart.DEBUG_PANEL_W))
+			< float(PaletteLib.CHROME_TILE) * 0.5,
+		"the panel's width matches DEBUG_PANEL_W (%d)" % int(panel.size.x))
+	_check(panel.position.x + panel.size.x
+			>= chart.get_viewport_rect().size.x
+				- float(PaletteLib.CHROME_TILE) * 0.5 - 0.01,
+		"the panel hugs the viewport's right edge (%s)"
+			% str(panel.position + panel.size))
 	var scroll: ScrollContainer = panel.get_node("Scroll")
 	_check(scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
 		"the side legend scrolls vertically instead of overflowing the panel")

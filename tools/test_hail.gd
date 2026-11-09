@@ -151,12 +151,16 @@ func _options_by_id(fleet: Dictionary) -> Dictionary:
 
 
 ## True when any Label under `row` renders `text` (the terms lines).
+## Phase 12 (the W2-C absolute layout): the terms lines are `rows` list
+## rows of their own beneath the option's button row, so the search walks
+## the content subtree (the guarantee is unchanged: the terms text renders).
 func _row_has_terms(row: Node, text: String) -> bool:
-	var found := false
+	if (row is Label) and str(row.text) == text:
+		return true
 	for child in row.get_children():
-		if child is Label and str(child.text) == text:
-			found = true
-	return found
+		if _row_has_terms(child, text):
+			return true
+	return false
 
 
 func _inject_cards() -> void:
@@ -634,33 +638,31 @@ func _test_modal() -> void:
 	modal.call("setup", fleet)
 
 	_check(modal.call("is_open"), "the modal opens over the hail")
-	_check(str((modal.get_node("Center/Panel/Margin/Body/Title") as Label).text) \
+	_check(str((modal.get_node("Panel/Title") as Label).text) \
 		== I18n.fmt("hail.title", {"name": "Walter Selwyn"}),
 		"the title is hail.title with the identified captain name")
-	var content := modal.get_node("Center/Panel/Margin/Body/Scroll/Content")
+	var content := modal.get_node("Panel/Scroll/Content")
 	for option_id in ["ask_rumours", "buy_supplies", "intimidate", "befriend"]:
 		_check(content.get_node_or_null("Row_%s" % option_id) != null,
 			"the %s row renders" % option_id)
 	var supplies_row := content.get_node("Row_buy_supplies")
-	_check(supplies_row.get_node_or_null("Line/StepMinus") != null
-		and supplies_row.get_node_or_null("Line/StepPlus") != null
-		and supplies_row.get_node_or_null("Line/Qty") != null,
+	_check(supplies_row.get_node_or_null("StepMinus") != null
+		and supplies_row.get_node_or_null("StepPlus") != null
+		and supplies_row.get_node_or_null("Qty") != null,
 		"the supply row carries the [- qty +] stepper")
 	_check(int(modal.call("staged_qty")) == 0, "the stepper starts at 0")
 
 	# Terms render from the authored keys, inline (80-* §4.10.2): the intel
 	# terms at stance ≥ +2, the ×1.5 terms always.
-	_check(_row_has_terms(content.get_node("Row_ask_rumours"),
-		I18n.t_key("hail.rumours.intel_terms")),
+	_check(_row_has_terms(content, I18n.t_key("hail.rumours.intel_terms")),
 		"the rumours row renders the intel terms at stance ≥ +2")
-	_check(_row_has_terms(content.get_node("Row_buy_supplies"),
-		I18n.t_key("hail.supplies.terms")),
+	_check(_row_has_terms(content, I18n.t_key("hail.supplies.terms")),
 		"the supply row renders the ×1.5 terms")
 
 	modal.call("_on_step", 10)
 	_check(int(modal.call("staged_qty")) == 10,
 		"a +10 step stages 10 bundles")
-	_check(str((supplies_row.get_node("Line/Cost") as Label).text) == "45g",
+	_check(str((supplies_row.get_node("Cost") as Label).text) == "45g",
 		"the cost caption shows the ×1.5 bundle total (45g)")
 
 	# Buying through the modal moves state only via the funnel.
@@ -720,7 +722,7 @@ func _test_modal() -> void:
 	modal4.call("setup", used_fleet)
 	modal4.call("_on_option_pressed", HailOptionsLib.OPTION_BEFRIEND)
 	var befriend_button: Button = modal4.get_node(
-		"Center/Panel/Margin/Body/Scroll/Content/Row_befriend/Line/Action_befriend")
+		"Panel/Scroll/Content/Row_befriend/Action_befriend")
 	_check(not modal4.call("is_showing_results") and befriend_button.disabled,
 		"a refused befriend re-renders the options with the row grayed out")
 	modal4.call("close")
@@ -733,14 +735,11 @@ func _test_modal() -> void:
 	modal5.call("setup", _fleet("coaster", coaster_id,
 		{"cargo": {"cloth": 8}}))
 	var content5: Node = modal5.get_node(
-		"Center/Panel/Margin/Body/Scroll/Content")
+		"Panel/Scroll/Content")
 	_check(content5.get_node_or_null("Row_buy_supplies") != null,
 		"a coaster's modal offers the supplies row (the role gate is trader AND coaster)")
-	var note_found := false
-	for child in content5.get_children():
-		if child is Label and str(child.text) == I18n.t_key("hail.coaster_note"):
-			note_found = true
-	_check(note_found, "a coaster's modal renders hail.coaster_note")
+	_check(_row_has_terms(content5, I18n.t_key("hail.coaster_note")),
+		"a coaster's modal renders hail.coaster_note")
 
 	# Hostile determinism: predict the modal's own seeded draw, then assert
 	# the outcome and the signal order (closed BEFORE hostile — the battle

@@ -75,6 +75,10 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## shared kit's band vocabulary (the no-per-screen-styling channel, §4.9).
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the chart's chrome registers under the
+## absolute-tile registry — the `chart` screen table IS the layout; the
+## debug side legend's rows are the `panel_rows` list block.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -199,15 +203,16 @@ const HIDDEN_ROW_ALPHA := 0.35
 @onready var _title: Label = $TopBar/Title
 @onready var _close: Button = $TopBar/Close
 @onready var _bottom_bar: ColorRect = $BottomBar
-@onready var _legend_note: Label = $BottomBar/Legend/Explored
-@onready var _legend_port: Label = $BottomBar/Legend/Ports
-@onready var _legend_fleet: Label = $BottomBar/Legend/Fleet
-@onready var _legend_discovery: Label = $BottomBar/Legend/Discoveries
-@onready var _legend_wind: Label = $BottomBar/Legend/Wind
-@onready var _legend_current: Label = $BottomBar/Legend/Current
-@onready var _legend_ice: Label = $BottomBar/Legend/Ice
-@onready var _debug_panel: PanelContainer = $DebugPanel
-@onready var _debug_rows: VBoxContainer = $DebugPanel/Scroll/Rows
+@onready var _legend_note: Label = $BottomBar/Explored
+@onready var _legend_port: Label = $BottomBar/Ports
+@onready var _legend_fleet: Label = $BottomBar/Fleet
+@onready var _legend_discovery: Label = $BottomBar/Discoveries
+@onready var _legend_wind: Label = $BottomBar/Wind
+@onready var _legend_current: Label = $BottomBar/Current
+@onready var _legend_ice: Label = $BottomBar/Ice
+@onready var _debug_panel: Panel = $DebugPanel
+@onready var _debug_scroll: ScrollContainer = $DebugPanel/Scroll
+@onready var _debug_rows: Control = $DebugPanel/Scroll/Rows
 
 ## The whole-world image at grid resolution (4320×2160, one pixel per tile).
 ## Kept so [method world_pixel_color] can answer "what does the chart show for
@@ -315,6 +320,31 @@ func _ready() -> void:
 	EventBus.day_advanced.connect(_on_day_advanced)
 	_bind_labels()
 	_relayout()
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the chart's chrome registers under
+	# the absolute-tile registry; the activation applies the `chart` table at
+	# [method open_chart] (the open path — the screen boots hidden).
+	_register_layout_ids()
+
+
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the chart's registered chrome — the
+## two bars, the header title + close button, the bottom legend row
+## (flattened: the seven caption labels hang directly off the bar band at
+## their authored tiles), and the debug side legend's panel. The legend's
+## scroll viewport and its content node are plumbing (no ids); the legend
+## rows register as the `panel_rows` list where they build.
+func _register_layout_ids() -> void:
+	RegistryLib.register("chart", _top_bar, "top_bar")
+	RegistryLib.register("chart", _title, "top_bar.title")
+	RegistryLib.register("chart", _close, "toolbar.back", {"role": "button"})
+	RegistryLib.register("chart", _bottom_bar, "bottom_bar")
+	RegistryLib.register("chart", _legend_note, "legend.hint")
+	RegistryLib.register("chart", _legend_port, "legend.port")
+	RegistryLib.register("chart", _legend_fleet, "legend.fleet")
+	RegistryLib.register("chart", _legend_discovery, "legend.discovery")
+	RegistryLib.register("chart", _legend_wind, "legend.wind")
+	RegistryLib.register("chart", _legend_current, "legend.current")
+	RegistryLib.register("chart", _legend_ice, "legend.ice")
+	RegistryLib.register("chart", _debug_panel, "debug_panel", {"role": "panel"})
 
 
 # --- Hosting ---------------------------------------------------------------
@@ -361,6 +391,9 @@ func open_chart() -> void:
 	add_to_group(MODAL_GROUP)
 	_open_ms = float(Time.get_ticks_usec() - started) / 1000.0
 	_close.grab_focus()
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the activation applies the
+	# `chart` table (idempotent) and notifies the bridge.
+	RegistryLib.screen_active("chart", self)
 	queue_redraw()
 
 
@@ -1837,6 +1870,7 @@ func _rebuild() -> void:
 		_intel_markers = []
 		_network = {}
 		_refresh_panel()
+		RegistryLib.apply_layout("chart")
 		queue_redraw()
 		return
 	_relayout()
@@ -1873,6 +1907,10 @@ func _rebuild() -> void:
 		_network = {}
 
 	_refresh_panel()
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the rebuild path re-applies the
+	# data layout (idempotent — new legend rows re-register where they
+	# build, and their static children take their rect rows again).
+	RegistryLib.apply_layout("chart")
 	queue_redraw()
 
 
@@ -2312,6 +2350,11 @@ func debug_legend_texts() -> Array:
 # --- Debug side legend (`80-*` §4.6: lane ids + role names in a side legend) -
 
 ## Creates the panel rows once (structure is static; values refresh per build).
+## Phase 12 (docs/80-UI-UX.md §4.8.9): each row is a plain `Control` list
+## member of the `panel_rows` block — row *i* at `list_rect("chart",
+## "panel_rows", i)` (authored fallback `(0, i·32, 320, 32)` while the table
+## is unshipped), its children absolutely placed inside the row. The scroll
+## viewport and content node stay unregistered plumbing.
 func _ensure_panel_rows() -> void:
 	if not _panel_rows.is_empty():
 		return
@@ -2339,15 +2382,44 @@ func _ensure_panel_rows() -> void:
 	_panel_rows["neutral"] = _panel_swatch_row(KEY_LEGEND_NEUTRAL,
 		ChartViewLib.port_neutral_color())
 	_panel_rows["hover"] = _panel_row("", false)  # value-only tooltip row
+	# The content node stacks to the list block's computed extent — a
+	# custom minimum, so the ScrollContainer's own layout keeps it exactly
+	# that tall (a manual `size` would be overwritten by the viewport).
+	_debug_rows.custom_minimum_size = Vector2(
+		float(PANEL_ROW_W * PaletteLib.CHROME_TILE),
+		float(_panel_rows.size() * PANEL_ROW_H * PaletteLib.CHROME_TILE))
 	# §4.6 interactive legend rows (amended 2026-11-01): a click shows/hides
 	# what the row depicts. The children ignore the mouse, so the row box
 	# receives the whole click.
+	for index in range(_panel_rows.size()):
+		var row_id: String = _panel_rows.keys()[index]
+		_place_panel_row(row_id, index)
 	for row_id in _panel_rows:
 		if not _row_clickable(str(row_id)):
 			continue
 		var box: Control = _panel_rows[row_id]["box"]
 		box.mouse_filter = Control.MOUSE_FILTER_STOP
 		box.gui_input.connect(_on_row_gui_input.bind(str(row_id)))
+
+
+## The `panel_rows` list block's row geometry, in tiles (authored — the
+## capture records them as the block's base/row_h/viewport).
+const PANEL_ROW_W := 10
+const PANEL_ROW_H := 1
+
+
+## Places row `index` at its list slot (the builder-owned placement).
+func _place_panel_row(row_id: String, index: int) -> void:
+	var rect := RegistryLib.list_rect("chart", "panel_rows", index)
+	if rect == Rect2():
+		# Unshipped table: the authored fallback mirrors the block
+		# (base (0,0,10,1), row_h 1).
+		var tile := float(PaletteLib.CHROME_TILE)
+		rect = Rect2(0.0, float(index * PANEL_ROW_H) * tile,
+			float(PANEL_ROW_W * tile), float(PANEL_ROW_H * tile))
+	var row: Control = _panel_rows[row_id]["box"]
+	row.position = rect.position
+	row.size = rect.size
 
 
 ## The row ids a click may toggle (§4.6 interactive legend rows): the four
@@ -2435,54 +2507,78 @@ static func _is_string_key(text: String) -> bool:
 
 
 ## A section header row (accent dot absent; the theme ink — the ACCENT tint
-## retired with the sweep).
+## retired with the sweep). Phase 12: one plain row node, the label
+## absolutely placed; both register (row = `panel_rows` list member).
 func _panel_section(text_key: String) -> Dictionary:
+	var row := Control.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var label := Label.new()
 	label.text = I18n.t_key(text_key)
-	_debug_rows.add_child(label)
-	return {"label": label, "value": label, "swatch": null, "box": null,
+	label.position = Vector2(16, 0)
+	label.size = Vector2(288, 32)
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	_debug_rows.add_child(row)
+	var row_id := "sec_" + text_key.trim_prefix("debug.")
+	RegistryLib.register("chart", row, "panel_rows." + row_id,
+		{"list": "panel_rows", "data_ordered": true})
+	RegistryLib.register("chart", label, "panel_rows.%s.label" % row_id)
+	return {"label": label, "value": label, "swatch": null, "box": row,
 		"key": text_key}
 
 
 ## A label + state-dot row (the dot is `ACCENT` when the row's thing is on).
 ## An empty key makes a value-only row (the hover tooltip). The label carries
 ## the theme ink; the state value reads as secondary text (the Dim variation).
+## Phase 12: flattened row internals — dot/label/value at fixed slots.
 func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
-	var box := HBoxContainer.new()
-	var dot := ColorRect.new()
-	dot.custom_minimum_size = Vector2(8, 8)
-	dot.color = PaletteLib.PANEL_LINE
-	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := Control.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var dot: ColorRect = null
 	if with_dot:
-		box.add_child(dot)
+		dot = ColorRect.new()
+		dot.position = Vector2(2, 12)
+		dot.size = Vector2(8, 8)
+		dot.color = PaletteLib.PANEL_LINE
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(dot)
 	var label := Label.new()
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if _is_string_key(text_key):
 		label.text = I18n.t_key(text_key)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(label)
+	label.position = Vector2(16, 0)
+	label.size = Vector2(208, 32)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
 	var value := Label.new()
 	value.theme_type_variation = "Dim"
 	value.clip_text = true
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	box.add_child(value)
-	_debug_rows.add_child(box)
+	value.position = Vector2(256, 0)
+	value.size = Vector2(64, 32)
+	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(value)
+	_debug_rows.add_child(row)
+	_register_panel_row_parts(row, label, value, dot, text_key,
+			bool(with_dot))
 	return {"label": label, "value": value, "swatch": dot if with_dot else null,
-		"box": box, "key": text_key}
+		"box": row, "key": text_key}
 
 
 ## A color-swatch + text row (lane ids, role letters, shape colors). `text`
 ## is either a data literal (lane id, role letter) or an i18n key.
 func _panel_swatch_row(text: String, color: Color) -> Dictionary:
-	var box := HBoxContainer.new()
+	var row := Control.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var swatch := ColorRect.new()
-	swatch.custom_minimum_size = Vector2(8, 8)
+	swatch.position = Vector2(2, 12)
+	swatch.size = Vector2(8, 8)
 	swatch.color = color
-	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(swatch)
+	row.add_child(swatch)
 	var label := Label.new()
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -2490,16 +2586,42 @@ func _panel_swatch_row(text: String, color: Color) -> Dictionary:
 		label.text = I18n.t_key(text)
 	else:
 		label.text = text
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(label)
+	label.position = Vector2(16, 0)
+	label.size = Vector2(208, 32)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
 	var value := Label.new()
 	value.theme_type_variation = "Dim"
 	value.clip_text = true
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	box.add_child(value)
-	_debug_rows.add_child(box)
-	return {"label": label, "value": value, "swatch": swatch, "box": box,
+	value.position = Vector2(256, 0)
+	value.size = Vector2(64, 32)
+	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(value)
+	_debug_rows.add_child(row)
+	_register_panel_row_parts(row, label, value, swatch, text, true)
+	return {"label": label, "value": value, "swatch": swatch, "box": row,
 		"key": text}
+
+
+## The `panel_rows` registration for one built row: the row node under its
+## data-derived id (list member) and its flattened parts (label/value/dot)
+## under static ids — identical rect rows for every row (the parts live in
+## the uniform row slot).
+func _register_panel_row_parts(row: Control, label: Label, value: Label,
+		dot: ColorRect, text: String, with_dot: bool) -> void:
+	var row_id := "row_%d" % _panel_row_seq
+	_panel_row_seq += 1
+	RegistryLib.register("chart", row, "panel_rows." + row_id,
+		{"list": "panel_rows", "data_ordered": true})
+	RegistryLib.register("chart", label, "panel_rows.%s.label" % row_id)
+	RegistryLib.register("chart", value, "panel_rows.%s.value" % row_id)
+	if dot != null and with_dot:
+		RegistryLib.register("chart", dot, "panel_rows.%s.dot" % row_id)
+
+
+## Sequence counter for data-derived row ids (unique per chart instance).
+var _panel_row_seq := 0
 
 
 ## Refreshes the panel from the last build's caches (locale-safe: every i18n

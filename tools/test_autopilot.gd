@@ -623,7 +623,7 @@ func _test_hud_bar() -> void:
 	hud.refresh()
 	_check(hud.is_showing(), "the HUD bar shows while appointed")
 	var port: Dictionary = DataLoader.get_port("seville")
-	var text: String = hud.get_node("Row/Info").text
+	var text: String = hud.get_node("Info").text
 	_check(text.contains(I18n.t(port.get("name", {}))),
 		"the bar names the destination (%s)" % I18n.t(port.get("name", {})))
 	_check(text == I18n.fmt("sail.autopilot.hud.bar",
@@ -633,12 +633,12 @@ func _test_hud_bar() -> void:
 	# zh flip: the same read re-renders in the other locale.
 	I18n.set_locale("zh")
 	hud.refresh()
-	_check(hud.get_node("Row/Info").text.contains(
+	_check(hud.get_node("Info").text.contains(
 		I18n.t(port.get("name", {}))),
 		"the bar re-renders on a locale flip (zh)")
 	I18n.set_locale("en")
 	# The cancel button is a manual cancel.
-	hud.get_node("Row/Cancel").pressed.emit()
+	hud.get_node("Cancel").pressed.emit()
 	_check(not AutopilotLib.appointed() and not hud.is_showing(),
 		"the bar's [取消委任] is a manual cancel: key cleared, bar hides")
 	hud.free()

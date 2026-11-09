@@ -1461,9 +1461,12 @@ func _test_hud_signal_only() -> void:
 	_check(hud.minimap_crop_tiles() == Vector2i(128, 96),
 		"the minimap is a 128×96-tile crop at 2 px/tile (got %s)"
 		% str(hud.minimap_crop_tiles()))
-	_check(minimap.position == Vector2(PaletteLib.MARGIN,
-		PaletteLib.TOP_BAR_H + PaletteLib.MARGIN),
-		"the crop keeps its fixed under-the-top-bar position (got %s)"
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the minimap block is an authored
+	# tile cluster — the box sits at tile (1,2), directly under the 2-tile
+	# top bar (the 16px-margin pin quantizes onto the chrome grid).
+	_check(minimap.position == Vector2(PaletteLib.CHROME_TILE,
+		PaletteLib.TOP_BAR_H),
+		"the crop keeps its authored tile position under the top bar (got %s)"
 		% str(minimap.position))
 	hud.toggle_minimap()
 	_check(minimap.size == Vector2(256, 192) and not hud.is_minimap_enlarged(),

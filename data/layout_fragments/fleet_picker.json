@@ -1,0 +1,141 @@
+{
+  "elements": {
+    "dim": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "fleet_rows.0.flag": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "fleet_rows.0.name": {
+      "h": 1,
+      "w": 4,
+      "x": 2,
+      "y": 0
+    },
+    "fleet_rows.0.role": {
+      "h": 1,
+      "w": 1,
+      "x": 1,
+      "y": 0
+    },
+    "fleet_rows.0.role_letter": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "fleet_rows.0.tier": {
+      "h": 1,
+      "w": 1,
+      "x": 6,
+      "y": 0
+    },
+    "fleet_rows.0.verb.attack": {
+      "h": 2,
+      "w": 3,
+      "x": 13,
+      "y": 0
+    },
+    "fleet_rows.0.verb.inspect": {
+      "h": 2,
+      "w": 3,
+      "x": 7,
+      "y": 0
+    },
+    "fleet_rows.0.verb.talk": {
+      "h": 2,
+      "w": 3,
+      "x": 10,
+      "y": 0
+    },
+    "fleet_rows.1.flag": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "fleet_rows.1.name": {
+      "h": 1,
+      "w": 4,
+      "x": 2,
+      "y": 0
+    },
+    "fleet_rows.1.role": {
+      "h": 1,
+      "w": 1,
+      "x": 1,
+      "y": 0
+    },
+    "fleet_rows.1.role_letter": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "fleet_rows.1.tier": {
+      "h": 1,
+      "w": 1,
+      "x": 6,
+      "y": 0
+    },
+    "fleet_rows.1.verb.attack": {
+      "h": 2,
+      "w": 3,
+      "x": 13,
+      "y": 0
+    },
+    "fleet_rows.1.verb.inspect": {
+      "h": 2,
+      "w": 3,
+      "x": 7,
+      "y": 0
+    },
+    "fleet_rows.1.verb.talk": {
+      "h": 2,
+      "w": 3,
+      "x": 10,
+      "y": 0
+    },
+    "panel": {
+      "h": 13,
+      "w": 18,
+      "x": 21,
+      "y": 8
+    },
+    "panel.status": {
+      "h": 1,
+      "w": 16,
+      "x": 1,
+      "y": 10
+    },
+    "panel.title": {
+      "h": 1,
+      "w": 16,
+      "x": 1,
+      "y": 0
+    }
+  },
+  "lists": {
+    "fleet_rows": {
+      "base": {
+        "h": 2,
+        "w": 16,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 8,
+        "w": 16,
+        "x": 1,
+        "y": 1
+      }
+    }
+  }
+}

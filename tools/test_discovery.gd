@@ -676,9 +676,12 @@ func _test_minimap() -> void:
 	_check(hud.minimap_image_size() == Vector2i(256, 192),
 		"the cached image is the 256×192 crop, not the whole world (got %s)"
 		% str(hud.minimap_image_size()))
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the minimap block is an authored
+	# tile cluster — the box sits at tile (1,2), directly under the 2-tile
+	# top bar (the 16px-margin pin quantizes onto the chrome grid).
 	_check(hud.minimap_rect().position == Vector2(
-		PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN),
-		"minimap sits under the top bar at the 16px margin (got %s)"
+		PaletteLib.CHROME_TILE, PaletteLib.TOP_BAR_H),
+		"minimap sits at its authored tile (1,2) under the top bar (got %s)"
 		% str(hud.minimap_rect().position))
 	# The crop is centred on the fleet: 128 wide → origin = fleet.x − 64.
 	_check(hud.minimap_crop_origin() == OPEN_CELL - Vector2i(64, 48),

@@ -1,0 +1,117 @@
+{
+  "elements": {
+    "dim": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "panel": {
+      "h": 17,
+      "w": 15,
+      "x": 22,
+      "y": 8
+    },
+    "panel.ok": {
+      "h": 2,
+      "w": 4,
+      "x": 11,
+      "y": 14
+    },
+    "panel.title": {
+      "h": 1,
+      "w": 13,
+      "x": 1,
+      "y": 0
+    },
+    "rows.ask_rumours.action": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.befriend.action": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.buy_supplies.action": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.buy_supplies.cost": {
+      "h": 1,
+      "w": 2,
+      "x": 11,
+      "y": 0
+    },
+    "rows.buy_supplies.minus": {
+      "h": 2,
+      "w": 1,
+      "x": 6,
+      "y": 0
+    },
+    "rows.buy_supplies.plus": {
+      "h": 2,
+      "w": 1,
+      "x": 9,
+      "y": 0
+    },
+    "rows.buy_supplies.qty": {
+      "h": 1,
+      "w": 2,
+      "x": 7,
+      "y": 0
+    },
+    "rows.intimidate.action": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.portrait.bust": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "rows.terms_befriend.terms": {
+      "h": 2,
+      "w": 13,
+      "x": 0,
+      "y": 0
+    },
+    "rows.terms_rumours.terms": {
+      "h": 2,
+      "w": 13,
+      "x": 0,
+      "y": 0
+    },
+    "rows.terms_supplies.terms": {
+      "h": 2,
+      "w": 13,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "lists": {
+    "rows": {
+      "base": {
+        "h": 2,
+        "w": 13,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 12,
+        "w": 13,
+        "x": 1,
+        "y": 1
+      }
+    }
+  }
+}

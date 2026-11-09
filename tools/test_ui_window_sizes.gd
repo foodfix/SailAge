@@ -311,7 +311,7 @@ func _test_hail_modal() -> void:
 	await _settle()
 	modal.call("setup", _npc_fleet(captain))
 	await _settle()
-	var panel: Control = modal.get_node("Center/Panel")
+	var panel: Control = modal.get_node("Panel")
 	# The hail box hugs its content with the shared 400px cap (80-* edge-case
 	# table) — height by design; the width must never drift.
 	await assert_window_size_invariant(
@@ -532,7 +532,7 @@ func _test_fleet_picker() -> void:
 	var picker: Control = FleetPickerScene.instantiate()
 	_host.add_child(picker)
 	await _settle()
-	var panel: Control = picker.get_node("Center/Panel")
+	var panel: Control = picker.get_node("Panel")
 	picker.call("open_fleets", [_npc_fleet(captain)])
 	# A pick list grows with the fleets on the tile BY DESIGN (the master's
 	# sanctioned resizable window) — the width must hold; the mode swap
