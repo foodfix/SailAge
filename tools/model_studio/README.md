@@ -194,19 +194,52 @@ registry strips the family prefix).
 | GET | `/thumb/td/<label>/<deg>.png` | — | top-down ship rotation preview (PIL NEAREST, pinned degrees) |
 | GET | `/thumb/fx/<size>/<kind>` | — | wake previews: `anim.gif` (staged API gif) / `comp.png` (staged wake under the ship) / `shipped.png` (the committed family — in game now) |
 
-## Layout tab (Phase 11 — the visual UI-layout editor, 80-* §4.8.9)
+## Layout tab (Phase 12 — the v2 absolute-rect editor, 80-* §4.8.9)
 
 The **Layout** tab swaps the card grid for a live UI-layout editor:
 screen list + element tree on the left, the game's real viewport frame
-with the 32 px-tile grid on the canvas, the override inspector on the
-right, and the commit bar underneath.
+with the 32 px-tile grid on the canvas, the inspector on the right, and
+the commit bar underneath.
+
+- **The v2 model** — every static element IS an absolute rect:
+  `{x, y, w, h}` in chrome tiles, **parent-relative** (a child's tiles
+  address its registered parent's rect; top-level elements address the
+  60 × 34 canvas — `hello` carries the grid, 33.75 tiles rounded up, the
+  34th row's bottom 8 px are the sliver). `data/ui_layout.json` v2
+  `{version: 2, screens: {<screen>: {elements, lists}}}` IS the layout —
+  no code defaults underneath. The tree dump's `parent` id names the
+  registered parent whose rect bounds each element.
 
 - **Selection model (2026-11-09 user direction — the list is the only
   selection surface):** pick an element in the tree; the canvas then
-  renders ONLY that element's box (nothing selected — no boxes), and
-  that single box is the only thing the canvas can drag (free/anchored
-  move, `min_w`/`min_h` resize for container children). Canvas clicks
-  never select.
+  renders that element's single box (plus the locked list blocks below —
+  nothing else). Canvas clicks never select.
+
+- **Drag/resize, one path for all** — every element drags and resizes as
+  a rect: a drag sends `move {screen, id, x, y}`, the SE handle sends
+  `resize {screen, id, w, h}` (tiles; sends coalesce to one per 150 ms
+  and the trailing send flushes on release). The clamps are client-side
+  and mirror the game: the element cannot leave its registered parent's
+  rect (the tree's `parent` chain) and cannot shrink below its
+  `min_tiles`/`kids_tiles` floors. The Phase-11 child/free/anchored kind
+  split, the min-override dance, the sibling order and the edge anchors
+  are RETIRED — the game answers `retired_field` for them and the
+  studio never sends them (`kind` survives in the dump as inspector
+  wording only).
+
+- **List members are not rows** — a tree row carrying a non-empty
+  `list` renders as part of ONE hatched viewport block (labeled
+  `<list> · row_h`) spanning the block's viewport rect: no per-row
+  boxes, no drag/resize, and the block itself is not editable (the
+  `lists` data is builder-owned; rows stack at `base + i·row_h`). The
+  block rect comes from the session's committed `lists` data; without a
+  committed block it degrades to the member rows' union extent.
+
+- **Inspector** — x/y/w/h tile integers (shown and sent
+  parent-relative, the file's address space) + the sheet picker (the 7
+  assignable nine-patches, hidden for `plain`-role elements). Typed
+  values are pre-clamped like the drags; a `move` always carries both
+  `x` and `y`, a `resize` both `w` and `h`.
 
 - **Launch contract** — the game carries the bridge; the studio never
   launches Godot. Start the game with
@@ -220,27 +253,30 @@ right, and the commit bar underneath.
   whenever disconnected). Without the flag the game runs no listener.
 - **Protocol** — the browser connects DIRECTLY to the game's
   LayoutBridge; `server.py` never proxies WebSocket. The message table
-  is frozen verbatim in `docs/90-ARCHITECTURE.md` §5.7: `hello` /
-  `screen_changed` / `tree` / `frame` / `error` game→studio,
-  `get_tree` `get_frame` `move` `resize` `reorder` `assign_sheet`
-  `revert` `reset_screen` `commit` studio→game. Every edit is sent as
-  its §5.7 message; the game replies with a fresh `tree` + `frame` and
-  the tab re-renders. The wire discriminator rides under **both** `msg`
-  and `type` keys so either reader convention works (the frozen table
-  names messages, not envelope keys); edit payloads carry the §4.23
-  override key names (`x`, `y`, `w`, `h`, `min_w`, `min_h`, `order`,
-  `sheet`), and `reorder` carries the absolute sibling index. Anchors
-  have no live message (the frozen set has none) — the anchor dropdown
-  edits the session only and is applied from the committed file at game
-  restart.
-- **Session** — the edit session accumulates browser-side as
-  `{screen: {element_id: {…overrides}}}`, STARTING from the committed
-  `data/ui_layout.json` (fetched on tab open), so edits compose over
-  what is already committed. Per-element **Revert** drops that element's
-  override (and tells the bridge); **Reset screen** drops the screen's.
+  is frozen verbatim in `docs/90-ARCHITECTURE.md` §5.7 (Phase-12
+  amendment): `hello` (`grid` 60 × 34, `tile` 32) / `screen_changed` /
+  `tree` / `frame` / `error` game→studio — tree rows carry
+  `{id, kind, role, list, rect_tiles, sheet, locked, parent, clipped,
+  min_tiles, kids_tiles?}` (`rect_tiles` is screen-relative; a non-empty
+  `list` marks a dynamic-row member) — and `get_tree` `get_frame` `move`
+  `resize` `assign_sheet` `revert` `reset_screen` `commit`
+  studio→game. Every edit is sent as its §5.7 message; the game replies
+  with a fresh `tree` + `frame` (deferred one frame) and the tab
+  re-renders. The wire discriminator rides under **both** `msg` and
+  `type` keys so either reader convention works (the frozen table names
+  messages, not envelope keys).
+- **Session** — the edit session accumulates browser-side as the FULL
+  v2 document, STARTING from the committed `data/ui_layout.json`
+  (fetched on tab open), so edits compose over what is already
+  committed; a new element row is seeded with the element's full
+  current rect so every commit writes complete `{x, y, w, h}` rows.
+  Per-element **Revert** restores that element's session row to the
+  committed row (or drops the row this session created) and tells the
+  bridge — the data rect re-applies live; **Reset screen** does the
+  same for the screen's rows. The `lists` blocks ride along untouched.
 - **Single writer** — the game and its bridge never write files. The
   studio writes `data/ui_layout.json` and NOTHING else, and only behind
-  the validator gate: Commit POSTs the full table to
+  the validator gate: Commit POSTs the full v2 document to
   `/api/layout/commit`, the server serializes and runs a FULL
   `tools/validate_data.py` pass (all groups 1–14) against a staged
   `SAILAGE_DATA_ROOT` tree holding the candidate, and writes the real
@@ -248,16 +284,16 @@ right, and the commit bar underneath.
   `{ok: false, error: <FAIL text>}` and leaves the committed file
   byte-unchanged. Git add/commit stays with the user.
 - **Serialization rules** (10-* §4.23, deterministic bytes):
-  `json.dumps(layout, indent=2, sort_keys=True) + "\n"` — sorted keys,
-  2-space indent, trailing newline; `{}` serializes to exactly
-  `{}\n`. Tile integers only; the §8.9 group-14 rules (screen ids,
-  dotted element ids, key whitelist, grid bounds `x+w ≤ 60`,
-  `y+h ≤ 33`, `anchor` ⇒ no `y`) are enforced by the validator gate and
-  pre-clamped in the editor.
+  `json.dumps(doc, indent=2, sort_keys=True) + "\n"` — sorted keys,
+  2-space indent, trailing newline. Tile integers only; the §8.9
+  group-14 rules (the 32-screen set, dotted element ids, the
+  `{x, y, w, h, sheet}` key whitelist, canvas bounds `x + w ≤ 60`,
+  `y + h ≤ 34`, list blocks `{base, row_h, viewport}`) are enforced by
+  the validator gate and pre-clamped in the editor.
 - **Manual-suite reminder** — the studio cannot run Godot: after a
-  layout commit, run the port-screen locale layout suites (`zh` + `en`)
-  — the Commit banner under the bar says so too (the §4.8.9 both-locale
-  guard: a commit that clips either locale fails the suite).
+  layout commit, run the layout suites (`zh` + `en`) — the Commit
+  banner under the bar says so too (the §4.8.9 both-locale guard: a
+  commit that clips either locale fails the suite).
 
 ## UI
 

@@ -21,10 +21,12 @@ API:
   POST /api/accept           {job} — marks the current result accepted
   POST /api/prompt           {job, prompt} — persist a prompt edit alone
   GET  /api/status           worker state, queue, current job
-  GET  /api/layout/file      the committed data/ui_layout.json (+mtime, verdict)
-  POST /api/layout/commit    {layout} — serialize (10-* §4.23), validate in a
-                             full tools/validate_data.py pass over a staged
-                             tree, write ONLY on pass (the single-writer rule)
+  GET  /api/layout/file      the committed data/ui_layout.json (v2 doc,
+                             +mtime, verdict)
+  POST /api/layout/commit    {layout} — the FULL v2 document; serialize
+                             (10-* §4.23 bytes), validate in a full
+                             tools/validate_data.py pass over a staged
+                             tree, write ONLY on pass (single writer)
   GET  /thumb/<kind>/<job>   draft | raw | snapped PNG (cache-busting ?v=)
   GET  /thumb/td/<l>/<deg>   top-down rotation previews (NEAREST)
   GET  /thumb/fx/<ship>/<kind>  wake previews: anim.gif | comp.png | shipped.png
@@ -131,21 +133,22 @@ class Studio:
     def save_accepted(self, data: dict) -> None:
         self._write_json(self._json_path("accepted.json"), data)
 
-    # -- layout overrides (Phase 11 W5-D — 10-* §4.23, 80-* §4.8.9) ------
+    # -- layout (Phase 11 W5-D; the Phase-12 v2 doc — 10-* §4.23, --------
+    # 80-* §4.8.9) ---------------------------------------------------------
     # The studio is the SINGLE WRITER of data/ui_layout.json: the game
-    # and its bridge never touch the filesystem. Every commit is gated
-    # behind a full tools/validate_data.py pass (run IN-PROCESS-ladder
-    # style, the same subprocess mechanism the accept flows use for
-    # build_ui_art) over a staged SAILAGE_DATA_ROOT tree, so the real
-    # file is written ONLY on validator exit 0.
+    # and its bridge never touch the filesystem. The session document is
+    # the FULL v2 layout {version: 2, screens: {<screen>: {elements,
+    # lists}}}. Every commit is gated behind a full tools/validate_data.py
+    # pass (run as a subprocess over a staged SAILAGE_DATA_ROOT tree), so
+    # the real file is written ONLY on validator exit 0.
     LAYOUT_TIMEOUT_S = 240   # full validator pass ≈ 26 s; spec bound < 30 s
 
     def layout_path(self) -> str:
         return os.path.join(self.repo, "data", "ui_layout.json")
 
     def layout_file(self) -> dict:
-        """GET /api/layout/file — the committed override table text, its
-        mtime, and the last in-session commit-gate verdict. NEVER
+        """GET /api/layout/file — the committed v2 layout document text,
+        its mtime, and the last in-session commit-gate verdict. NEVER
         raises: a missing file degrades to the {content: null} shape."""
         path = self.layout_path()
         try:
@@ -157,14 +160,14 @@ class Studio:
                     "valid": self.layout_valid}
         return {"content": text, "mtime": mtime, "valid": self.layout_valid}
 
-    def commit_layout(self, table: dict) -> dict:
+    def commit_layout(self, doc: dict) -> dict:
         """POST /api/layout/commit — serialize EXACTLY per §4.23 (sorted
         keys, 2-space indent, trailing newline), gate the candidate
         behind the full validator pass, write ONLY on exit 0. Returns
         {ok: True, bytes: n} or {ok: False, error: text} — never raises,
         never a 500 (the registry-never-raises rule)."""
         try:
-            text = json.dumps(table, indent=2, sort_keys=True) + "\n"
+            text = json.dumps(doc, indent=2, sort_keys=True) + "\n"
         except (TypeError, ValueError) as exc:
             return {"ok": False, "error": f"serialize failed: "
                                           f"{type(exc).__name__}: {exc}"}
@@ -183,7 +186,7 @@ class Studio:
                                               f"{type(exc).__name__}: {exc}"}
         self.layout_valid = True
         log(f"layout committed: {len(data)} bytes, "
-            f"{len(table)} screen(s) — validator gate passed")
+            f"{len(doc.get('screens', {}))} screen(s) — validator gate passed")
         return {"ok": True, "bytes": len(data)}
 
     def _validate_layout_text(self, text: str) -> dict:
@@ -1886,21 +1889,34 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "job": job_id, "custom": bool(prompt)})
 
     def _layout_commit(self, data: dict) -> None:
-        """POST /api/layout/commit — the session table is the FULL
-        override object (the browser session starts from the committed
-        file, so edits compose); the server never merges. Always 200:
-        the gate verdict rides the body, never a 500."""
+        """POST /api/layout/commit — the session document is the FULL v2
+        layout {version: 2, screens: {<screen>: {elements, lists}}}
+        (10-* §4.23; the browser session starts from the committed file,
+        so edits compose); the server never merges. A cheap v2-shape
+        check runs BEFORE the ~30 s gate so a v1-shaped or partial body
+        fails fast with a named error; the validator remains the
+        authority. Always 200: the gate verdict rides the body, never
+        a 500."""
         layout = data.get("layout")
         if layout is None:
             self._json(200, {"ok": False,
-                             "error": "missing 'layout' — the full "
-                                      "override object "
-                                      "{screen: {element: {…}}}"})
+                             "error": "missing 'layout' — the full v2 "
+                                      "document "
+                                      "{version: 2, screens: {…}}"})
             return
         if not isinstance(layout, dict):
             self._json(200, {"ok": False,
-                             "error": "'layout' must be an object "
-                                      "(screen → element → overrides)"})
+                             "error": "'layout' must be the v2 document "
+                                      "object "
+                                      "{version: 2, screens: {…}}"})
+            return
+        if layout.get("version") != 2 or not isinstance(
+                layout.get("screens"), dict):
+            self._json(200, {"ok": False,
+                             "error": "'layout' must be v2-shaped "
+                                      "{version: 2, screens: {…}} — a "
+                                      "v1 screen map is not accepted "
+                                      "(10-* §4.23)"})
             return
         self._json(200, self.studio.commit_layout(layout))
 
