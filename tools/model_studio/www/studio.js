@@ -953,17 +953,21 @@ function layRenderBoxes() {
     se.title = kind === "child" ? "resize (min_w/min_h)" : "resize";
     se.addEventListener("mousedown", (ev) => {
       ev.stopPropagation(); ev.preventDefault();
+      // The drag floor (2026-11-09 grid guarantee): the element's
+      // content minimum in tiles, quantized — plus its registered
+      // CHILDREN's extent (a parent cannot shrink so its children end
+      // up outside). The game clamps to the same floors, so the box
+      // never draws below what the control can be and never fights the
+      // reply.
+      const sheetFloor = kind !== "child" && e.role !== "plain" ? 2 : 1;
+      const floorW = Math.max(sheetFloor,
+        e.min_tiles ? e.min_tiles.w : 1,
+        e.kids_tiles ? e.kids_tiles.w : 1);
+      const floorH = Math.max(sheetFloor,
+        e.min_tiles ? e.min_tiles.h : 1,
+        e.kids_tiles ? e.kids_tiles.h : 1);
       LAY.drag = { mode: "resize", e: JSON.parse(JSON.stringify(e)),
-                   r: layRect(e),
-                   // The drag floor (2026-11-09 grid guarantee): the
-                   // element's content minimum in tiles, quantized —
-                   // the game clamps to the same floor, so the box
-                   // never draws below what the control can be and
-                   // never fights the reply.
-                   minr: e.min_tiles
-                     ? { w: Math.max(1, e.min_tiles.w || 1),
-                         h: Math.max(1, e.min_tiles.h || 1) }
-                     : null };
+                   r: layRect(e), floorW, floorH };
       box.classList.add("dragging");
     });
     box.appendChild(se);
@@ -1049,15 +1053,11 @@ function layDragMove(ev) {
       layPatch(e.id, { x: nx, y: ny });
     }
   } else if (mode === "resize") {
-    // The drag floor: the §4.8.8 sheet floor (skinned controls measure
-    // ≥2×2 tiles) AND the element's own content minimum (min_tiles —
-    // font metrics are off-grid, so the game quantizes UP; the box
-    // draws the same floor instead of fighting the reply).
-    const minr = LAY.drag.minr;
-    const floorW = Math.max(kind !== "child" && e.role !== "plain" ? 2 : 1,
-                            minr ? minr.w : 0);
-    const floorH = Math.max(kind !== "child" && e.role !== "plain" ? 2 : 1,
-                            minr ? minr.h : 0);
+    // The drag floor captured at mousedown (the sheet floor + the
+    // element's content minimum + its registered children's extent —
+    // a parent cannot shrink so its children end up outside).
+    const floorW = LAY.drag.floorW;
+    const floorH = LAY.drag.floorH;
     if (kind === "child") {
       // container child: SE handle drives custom_minimum_size — the box
       // FOLLOWS the handle (drawing the requested min rect); the

@@ -126,6 +126,7 @@ static func register(screen_id: String, control: Control, id: String,
 	if per_screen.is_empty() and not _screens.has(screen_id):
 		_screens[screen_id] = per_screen
 	var rec: Dictionary = {
+		"screen": screen_id,
 		"control": weakref(control),
 		"kind": kind,
 		"role": role,
@@ -238,7 +239,7 @@ static func apply_screen(screen_id: String) -> void:
 			continue
 		var overrides: Dictionary = table.get(id, {})
 		if not overrides.is_empty():
-			_apply(rec, control, overrides)
+			_apply(screen_id, id, rec, control, overrides)
 	for id in dead:
 		per_screen.erase(id)
 
@@ -258,14 +259,14 @@ static func apply_overrides(screen_id: String, id: String,
 			push_error("LayoutRegistry: %s '%s' unknown key '%s'"
 					% [screen_id, id, key])
 			return
-	_apply(rec, control, overrides)
+	_apply(screen_id, id, rec, control, overrides)
 
 
 ## The applier core. Order: `order` (container children, unlocked) →
 ## `min_w`/`min_h` → geometry (`x`/`y`/`w`/`h` free; `anchor` dock) →
 ## `sheet`. An empty override object applies nothing.
-static func _apply(rec: Dictionary, control: Control,
-		overrides: Dictionary) -> void:
+static func _apply(screen_id: String, id: String, rec: Dictionary,
+		control: Control, overrides: Dictionary) -> void:
 	if overrides.is_empty():
 		return
 	var kind := _resolve_kind(rec, control)
@@ -293,6 +294,11 @@ static func _apply(rec: Dictionary, control: Control,
 		var content := control.get_minimum_size()
 		var floor_x := float(ceili(content.x / float(TILE)) * TILE)
 		var floor_y := float(ceili(content.y / float(TILE)) * TILE)
+		# The children-extent floor (the parent-bounds rule's mirror —
+		# a parent cannot shrink so its children end up outside).
+		var kids := _children_extent(screen_id, id, control)
+		floor_x = maxf(floor_x, float(ceili(kids.x / float(TILE)) * TILE))
+		floor_y = maxf(floor_y, float(ceili(kids.y / float(TILE)) * TILE))
 		if overrides.has("min_w"):
 			min_size.x = max(float(int(overrides["min_w"]) * TILE),
 					floor_x)
@@ -346,12 +352,16 @@ static func _apply(rec: Dictionary, control: Control,
 		if overrides.has("h"):
 			size.y = float(int(overrides["h"]) * TILE)
 		# The same grid guarantee as the min floor above: a free resize
-		# subsumes the tile-quantized content floor, so the settled rect
-		# is an exact tile multiple even when the control's content
-		# demands more than the drag asked for.
+		# subsumes the tile-quantized content floor AND the
+		# children-extent floor (a parent cannot shrink so its children
+		# end up outside), so the settled rect is an exact tile multiple
+		# and every registered child stays inside.
 		var content := control.get_minimum_size()
-		size.x = max(size.x, float(ceili(content.x / float(TILE)) * TILE))
-		size.y = max(size.y, float(ceili(content.y / float(TILE)) * TILE))
+		var kids := _children_extent(screen_id, id, control)
+		size.x = max(size.x, float(ceili(content.x / float(TILE)) * TILE),
+				float(ceili(kids.x / float(TILE)) * TILE))
+		size.y = max(size.y, float(ceili(content.y / float(TILE)) * TILE),
+				float(ceili(kids.y / float(TILE)) * TILE))
 		# The parent-bounds clamp (2026-11-09 user direction): an
 		# element cannot move or resize outside its parent — the clamp
 		# runs in the DIRECT parent's local space, which is exact for
@@ -393,6 +403,31 @@ static func _apply(rec: Dictionary, control: Control,
 		else:
 			push_error("LayoutRegistry: sheet override '%s' not applicable"
 					% sheet + " (role %s)" % role)
+
+
+## The children-extent floor (the 2026-11-09 user direction — a parent
+## cannot shrink so its children end up outside): the right/bottom edge
+## (px, in `parent`'s LOCAL space) of every registered child whose
+## registered parent is `parent_id`. Dead records are skipped; the
+## caller quantizes UP to whole tiles.
+static func _children_extent(screen_id: String, parent_id: String,
+		parent: Control) -> Vector2:
+	var extent := Vector2.ZERO
+	var per_screen: Dictionary = _screens.get(screen_id, {})
+	var pr := Rect2(parent.global_position, parent.size)
+	for id in per_screen:
+		var rec: Dictionary = per_screen[id]
+		var child := _live(rec)
+		if child == null or child == parent:
+			continue
+		var row_parent := String(rec.get("flow_parent",
+				_registered_ancestor(screen_id, child)))
+		if row_parent != parent_id:
+			continue
+		var edge := (child.global_position - pr.position) + child.size
+		extent.x = maxf(extent.x, edge.x)
+		extent.y = maxf(extent.y, edge.y)
+	return extent
 
 
 ## Re-parents a container child to the screen root so it can float
@@ -583,7 +618,7 @@ static func tree(screen_id: String) -> Array:
 		size_tiles = Vector2i(
 			roundi(control.size.x / float(TILE)),
 			roundi(control.size.y / float(TILE)))
-		rows.append({
+		var row: Dictionary = {
 			"id": id,
 			"kind": _resolve_kind(rec, control),
 			"role": String(rec.get("role", ROLE_PLAIN)),
@@ -603,7 +638,17 @@ static func tree(screen_id: String) -> Array:
 					_registered_ancestor(screen_id, control))),
 			"clipped": _inside_scroll(control),
 			"min_tiles": _content_min_tiles(control),
-		})
+		}
+		# The children-extent drag floor — only present when the element
+		# has registered children (otherwise the key is omitted and the
+		# studio falls back to min_tiles alone).
+		var kids := _children_extent(screen_id, id, control)
+		if kids.x > 0 or kids.y > 0:
+			row["kids_tiles"] = {
+				"w": ceili(kids.x / float(TILE)),
+				"h": ceili(kids.y / float(TILE)),
+			}
+		rows.append(row)
 	return rows
 
 

@@ -183,6 +183,16 @@ func _test_parent_bounds_clamp() -> void:
 			"parent bounds: the resize clamps to the parent's size")
 	_check(child.position == Vector2.ZERO,
 			"parent bounds: the move clamps to the parent's origin")
+	# The children-extent floor (the parent-bounds rule's mirror): the
+	# parent cannot shrink so its child ends up outside — a w=3-tile
+	# override on the host clamps to the child's 10-tile extent.
+	RegistryLib.set_table_for_tests({
+		"market": {"toolbar": {"w": 3, "h": 2}},
+	})
+	RegistryLib.apply_screen("market")
+	_check(host.size.x == 10 * RegistryLib.TILE,
+			"children-extent floor: the parent cannot shrink below its "
+			+ "child's extent (got %s)" % str(host.size))
 	_drop_root(root)
 	await get_tree().process_frame
 	await _test_break_out_of_flow()

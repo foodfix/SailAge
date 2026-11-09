@@ -273,6 +273,16 @@ slot's file inventory:
   connected element. Registry suite 61 checks (break-out, confinement,
   tree parentage, revert-slot pinned); 80-* §4.8.9 child Move cell +
   10-* §4.23 x/y row amended.
+- **The children-extent floor (2026-11-09, user direction — "when
+  resizing the parent, it is possible to sink too much that the child
+  will be outside"):** the parent-bounds rule's mirror — a parent
+  cannot shrink below its registered children's extent. Every applied
+  w/h (free) and min_w/min_h (child) subsumes the tile-quantized
+  children-extent floor (`_children_extent` — the right/bottom edges
+  of every registered child, in the parent's local space), and tree
+  rows carry `kids_tiles` so the studio's drag floor clamps mid-drag.
+  Registry suite 62 checks (the host-shrink floor pinned); bridge 31,
+  port_hub 327, market 270, validator 1–14, UI sweep 5/5 green.
 - **The hierarchical element list + the trail's parent field (2026-11-09,
   tree readability round 2):** the list rendered rows in REGISTRATION
   order — a parent sat far above its children and an indented child
