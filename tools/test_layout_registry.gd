@@ -31,8 +31,10 @@ extends Node
 ##   8. SHEET SEAM — `sheet_override` routes per role and installs a
 ##      StyleBoxTexture ONLY when the sheet file exists; clear removes
 ##      exactly that box.
-##   9. DATA SEAM — `DataLoader.ui_layout` exists, is `{}` (the interim
-##      shipped file) and the file on disk is v2-shaped.
+##   9. DATA SEAM — `DataLoader.ui_layout` exists and the file on disk
+##      is v2-shaped ({version, screens}; every screen table carries
+##      {elements, lists}) — the file grows per merge gate, the shape
+##      pin is the constant.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
@@ -451,8 +453,19 @@ func _test_data_seam() -> void:
 	var loader := _loader()
 	_check(loader != null and loader.ui_layout is Dictionary,
 			"DataLoader.ui_layout exists (the §4.23 v2 table)")
-	_check(loader.ui_layout.is_empty(),
-			"the shipped ui_layout table is {} (the interim state)")
+	# The shipped file grows per merge gate (each converted screen's
+	# table assembles in) — the seam pins the SHAPE, not emptiness:
+	# every present screen carries the {elements, lists} v2 tables.
+	var shaped := true
+	for screen in loader.ui_layout:
+		var table: Variant = loader.ui_layout[screen]
+		if not (table is Dictionary) \
+				or not (table.get("elements", null) is Dictionary) \
+				or not (table.get("lists", null) is Dictionary):
+			shaped = false
+	_check(shaped and not loader.ui_layout.is_empty(),
+			"the shipped ui_layout tables are v2-shaped "
+			+ "(%d screens assembled)" % loader.ui_layout.size())
 	var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
 	_check(f != null, "data/ui_layout.json exists")
 	if f != null:

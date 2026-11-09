@@ -1,4 +1,1266 @@
 {
-  "screens": {},
+  "screens": {
+    "autopilot_hud": {
+      "elements": {
+        "bar": {
+          "h": 1,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "bar.cancel": {
+          "h": 1,
+          "w": 4,
+          "x": 55,
+          "y": 0
+        },
+        "bar.info": {
+          "h": 1,
+          "w": 51,
+          "x": 1,
+          "y": 0
+        }
+      },
+      "lists": {}
+    },
+    "chart": {
+      "elements": {
+        "bottom_bar": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 32
+        },
+        "debug_panel": {
+          "h": 31,
+          "w": 10,
+          "x": 50,
+          "y": 2
+        },
+        "legend.current": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "legend.discovery": {
+          "h": 2,
+          "w": 9,
+          "x": 24,
+          "y": 0
+        },
+        "legend.fleet": {
+          "h": 2,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "legend.hint": {
+          "h": 2,
+          "w": 9,
+          "x": 1,
+          "y": 0
+        },
+        "legend.ice": {
+          "h": 2,
+          "w": 6,
+          "x": 47,
+          "y": 0
+        },
+        "legend.port": {
+          "h": 2,
+          "w": 8,
+          "x": 10,
+          "y": 0
+        },
+        "legend.wind": {
+          "h": 2,
+          "w": 6,
+          "x": 34,
+          "y": 0
+        },
+        "panel_rows.row_0.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_0.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_0.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_1.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_1.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_1.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_10.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_10.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_10.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_11.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_11.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_11.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_12.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_12.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_12.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_13.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_13.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_13.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_14.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_14.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_14.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_15.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_15.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_15.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_16.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_16.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_16.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_17.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_17.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_17.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_18.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_18.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_18.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_19.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_19.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_19.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_2.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_2.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_2.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_20.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_20.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_20.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_21.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_21.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_21.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_22.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_22.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_22.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_23.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_23.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_23.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_24.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_24.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_24.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_25.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_25.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_25.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_26.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_26.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_26.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_27.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_27.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_27.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_28.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_28.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_28.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_29.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_29.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_29.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_3.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_3.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_3.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_30.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_30.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_30.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_31.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_31.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_31.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_32.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_32.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_32.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_33.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_33.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_33.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_34.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_34.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_34.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_35.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_35.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_35.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_36.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_36.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_36.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_37.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_37.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_37.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_38.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_38.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_38.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_39.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_39.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_4.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_4.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_4.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_5.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_5.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_5.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_6.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_6.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_6.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_7.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_7.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_7.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_8.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_8.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_8.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.row_9.dot": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "panel_rows.row_9.label": {
+          "h": 1,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.row_9.value": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "panel_rows.sec_legend.fleets.label": {
+          "h": 1,
+          "w": 9,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.sec_legend.network.label": {
+          "h": 1,
+          "w": 9,
+          "x": 1,
+          "y": 0
+        },
+        "panel_rows.sec_title.label": {
+          "h": 1,
+          "w": 9,
+          "x": 1,
+          "y": 0
+        },
+        "toolbar.back": {
+          "h": 2,
+          "w": 8,
+          "x": 51,
+          "y": 0
+        },
+        "top_bar": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "top_bar.title": {
+          "h": 1,
+          "w": 24,
+          "x": 1,
+          "y": 0
+        }
+      },
+      "lists": {
+        "panel_rows": {
+          "base": {
+            "h": 1,
+            "w": 10,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 31,
+            "w": 10,
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
+    },
+    "fleet_picker": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_rows.0.flag": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_rows.0.name": {
+          "h": 1,
+          "w": 4,
+          "x": 2,
+          "y": 0
+        },
+        "fleet_rows.0.role": {
+          "h": 1,
+          "w": 1,
+          "x": 1,
+          "y": 0
+        },
+        "fleet_rows.0.role_letter": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_rows.0.tier": {
+          "h": 1,
+          "w": 1,
+          "x": 6,
+          "y": 0
+        },
+        "fleet_rows.0.verb.attack": {
+          "h": 2,
+          "w": 3,
+          "x": 13,
+          "y": 0
+        },
+        "fleet_rows.0.verb.inspect": {
+          "h": 2,
+          "w": 3,
+          "x": 7,
+          "y": 0
+        },
+        "fleet_rows.0.verb.talk": {
+          "h": 2,
+          "w": 3,
+          "x": 10,
+          "y": 0
+        },
+        "fleet_rows.1.flag": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_rows.1.name": {
+          "h": 1,
+          "w": 4,
+          "x": 2,
+          "y": 0
+        },
+        "fleet_rows.1.role": {
+          "h": 1,
+          "w": 1,
+          "x": 1,
+          "y": 0
+        },
+        "fleet_rows.1.role_letter": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_rows.1.tier": {
+          "h": 1,
+          "w": 1,
+          "x": 6,
+          "y": 0
+        },
+        "fleet_rows.1.verb.attack": {
+          "h": 2,
+          "w": 3,
+          "x": 13,
+          "y": 0
+        },
+        "fleet_rows.1.verb.inspect": {
+          "h": 2,
+          "w": 3,
+          "x": 7,
+          "y": 0
+        },
+        "fleet_rows.1.verb.talk": {
+          "h": 2,
+          "w": 3,
+          "x": 10,
+          "y": 0
+        },
+        "panel": {
+          "h": 13,
+          "w": 18,
+          "x": 21,
+          "y": 8
+        },
+        "panel.status": {
+          "h": 1,
+          "w": 16,
+          "x": 1,
+          "y": 10
+        },
+        "panel.title": {
+          "h": 1,
+          "w": 16,
+          "x": 1,
+          "y": 0
+        }
+      },
+      "lists": {
+        "fleet_rows": {
+          "base": {
+            "h": 2,
+            "w": 16,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 8,
+            "w": 16,
+            "x": 1,
+            "y": 1
+          }
+        }
+      }
+    },
+    "hail": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 17,
+          "w": 15,
+          "x": 22,
+          "y": 8
+        },
+        "panel.ok": {
+          "h": 2,
+          "w": 4,
+          "x": 11,
+          "y": 14
+        },
+        "panel.title": {
+          "h": 1,
+          "w": 13,
+          "x": 1,
+          "y": 0
+        },
+        "rows.ask_rumours.action": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.befriend.action": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.buy_supplies.action": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.buy_supplies.cost": {
+          "h": 1,
+          "w": 2,
+          "x": 11,
+          "y": 0
+        },
+        "rows.buy_supplies.minus": {
+          "h": 2,
+          "w": 1,
+          "x": 6,
+          "y": 0
+        },
+        "rows.buy_supplies.plus": {
+          "h": 2,
+          "w": 1,
+          "x": 9,
+          "y": 0
+        },
+        "rows.buy_supplies.qty": {
+          "h": 1,
+          "w": 2,
+          "x": 7,
+          "y": 0
+        },
+        "rows.intimidate.action": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.portrait.bust": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "rows.terms_befriend.terms": {
+          "h": 2,
+          "w": 13,
+          "x": 0,
+          "y": 0
+        },
+        "rows.terms_rumours.terms": {
+          "h": 2,
+          "w": 13,
+          "x": 0,
+          "y": 0
+        },
+        "rows.terms_supplies.terms": {
+          "h": 2,
+          "w": 13,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {
+        "rows": {
+          "base": {
+            "h": 2,
+            "w": 13,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 12,
+            "w": 13,
+            "x": 1,
+            "y": 1
+          }
+        }
+      }
+    },
+    "world": {
+      "elements": {
+        "bottom_bar": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 32
+        },
+        "current": {
+          "h": 1,
+          "w": 4,
+          "x": 6,
+          "y": 9
+        },
+        "explore": {
+          "h": 2,
+          "w": 7,
+          "x": 9,
+          "y": 9
+        },
+        "explore_hint": {
+          "h": 1,
+          "w": 14,
+          "x": 9,
+          "y": 8
+        },
+        "hud": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "hud.area": {
+          "h": 2,
+          "w": 12,
+          "x": 35,
+          "y": 0
+        },
+        "hud.calendar": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "hud.day": {
+          "h": 2,
+          "w": 7,
+          "x": 1,
+          "y": 0
+        },
+        "hud.gold": {
+          "h": 2,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "hud.intel": {
+          "h": 2,
+          "w": 3,
+          "x": 56,
+          "y": 0
+        },
+        "hud.morale": {
+          "h": 2,
+          "w": 8,
+          "x": 26,
+          "y": 0
+        },
+        "minimap": {
+          "h": 6,
+          "w": 8,
+          "x": 1,
+          "y": 2
+        },
+        "minimap_title": {
+          "h": 1,
+          "w": 8,
+          "x": 1,
+          "y": 9
+        },
+        "status": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 32
+        },
+        "status.cargo": {
+          "h": 2,
+          "w": 7,
+          "x": 28,
+          "y": 0
+        },
+        "status.crew": {
+          "h": 2,
+          "w": 9,
+          "x": 19,
+          "y": 0
+        },
+        "status.provisions": {
+          "h": 2,
+          "w": 8,
+          "x": 3,
+          "y": 0
+        },
+        "status.speed": {
+          "h": 2,
+          "w": 7,
+          "x": 36,
+          "y": 0
+        },
+        "status.trim": {
+          "h": 2,
+          "w": 8,
+          "x": 44,
+          "y": 0
+        },
+        "status.water": {
+          "h": 2,
+          "w": 7,
+          "x": 11,
+          "y": 0
+        },
+        "toast": {
+          "h": 2,
+          "w": 15,
+          "x": 23,
+          "y": 31
+        },
+        "toast.label": {
+          "h": 2,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "top_bar": {
+          "h": 2,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "weather": {
+          "h": 1,
+          "w": 8,
+          "x": 1,
+          "y": 8
+        },
+        "wind": {
+          "h": 1,
+          "w": 3,
+          "x": 5,
+          "y": 8
+        }
+      },
+      "lists": {}
+    }
+  },
   "version": 2
 }

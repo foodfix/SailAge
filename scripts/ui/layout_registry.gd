@@ -254,6 +254,13 @@ static func _screen_data(screen_id: String) -> Dictionary:
 	return {}
 
 
+## The public managed-check (screens/bridge-side seams): true when the
+## committed layout file carries this screen's table — the registry
+## owns the screen's rects then.
+static func is_managed(screen_id: String) -> bool:
+	return not _screen_data(screen_id).is_empty()
+
+
 ## The screen's list block `{base, row_h, viewport}` in tiles.
 static func _list_block(screen_id: String, list_id: String) -> Dictionary:
 	var lists: Variant = _screen_data(screen_id).get("lists", {})

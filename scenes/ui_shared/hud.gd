@@ -1073,7 +1073,7 @@ func _apply_minimap_rect() -> void:
 ## True when the committed `ui_layout` table carries a `world` screen (the
 ## registry owns the HUD's rects then — docs/10-* §4.23).
 func _layout_managed() -> bool:
-	return not RegistryLib._screen_data("world").is_empty()
+	return RegistryLib.is_managed("world")
 
 
 ## **Phase-4 compatibility shim.** The enlarged `M` minimap is gone (`80-*`
