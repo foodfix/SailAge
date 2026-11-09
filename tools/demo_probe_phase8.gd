@@ -397,7 +397,7 @@ func _scenario_two_step_creation() -> void:
 	await get_tree().process_frame
 	_check(CreationLib.pending_nation_id == "",
 		"the S2→S20 handoff carrier is consumed by the screen's _ready")
-	var grid: GridContainer = screen.get_node("Layout/StepBackground")
+	var grid: Control = screen.get_node("StepBackground")
 	_check(grid.get_child_count() == 6,
 		"step ① shows the 6 background cards (%d)" % grid.get_child_count())
 	# Pick 海军见习生 (index 1: courage +3 / navigation +5) → step ②.
@@ -406,19 +406,19 @@ func _scenario_two_step_creation() -> void:
 	_check(screen._step == 2, "step ① confirm advances to the free points")
 	# Steppers' caps: the courage extreme is the closed form 21.
 	var courage_add: Button = screen.get_node(
-		"Layout/StepPoints/Columns/Attributes/Row_courage/Add")
+		"StepPoints/Row_courage/Add")
 	for _i in 4:
 		courage_add.pressed.emit()
 	_check(int(screen._attr_alloc.get("courage", 0)) == 3,
 		"the per-item cap stops the + at 3 (courage base 10+5+3 → max 21)")
 	var courage_label: Label = screen.get_node(
-		"Layout/StepPoints/Columns/Attributes/Row_courage/StatValue")
+		"StepPoints/Row_courage/StatValue")
 	_check(courage_label.text == "21",
 		"the attribute extreme reads 21 (10+5+3+3, got %s)" % courage_label.text)
 	var sword_label: Label = screen.get_node(
-		"Layout/StepPoints/Columns/Skills/Row_swordplay/StatValue")
+		"StepPoints/Row_swordplay/StatValue")
 	var sword_add: Button = screen.get_node(
-		"Layout/StepPoints/Columns/Skills/Row_swordplay/Add")
+		"StepPoints/Row_swordplay/Add")
 	for _i in 5:
 		sword_add.pressed.emit()
 	_check(int(screen._skill_alloc.get("swordplay", 0)) == 3
@@ -434,7 +434,7 @@ func _scenario_two_step_creation() -> void:
 		"spread evenly spends +1 on the first three skills")
 	_check(screen._remaining_attr() == 0 and screen._remaining_skill() == 0,
 		"the +5/+3 budget is spent exactly")
-	var confirm: Button = screen.get_node("Layout/Footer/Confirm")
+	var confirm: Button = screen.get_node("Confirm")
 	_check(not confirm.disabled, "spend-all arms the confirm")
 	# One point back → the must-spend-all gate re-arms.
 	screen._on_step("seamanship", false, -1)

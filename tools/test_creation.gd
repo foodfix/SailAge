@@ -11,6 +11,7 @@ extends Node
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
+const PaletteLib := preload("res://scripts/palette.gd")
 const CreationLib := preload("res://scenes/title/creation_screen.gd")
 const CreationScene := preload("res://scenes/title/creation_screen.tscn")
 const NationalityScene := preload("res://scenes/title/nationality_select.tscn")
@@ -49,7 +50,7 @@ func _open_creation(nation_id: String) -> Control:
 ## Enters step ② (the free points) on a fresh screen.
 func _open_points(nation_id: String, background_index: int = 0) -> Control:
 	var screen: Control = await _open_creation(nation_id)
-	var grid: GridContainer = screen.get_node("Layout/StepBackground")
+	var grid: Control = screen.get_node("StepBackground")
 	(grid.get_child(background_index) as Button).pressed.emit()
 	screen.confirm_selection()
 	await get_tree().process_frame
@@ -141,24 +142,24 @@ func _test_handoff() -> void:
 
 func _test_background_step() -> void:
 	var screen: Control = await _open_creation("portugal")
-	var grid: GridContainer = screen.get_node("Layout/StepBackground")
+	var grid: Control = screen.get_node("StepBackground")
 	_check(grid.get_child_count() == 6, "step ① shows exactly 6 background cards")
 	var names_ok := true
 	for index in DataLoader.backgrounds_list.size():
 		var card: Control = grid.get_child(index)
-		var label: Label = card.get_node("Content/BackgroundName")
+		var label: Label = card.get_node("BackgroundName")
 		if label.text != I18n.t(DataLoader.backgrounds_list[index]["name"]):
 			names_ok = false
 	_check(names_ok, "every card renders its data name")
 	# Data-driven bonus line on the first card (deckhand: +3/+5).
 	var first: Button = grid.get_child(0)
 	_check(first.button_pressed, "the first card starts selected")
-	var bonus_text: String = (first.get_node("Content/Bonus") as Label).text
+	var bonus_text: String = (first.get_node("Bonus") as Label).text
 	_check(bonus_text.contains("+3") and bonus_text.contains("+5"),
 		"the bonus line shows the +3 attribute / +5 skill grants (%s)" % bonus_text)
-	_check(not (first.get_node("Content/Bio") as Label).text.is_empty(),
+	_check(not (first.get_node("Bio") as Label).text.is_empty(),
 		"each card carries the data bio")
-	_check(screen.get_node("Layout/Header/Title").text
+	_check(screen.get_node("Title").text
 		== I18n.t_key("creation.step.background"),
 		"step ① title is creation.step.background")
 	# Selecting a card and confirming advances to the free points.
@@ -168,11 +169,11 @@ func _test_background_step() -> void:
 		"selecting a card picks its background (%s)" % screen._background_id)
 	screen.confirm_selection()
 	_check(screen._step == 2, "step ① confirm advances to the free points")
-	_check(screen.get_node("Layout/Header/Title").text
+	_check(screen.get_node("Title").text
 		== I18n.t_key("creation.step.points"),
 		"step ② title is creation.step.points")
-	_check(not screen.get_node("Layout/StepBackground").visible
-		and screen.get_node("Layout/StepPoints").visible,
+	_check(not screen.get_node("StepBackground").visible
+		and screen.get_node("StepPoints").visible,
 		"the two steps swap visibility")
 	screen.queue_free()
 	await get_tree().process_frame
@@ -184,14 +185,14 @@ func _test_steppers_and_counters() -> void:
 	# portugal × deckhand (the default first card): constitution base 10+3,
 	# seamanship/navigation base 5.
 	var screen: Control = await _open_points("portugal")
-	var points: Control = screen.get_node("Layout/StepPoints")
-	var attr_header: Label = points.get_node("Columns/Attributes/AttrHeader")
+	var points: Control = screen.get_node("StepPoints")
+	var attr_header: Label = points.get_node("AttrHeader")
 	_check(attr_header.text == I18n.fmt("creation.points.attributes", {"count": 5}),
 		"the attribute counter starts at 5 left (%s)" % attr_header.text)
-	var skill_header: Label = points.get_node("Columns/Skills/SkillHeader")
+	var skill_header: Label = points.get_node("SkillHeader")
 	_check(skill_header.text == I18n.fmt("creation.points.skills", {"count": 3}),
 		"the skill counter starts at 3 left")
-	var con_row: Control = points.get_node("Columns/Attributes/Row_constitution")
+	var con_row: Control = points.get_node("Row_constitution")
 	_check((con_row.get_node("StatValue") as Label).text == "13",
 		"the stepper shows base + bonuses before spending (10+3)")
 	var add: Button = con_row.get_node("Add")
@@ -209,7 +210,7 @@ func _test_steppers_and_counters() -> void:
 	_check(int(screen._attr_alloc.get("constitution", 0)) == 2,
 		"the − unwinds one point")
 	# A skill row: navigation base 5 (nation), + one spend.
-	var nav_row: Control = points.get_node("Columns/Skills/Row_navigation")
+	var nav_row: Control = points.get_node("Row_navigation")
 	_check((nav_row.get_node("StatValue") as Label).text == "5",
 		"the skill stepper shows base + bonuses (nation +5)")
 	(nav_row.get_node("Add") as Button).pressed.emit()
@@ -219,13 +220,13 @@ func _test_steppers_and_counters() -> void:
 		"the skill counter tracks its own budget")
 	# Spend the attribute budget out (constitution holds 2, intellect takes
 	# the remaining 3): the + disables everywhere once the budget is gone.
-	var int_add: Button = points.get_node("Columns/Attributes/Row_intellect/Add")
+	var int_add: Button = points.get_node("Row_intellect/Add")
 	for _i in 3:
 		int_add.pressed.emit()
 	_check(attr_header.text == I18n.fmt("creation.points.attributes", {"count": 0}),
 		"the counter reaches 0")
 	_check(add.disabled, "an exhausted budget disables the spent row's +")
-	_check(not (points.get_node("Columns/Skills/Row_seamanship/Add") as Button).disabled,
+	_check(not (points.get_node("Row_seamanship/Add") as Button).disabled,
 		"the skill budget is independent of the attribute budget")
 	screen.queue_free()
 	await get_tree().process_frame
@@ -247,7 +248,7 @@ func _test_spread_evenly() -> void:
 		% str(screen._skill_alloc))
 	_check(screen._remaining_attr() == 0 and screen._remaining_skill() == 0,
 		"spread spends exactly the +5/+3 budget")
-	_check(not (screen.get_node("Layout/Footer/Confirm") as Button).disabled,
+	_check(not (screen.get_node("Confirm") as Button).disabled,
 		"spend-all arms the confirm")
 	screen.queue_free()
 	await get_tree().process_frame
@@ -257,75 +258,114 @@ func _test_spread_evenly() -> void:
 
 func _test_must_spend_all() -> void:
 	var screen: Control = await _open_points("holland")
-	var confirm: Button = screen.get_node("Layout/Footer/Confirm")
+	var confirm: Button = screen.get_node("Confirm")
 	_check(confirm.disabled, "confirm is disabled while points remain")
-	_check((screen.get_node("Layout/StepPoints/SpreadRow/SpendHint") as Label).text
+	_check((screen.get_node("StepPoints/SpendHint") as Label).text
 		== I18n.t_key("creation.points.must_spend"),
 		"the must-spend hint shows while points remain")
-	(screen.get_node("Layout/StepPoints/Columns/Attributes/Row_luck/Add")
+	(screen.get_node("StepPoints/Row_luck/Add")
 		as Button).pressed.emit()
 	_check(confirm.disabled, "a partial spend keeps confirm disabled")
 	screen._on_spread()
 	_check(not confirm.disabled, "spend-all arms the confirm")
-	(screen.get_node("Layout/StepPoints/Columns/Attributes/Row_luck/Sub")
+	(screen.get_node("StepPoints/Row_luck/Sub")
 		as Button).pressed.emit()
 	_check(confirm.disabled, "un-spending a point re-locks the confirm")
-	_check(not (screen.get_node("Layout/StepPoints/SpreadRow/SpendHint")
+	_check(not (screen.get_node("StepPoints/SpendHint")
 		as Label).text.is_empty(), "the hint returns with the un-spent point")
 	screen.queue_free()
 	await get_tree().process_frame
 
 
-# --- 6b. Pixel-stable steppers (production fix, 2026-11-04 playthrough) ------
+# --- 6b. Pixel-stable steppers (W2-B re-pin of the 2026-11-04 fix) -----------
 #
 # The user report: "the UI layout somehow changes after i click Spread
-# evenly" — every stepper row shifted left ~50px once points ran out. Root
-# cause: StepPoints is size-flag SHRINK_CENTER (its rect is its own minimum
-# width, re-centered inside the layout on every change), and the only
-# state-dependent width inside it was the must-spend SpendHint label (it
-# empties when points run out; zh 192px / en 335px). The fix pins the hint
-# cell (`SPEND_HINT_MIN_W` + clip_text, whose intrinsic minimum width is 1px
-# in this release), so the block's minimum width is the Columns width in
-# EVERY state and the ± buttons can never move. These pins hold the contract:
-# every stepper button keeps its exact rect across (a) the spread flip —
-# every − flips disabled→enabled, every + enabled→disabled, the hint
-# empties — and (b) a manual − flip, in both locales.
+# evenly" — every stepper row shifted left ~50px once points ran out. The
+# flow root cause (a SHRINK_CENTER block re-centering on the must-spend
+# hint's state-dependent width) is DELETED with the flow containers in the
+# W2-B absolute restructure; the reserved-cell workaround
+# (`SPEND_HINT_MIN_W` + clip_text) went with it. The contract survives on
+# the absolute model and is pinned two ways:
+#   1. every stepper button keeps its exact rect across (a) the spread flip
+#      — every − flips disabled→enabled, every + enabled→disabled, the hint
+#      empties — and (b) a manual − flip, in both locales;
+#   2. the live stepper rows sit EXACTLY on their v2 fragment rows
+#      (data/layout_fragments/creation.json) — the data rows are the
+#      geometry, not a derived minimum (docs/IMPLEMENT-Phase12.md §3 W2-B).
 
 func _test_stepper_pixel_stability() -> void:
 	for locale in ["zh", "en"]:
 		I18n.set_locale(locale)
 		var screen: Control = await _open_points("portugal")
 		await get_tree().process_frame
-		var points: Control = screen.get_node("Layout/StepPoints")
-		var columns: Control = points.get_node("Columns")
-		var buttons: Array = columns.find_children("Sub", "Button", true, false)
-		buttons.append_array(columns.find_children("Add", "Button", true, false))
+		var points: Control = screen.get_node("StepPoints")
+		var buttons: Array = points.find_children("Sub", "Button", true, false)
+		buttons.append_array(points.find_children("Add", "Button", true, false))
 		_check(buttons.size() == 26,
 			"%s: all 26 stepper buttons (13 rows × ±) are under observation"
 			% locale)
 		# (a) The user action: spread evenly — the full enable-state flip.
 		var rects := _stepper_rects(buttons)
-		var columns_min: float = columns.get_combined_minimum_size().x
 		screen._on_spread()
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var moved := _moved_buttons(buttons, rects)
 		_check(moved.is_empty(), "%s: every stepper button holds its pixel rect through the spread flip (%s)" % [locale, str(moved.slice(0, 3))])
-		var after_min: float = (points as Control).get_combined_minimum_size().x
-		_check(is_equal_approx(after_min, columns_min), "%s: StepPoints min width is Columns-pinned across the flip (%f px → %f px)" % [locale, columns_min, after_min])
-		_check((points.get_node("SpreadRow/SpendHint") as Label).get_combined_minimum_size().x <= 344.0, "%s: the must-spend hint cell stays at/below its pinned width in both states" % locale)
 		# (b) A manual flip: − on a spent row re-disables it and re-arms the
 		# row's + — still no movement.
 		rects = _stepper_rects(buttons)
-		(points.get_node("Columns/Attributes/Row_constitution/Sub")
+		(points.get_node("Row_constitution/Sub")
 			as Button).pressed.emit()
 		await get_tree().process_frame
 		await get_tree().process_frame
 		moved = _moved_buttons(buttons, rects)
 		_check(moved.is_empty(), "%s: every stepper button holds its pixel rect through a manual − flip (%s)" % [locale, str(moved.slice(0, 3))])
+		# (c) The data-row pin: the live rows ARE the v2 fragment rows
+		# (points-relative tiles × 32). Asserted once, in en.
+		if locale == "en":
+			var rows_ok := true
+			var detail := ""
+			var fragment := _creation_fragment_rows()
+			var tile := float(PaletteLib.CHROME_TILE)
+			for key in ["constitution", "intellect", "charisma",
+					"courage", "luck", "seamanship", "navigation",
+					"swordplay", "gunnery", "appraisal", "negotiation",
+					"cartography", "rumour"]:
+				var group := "attrs" \
+					if key in CharacterLib.ATTRIBUTES else "skills"
+				var data: Dictionary = fragment.get(
+					"points.%s.%s" % [group, key], {})
+				var row: Control = points.get_node("Row_%s" % key)
+				var want_pos: Vector2 = Vector2(
+					float(data.get("x", -1)) * tile,
+					float(data.get("y", -1)) * tile)
+				var want_size: Vector2 = Vector2(
+					float(data.get("w", -1)) * tile,
+					float(data.get("h", -1)) * tile)
+				if row.position != want_pos or row.size != want_size:
+					rows_ok = false
+					detail = "%s want %s/%s got %s/%s" % [key,
+						want_pos, want_size, row.position, row.size]
+			_check(rows_ok and not fragment.is_empty(),
+				"the 13 live stepper rows sit exactly on their v2 "
+				+ "fragment rows (%s)" % detail)
 		screen.queue_free()
 		await get_tree().process_frame
 	I18n.set_locale("en")
+
+
+## The creation fragment's element rows (the W2-B data pin — the same bytes
+## the capture tool wrote; master assembles them into ui_layout.json).
+func _creation_fragment_rows() -> Dictionary:
+	var f := FileAccess.open("res://data/layout_fragments/creation.json",
+		FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if parsed is Dictionary:
+		return (parsed as Dictionary).get("elements", {})
+	return {}
 
 
 func _stepper_rects(buttons: Array) -> Dictionary:
@@ -363,7 +403,7 @@ func _test_extremes() -> void:
 	# (b) The steppers cannot exceed the extremes: spain × navy_cadet puts
 	# base+bonuses 18 on courage; three + clicks are the ceiling.
 	var screen: Control = await _open_points("spain", 1)
-	var cou_row: Control = screen.get_node("Layout/StepPoints/Columns/Attributes/Row_courage")
+	var cou_row: Control = screen.get_node("StepPoints/Row_courage")
 	_check((cou_row.get_node("StatValue") as Label).text == "18",
 		"the extreme base shows 10+5+3 = 18")
 	for _i in 6:
@@ -371,13 +411,13 @@ func _test_extremes() -> void:
 	_check((cou_row.get_node("StatValue") as Label).text == "21",
 		"the stepper tops out at the normative extreme 21")
 	var screen2: Control = await _open_points("portugal", 1)
-	var nav_row: Control = screen2.get_node("Layout/StepPoints/Columns/Skills/Row_navigation")
+	var nav_row: Control = screen2.get_node("StepPoints/Row_navigation")
 	for _i in 6:
 		(nav_row.get_node("Add") as Button).pressed.emit()
 	_check((nav_row.get_node("StatValue") as Label).text == "13",
 		"the skill stepper tops out at the normative extreme 13 (10+3)")
 	# (c) Mashing every + on the screen can never break a cap or a budget.
-	for add_button in screen2.get_node("Layout/StepPoints/Columns") \
+	for add_button in screen2.get_node("StepPoints") \
 			.find_children("Add", "Button", true, false):
 		for _i in 6:
 			(add_button as Button).pressed.emit()
@@ -415,7 +455,7 @@ func _test_preview() -> void:
 		"base duel is swordplay 0 + floor(13/20)")
 	# Navigation +2 (of the 3-point skill budget): 12 → 48 + floor(12/12) = 49.
 	for _i in 2:
-		(screen.get_node("Layout/StepPoints/Columns/Skills/Row_navigation/Add")
+		(screen.get_node("StepPoints/Row_navigation/Add")
 			as Button).pressed.emit()
 	values = screen.preview_values()
 	_check(int(values["sighting_value"]) == 49
@@ -423,15 +463,15 @@ func _test_preview() -> void:
 		"nav 12 → sighting 49 against the unchanged base (48 → 49)")
 	# The last skill point on seamanship: the closed form 1/300; the line
 	# renders the percent pair.
-	var seam_add: Button = screen.get_node("Layout/StepPoints/Columns/Skills/Row_seamanship/Add")
+	var seam_add: Button = screen.get_node("StepPoints/Row_seamanship/Add")
 	seam_add.pressed.emit()
 	values = screen.preview_values()
 	_check(is_equal_approx(float(values["speed_value"]), 1.0 / 300.0),
 		"the speed value is the closed form seamanship/300")
-	var speed_label: Label = screen.get_node("Layout/StepPoints/Preview/Preview_speed")
+	var speed_label: Label = screen.get_node("StepPoints/Preview_speed")
 	_check(speed_label.text.contains("0.0% → 0.3%"),
 		"the speed line shows base → value in percent (%s)" % speed_label.text)
-	var sighting_label: Label = screen.get_node("Layout/StepPoints/Preview/Preview_sighting")
+	var sighting_label: Label = screen.get_node("StepPoints/Preview_sighting")
 	_check(sighting_label.text == "%s %s" % [
 			I18n.t_key("creation.preview.sighting"),
 			I18n.fmt("creation.preview.base_value", {"base": "48", "value": "49"})],
@@ -441,7 +481,7 @@ func _test_preview() -> void:
 	# The duel courage term: spain × navy_cadet — spain's signature swordplay
 	# +5 puts the base at 5 + floor(18/20); three courage points reach 21.
 	var screen2: Control = await _open_points("spain", 1)
-	var cou_add: Button = screen2.get_node("Layout/StepPoints/Columns/Attributes/Row_courage/Add")
+	var cou_add: Button = screen2.get_node("StepPoints/Row_courage/Add")
 	for _i in 3:
 		cou_add.pressed.emit()
 	var values2: Dictionary = screen2.preview_values()
@@ -461,15 +501,15 @@ func _test_confirm_new_game() -> void:
 	# A deliberate draft: navigation +3 (the skill extreme), courage +2,
 	# constitution +3 — exactly the +5 attribute budget spent.
 	for _i in 3:
-		(screen.get_node("Layout/StepPoints/Columns/Skills/Row_navigation/Add")
+		(screen.get_node("StepPoints/Row_navigation/Add")
 			as Button).pressed.emit()
 	for _i in 2:
-		(screen.get_node("Layout/StepPoints/Columns/Attributes/Row_courage/Add")
+		(screen.get_node("StepPoints/Row_courage/Add")
 			as Button).pressed.emit()
 	for _i in 3:
-		(screen.get_node("Layout/StepPoints/Columns/Attributes/Row_constitution/Add")
+		(screen.get_node("StepPoints/Row_constitution/Add")
 			as Button).pressed.emit()
-	_check(not (screen.get_node("Layout/Footer/Confirm") as Button).disabled,
+	_check(not (screen.get_node("Confirm") as Button).disabled,
 		"the fully-spent draft arms the confirm")
 	var preview: Dictionary = screen.preview_values()
 	screen.confirm_selection()
@@ -515,7 +555,7 @@ func _test_back_navigation() -> void:
 	var screen: Control = await _open_points("italy")
 	var routed: Array = []
 	screen.route_sink = func(path: String) -> void: routed.append(path)
-	(screen.get_node("Layout/Footer/Back") as Button).pressed.emit()
+	(screen.get_node("Back") as Button).pressed.emit()
 	_check(routed.size() == 1
 		and str(routed[0]).ends_with("nationality_select.tscn"),
 		"the S20 back control routes to S2 (%s)" % str(routed))
@@ -531,7 +571,7 @@ func _test_locales() -> void:
 	for locale in ["en", "zh"]:
 		I18n.set_locale(locale)
 		await get_tree().process_frame
-		var title: Label = screen.get_node("Layout/Header/Title")
+		var title: Label = screen.get_node("Title")
 		_check(title.text == _ui("creation.step.points", locale),
 			"the %s step title is the ui_strings value (%s)"
 			% [locale, title.text])

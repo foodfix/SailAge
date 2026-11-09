@@ -941,9 +941,9 @@ func _test_title_and_port_wiring() -> void:
 
 	var title: Control = TitleScene.instantiate()
 	add_child(title)
-	_check(title.get_node("Center/Stack/Buttons/Load") != null,
+	_check(title.get_node("Load") != null,
 		"the title screen has a Load row")
-	var load_button: Button = title.get_node("Center/Stack/Buttons/Load")
+	var load_button: Button = title.get_node("Load")
 	_check(load_button.text == I18n.t_key("title.load_game"),
 		"the Load row is localised (got '%s')" % load_button.text)
 	var dialog: Control = title.open_load_dialog()
