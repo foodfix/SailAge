@@ -1257,8 +1257,10 @@ func _check_commendation() -> void:
 ## dialog scene itself is W4-B's). An absent registry id adds nothing
 ## (the flat fallback).
 func _attach_commend_trophy() -> void:
-	var body := _commend.get_node_or_null(
-		"Center/Panel/Margin/Body") as VBoxContainer
+	# Phase 12: the shared dialog's flow chain is deleted — the body is
+	# the plate's scroll content (a plain Control,
+	# `data/layout_fragments/dialog_box.json`).
+	var body := _commend.get_node_or_null("Panel/Body/Content")
 	if body == null or body.get_node_or_null("CommendTrophy") != null:
 		return
 	# The §4.8 hero-64 display rule: the commendation trophy renders its
@@ -1322,8 +1324,8 @@ func _commend_port_name() -> String:
 
 ## The pinned close label (`palace.commend.close`) on the dialog's OK button.
 func _set_commend_button() -> void:
-	var ok: Button = _commend.get_node_or_null(
-		"Center/Panel/Margin/Body/Footer/OK")
+	# Phase 12: the OK button hangs off the plate (`Panel/OK`).
+	var ok: Button = _commend.get_node_or_null("Panel/OK")
 	if ok != null and DataLoader.ui_strings.has(COMMEND_CLOSE_KEY):
 		ok.text = I18n.t_key(COMMEND_CLOSE_KEY)
 

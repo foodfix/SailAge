@@ -116,8 +116,12 @@ static var _screens: Dictionary = {}
 static var _roots: Dictionary = {}
 ## The screen id of the last `screen_active` call.
 static var _current: String = ""
-## The suite's fixture table (bypasses the DataLoader read when non-empty).
+## The suite's fixture table (bypasses the DataLoader read when set).
 static var _test_table: Dictionary = {}
+## Whether `_test_table` was set (a set-but-empty table means "no
+## table" — unmanaged everywhere — rather than falling through to the
+## shipped file, which grows per merge gate).
+static var _test_table_set := false
 
 
 # --- Registration ------------------------------------------------------------
@@ -227,7 +231,7 @@ static func _capture(control: Control) -> Dictionary:
 ## The committed layout file (the suite's fixture table wins when set;
 ## DataLoader's `ui_layout` otherwise; `{}` without either).
 static func _layout_table() -> Dictionary:
-	if not _test_table.is_empty():
+	if _test_table_set:
 		return _test_table
 	var loader: Node = Engine.get_main_loop().root.get_node_or_null(
 			"DataLoader")
@@ -237,9 +241,12 @@ static func _layout_table() -> Dictionary:
 
 
 ## The suite's fixture injection (production never calls this).
-## `table` is the per-screen map `{screen: {elements, lists}}`.
+## `table` is the per-screen map `{screen: {elements, lists}}` — an
+## EMPTY table means "no table" (every screen unmanaged), not "read
+## the shipped file".
 static func set_table_for_tests(table: Dictionary) -> void:
 	_test_table = table
+	_test_table_set = true
 
 
 ## One screen's v2 table `{elements, lists}` — `{}` when the screen is
@@ -763,3 +770,4 @@ static func _reset_for_tests() -> void:
 	_roots = {}
 	_current = ""
 	_test_table = {}
+	_test_table_set = false

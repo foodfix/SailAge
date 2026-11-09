@@ -536,12 +536,14 @@ func current_mutiny_offer() -> Dictionary:
 
 
 ## Disables the buttons the offer cannot satisfy: "Pay" needs `can_pay`,
-## "Suppress" needs `can_suppress` (§4.8.3).
+## "Suppress" needs `can_suppress` (§4.8.3). (Phase 12: the confirm
+## dialog's flow chain is deleted — the buttons hang off the plate,
+## `data/layout_fragments/confirm.json`.)
 func _apply_mutiny_offer() -> void:
 	if _mutiny_dialog == null:
 		return
-	var confirm: Button = _mutiny_dialog.get_node("Center/Panel/Margin/Body/Footer/Confirm")
-	var cancel: Button = _mutiny_dialog.get_node("Center/Panel/Margin/Body/Footer/Cancel")
+	var confirm: Button = _mutiny_dialog.get_node("Panel/Confirm")
+	var cancel: Button = _mutiny_dialog.get_node("Panel/Cancel")
 	confirm.disabled = not bool(_mutiny_offer.get("can_pay", false))
 	cancel.disabled = not bool(_mutiny_offer.get("can_suppress", false))
 	confirm.text = I18n.fmt(

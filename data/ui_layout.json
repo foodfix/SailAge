@@ -1764,6 +1764,138 @@
       },
       "lists": {}
     },
+    "guild": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "header": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 1
+        },
+        "header.back": {
+          "h": 2,
+          "w": 4,
+          "x": 54,
+          "y": 0
+        },
+        "header.fame": {
+          "h": 1,
+          "w": 2,
+          "x": 52,
+          "y": 1
+        },
+        "header.gold": {
+          "h": 1,
+          "w": 2,
+          "x": 49,
+          "y": 1
+        },
+        "header.title": {
+          "h": 1,
+          "w": 48,
+          "x": 0,
+          "y": 0
+        },
+        "offers": {
+          "h": 21,
+          "w": 58,
+          "x": 1,
+          "y": 3
+        },
+        "offers.announce": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "offers.empty": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 3
+        },
+        "offers.heading": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "offers.refresh_hint": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        },
+        "offers.scroll": {
+          "h": 18,
+          "w": 58,
+          "x": 0,
+          "y": 3
+        },
+        "reports": {
+          "h": 6,
+          "w": 58,
+          "x": 1,
+          "y": 25
+        },
+        "reports.empty": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        },
+        "reports.heading": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "reports.scroll": {
+          "h": 4,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        }
+      },
+      "lists": {
+        "offers": {
+          "base": {
+            "h": 3,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 3,
+          "viewport": {
+            "h": 18,
+            "w": 58,
+            "x": 0,
+            "y": 3
+          }
+        },
+        "reports": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 4,
+            "w": 58,
+            "x": 0,
+            "y": 1
+          }
+        }
+      }
+    },
     "hail": {
       "elements": {
         "dim": {
@@ -1877,6 +2009,129 @@
             "w": 13,
             "x": 1,
             "y": 1
+          }
+        }
+      }
+    },
+    "inn": {
+      "elements": {
+        "actions": {
+          "h": 10,
+          "w": 58,
+          "x": 1,
+          "y": 9
+        },
+        "actions.odd_job_hint": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 6
+        },
+        "actions.rest": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "actions.rest_hint": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "actions.work_odd_job": {
+          "h": 2,
+          "w": 13,
+          "x": 0,
+          "y": 4
+        },
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "captains.header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 20
+        },
+        "captains.rows": {
+          "h": 4,
+          "w": 58,
+          "x": 1,
+          "y": 21
+        },
+        "footer": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 30
+        },
+        "footer.back": {
+          "h": 2,
+          "w": 4,
+          "x": 54,
+          "y": 0
+        },
+        "header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 1
+        },
+        "header.title": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "status": {
+          "h": 6,
+          "w": 58,
+          "x": 1,
+          "y": 2
+        },
+        "status.day": {
+          "h": 1,
+          "w": 57,
+          "x": 1,
+          "y": 4
+        },
+        "status.gold": {
+          "h": 1,
+          "w": 57,
+          "x": 1,
+          "y": 3
+        },
+        "status.morale": {
+          "h": 1,
+          "w": 57,
+          "x": 1,
+          "y": 1
+        },
+        "status.morale_bar": {
+          "h": 1,
+          "w": 57,
+          "x": 1,
+          "y": 2
+        }
+      },
+      "lists": {
+        "captains": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
           }
         }
       }
@@ -2046,6 +2301,237 @@
         }
       }
     },
+    "market": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "captains": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 28
+        },
+        "captains_header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 27
+        },
+        "column_header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        },
+        "column_header.arrows": {
+          "h": 1,
+          "w": 1,
+          "x": 14,
+          "y": 0
+        },
+        "column_header.buy": {
+          "h": 1,
+          "w": 3,
+          "x": 32,
+          "y": 0
+        },
+        "column_header.good": {
+          "h": 1,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "column_header.marginal": {
+          "h": 1,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "column_header.qty": {
+          "h": 1,
+          "w": 10,
+          "x": 22,
+          "y": 0
+        },
+        "column_header.sell": {
+          "h": 1,
+          "w": 3,
+          "x": 35,
+          "y": 0
+        },
+        "column_header.stock": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "column_header.trend": {
+          "h": 1,
+          "w": 4,
+          "x": 10,
+          "y": 0
+        },
+        "column_header.you_have": {
+          "h": 1,
+          "w": 2,
+          "x": 20,
+          "y": 0
+        },
+        "footer": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 25
+        },
+        "footer.invest": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "footer.invest_status": {
+          "h": 1,
+          "w": 20,
+          "x": 7,
+          "y": 0
+        },
+        "goods_scroll": {
+          "h": 19,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "header": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 1
+        },
+        "header.back": {
+          "h": 2,
+          "w": 5,
+          "x": 53,
+          "y": 0
+        },
+        "header.gold": {
+          "h": 1,
+          "w": 2,
+          "x": 43,
+          "y": 1
+        },
+        "header.hold": {
+          "h": 1,
+          "w": 4,
+          "x": 46,
+          "y": 1
+        },
+        "header.tax_badge": {
+          "h": 1,
+          "w": 3,
+          "x": 49,
+          "y": 1
+        },
+        "header.title": {
+          "h": 2,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "hero_slot": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 21
+        },
+        "info_strip": {
+          "h": 2,
+          "w": 56,
+          "x": 2,
+          "y": 21
+        },
+        "intel": {
+          "h": 3,
+          "w": 58,
+          "x": 1,
+          "y": 31
+        },
+        "intel_header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 30
+        },
+        "specialty_header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "table": {
+          "h": 22,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "table_frame": {
+          "h": 22,
+          "w": 58,
+          "x": 1,
+          "y": 3
+        }
+      },
+      "lists": {
+        "captains": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "intel": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "rows": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 19,
+            "w": 58,
+            "x": 0,
+            "y": 2
+          }
+        }
+      }
+    },
     "officer_roster": {
       "elements": {
         "detail": {
@@ -2128,6 +2614,692 @@
         }
       },
       "lists": {}
+    },
+    "palace": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "board.header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 21
+        },
+        "board.rows": {
+          "h": 4,
+          "w": 58,
+          "x": 1,
+          "y": 22
+        },
+        "commend_dialog": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "confirm_dialog": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "header": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 1
+        },
+        "header.back": {
+          "h": 2,
+          "w": 4,
+          "x": 54,
+          "y": 0
+        },
+        "header.fame": {
+          "h": 1,
+          "w": 2,
+          "x": 52,
+          "y": 1
+        },
+        "header.rep": {
+          "h": 1,
+          "w": 5,
+          "x": 46,
+          "y": 1
+        },
+        "header.title": {
+          "h": 1,
+          "w": 46,
+          "x": 0,
+          "y": 0
+        },
+        "inform.header": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 27
+        },
+        "inform.rows": {
+          "h": 4,
+          "w": 58,
+          "x": 1,
+          "y": 28
+        },
+        "rows": {
+          "h": 25,
+          "w": 58,
+          "x": 1,
+          "y": 3
+        },
+        "rows.bounty": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 6
+        },
+        "rows.bounty.action": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.bounty.label": {
+          "h": 1,
+          "w": 51,
+          "x": 0,
+          "y": 1
+        },
+        "rows.mission": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "rows.mission.action": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.mission.label": {
+          "h": 1,
+          "w": 51,
+          "x": 0,
+          "y": 1
+        },
+        "rows.permit_foreign": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 11
+        },
+        "rows.permit_foreign.buy": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.permit_foreign.label": {
+          "h": 2,
+          "w": 36,
+          "x": 0,
+          "y": 0
+        },
+        "rows.permit_foreign.note": {
+          "h": 2,
+          "w": 15,
+          "x": 36,
+          "y": 0
+        },
+        "rows.permit_header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 8
+        },
+        "rows.permit_home": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 9
+        },
+        "rows.permit_home.buy": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.permit_home.label": {
+          "h": 2,
+          "w": 36,
+          "x": 0,
+          "y": 0
+        },
+        "rows.permit_home.note": {
+          "h": 2,
+          "w": 15,
+          "x": 36,
+          "y": 0
+        },
+        "rows.repair": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 4
+        },
+        "rows.repair.action": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.repair.label": {
+          "h": 1,
+          "w": 51,
+          "x": 0,
+          "y": 1
+        },
+        "rows.retire": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 15
+        },
+        "rows.retire.button": {
+          "h": 2,
+          "w": 7,
+          "x": 0,
+          "y": 0
+        },
+        "rows.title": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "rows.title.ceremony": {
+          "h": 2,
+          "w": 7,
+          "x": 51,
+          "y": 0
+        },
+        "rows.title.current": {
+          "h": 1,
+          "w": 9,
+          "x": 0,
+          "y": 1
+        },
+        "rows.title.next": {
+          "h": 1,
+          "w": 42,
+          "x": 9,
+          "y": 1
+        },
+        "rows.tournament": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 13
+        },
+        "rows.tournament.action": {
+          "h": 2,
+          "w": 8,
+          "x": 50,
+          "y": 0
+        },
+        "rows.tournament.label": {
+          "h": 1,
+          "w": 50,
+          "x": 0,
+          "y": 1
+        }
+      },
+      "lists": {
+        "board": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "inform": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
+    },
+    "port": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "cards.guild": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 5
+        },
+        "cards.guild.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.guild.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "cards.inn": {
+          "h": 2,
+          "w": 10,
+          "x": 10,
+          "y": 2
+        },
+        "cards.inn.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.inn.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "cards.market": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.market.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.market.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "cards.palace": {
+          "h": 2,
+          "w": 10,
+          "x": 10,
+          "y": 5
+        },
+        "cards.palace.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.palace.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "cards.shipyard": {
+          "h": 2,
+          "w": 10,
+          "x": 10,
+          "y": 0
+        },
+        "cards.shipyard.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.shipyard.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "cards.tavern": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 2
+        },
+        "cards.tavern.name": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "cards.tavern.status": {
+          "h": 1,
+          "w": 10,
+          "x": 0,
+          "y": 1
+        },
+        "facility_grid": {
+          "h": 7,
+          "w": 58,
+          "x": 1,
+          "y": 7
+        },
+        "facility_heading": {
+          "h": 1,
+          "w": 58,
+          "x": 1,
+          "y": 6
+        },
+        "footer": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 30
+        },
+        "footer.set_sail": {
+          "h": 2,
+          "w": 8,
+          "x": 45,
+          "y": 0
+        },
+        "footer.settings": {
+          "h": 2,
+          "w": 5,
+          "x": 53,
+          "y": 0
+        },
+        "header": {
+          "h": 4,
+          "w": 58,
+          "x": 1,
+          "y": 2
+        },
+        "header.day_greeting": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 3
+        },
+        "header.greeting": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "header.nation_name": {
+          "h": 1,
+          "w": 2,
+          "x": 5,
+          "y": 1
+        },
+        "header.nation_swatch": {
+          "h": 1,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "header.port_name": {
+          "h": 1,
+          "w": 3,
+          "x": 1,
+          "y": 0
+        }
+      },
+      "lists": {}
+    },
+    "provisions": {
+      "elements": {
+        "cargo": {
+          "h": 4,
+          "w": 23,
+          "x": 1,
+          "y": 15
+        },
+        "cargo.scroll": {
+          "h": 4,
+          "w": 23,
+          "x": 0,
+          "y": 0
+        },
+        "crew": {
+          "h": 1,
+          "w": 23,
+          "x": 0,
+          "y": 0
+        },
+        "days_bar": {
+          "h": 1,
+          "w": 23,
+          "x": 1,
+          "y": 13
+        },
+        "days_row": {
+          "h": 2,
+          "w": 23,
+          "x": 1,
+          "y": 11
+        },
+        "days_row.days": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "days_row.fill": {
+          "h": 2,
+          "w": 7,
+          "x": 15,
+          "y": 0
+        },
+        "days_row.short": {
+          "h": 2,
+          "w": 5,
+          "x": 10,
+          "y": 0
+        },
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "footer": {
+          "h": 2,
+          "w": 23,
+          "x": 1,
+          "y": 19
+        },
+        "footer.gate_reason": {
+          "h": 2,
+          "w": 10,
+          "x": 0,
+          "y": 0
+        },
+        "footer.sail": {
+          "h": 2,
+          "w": 6,
+          "x": 17,
+          "y": 0
+        },
+        "footer.stay": {
+          "h": 2,
+          "w": 6,
+          "x": 11,
+          "y": 0
+        },
+        "header": {
+          "h": 1,
+          "w": 25,
+          "x": 1,
+          "y": 2
+        },
+        "hint": {
+          "h": 1,
+          "w": 23,
+          "x": 1,
+          "y": 14
+        },
+        "hold": {
+          "h": 1,
+          "w": 23,
+          "x": 0,
+          "y": 5
+        },
+        "panel": {
+          "h": 21,
+          "w": 27,
+          "x": 16,
+          "y": 6
+        },
+        "rows": {
+          "h": 4,
+          "w": 23,
+          "x": 0,
+          "y": 1
+        },
+        "rows.provisions": {
+          "h": 2,
+          "w": 23,
+          "x": 0,
+          "y": 0
+        },
+        "rows.provisions.buy": {
+          "h": 2,
+          "w": 7,
+          "x": 12,
+          "y": 0
+        },
+        "rows.provisions.jettison": {
+          "h": 2,
+          "w": 3,
+          "x": 19,
+          "y": 0
+        },
+        "rows.provisions.label": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.provisions.minus": {
+          "h": 1,
+          "w": 2,
+          "x": 6,
+          "y": 0
+        },
+        "rows.provisions.plus": {
+          "h": 1,
+          "w": 2,
+          "x": 10,
+          "y": 0
+        },
+        "rows.provisions.qty": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "rows.water": {
+          "h": 2,
+          "w": 23,
+          "x": 0,
+          "y": 2
+        },
+        "rows.water.buy": {
+          "h": 2,
+          "w": 7,
+          "x": 12,
+          "y": 0
+        },
+        "rows.water.jettison": {
+          "h": 2,
+          "w": 3,
+          "x": 19,
+          "y": 0
+        },
+        "rows.water.label": {
+          "h": 2,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "rows.water.minus": {
+          "h": 1,
+          "w": 2,
+          "x": 6,
+          "y": 0
+        },
+        "rows.water.plus": {
+          "h": 1,
+          "w": 2,
+          "x": 10,
+          "y": 0
+        },
+        "rows.water.qty": {
+          "h": 1,
+          "w": 2,
+          "x": 8,
+          "y": 0
+        },
+        "table": {
+          "h": 6,
+          "w": 23,
+          "x": 1,
+          "y": 4
+        },
+        "title": {
+          "h": 1,
+          "w": 25,
+          "x": 1,
+          "y": 1
+        }
+      },
+      "lists": {
+        "stacks": {
+          "base": {
+            "h": 1,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 4,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
     },
     "reputation_view": {
       "elements": {
@@ -2548,6 +3720,453 @@
         }
       },
       "lists": {}
+    },
+    "shipyard": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "catalog_panel": {
+          "h": 28,
+          "w": 29,
+          "x": 1,
+          "y": 4
+        },
+        "catalog_scroll": {
+          "h": 26,
+          "w": 27,
+          "x": 1,
+          "y": 2
+        },
+        "catalog_title": {
+          "h": 1,
+          "w": 27,
+          "x": 1,
+          "y": 1
+        },
+        "equip.player.armor": {
+          "h": 4,
+          "w": 27,
+          "x": 0,
+          "y": 4
+        },
+        "equip.player.weapon": {
+          "h": 4,
+          "w": 27,
+          "x": 0,
+          "y": 0
+        },
+        "fleet_panel": {
+          "h": 28,
+          "w": 29,
+          "x": 30,
+          "y": 4
+        },
+        "fleet_scroll": {
+          "h": 16,
+          "w": 27,
+          "x": 1,
+          "y": 11
+        },
+        "fleet_title": {
+          "h": 1,
+          "w": 27,
+          "x": 1,
+          "y": 1
+        },
+        "header": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 2
+        },
+        "header.back": {
+          "h": 2,
+          "w": 4,
+          "x": 54,
+          "y": 0
+        },
+        "header.gold": {
+          "h": 1,
+          "w": 2,
+          "x": 52,
+          "y": 1
+        },
+        "header.title": {
+          "h": 1,
+          "w": 51,
+          "x": 0,
+          "y": 0
+        },
+        "player_equip": {
+          "h": 9,
+          "w": 27,
+          "x": 1,
+          "y": 2
+        },
+        "player_equip.rows": {
+          "h": 8,
+          "w": 27,
+          "x": 0,
+          "y": 1
+        },
+        "player_equip.title": {
+          "h": 1,
+          "w": 27,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {
+        "catalog": {
+          "base": {
+            "h": 3,
+            "w": 27,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 3,
+          "viewport": {
+            "h": 26,
+            "w": 27,
+            "x": 1,
+            "y": 2
+          }
+        },
+        "fleet": {
+          "base": {
+            "h": 16,
+            "w": 27,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 16,
+          "viewport": {
+            "h": 16,
+            "w": 27,
+            "x": 1,
+            "y": 11
+          }
+        }
+      }
+    },
+    "tavern": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "body": {
+          "h": 24,
+          "w": 58,
+          "x": 1,
+          "y": 6
+        },
+        "captains_table": {
+          "h": 3,
+          "w": 58,
+          "x": 0,
+          "y": 17
+        },
+        "captains_table.header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "crew": {
+          "h": 24,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "crew.count": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "crew.fire_row": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 6
+        },
+        "crew.fire_row.down_to_min": {
+          "h": 2,
+          "w": 5,
+          "x": 11,
+          "y": 0
+        },
+        "crew.fire_row.fire_1": {
+          "h": 2,
+          "w": 5,
+          "x": 0,
+          "y": 0
+        },
+        "crew.fire_row.fire_10": {
+          "h": 2,
+          "w": 5,
+          "x": 5,
+          "y": 0
+        },
+        "crew.hire_row": {
+          "h": 2,
+          "w": 58,
+          "x": 0,
+          "y": 4
+        },
+        "crew.hire_row.fill": {
+          "h": 2,
+          "w": 5,
+          "x": 11,
+          "y": 0
+        },
+        "crew.hire_row.hire_1": {
+          "h": 2,
+          "w": 5,
+          "x": 0,
+          "y": 0
+        },
+        "crew.hire_row.hire_10": {
+          "h": 2,
+          "w": 5,
+          "x": 5,
+          "y": 0
+        },
+        "crew.min_note": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 9
+        },
+        "crew.morale": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        },
+        "crew.morale_bar": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "crew.per_head": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 3
+        },
+        "crew.reason": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 8
+        },
+        "header": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 1
+        },
+        "header.back": {
+          "h": 2,
+          "w": 4,
+          "x": 54,
+          "y": 0
+        },
+        "header.gold": {
+          "h": 1,
+          "w": 2,
+          "x": 52,
+          "y": 1
+        },
+        "header.title": {
+          "h": 1,
+          "w": 51,
+          "x": 0,
+          "y": 0
+        },
+        "officers": {
+          "h": 24,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "officers.reason": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 23
+        },
+        "officers.recruitable_scroll": {
+          "h": 16,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "officers.roster.empty": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "officers.roster_header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 17
+        },
+        "officers.roster_scroll": {
+          "h": 5,
+          "w": 58,
+          "x": 0,
+          "y": 18
+        },
+        "rumors": {
+          "h": 24,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "rumors.empty": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "rumors.price": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 1
+        },
+        "rumors.scroll": {
+          "h": 15,
+          "w": 58,
+          "x": 0,
+          "y": 2
+        },
+        "rumors.tournament": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "spar": {
+          "h": 4,
+          "w": 58,
+          "x": 0,
+          "y": 20
+        },
+        "spar.controls.bet": {
+          "h": 2,
+          "w": 7,
+          "x": 5,
+          "y": 2
+        },
+        "spar.controls.stake_down": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 2
+        },
+        "spar.controls.stake_up": {
+          "h": 2,
+          "w": 2,
+          "x": 2,
+          "y": 2
+        },
+        "spar.header": {
+          "h": 1,
+          "w": 58,
+          "x": 0,
+          "y": 0
+        },
+        "spar.terms": {
+          "h": 1,
+          "w": 29,
+          "x": 0,
+          "y": 1
+        },
+        "tabs": {
+          "h": 2,
+          "w": 58,
+          "x": 1,
+          "y": 3
+        },
+        "tabs.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 0,
+          "y": 0
+        },
+        "tabs.officers": {
+          "h": 2,
+          "w": 5,
+          "x": 5,
+          "y": 0
+        },
+        "tabs.rumors": {
+          "h": 2,
+          "w": 5,
+          "x": 11,
+          "y": 0
+        }
+      },
+      "lists": {
+        "recruitable": {
+          "base": {
+            "h": 4,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 4,
+          "viewport": {
+            "h": 16,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "rumors": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 15,
+            "w": 58,
+            "x": 0,
+            "y": 2
+          }
+        },
+        "table": {
+          "base": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 1
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 2,
+            "w": 58,
+            "x": 0,
+            "y": 1
+          }
+        }
+      }
     },
     "world": {
       "elements": {

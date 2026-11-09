@@ -545,7 +545,8 @@ func fleet_panel() -> Control:
 	var window := IntelWindowLib._find_window(self)
 	if window == null:
 		return null
-	return window.get_node_or_null("Center/Panel/Margin/Body/Content/FleetView")
+	# Phase 12: the intel window's flow chain is deleted.
+	return window.get_node_or_null("Panel/Content/FleetView")
 
 
 ## Opens the Set-Sail provisioning prompt (docs/80-* §4.6.1) — the S4 → S3 edge.
@@ -595,8 +596,10 @@ func officers_panel() -> Control:
 	var window := IntelWindowLib._find_window(self)
 	if window == null:
 		return null
-	return window.get_node_or_null(
-		"Center/Panel/Margin/Body/Content/OfficerRosterView")
+	# Phase 12: the intel window's flow chain is deleted — the roster
+	# hangs directly under the registered Panel/Content tree
+	# (`data/layout_fragments/intel_window.json`).
+	return window.get_node_or_null("Panel/Content/OfficerRosterView")
 
 
 ## Opens the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic density
