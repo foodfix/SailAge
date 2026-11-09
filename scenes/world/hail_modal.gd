@@ -24,12 +24,17 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const HailOptionsLib := preload("res://scripts/world/hail_options.gd")
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the modal's chrome registers under the
+## absolute-tile registry; the option/terms/result lines are the `rows`
+## list block (computed stacking inside the fixed scroll viewport).
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 ## The W4-D portrait contract seam (§4.11.3 composer): the modal guard-loads
 ## the composer and asks it for the hailed captain's bust; the script is
 ## absent on bases before D merges (or answers null) ⇒ the text-only rows.
 const PortraitComposerPath := "res://scripts/ui/portrait_composer.gd"
-## The §4.8.8 portrait footprint (3:4 bust).
-const PORTRAIT_SIZE := Vector2(72, 96)
+## The §4.8.8 portrait footprint (3:4 bust) — Phase 12: quantized onto the
+## `rows` list's uniform 2-tile row (64px tall bust).
+const PORTRAIT_SIZE := Vector2(48, 64)
 
 ## Emitted when the modal closes (OK button or Esc).
 signal closed
@@ -40,10 +45,18 @@ signal hostile_encounter_requested(fleet: Dictionary)
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
-## §4.7/§6: the body grows to 400px, then scrolls.
-const MAX_BODY_H := 400
+## §4.7/§6: the body scrolls inside its fixed 12-tile viewport (Phase 12 —
+## the viewport is the `rows` list block's clip rect; the grow-to-400px
+## dance is retired with the flow layout).
+const MAX_BODY_H := 384
 ## §4.6.1 stepper convention: steps of 10.
 const STEP_SIZE := 10
+
+## Phase 12: the `rows` list block's geometry, in tiles (authored — the
+## capture records them as the block's base/row_h/viewport).
+const LIST_ROWS := "rows"
+const ROW_W := 13
+const ROW_H := 2
 
 ## Option id → its `hail.option.*` label suffix.
 const OPTION_LABEL_KEYS := {
@@ -67,25 +80,39 @@ var _made_hostile := false
 var _open := false
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _scroll: ScrollContainer = $Center/Panel/Margin/Body/Scroll
-@onready var _content: VBoxContainer = $Center/Panel/Margin/Body/Scroll/Content
-@onready var _ok_button: Button = $Center/Panel/Margin/Body/Footer/OK
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _scroll: ScrollContainer = $Panel/Scroll
+@onready var _content: Control = $Panel/Scroll/Content
+@onready var _ok_button: Button = $Panel/OK
 
 
 func _ready() -> void:
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
 	# Phase-10 sweep: the panel/title chrome retired to the theme (§4.9
 	# Panel + Label rows).
-	_scroll.custom_minimum_size = Vector2(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN, 0)
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_ok_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_ok_button.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the modal's chrome registers its
+	# ids at build; the activation applies the `hail` table at [method
+	# setup] (the open path — the rows are list members registered where
+	# they build).
+	_register_layout_ids()
 	if _open:
 		_refresh()
+
+
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the modal's registered chrome — the
+## dim blanket, the panel, its title and OK button. The scroll viewport and
+## the content node are plumbing (no ids).
+func _register_layout_ids() -> void:
+	RegistryLib.register("hail", _dim, "dim")
+	RegistryLib.register("hail", _panel, "panel", {"role": "panel"})
+	RegistryLib.register("hail", _title, "panel.title")
+	RegistryLib.register("hail", _ok_button, "panel.ok", {"role": "button"})
 
 
 ## The master's static-ish entry: instantiates the scene under `host`
@@ -114,6 +141,10 @@ func setup(fleet: Dictionary) -> void:
 	visible = true
 	add_to_group(MODAL_GROUP)
 	_refresh()
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the activation applies the `hail`
+	# table (idempotent — a rebuilt view's rows re-register where they
+	# build) and notifies the bridge.
+	RegistryLib.screen_active("hail", self)
 
 
 func close() -> void:
@@ -175,9 +206,30 @@ func _refresh() -> void:
 		_show_options()
 	else:
 		_show_results(_result)
-	# §4.7/§6: grow to at most 400px, then the ScrollContainer scrolls.
-	var body_height: float = _content.get_combined_minimum_size().y
-	_scroll.custom_minimum_size.y = minf(body_height, float(MAX_BODY_H))
+	# Phase 12: the rows live in the fixed `rows` viewport; the rebuild
+	# re-applies the data layout (the row children's static rect rows).
+	RegistryLib.apply_layout("hail")
+
+
+## Builds one uniform list row at its stack slot — row *i* at
+## `list_rect("hail", "rows", i)` (authored fallback `(0, i·64, 416, 64)`
+## while the table is unshipped), registered as a `rows` list member.
+func _new_list_row(id: String) -> Control:
+	var row := Control.new()
+	row.name = "Row_%s" % id
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	var index := _content.get_child_count()
+	var rect := RegistryLib.list_rect("hail", LIST_ROWS, index)
+	if rect == Rect2():
+		var tile := float(PaletteLib.CHROME_TILE)
+		rect = Rect2(0.0, float(index * ROW_H) * tile,
+			float(ROW_W * tile), float(ROW_H * tile))
+	row.position = rect.position
+	row.size = rect.size
+	_content.add_child(row)
+	RegistryLib.register("hail", row, "rows.%s" % id,
+		{"list": LIST_ROWS, "data_ordered": true})
+	return row
 
 
 func _show_options() -> void:
@@ -188,11 +240,11 @@ func _show_options() -> void:
 	# (exactly today's layout).
 	var portrait := _portrait_texture()
 	if portrait != null:
-		_content.add_child(_portrait_row(portrait))
+		_add_portrait_row(portrait)
 	for option in HailOptionsLib.options_for(_fleet):
 		_add_option_row(option)
 	if str(_fleet.get("role", "")) == "coaster":
-		_add_terms_label(I18n.t_key("hail.coaster_note"))
+		_add_terms_row("note", I18n.t_key("hail.coaster_note"))
 	_ok_button.text = I18n.t_key("ui.close")
 
 
@@ -215,93 +267,101 @@ func _portrait_texture() -> Texture2D:
 	return texture if texture is Texture2D else null
 
 
-## The portrait illustration row: the 72×96 bust at the top of the options.
-func _portrait_row(texture: Texture2D) -> Control:
-	var row := HBoxContainer.new()
-	row.name = "PortraitRow"
+## The portrait illustration row: the 3:4 bust in the row's leading slot.
+func _add_portrait_row(texture: Texture2D) -> void:
+	var row := _new_list_row("portrait")
 	var rect := TextureRect.new()
 	rect.name = "Portrait"
 	rect.texture = texture
 	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	rect.custom_minimum_size = PORTRAIT_SIZE
+	rect.position = Vector2.ZERO
+	rect.size = PORTRAIT_SIZE
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(rect)
-	return row
+	RegistryLib.register("hail", rect, "rows.portrait.bust")
 
 
 func _add_option_row(option: Dictionary) -> void:
 	var option_id := str(option.get("id", ""))
-	var row := VBoxContainer.new()
-	row.name = "Row_%s" % option_id
-
-	var line := HBoxContainer.new()
-	line.name = "Line"
+	var row := _new_list_row(option_id)
 
 	var button := Button.new()
 	button.name = "Action_%s" % option_id
 	button.text = I18n.t_key("hail.option.%s"
 		% str(OPTION_LABEL_KEYS.get(option_id, option_id)))
-	button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.position = Vector2.ZERO
+	button.size = Vector2(192, float(PaletteLib.BUTTON_H))
 	button.disabled = not bool(option.get("enabled", false))
 	button.pressed.connect(_on_option_pressed.bind(option_id))
-	line.add_child(button)
+	row.add_child(button)
+	RegistryLib.register("hail", button, "rows.%s.action" % option_id,
+		{"role": "button"})
 
 	if option_id == HailOptionsLib.OPTION_SUPPLIES:
-		_add_supply_stepper(line)
-	row.add_child(line)
+		_add_supply_stepper(row, option_id)
 
 	# Terms lines, inline (80-* §4.10.2): the keys the W2-C family authored.
 	match option_id:
 		HailOptionsLib.OPTION_RUMOURS:
 			if bool(option.get("intel", false)):
-				_add_terms_label(I18n.t_key("hail.rumours.intel_terms"), row)
+				_add_terms_row("rumours", I18n.t_key("hail.rumours.intel_terms"))
 		HailOptionsLib.OPTION_SUPPLIES:
-			_add_terms_label(I18n.t_key("hail.supplies.terms"), row)
+			_add_terms_row("supplies", I18n.t_key("hail.supplies.terms"))
 			if HailOptionsLib.stance_of(_fleet) >= HailOptionsLib.SUPPLY_WARM_STANCE:
-				_add_terms_label(I18n.t_key("hail.supplies.stance_terms"), row)
+				_add_terms_row("supplies_1", I18n.t_key("hail.supplies.stance_terms"))
 			var points := HailOptionsLib.negotiation_discount_points()
 			if points > 0:
-				_add_terms_label(I18n.fmt("hail.supplies.negotiation",
-					{"percent": points}), row)
+				_add_terms_row("supplies_2", I18n.fmt("hail.supplies.negotiation",
+					{"percent": points}))
 		HailOptionsLib.OPTION_BEFRIEND:
-			_add_terms_label(I18n.t_key("hail.befriend.terms"), row)
+			_add_terms_row("befriend", I18n.t_key("hail.befriend.terms"))
 			if not bool(option.get("enabled", false)):
-				_add_terms_label(I18n.t_key(str(option.get("reason_key",
-					"gate.locked"))), row)
-
-	_content.add_child(row)
+				_add_terms_row("befriend_1",
+					I18n.t_key(str(option.get("reason_key", "gate.locked"))))
 
 
 ## The `[- qty + ]` stepper + total-cost caption of the supply row (the
-## §4.6.1 convention, steps of 10; staged value starts at 0).
-func _add_supply_stepper(line: HBoxContainer) -> void:
+## §4.6.1 convention, steps of 10; staged value starts at 0). Phase 12:
+## absolute slots in the row — minus / qty / plus / cost.
+func _add_supply_stepper(row: Control, option_id: String) -> void:
 	var minus := Button.new()
 	minus.name = "StepMinus"
 	minus.text = "-"
-	minus.custom_minimum_size = Vector2(40, PaletteLib.BUTTON_H)
+	minus.position = Vector2(192, 0)
+	minus.size = Vector2(32, float(PaletteLib.BUTTON_H))
 	minus.pressed.connect(_on_step.bind(-STEP_SIZE))
-	line.add_child(minus)
+	row.add_child(minus)
+	RegistryLib.register("hail", minus, "rows.%s.minus" % option_id,
+		{"role": "button"})
 
 	var qty := Label.new()
 	qty.name = "Qty"
-	qty.custom_minimum_size = Vector2(56, PaletteLib.ROW_H)
+	qty.position = Vector2(224, 0)
+	qty.size = Vector2(64, float(PaletteLib.ROW_H))
+	qty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line.add_child(qty)
+	row.add_child(qty)
+	RegistryLib.register("hail", qty, "rows.%s.qty" % option_id)
 
 	var plus := Button.new()
 	plus.name = "StepPlus"
 	plus.text = "+"
-	plus.custom_minimum_size = Vector2(40, PaletteLib.BUTTON_H)
+	plus.position = Vector2(288, 0)
+	plus.size = Vector2(32, float(PaletteLib.BUTTON_H))
 	plus.pressed.connect(_on_step.bind(STEP_SIZE))
-	line.add_child(plus)
+	row.add_child(plus)
+	RegistryLib.register("hail", plus, "rows.%s.plus" % option_id,
+		{"role": "button"})
 
 	var cost := Label.new()
 	cost.name = "Cost"
-	cost.custom_minimum_size = Vector2(96, PaletteLib.ROW_H)
+	cost.position = Vector2(352, 0)
+	cost.size = Vector2(64, float(PaletteLib.ROW_H))
+	cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	line.add_child(cost)
+	row.add_child(cost)
+	RegistryLib.register("hail", cost, "rows.%s.cost" % option_id)
 	_refresh_supply_row()
 
 
@@ -319,8 +379,8 @@ func _refresh_supply_row() -> void:
 		"Row_%s" % HailOptionsLib.OPTION_SUPPLIES)
 	if row == null:
 		return
-	var qty_label: Label = row.get_node("Line/Qty")
-	var cost_label: Label = row.get_node("Line/Cost")
+	var qty_label: Label = row.get_node("Qty")
+	var cost_label: Label = row.get_node("Cost")
 	qty_label.text = str(_staged_qty)
 	var cost := 0
 	if _staged_qty > 0:
@@ -331,33 +391,44 @@ func _refresh_supply_row() -> void:
 
 func _show_results(payload: Dictionary) -> void:
 	_clear(_content)
+	var index := 0
 	for entry in payload.get("lines", []):
 		if not (entry is Dictionary):
 			continue
+		var row := _new_list_row("result_%d" % index)
 		var label := Label.new()
 		label.text = I18n.fmt(str(entry.get("key", "")),
 			entry.get("values", {}) if entry.get("values", {}) is Dictionary
 			else {})
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.custom_minimum_size.x = float(
-			PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
-		_content.add_child(label)
+		label.position = Vector2.ZERO
+		label.size = Vector2(float(ROW_W * PaletteLib.CHROME_TILE),
+			float(ROW_H * PaletteLib.CHROME_TILE))
+		row.add_child(label)
+		RegistryLib.register("hail", label,
+			"rows.result_%d.line" % index)
+		index += 1
 	_ok_button.text = I18n.t_key("ui.ok")
 
 
-func _add_terms_label(text: String, row: Container = null) -> void:
+## One terms line: its own `rows` list row beneath the option's button row
+## (the same visual order the in-row VBox used to give). `suffix` dis-
+## ambiguates an option's multiple lines; `note` is the coaster note.
+func _add_terms_row(suffix: String, text: String) -> void:
+	var row := _new_list_row("terms_%s" % suffix)
 	var label := Label.new()
 	label.name = "Terms"
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# Secondary terms text carries the theme's Dim variation (§4.9).
 	label.theme_type_variation = "Dim"
-	label.custom_minimum_size.x = float(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
-	if row == null:
-		_content.add_child(label)
-	else:
-		row.add_child(label)
+	label.position = Vector2.ZERO
+	label.size = Vector2(float(ROW_W * PaletteLib.CHROME_TILE),
+		float(ROW_H * PaletteLib.CHROME_TILE))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	RegistryLib.register("hail", label, "rows.terms_%s.terms" % suffix)
 
 
 # --- Actions ------------------------------------------------------------------

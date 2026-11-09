@@ -2,27 +2,29 @@
 
 [ext_resource type="Script" path="res://scenes/world/autopilot_hud.gd" id="1_ap_hud"]
 
-[node name="AutopilotHud" type="PanelContainer"]
-custom_minimum_size = Vector2(0, 36)
+[node name="AutopilotHud" type="Panel"]
+custom_minimum_size = Vector2(0, 32)
 anchors_preset = 10
 anchor_right = 1.0
 grow_horizontal = 2
 mouse_filter = 2
 script = ExtResource("1_ap_hud")
 
-[node name="Row" type="HBoxContainer" parent="."]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 12
-
-[node name="Info" type="Label" parent="Row"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Info" type="Label" parent="."]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 0.0
+offset_right = 1664.0
+offset_bottom = 32.0
 text = "目的地 · 预计 天"
 vertical_alignment = 1
+clip_text = true
 
-[node name="Cancel" type="Button" parent="Row"]
+[node name="Cancel" type="Button" parent="."]
 custom_minimum_size = Vector2(140, 28)
-layout_mode = 2
-size_flags_vertical = 4
+layout_mode = 0
+offset_left = 1760.0
+offset_top = 0.0
+offset_right = 1888.0
+offset_bottom = 32.0
 text = "取消委任"

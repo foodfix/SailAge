@@ -1,4 +1,4 @@
-extends PanelContainer
+extends Panel
 ## Appointed-voyage HUD bar — docs/80-UI-UX.md §4.10.4 + §4.5 ("instanced
 ## into the world HUD below the top bar"), docs/20-WORLD-AND-SAILING.md
 ## §4.19. Reads `player.autopilot` + the runtime route; **mutates nothing**
@@ -8,7 +8,7 @@ extends PanelContainer
 ##
 ## ```
 ## +--------------------------------------------------------------+
-## | 目的地 {port} · 预计 {days} 天                        [取消委任] |  36px
+## | 目的地 {port} · 预计 {days} 天                        [取消委任] |  32px
 ## +--------------------------------------------------------------+
 ## ```
 ##
@@ -18,17 +18,21 @@ extends PanelContainer
 ## master's micro-ledger entry — the host calls [method setup] after adding
 ## the scene, everything else is self-contained.
 ##
-## Placeholder art rule: palette colors + default font only (§4.8, via
-## `scripts/palette.gd`).
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the bar is a plain Panel whose two
+## elements (info line + cancel button) are absolutely placed — the
+## `autopilot_hud` table IS the layout; the flow HBox row is deleted.
 
 const AutopilotLib := preload("res://scripts/world/autopilot.gd")
+## Phase 12 (docs/80-UI-UX.md §4.8.9): the bar registers under the
+## absolute-tile registry — the `autopilot_hud` screen table IS the layout.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 ## `sail.autopilot.*` keys (docs/80-* §4.15).
 const KEY_HUD_BAR := "sail.autopilot.hud.bar"
 const KEY_CANCEL := "sail.autopilot.cancel"
 
-@onready var _info: Label = $Row/Info
-@onready var _cancel: Button = $Row/Cancel
+@onready var _info: Label = $Info
+@onready var _cancel: Button = $Cancel
 
 ## True once [method setup] wired the signals (idempotent re-setup).
 var _wired := false
@@ -36,23 +40,31 @@ var _wired := false
 
 func _ready() -> void:
 	# Phase-10 sweep: the bar's panel chrome retired to the theme (§4.9
-	# PanelContainer row); the info line reads in the theme's Label ink.
+	# Panel row); the info line reads in the theme's Label ink.
 	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cancel.text = I18n.t_key(KEY_CANCEL)
 	_cancel.pressed.connect(_on_cancel_pressed)
 	visible = false
 	_rebind_labels()
+	# Phase 12 (docs/80-UI-UX.md §4.8.9): the bar's elements register their
+	# ids at build; the activation applies the `autopilot_hud` table at
+	# [method setup] (the host's wiring seam — the open path).
+	RegistryLib.register("autopilot_hud", self, "bar", {"role": "panel"})
+	RegistryLib.register("autopilot_hud", _info, "bar.info")
+	RegistryLib.register("autopilot_hud", _cancel, "bar.cancel",
+		{"role": "button"})
 
 
 ## The world-HUD wiring seam (the master's micro): connect the shared
 ## signals + take the first read. Idempotent; safe to call again after a
-## re-parent.
+## re-parent. Phase 12: the activation applies the `autopilot_hud` table.
 func setup() -> void:
 	if not _wired:
 		EventBus.day_advanced.connect(_on_day_advanced)
 		EventBus.locale_changed.connect(_on_locale_changed)
 		_wired = true
 	refresh()
+	RegistryLib.screen_active("autopilot_hud", self)
 
 
 ## True while the bar is on screen (an appointment stands).
