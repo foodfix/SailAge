@@ -68,6 +68,11 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## the registry fills at W4-D), the private trade toast adopts the kit toast
 ## atom, and every per-screen color/chrome override retires to the theme.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase-11 W3-B (docs/80-UI-UX.md §4.8.9): every named control registers its
+## stable hierarchical id at build time (`rows.<good_id>` for the table — the
+## market row order is a locked data contract); the shipped `ui_layout` table
+## is `{}`, so the apply walk is a no-op. Styling stays in `ui_theme.gd`.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const UiMotionLib := preload("res://scripts/ui_motion.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
@@ -177,13 +182,16 @@ signal traded(kind: String, good_id: String, qty: int)
 @onready var _gold: Label = $Layout/VBox/Header/Gold
 @onready var _hold: Label = $Layout/VBox/Header/Hold
 @onready var _back_button: Button = $Layout/VBox/Header/Back
+@onready var _header_box: HBoxContainer = $Layout/VBox/Header
 @onready var _table_frame: PanelContainer = $Layout/VBox/TableFrame
+@onready var _table_box: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
 @onready var _column_header: HBoxContainer = \
 	$Layout/VBox/TableFrame/Margin/Table/ColumnHeader
 @onready var _goods_scroll: ScrollContainer = \
 	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll
 @onready var _goods_rows: VBoxContainer = \
 	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows
+@onready var _footer: HBoxContainer = $Layout/VBox/Footer
 @onready var _invest_button: Button = $Layout/VBox/Footer/Invest
 @onready var _invest_status: Label = $Layout/VBox/Footer/InvestStatus
 
@@ -333,6 +341,7 @@ func _ready() -> void:
 
 	_port_id = _read_current_port()
 	_cache_port_lists()
+	_register_static_ids()
 	_build_specialty_header()
 	_build_tax_badge()
 	_build_info_strip()
@@ -353,6 +362,39 @@ func _ready() -> void:
 	# docs/30 §4.4: a stock-moving trade (or the daily economy step at this
 	# port) moves the stock/trend/marginal cells immediately.
 	EventBus.market_changed.connect(_on_market_changed)
+
+	# Phase-11 W3-B (docs/80-* §4.8.9): one activation after the full build —
+	# captures the registration baselines and applies the committed override
+	# table (the shipped file is `{}`, so this is a no-op walk).
+	RegistryLib.screen_active("market", self)
+
+
+## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
+## stable hierarchical ids. Roles only tag what a `sheet` override may
+## target (the styling itself stays in `ui_theme.gd`); kinds auto-derive
+## (this screen has no edge-docked bars). The code-built sections register
+## where they build (`_build_specialty_header`, `_build_tax_badge`,
+## `_build_info_strip`, `_build_captains_section`, `_build_intel_section`);
+## the shared intel window and toast atom are §4.8.9 fast-follows.
+func _register_static_ids() -> void:
+	RegistryLib.register("market", _background, "background", {"role": "panel"})
+	RegistryLib.register("market", _header_box, "header")
+	RegistryLib.register("market", _title, "header.title")
+	RegistryLib.register("market", _gold, "header.gold")
+	RegistryLib.register("market", _hold, "header.hold")
+	RegistryLib.register("market", _back_button, "header.back",
+		{"role": "button"})
+	RegistryLib.register("market", $Toast, "toast")
+	RegistryLib.register("market", _table_frame, "table_frame",
+		{"role": "panel"})
+	RegistryLib.register("market", _table_box, "table")
+	RegistryLib.register("market", _column_header, "column_header")
+	RegistryLib.register("market", _goods_scroll, "goods_scroll")
+	RegistryLib.register("market", _goods_rows, "rows")
+	RegistryLib.register("market", _footer, "footer")
+	RegistryLib.register("market", _invest_button, "footer.invest",
+		{"role": "button"})
+	RegistryLib.register("market", _invest_status, "footer.invest_status")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -583,6 +625,10 @@ func _make_group_divider() -> ColorRect:
 	divider.color = PaletteLib.PANEL_LINE
 	divider.custom_minimum_size = Vector2(0, 2)
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Phase-11 W3-B (docs/80-* §4.8.9): the divider's slot between the ★ 特产
+	# group and the rest is data-derived (locked like the row order).
+	RegistryLib.register("market", divider, "rows.specialty_divider",
+		{"data_ordered": true})
 	return divider
 
 
@@ -604,6 +650,10 @@ func _build_column_header() -> void:
 		# Secondary caption color: the theme's `Dim` variation.
 		label.theme_type_variation = "Dim"
 		_column_header.add_child(label)
+		# Phase-11 W3-B (docs/80-* §4.8.9): the §4.8 column order is the
+		# COL_SPECS contract — locked like the market row order.
+		RegistryLib.register("market", label,
+			"column_header.%s" % str(spec[0]), {"data_ordered": true})
 
 
 ## One table row, built cell-for-cell in [constant COL_SPECS] order —
@@ -622,6 +672,11 @@ func _build_good_row(good_id: String) -> Dictionary:
 	# PASS, so the row's own buttons and field still get their clicks.
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.gui_input.connect(_on_row_gui_input.bind(good_id))
+	# Phase-11 W3-B (docs/80-* §4.8.9): one data-derived id per goods row;
+	# the market row order (★ 特产 first, then base_price ascending) is a
+	# locked data contract, never a layout preference.
+	RegistryLib.register("market", row, "rows.%s" % good_id,
+		{"data_ordered": true})
 
 	var refs := {"node": row, "qty_buttons": {}}
 	for spec in COL_SPECS:
@@ -668,6 +723,14 @@ func _build_good_row(good_id: String) -> Dictionary:
 				refs["name_cell"] = name_cell
 				refs["badge"] = badge_label
 				refs["name"] = name_label
+				# Phase-11 W3-B (docs/80-* §4.8.9): the good cell's named
+				# parts under the row's data-derived id.
+				RegistryLib.register("market", badge_label,
+					"rows.%s.badge" % good_id)
+				RegistryLib.register("market", good_icon,
+					"rows.%s.good_icon" % good_id)
+				RegistryLib.register("market", name_label,
+					"rows.%s.name" % good_id)
 			"arrows":
 				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the
 				# profit arrow (↓ buy-cheap / ↑ sell-dear vs base_price)
@@ -692,6 +755,10 @@ func _build_good_row(good_id: String) -> Dictionary:
 				refs["arrows"] = arrows_box
 				refs["profit_arrow"] = profit_arrow_label
 				refs["memory_arrow"] = memory_arrow_label
+				RegistryLib.register("market", profit_arrow_label,
+					"rows.%s.profit_arrow" % good_id)
+				RegistryLib.register("market", memory_arrow_label,
+					"rows.%s.memory_arrow" % good_id)
 			"trend":
 				# The §4.7.7 flow-trend cell: the §4.8 trend mark
 				# (`trend_up` / `trend_down` /, on a demand-event surge,
@@ -717,6 +784,10 @@ func _build_good_row(good_id: String) -> Dictionary:
 				row.add_child(trend_box)
 				refs["trend_icon"] = trend_icon
 				refs["trend"] = trend_label
+				RegistryLib.register("market", trend_icon,
+					"rows.%s.trend_icon" % good_id)
+				RegistryLib.register("market", trend_label,
+					"rows.%s.trend" % good_id)
 			"qty":
 				# Quantity picker (docs/30 §4.4): 1 / 10 / 100 / Max buttons
 				# plus direct numeric entry (digits only, live-clamped,
@@ -731,16 +802,25 @@ func _build_good_row(good_id: String) -> Dictionary:
 				qty_field.max_length = 6
 				qty_field.placeholder_text = "0"
 				qty_box.add_child(qty_field)
+				# Phase-11 W3-B (docs/80-* §4.8.9): the picker's field (the
+				# row's `field` role) and its preset buttons.
+				RegistryLib.register("market", qty_field,
+					"rows.%s.qty" % good_id, {"role": "field"})
 				for preset in QTY_PRESETS:
 					var button := _make_row_button(
 						"Qty%d" % preset, str(preset), COL_PRESET_W)
 					button.pressed.connect(_on_qty_preset.bind(good_id, preset))
 					qty_box.add_child(button)
+					RegistryLib.register("market", button,
+						"rows.%s.qty_%d" % [good_id, preset],
+						{"role": "button"})
 					refs["qty_buttons"][str(preset)] = button
 				var max_button := _make_row_button(
 					"QtyMax", I18n.t_key("market.max"), COL_MAX_W)
 				max_button.pressed.connect(_on_qty_preset.bind(good_id, -1))
 				qty_box.add_child(max_button)
+				RegistryLib.register("market", max_button,
+					"rows.%s.qty_max" % good_id, {"role": "button"})
 				refs["qty_buttons"]["max"] = max_button
 				row.add_child(qty_box)
 				refs["qty"] = qty_field
@@ -755,6 +835,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 				var handler := _on_buy if is_buy else _on_sell
 				trade_button.pressed.connect(handler.bind(good_id))
 				row.add_child(trade_button)
+				RegistryLib.register("market", trade_button,
+					"rows.%s.%s" % [good_id, key.to_lower()],
+					{"role": "button"})
 				refs[key.to_lower()] = trade_button
 			_:
 				# A plain fixed-width cell (Stock / Marginal / You have):
@@ -770,6 +853,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 				cell.clip_text = true
 				cell.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 				row.add_child(cell)
+				RegistryLib.register("market", cell,
+					"rows.%s.%s" % [good_id,
+						"have" if spec_key == "you_have" else spec_key])
 				refs["have" if spec_key == "you_have" else spec_key] = cell
 
 	_goods_rows.add_child(row)
@@ -793,6 +879,8 @@ func _build_specialty_header() -> void:
 	_specialty_header.name = "SpecialtyHeader"
 	table.add_child(_specialty_header)
 	table.move_child(_specialty_header, 0)
+	# Phase-11 W3-B (docs/80-* §4.8.9).
+	RegistryLib.register("market", _specialty_header, "specialty_header")
 
 
 ## The header tariff badge (docs/30 §4.8 / docs/80 §4.7.11): 势力内 5% /
@@ -805,6 +893,8 @@ func _build_tax_badge() -> void:
 	_tax_badge.name = "TaxBadge"
 	header.add_child(_tax_badge)
 	header.move_child(_tax_badge, _back_button.get_index())
+	# Phase-11 W3-B (docs/80-* §4.8.9).
+	RegistryLib.register("market", _tax_badge, "header.tax_badge")
 
 
 # --- Binding ---------------------------------------------------------------
@@ -888,6 +978,11 @@ func _refresh() -> void:
 	_refresh_investment()
 	_refresh_captains()
 	_refresh_intel()
+	# Phase-11 W3-B (docs/80-* §4.8.9): the captains/intel sections are the
+	# rebuild paths on this screen (fingerprint-gated re-renders recreate
+	# their rows); the new nodes re-registered where they built — re-apply
+	# the committed override table (a no-op on the shipped `{}`).
+	RegistryLib.apply_screen("market")
 
 
 func _refresh_header() -> void:
@@ -978,6 +1073,10 @@ func _build_info_strip() -> void:
 	strip_row.add_child(_hero_slot)
 	strip_row.add_child(_info_strip)
 	table.add_child(strip_row)
+	# Phase-11 W3-B (docs/80-* §4.8.9): the strip and its §4.8 hero-64 slot.
+	RegistryLib.register("market", strip_row, "info_strip_row")
+	RegistryLib.register("market", _hero_slot, "hero_slot")
+	RegistryLib.register("market", _info_strip, "info_strip")
 
 
 ## The two tax lines for `good_id`'s engine payload: `market.tax.buy_line` /
@@ -1356,6 +1455,9 @@ func _build_captains_section() -> void:
 	_captains_box = VBoxContainer.new()
 	_captains_box.name = "CaptainsRows"
 	layout.add_child(_captains_box)
+	# Phase-11 W3-B (docs/80-* §4.8.9).
+	RegistryLib.register("market", _captains_header, "captains_header")
+	RegistryLib.register("market", _captains_box, "captains")
 
 
 ## Re-reads the docked traders sighted at this port's market (the seeded
@@ -1399,6 +1501,8 @@ func _refresh_captains() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
+		# Phase-11 W3-B (docs/80-* §4.8.9).
+		RegistryLib.register("market", empty, "captains.empty")
 		return
 	for entry in _captain_rows:
 		var row := HBoxContainer.new()
@@ -1411,6 +1515,12 @@ func _refresh_captains() -> void:
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
 		row.add_child(label)
 		_captains_box.add_child(row)
+		# Phase-11 W3-B (docs/80-* §4.8.9): data-derived ids; the sighting
+		# order is the seeded intel data (locked like the market rows).
+		RegistryLib.register("market", row,
+			"captains.%s" % str(entry["id"]), {"data_ordered": true})
+		RegistryLib.register("market", label,
+			"captains.%s.label" % str(entry["id"]))
 
 
 ## Prepends the §4.8 `role_{role}` badge to a sighting row (32px inline in
@@ -1458,6 +1568,9 @@ func _build_intel_section() -> void:
 	_intel_box = VBoxContainer.new()
 	_intel_box.name = "IntelRows"
 	layout.add_child(_intel_box)
+	# Phase-11 W3-B (docs/80-* §4.8.9).
+	RegistryLib.register("market", _intel_header, "intel_header")
+	RegistryLib.register("market", _intel_box, "intel")
 
 
 ## Re-reads the captain-bearing fleets sighted at this port (docked + present
@@ -1526,6 +1639,12 @@ func _refresh_intel() -> void:
 		label.theme_type_variation = "Accent" if bool(row["free"]) else ""
 		box.add_child(label)
 		_intel_box.add_child(box)
+		# Phase-11 W3-B (docs/80-* §4.8.9): data-derived ids; the stance
+		# ordering is the intel data (locked).
+		RegistryLib.register("market", box,
+			"intel.%s" % str(row["captain_id"]), {"data_ordered": true})
+		RegistryLib.register("market", label,
+			"intel.%s.label" % str(row["captain_id"]))
 
 
 # --- Interaction -----------------------------------------------------------
