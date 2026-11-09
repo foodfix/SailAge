@@ -308,8 +308,7 @@ func _msg_revert(msg: Dictionary) -> void:
 		_send_error("bad_field", "missing 'id'")
 		return
 	RegistryLib.revert_element(screen, id)
-	_send_tree(screen)
-	_send_frame()
+	_queue_update(screen)
 
 
 func _msg_reset_screen(msg: Dictionary) -> void:
@@ -317,13 +316,12 @@ func _msg_reset_screen(msg: Dictionary) -> void:
 	if not _known_screen(screen):
 		return
 	RegistryLib.reset_screen(screen)
-	_send_tree(screen)
-	_send_frame()
+	_queue_update(screen)
 
 
 ## The shared edit path: apply through the registry immediately (the
 ## user watches the real screen move), then answer with the fresh tree
-## + a frame (`90-*` §5.7).
+## + a frame (`90-*` §5.7) — DEFERRED (see `_queue_update`).
 func _edit(msg: Dictionary, overrides: Dictionary) -> void:
 	var screen := String(msg.get("screen", ""))
 	var id := String(msg.get("id", ""))
@@ -333,8 +331,7 @@ func _edit(msg: Dictionary, overrides: Dictionary) -> void:
 		_send_error("bad_field", "missing 'id'")
 		return
 	RegistryLib.apply_overrides(screen, id, overrides)
-	_send_tree(screen)
-	_send_frame()
+	_queue_update(screen)
 
 
 ## Validates one integer-tile field; appends it to `overrides` and
@@ -432,7 +429,34 @@ func on_screen_changed(screen_id: String) -> void:
 	if not _enabled or _active_peer() == null:
 		return
 	_send_screen_changed(screen_id)
-	_send_tree(screen_id)
+	_queue_update(screen_id)
+
+
+# --- Deferred reply (the 2026-11-09 grid-guarantee fix) -------------------------
+
+## The screen id awaiting its deferred tree+frame reply (`""` = none).
+## Coalesced: several edits in one frame answer once.
+var _pending_update: String = ""
+
+
+## Queues the post-edit reply ONE FRAME OUT. A synchronous reply reads
+## the control's rect BEFORE the containers have re-sorted (container
+## sort is deferred by the engine), so the studio received a stale
+## pre-layout rect and re-rendered its box from it — mid-drag that
+## fought the optimistic box and on release it landed on the wrong
+## size. The deferred call runs after the frame's container sorts, so
+## the reply carries the settled, on-grid rect.
+func _queue_update(screen_id: String) -> void:
+	_pending_update = screen_id
+	_deferred_update.call_deferred()
+
+
+func _deferred_update() -> void:
+	var screen := _pending_update
+	_pending_update = ""
+	if screen.is_empty() or not _enabled or _active_peer() == null:
+		return
+	_send_tree(screen)
 	_send_frame()
 
 

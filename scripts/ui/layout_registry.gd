@@ -281,10 +281,23 @@ static func _apply(rec: Dictionary, control: Control,
 					+ " is ignored (data_ordered)")
 	# 2. `min_w` / `min_h` — merged per axis (absent axis untouched).
 	var min_size := control.custom_minimum_size
-	if overrides.has("min_w"):
-		min_size.x = float(int(overrides["min_w"]) * TILE)
-	if overrides.has("min_h"):
-		min_size.y = float(int(overrides["min_h"]) * TILE)
+	if overrides.has("min_w") or overrides.has("min_h"):
+		# The tile-quantized content floor (the 2026-11-09 grid
+		# guarantee, user direction: all edited elements sit on the
+		# 32×32 grid): the content minimum is font-metric (a 26 px text
+		# row is 0.8 tiles), so the effective min SUBSUMES it quantized
+		# UP to whole tiles — the applied size is an exact tile
+		# multiple, the reply rect matches the drag, and the drawn box
+		# (floored to tiles) can never disagree with the override.
+		var content := control.get_minimum_size()
+		var floor_x := float(ceili(content.x / float(TILE)) * TILE)
+		var floor_y := float(ceili(content.y / float(TILE)) * TILE)
+		if overrides.has("min_w"):
+			min_size.x = max(float(int(overrides["min_w"]) * TILE),
+					floor_x)
+		if overrides.has("min_h"):
+			min_size.y = max(float(int(overrides["min_h"]) * TILE),
+					floor_y)
 	control.custom_minimum_size = min_size
 	# The min-authoritative flag pin (the 2026-11-09 drag-resize fix):
 	# with the default FILL flags the parent's allotted size always won —
@@ -315,6 +328,13 @@ static func _apply(rec: Dictionary, control: Control,
 			size.x = float(int(overrides["w"]) * TILE)
 		if overrides.has("h"):
 			size.y = float(int(overrides["h"]) * TILE)
+		# The same grid guarantee as the min floor above: a free resize
+		# subsumes the tile-quantized content floor, so the settled rect
+		# is an exact tile multiple even when the control's content
+		# demands more than the drag asked for.
+		var content := control.get_minimum_size()
+		size.x = max(size.x, float(ceili(content.x / float(TILE)) * TILE))
+		size.y = max(size.y, float(ceili(content.y / float(TILE)) * TILE))
 		control.size = size
 	# 4. `sheet` — skinned roles only; `plain` ignores it by contract.
 	if overrides.has("sheet"):
@@ -491,8 +511,22 @@ static func tree(screen_id: String) -> Array:
 			"locked": bool(rec.get("data_ordered")),
 			"parent": _registered_ancestor(screen_id, control),
 			"clipped": _inside_scroll(control),
+			"min_tiles": _content_min_tiles(control),
 		})
 	return rows
+
+
+## The control's CONTENT minimum (docs/80-* §4.8.9 drag floor):
+## `get_minimum_size()` excludes `custom_minimum_size` — the override's
+## own floor is the studio's to manage, so the drag floor must not
+## include it (a min-driven child could otherwise never shrink). Ceiled
+## to tiles (a 33 px text row demands 2 whole tiles).
+static func _content_min_tiles(control: Control) -> Dictionary:
+	var content := control.get_minimum_size()
+	return {
+		"w": ceili(content.x / float(TILE)),
+		"h": ceili(content.y / float(TILE)),
+	}
 
 
 ## True when a ScrollContainer ancestor owns the control's visibility.

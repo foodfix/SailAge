@@ -897,7 +897,16 @@ function layRenderBoxes() {
     se.addEventListener("mousedown", (ev) => {
       ev.stopPropagation(); ev.preventDefault();
       LAY.drag = { mode: "resize", e: JSON.parse(JSON.stringify(e)),
-                   r: layRect(e) };
+                   r: layRect(e),
+                   // The drag floor (2026-11-09 grid guarantee): the
+                   // element's content minimum in tiles, quantized —
+                   // the game clamps to the same floor, so the box
+                   // never draws below what the control can be and
+                   // never fights the reply.
+                   minr: e.min_tiles
+                     ? { w: Math.max(1, e.min_tiles.w || 1),
+                         h: Math.max(1, e.min_tiles.h || 1) }
+                     : null };
       box.classList.add("dragging");
     });
     box.appendChild(se);
@@ -980,10 +989,15 @@ function layDragMove(ev) {
       layPatch(e.id, { x: nx, y: ny });
     }
   } else if (mode === "resize") {
-    // The §4.8.8 sheet floor: skinned controls measure ≥2×2 tiles, so a
-    // resize below that clamps at the control's own min anyway — the
-    // optimistic box draws the same floor instead of fighting the reply.
-    const floor = kind !== "child" && e.role !== "plain" ? 2 : 1;
+    // The drag floor: the §4.8.8 sheet floor (skinned controls measure
+    // ≥2×2 tiles) AND the element's own content minimum (min_tiles —
+    // font metrics are off-grid, so the game quantizes UP; the box
+    // draws the same floor instead of fighting the reply).
+    const minr = LAY.drag.minr;
+    const floorW = Math.max(kind !== "child" && e.role !== "plain" ? 2 : 1,
+                            minr ? minr.w : 0);
+    const floorH = Math.max(kind !== "child" && e.role !== "plain" ? 2 : 1,
+                            minr ? minr.h : 0);
     if (kind === "child") {
       // container child: SE handle drives custom_minimum_size — the box
       // FOLLOWS the handle (drawing the requested min rect); the
@@ -991,8 +1005,8 @@ function layDragMove(ev) {
       // the parent owns, which lands at drag end. Sends are throttled:
       // one message per tile would flood tree+frame replies that
       // re-render the box mid-drag.
-      const nw = Math.max(floor, Math.min(p.x - r.x, LAY.grid.w || 60));
-      const nh = Math.max(floor, Math.min(p.y - r.y, 33));
+      const nw = Math.max(floorW, Math.min(p.x - r.x, LAY.grid.w || 60));
+      const nh = Math.max(floorH, Math.min(p.y - r.y, 33));
       if (nw === (LAY.drag.lastW || 0) && nh === (LAY.drag.lastH || 0)) return;
       LAY.drag.lastW = nw; LAY.drag.lastH = nh;
       patchBox({ x: r.x, y: r.y, w: nw, h: nh });
@@ -1002,14 +1016,14 @@ function layDragMove(ev) {
     } else if (kind === "anchored") {
       // anchored: resize = the span from the anchored edge
       if (!anchor || anchor === "top") {
-        const nh = Math.max(floor, p.y - r.y);
+        const nh = Math.max(floorH, p.y - r.y);
         if (nh === r.h) return;
         LAY.drag.r = Object.assign({}, r, { h: nh });
         patchBox(LAY.drag.r);
         layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
         layPatch(e.id, { h: nh });
       } else if (anchor === "bottom") {
-        const nh = Math.max(floor, r.y + r.h - p.y);
+        const nh = Math.max(floorH, r.y + r.h - p.y);
         const ny = r.y + r.h - nh;
         if (nh === r.h) return;
         LAY.drag.r = Object.assign({}, r, { y: ny, h: nh });
@@ -1017,14 +1031,14 @@ function layDragMove(ev) {
         layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
         layPatch(e.id, { h: nh });
       } else if (anchor === "left") {
-        const nw = Math.max(floor, p.x - r.x);
+        const nw = Math.max(floorW, p.x - r.x);
         if (nw === r.w) return;
         LAY.drag.r = Object.assign({}, r, { w: nw });
         patchBox(LAY.drag.r);
         layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw });
         layPatch(e.id, { w: nw });
       } else {  // right
-        const nw = Math.max(floor, r.x + r.w - p.x);
+        const nw = Math.max(floorW, r.x + r.w - p.x);
         const nx = r.x + r.w - nw;
         if (nw === r.w) return;
         LAY.drag.r = Object.assign({}, r, { x: nx, w: nw });
@@ -1033,8 +1047,8 @@ function layDragMove(ev) {
         layPatch(e.id, { w: nw });
       }
     } else {  // free/plain: SE handle drives w/h
-      const nw = Math.max(floor, Math.min(p.x - r.x, 60 - r.x));
-      const nh = Math.max(floor, Math.min(p.y - r.y, 33 - r.y));
+      const nw = Math.max(floorW, Math.min(p.x - r.x, 60 - r.x));
+      const nh = Math.max(floorH, Math.min(p.y - r.y, 33 - r.y));
       if (nw === r.w && nh === r.h) return;
       LAY.drag.r = Object.assign({}, r, { w: nw, h: nh });
       patchBox(LAY.drag.r);

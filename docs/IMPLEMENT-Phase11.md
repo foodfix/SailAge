@@ -236,3 +236,15 @@ slot's file inventory:
   and child revert restores the captured flags. Registry suite 40
   checks; port_hub/market suites green. The 80-* §4.8.9 child-resize
   cell gains the flag-pin note.
+- **The grid guarantee (2026-11-09, drag-resize round 4, user
+  direction — "make ALL elements on the 32×32 grid"):** the resize
+  fight's root cause — content minimums are font-metric and off-grid,
+  so clamps landed off-tile, and the bridge replied with pre-layout
+  rects. Now: an overridden min (and a free resize) SUBSUMES the
+  content floor quantized UP to whole tiles (the applied size is an
+  exact tile multiple — `get_minimum_size()` content, never the
+  override's own custom); the bridge's post-edit tree+frame replies go
+  DEFERRED one frame (post container sort, coalesced — `_queue_update`),
+  so replies carry settled rects; tree rows carry `min_tiles` (the
+  content drag floor) and the studio clamps drags to it. Registry suite
+  42 checks; bridge 31 (deferred replies green); port_hub 327.

@@ -328,8 +328,9 @@ func _test_idempotence_pruning() -> void:
 	RegistryLib.apply_screen("guild")
 	_check(panel.position == after_first,
 			"apply_screen is idempotent")
-	_check(RegistryLib.tree("guild").size() == 1,
-			"tree() lists the live record")
+	var guild_rows: Array = RegistryLib.tree("guild")
+	_check(guild_rows.size() == 1 and "min_tiles" in guild_rows[0],
+			"tree() lists the live record with min_tiles (the drag floor)")
 	panel.free()  # an immediate free (not queue_free) — the pruned rec
 	RegistryLib.apply_screen("guild")
 	_check(RegistryLib.tree("guild").is_empty(),
@@ -360,12 +361,27 @@ func _test_wrapper_queued_rebuild() -> void:
 	# is_queued_for_deletion() == false until the frame ends).
 	grid.remove_child(wrapper)
 	wrapper.queue_free()
-	# The rebuild: a fresh wrapper + label under the same id.
+	# The rebuild: a fresh wrapper + label under the same id. The label
+	# carries text — a REAL content minimum (font metrics, off-grid by
+	# nature) — to pin the tile-quantized floor: a min override of 1
+	# tile must land on a whole-tile custom_min that still subsumes the
+	# content (the grid guarantee, 2026-11-09 user direction).
 	var new_wrapper := HBoxContainer.new()
 	grid.add_child(new_wrapper)
 	var new_label := Label.new()
+	new_label.text = "水手长 · Boatswain"
 	new_wrapper.add_child(new_label)
 	RegistryLib.register("port", new_label, "cards.guild.status")
+	RegistryLib.set_table_for_tests({
+		"port": {"cards.guild.status": {"min_h": 1}},
+	})
+	RegistryLib.apply_screen("port")
+	var content_y: float = new_label.get_minimum_size().y
+	_check(new_label.custom_minimum_size.y >= content_y,
+			"quantized floor: the applied min subsumes the content")
+	_check(absf(fmod(new_label.custom_minimum_size.y,
+			float(RegistryLib.TILE))) < 0.01,
+			"quantized floor: the applied min is an exact tile multiple")
 	RegistryLib.apply_screen("port")
 	var rows := RegistryLib.tree("port")
 	_check(rows.size() == 1 and rows[0]["id"] == "cards.guild.status",
