@@ -319,6 +319,276 @@
       },
       "lists": {}
     },
+    "character_card": {
+      "elements": {
+        "allocation": {
+          "h": 5,
+          "w": 15,
+          "x": 0,
+          "y": 29
+        },
+        "allocation.buttons": {
+          "h": 2,
+          "w": 15,
+          "x": 0,
+          "y": 3
+        },
+        "allocation.cancel": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 0
+        },
+        "allocation.clamp_note": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 2
+        },
+        "allocation.confirm": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        },
+        "allocation.left": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 1
+        },
+        "allocation.pending": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "career": {
+          "h": 2,
+          "w": 15,
+          "x": 0,
+          "y": 27
+        },
+        "career.empty": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 27
+        },
+        "career.header": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 26
+        },
+        "career.next": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 28
+        },
+        "career.record": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "career.returning": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 1
+        },
+        "career.xp": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 27
+        },
+        "identity": {
+          "h": 3,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "identity.flag": {
+          "h": 1,
+          "w": 1,
+          "x": 3,
+          "y": 0
+        },
+        "identity.level": {
+          "h": 1,
+          "w": 2,
+          "x": 13,
+          "y": 0
+        },
+        "identity.names": {
+          "h": 2,
+          "w": 8,
+          "x": 4,
+          "y": 0
+        },
+        "identity.names.name": {
+          "h": 1,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "identity.names.role": {
+          "h": 1,
+          "w": 8,
+          "x": 0,
+          "y": 1
+        },
+        "identity.portrait": {
+          "h": 3,
+          "w": 3,
+          "x": 0,
+          "y": 0
+        },
+        "identity.tier_badge": {
+          "h": 1,
+          "w": 1,
+          "x": 12,
+          "y": 0
+        },
+        "relations": {
+          "h": 2,
+          "w": 15,
+          "x": 0,
+          "y": 24
+        },
+        "relations.empty": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 24
+        },
+        "relations.header": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 23
+        },
+        "relations.loyalty": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 24
+        },
+        "relations.post": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 25
+        },
+        "relations.stance": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "relations.tier": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 1
+        },
+        "stat_columns": {
+          "h": 18,
+          "w": 15,
+          "x": 0,
+          "y": 3
+        },
+        "stat_columns.attribute_column": {
+          "h": 6,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        },
+        "stat_columns.attribute_column.attributes": {
+          "h": 5,
+          "w": 15,
+          "x": 0,
+          "y": 1
+        },
+        "stat_columns.attribute_column.header": {
+          "h": 1,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "stat_columns.skill_column": {
+          "h": 12,
+          "w": 15,
+          "x": 0,
+          "y": 6
+        },
+        "stat_columns.skill_column.header": {
+          "h": 1,
+          "w": 8,
+          "x": 0,
+          "y": 6
+        },
+        "stat_columns.skill_column.skills": {
+          "h": 11,
+          "w": 15,
+          "x": 0,
+          "y": 7
+        },
+        "tags": {
+          "h": 2,
+          "w": 15,
+          "x": 0,
+          "y": 21
+        },
+        "tags.appearance": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 1
+        },
+        "tags.personality": {
+          "h": 1,
+          "w": 15,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {
+        "attributes": {
+          "base": {
+            "h": 1,
+            "w": 15,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 34,
+            "w": 32,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "skills": {
+          "base": {
+            "h": 1,
+            "w": 15,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 34,
+            "w": 32,
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
+    },
     "chart": {
       "elements": {
         "bottom_bar": {
@@ -1858,7 +2128,7 @@
           "y": 0
         },
         "panel": {
-          "h": 24,
+          "h": 25,
           "w": 22,
           "x": 19,
           "y": 4
@@ -1868,12 +2138,6 @@
           "w": 4,
           "x": 17,
           "y": 22
-        },
-        "panel.content": {
-          "h": 20,
-          "w": 1,
-          "x": 1,
-          "y": 3
         },
         "panel.header": {
           "h": 1,
@@ -1888,7 +2152,38 @@
           "y": 1
         }
       },
-      "lists": {}
+      "lists": {
+        "content_lines": {
+          "base": {
+            "h": 1,
+            "w": 20,
+            "x": 0,
+            "y": 14
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 19,
+            "w": 20,
+            "x": 1,
+            "y": 3
+          }
+        },
+        "log": {
+          "base": {
+            "h": 2,
+            "w": 20,
+            "x": 0,
+            "y": 16
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 19,
+            "w": 20,
+            "x": 1,
+            "y": 3
+          }
+        }
+      }
     },
     "duel": {
       "elements": {
@@ -2304,7 +2599,7 @@
           "y": 1
         },
         "ships": {
-          "h": 13,
+          "h": 14,
           "w": 1,
           "x": 0,
           "y": 0
@@ -2338,7 +2633,7 @@
         "ships": {
           "base": {
             "h": 7,
-            "w": 16,
+            "w": 1,
             "x": 0,
             "y": 0
           },
@@ -3422,7 +3717,7 @@
         },
         "roster": {
           "h": 2,
-          "w": 1,
+          "w": 32,
           "x": 0,
           "y": 0
         },
@@ -3463,7 +3758,23 @@
           "y": 3
         }
       },
-      "lists": {}
+      "lists": {
+        "roster": {
+          "base": {
+            "h": 1,
+            "w": 32,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 7,
+            "w": 32,
+            "x": 0,
+            "y": 5
+          }
+        }
+      }
     },
     "palace": {
       "elements": {
@@ -4252,25 +4563,25 @@
           "h": 2,
           "w": 5,
           "x": 54,
-          "y": 1
+          "y": 3
         },
         "actions.import": {
           "h": 2,
           "w": 5,
-          "x": 49,
-          "y": 1
+          "x": 50,
+          "y": 3
         },
         "actions.random": {
           "h": 2,
           "w": 5,
-          "x": 44,
-          "y": 1
+          "x": 45,
+          "y": 3
         },
         "actions.start": {
           "h": 2,
           "w": 5,
-          "x": 39,
-          "y": 1
+          "x": 40,
+          "y": 3
         },
         "back_hint": {
           "h": 1,
