@@ -83,6 +83,7 @@ const W2D_SCENES := {
 	"sandbox": "res://scenes/combat/battle_sandbox.tscn",
 	"dossier": "res://scenes/ui/dossier_panel.tscn",
 	"fleet_view": "res://scenes/ui_shared/fleet_view.tscn",
+	"officer_roster": "res://scenes/ui_shared/officer_roster_view.tscn",
 }
 
 
@@ -472,6 +473,18 @@ func _rig_fleet_view() -> void:
 
 ## The fixture view: a two-ship fleet at port (rebuild IS the open).
 func _open_fleet_view(view: Control) -> void:
+	view.call("rebuild")
+
+
+# --- rig: officer_roster (W2-D) -------------------------------------------------
+
+func _rig_officer_roster() -> void:
+	_rig_modal_run()
+	preload("res://scripts/player/character.gd").recruit("off_mateus_alvares")
+
+
+## The fixture view: one employed officer (rebuild IS the open).
+func _open_officer_roster(view: Control) -> void:
 	view.call("rebuild")
 
 

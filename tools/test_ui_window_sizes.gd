@@ -496,9 +496,10 @@ func _test_fleet_view() -> void:
 	view.call("rebuild")
 	await _settle()
 	# A view that lists ships grows with the roster BY DESIGN (the intel
-	# window hosting it is the pinned surface) — the column geometry (the
-	# Body's width) must never drift.
-	await assert_window_size_invariant("fleet view", view.get_node("Body"), [
+	# window hosting it is the pinned surface) — the view root IS the fixed
+	# 32×12-tile element tree (`data/layout_fragments/fleet_view.json`); the
+	# pinned surface is the ships viewport.
+	await assert_window_size_invariant("fleet view", view.get_node("Scroll"), [
 		func() -> void:
 			GameState.fleet = [
 				_make_ship(45, 45), _make_ship(30, 30), _make_ship(20, 20),
@@ -531,8 +532,10 @@ func _test_officer_roster_view() -> void:
 		actions.append(func() -> void: skills.pressed.emit())
 	if attributes != null:
 		actions.append(func() -> void: attributes.pressed.emit())
+	# Phase 12: the Body chain is deleted — the view root IS the fixed
+	# 32×12-tile element tree (`data/layout_fragments/officer_roster.json`).
 	await assert_window_size_invariant(
-		"officers roster view", roster.get_node("Body"), actions)
+		"officers roster view", roster, actions)
 	roster.queue_free()
 	await _settle()
 

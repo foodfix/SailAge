@@ -250,7 +250,7 @@ func _test_officers_table() -> void:
 	# Toggle to the skills columns: 8 player skills + 3 officer-only.
 	view.set_stat_mode("skills")
 	_check(view.stat_mode() == "skills", "the 技能 toggle switches the columns")
-	var header: Control = view.get_node("Body/TableScroll/Table/Header")
+	var header: Control = view.get_node("TableScroll/Table/Header")
 	var stat_headers := 0
 	for child in header.get_children():
 		if str(child.name).begins_with("Stat_"):
@@ -258,7 +258,7 @@ func _test_officers_table() -> void:
 	_check(stat_headers == SkillsLib.KEYS.size() + SkillsLib.OFFICER_KEYS.size(),
 		"the skills table carries the 8+3 columns (%d)" % stat_headers)
 	view.set_stat_mode("attributes")
-	header = view.get_node("Body/TableScroll/Table/Header")
+	header = view.get_node("TableScroll/Table/Header")
 	var attr_headers := 0
 	for child in header.get_children():
 		if str(child.name).begins_with("Stat_"):
@@ -267,7 +267,7 @@ func _test_officers_table() -> void:
 	# The fresh run employs nobody: the empty state shows (§4.6.2).
 	_check(view.officer_ids().is_empty(),
 		"a fresh run lists no officers")
-	_check(view.get_node("Body/TableEmpty").visible,
+	_check(view.get_node("TableEmpty").visible,
 		"the empty state shows for a run with no officers")
 	_window.close()
 
@@ -293,14 +293,14 @@ func _test_officers_detail() -> void:
 	_check(view.officer_ids() == [hire_id],
 		"the table lists the employed officer (%s)" % str(view.officer_ids()))
 	# Click the row (the row Control's gui_input activation) → the detail page.
-	var row: Control = view.get_node("Body/TableScroll/Table/Officer_%s" % hire_id)
+	var row: Control = view.get_node("TableScroll/Table/Officer_%s" % hire_id)
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	row.gui_input.emit(click)
 	_check(view.detail_officer() == hire_id,
 		"clicking the row opens the detail page")
-	_check(view.get_node("Body/Detail").visible,
+	_check(view.get_node("Detail").visible,
 		"the detail page replaces the table")
 	var actions: Dictionary = view.action_buttons(hire_id)
 	for action in ["talk", "gift", "train", "appoint"]:
@@ -310,7 +310,7 @@ func _test_officers_detail() -> void:
 		"the detail page carries the dismiss action")
 	# Back returns to the table.
 	(view.find_child("DetailBack", true, false) as Button).pressed.emit()
-	_check(view.detail_officer() == "" and not view.get_node("Body/Detail").visible,
+	_check(view.detail_officer() == "" and not view.get_node("Detail").visible,
 		"back returns to the table")
 	_window.close()
 	# Cleanup: dismiss through the model funnel.
@@ -395,7 +395,7 @@ func _test_locale_rebind() -> void:
 	_window.open_tab(IntelWindowLib.TAB_OFFICERS)
 	var view: Control = _window.get_node(
 		"Panel/Content/OfficerRosterView")
-	_check(view.get_node("Body/Controls/AttributesToggle").text
+	_check(view.get_node("AttributesToggle").text
 		== I18n.t_key("char.stats"), "the toggle labels re-bind")
 	I18n.set_locale(_locale_before)
 	_check(_hud.intel_button().text == I18n.t_key("ui.intel"),
