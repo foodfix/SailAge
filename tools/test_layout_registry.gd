@@ -220,16 +220,49 @@ func _test_break_out_of_flow() -> void:
 	pair.add_child(card)
 	RegistryLib.register("port", card, "cards.market",
 			{"role": "button", "data_ordered": true})
+	# A second card in the SAME pair — the co-flow freeze keeps it at
+	# its visual rect when the first card breaks out.
+	var card2 := Button.new()
+	card2.custom_minimum_size = Vector2(320, 64)
+	pair.add_child(card2)
+	RegistryLib.register("port", card2, "cards.shipyard",
+			{"role": "button", "data_ordered": true})
 	RegistryLib.screen_active("port", root)
+	RegistryLib.set_table_for_tests({})
+	RegistryLib.apply_screen("port")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tile := float(RegistryLib.TILE)
+	# The sorted baseline: market at the first slot, shipyard beside it
+	# (the HBox default separation is 4 px).
+	_check(card.position == Vector2.ZERO
+			and card2.position.x >= card.size.x and card2.position.y == 0.0,
+			"break-out rig: the pair sorted (got %s / %s)" % [
+				str(card.position), str(card2.position)])
+	var shipyard_before: Vector2 = card2.global_position
+	# THE LIVE DRAG: x/y move on the container child — break-out + the
+	# co-flow freeze of the sibling.
 	RegistryLib.set_table_for_tests({
 		"port": {"cards.market": {"x": 2, "y": 3}},
 	})
-	RegistryLib.apply_screen("port")
-	var tile := float(RegistryLib.TILE)
+	RegistryLib.apply_overrides("port", "cards.market",
+			{"x": 2, "y": 3})
 	_check(card.get_parent() == root,
 			"break-out: the card left its flow container")
 	_check(card.position == Vector2(2 * tile, 3 * tile),
 			"break-out: the card sits at the dragged tiles")
+	# The co-flow freeze: the sibling froze at its visual rect —
+	# re-parented to the root, out-of-flow, NOT shifted into the
+	# vacated slot.
+	_check(card2.get_parent() == root,
+			"co-flow freeze: the sibling re-parented to the root")
+	_check(card2.global_position == shipyard_before,
+			"co-flow freeze: the sibling did not move (got %s)"
+					% str(card2.global_position))
+	_check(RegistryLib._screens["port"]["cards.shipyard"]
+			.get("out_of_flow", false) == true,
+			"co-flow freeze: the sibling is out-of-flow (individually "
+			+ "draggable)")
 	var rows: Array = RegistryLib.tree("port")
 	var row: Dictionary = {}
 	for r: Dictionary in rows:

@@ -273,6 +273,21 @@ slot's file inventory:
   connected element. Registry suite 61 checks (break-out, confinement,
   tree parentage, revert-slot pinned); 80-* §4.8.9 child Move cell +
   10-* §4.23 x/y row amended.
+- **The co-flow freeze (2026-11-09, user report — "moving cards.market
+  also moves cards.shipyard"):** breaking one card out of its pair
+  emptied the HBox, which RE-FLOWED — the remaining sibling shifted
+  into the vacated slot (and stretched). A live break-out now freezes
+  ALL in-flow registered siblings of the same registered parent too:
+  each re-parented to the screen root at its CURRENT visual rect,
+  confined to the same registered parent's rect, individually
+  draggable. Nothing moves except what the user drags. The freeze is
+  LIVE-DRAGS ONLY — boot-time applies (apply_screen) break out just
+  the overridden element at its committed position (freezing at boot
+  would capture pre-layout positions and pile siblings at the origin).
+  `apply_overrides` co-freezes; `apply_screen` does not. Registry
+  suite 66 checks (two cards in one pair: drag one, the other froze
+  at (324,0)); bridge 31, port_hub 327, validator 1–14, UI sweep 5/5
+  green.
 - **The children-extent floor (2026-11-09, user direction — "when
   resizing the parent, it is possible to sink too much that the child
   will be outside"):** the parent-bounds rule's mirror — a parent

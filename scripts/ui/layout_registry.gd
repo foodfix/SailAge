@@ -239,7 +239,7 @@ static func apply_screen(screen_id: String) -> void:
 			continue
 		var overrides: Dictionary = table.get(id, {})
 		if not overrides.is_empty():
-			_apply(screen_id, id, rec, control, overrides)
+			_apply(screen_id, id, rec, control, overrides, false)
 	for id in dead:
 		per_screen.erase(id)
 
@@ -259,14 +259,15 @@ static func apply_overrides(screen_id: String, id: String,
 			push_error("LayoutRegistry: %s '%s' unknown key '%s'"
 					% [screen_id, id, key])
 			return
-	_apply(screen_id, id, rec, control, overrides)
+	_apply(screen_id, id, rec, control, overrides, true)
 
 
 ## The applier core. Order: `order` (container children, unlocked) →
 ## `min_w`/`min_h` → geometry (`x`/`y`/`w`/`h` free; `anchor` dock) →
 ## `sheet`. An empty override object applies nothing.
 static func _apply(screen_id: String, id: String, rec: Dictionary,
-		control: Control, overrides: Dictionary) -> void:
+		control: Control, overrides: Dictionary,
+		co_freeze: bool = false) -> void:
 	if overrides.is_empty():
 		return
 	var kind := _resolve_kind(rec, control)
@@ -328,7 +329,7 @@ static func _apply(screen_id: String, id: String, rec: Dictionary,
 	# element at its baseline slot.
 	var eff_kind := kind
 	if kind == KIND_CHILD and (overrides.has("x") or overrides.has("y")):
-		_break_out_of_flow(control, rec)
+		_break_out_of_flow(control, rec, co_freeze)
 		eff_kind = KIND_FREE
 	if overrides.has("anchor"):
 		_apply_anchor(control, overrides)
@@ -430,12 +431,18 @@ static func _children_extent(screen_id: String, parent_id: String,
 	return extent
 
 
-## Re-parents a container child to the screen root so it can float
-## freely, CONFINED to the registered parent's rect captured here
-## (root-local == global: the screen root sits at the scene origin).
-## `rec["out_of_flow"]` + `rec["flow_parent"]` (the tree keeps nesting
-## the element under its registered parent) + `rec["flow_bounds"]`.
-static func _break_out_of_flow(control: Control, rec: Dictionary) -> void:
+## THE CO-FLOW FREEZE — LIVE DRAGS ONLY (`co_freeze`; boot-time applies
+## via `apply_screen` pass false and break out just the overridden
+## element, deterministically at its committed position): when a child
+## leaves a flow container, the container RE-FLOWS and every remaining
+## sibling shifts into the vacated slot. So a live break-out freezes ALL
+## in-flow registered siblings of the same registered parent too — each
+## at its CURRENT (settled, post-layout) visual rect, re-parented to the
+## screen root and confined to the same registered parent's rect.
+## Nothing on screen moves except what the user drags; the siblings
+## become individually draggable.
+static func _break_out_of_flow(control: Control, rec: Dictionary,
+		co_freeze: bool) -> void:
 	var root_ref: WeakRef = _roots.get(_current)
 	var root = root_ref.get_ref() if root_ref != null else null
 	var parent := control.get_parent()
@@ -447,6 +454,36 @@ static func _break_out_of_flow(control: Control, rec: Dictionary) -> void:
 		var anc := _live(_screens.get(_current, {}).get(anc_id, {}))
 		if anc != null:
 			bounds = Rect2(anc.global_position, anc.size)
+	# The co-flow freeze — LIVE DRAGS ONLY: at boot (apply_screen) the
+	# siblings have not settled yet (pre-layout positions), so freezing
+	# there would pile them at the origin; the committed layout applies
+	# deterministically without a freeze. During a live drag the screen
+	# is long-settled and the freeze preserves the visual state.
+	var to_break: Array = []
+	if co_freeze:
+		for id in _screens.get(_current, {}):
+			var other_rec: Dictionary = _screens[_current][id]
+			if other_rec == rec:
+				continue
+			var other := _live(other_rec)
+			if other == null or other_rec.get("out_of_flow", false):
+				continue
+			var other_parent := String(other_rec.get("flow_parent",
+					_registered_ancestor(_current, other)))
+			if other_parent == anc_id:
+				to_break.append([other, other_rec])
+	for entry in to_break:
+		var other: Control = entry[0]
+		var other_rec: Dictionary = entry[1]
+		var gpos := other.global_position
+		var other_parent: Node = other.get_parent()
+		other_rec["flow_parent"] = anc_id
+		other_rec["flow_bounds"] = [bounds.position.x, bounds.position.y,
+			bounds.size.x, bounds.size.y]
+		other_parent.remove_child(other)
+		root.add_child(other)
+		other.global_position = gpos
+		other_rec["out_of_flow"] = true
 	rec["flow_parent"] = anc_id
 	rec["flow_bounds"] = [bounds.position.x, bounds.position.y,
 		bounds.size.x, bounds.size.y]
