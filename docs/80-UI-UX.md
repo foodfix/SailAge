@@ -3500,7 +3500,7 @@ data. The default path is byte-stable: the override file ships **empty
 |---|---|---|---|
 | Free child (screen root / free layer) | `x`, `y` tiles | `w`, `h` tiles | any of the 7 |
 | Anchored free child (bars) | edge fixed; along-edge span | `h` (or `w`) tiles | any of the 7 |
-| Container child | `order` (sibling index) | `min_w`, `min_h` tiles (`custom_minimum_size`) — **a min override also pins BOTH size flags to shrink-begin**, so the dragged size is authoritative on both axes (the default FILL stretch would re-win over the min; amended 2026-11-09 after the live drag-resize session); revert restores the captured flags | any of the 7 |
+| Container child | `order` (sibling index) — or **drag = leave the flow**: an `x/y` move re-parents the element to the screen root, CONFINED to the registered parent's rect (facility_grid for the cards; amended 2026-11-09, user direction — drag must move anything); revert re-inserts it at its baseline slot; locked rows keep `order` locked but can still drag | `min_w`, `min_h` tiles (`custom_minimum_size`) — **a min override also pins BOTH size flags to shrink-begin**, so the dragged size is authoritative on both axes (the default FILL stretch would re-win over the min; amended 2026-11-09 after the live drag-resize session); revert restores the captured flags | any of the 7 |
 | Plain (ColorRect/dividers/labels) | as per kind | as per kind | `sheet` n/a |
 
 - **Locked order:** data-pinned orderings (the §4.8.1 facility-card

@@ -1414,7 +1414,7 @@ unchanged.
 
 | Key | Type | Applies to | Meaning |
 |---|---|---|---|
-| `x`, `y` | int ≥ 0, tiles | free children only | absolute position (px = tiles × 32) |
+| `x`, `y` | int ≥ 0, tiles | any element | absolute position (px = tiles × 32); on a container child it means **leave the flow** — the element re-parents to the screen root, confined to the registered parent's rect (80-* §4.8.9, 2026-11-09) |
 | `w`, `h` | int ≥ 0, tiles | free children | size; with `anchor`, the span from that edge |
 | `min_w`, `min_h` | int ≥ 0, tiles | any control | `custom_minimum_size` override |
 | `order` | int ≥ 0 ≤ 64 | container children | sibling index (ignored+locked for `data_ordered` registrations) |

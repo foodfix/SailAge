@@ -185,6 +185,63 @@ func _test_parent_bounds_clamp() -> void:
 			"parent bounds: the move clamps to the parent's origin")
 	_drop_root(root)
 	await get_tree().process_frame
+	await _test_break_out_of_flow()
+
+
+## Drag out of the flow (2026-11-09 user direction — drag must move
+## anything, within the registered parent): an x/y move on a container
+## child re-parents it to the screen root, confined to the registered
+## parent's rect; the tree keeps nesting it under that parent (kind
+## reports free); revert re-inserts it at its baseline slot.
+func _test_break_out_of_flow() -> void:
+	RegistryLib._reset_for_tests()
+	var root := Control.new()
+	root.size = Vector2(1920, 1080)
+	add_child(root)
+	var grid := Panel.new()
+	grid.size = Vector2(16 * RegistryLib.TILE, 6 * RegistryLib.TILE)
+	root.add_child(grid)
+	RegistryLib.register("port", grid, "facility_grid",
+			{"kind": "free", "role": "panel"})
+	var pair := HBoxContainer.new()
+	grid.add_child(pair)
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(320, 64)
+	pair.add_child(card)
+	RegistryLib.register("port", card, "cards.market",
+			{"role": "button", "data_ordered": true})
+	RegistryLib.screen_active("port", root)
+	RegistryLib.set_table_for_tests({
+		"port": {"cards.market": {"x": 2, "y": 3}},
+	})
+	RegistryLib.apply_screen("port")
+	var tile := float(RegistryLib.TILE)
+	_check(card.get_parent() == root,
+			"break-out: the card left its flow container")
+	_check(card.position == Vector2(2 * tile, 3 * tile),
+			"break-out: the card sits at the dragged tiles")
+	var rows: Array = RegistryLib.tree("port")
+	var row: Dictionary = {}
+	for r: Dictionary in rows:
+		if r["id"] == "cards.market":
+			row = r
+	_check(row.get("id") == "cards.market"
+			and row.get("parent") == "facility_grid"
+			and row.get("kind") == "free",
+			"break-out: the tree keeps nesting under facility_grid (free)")
+	RegistryLib.apply_overrides("port", "cards.market", {"x": 200})
+	_check(card.position.x <= 16 * tile - 10 * tile + RegistryLib.TILE,
+			"break-out: the card stays confined to facility_grid's rect")
+	RegistryLib.revert_element("port", "cards.market")
+	_check(card.get_parent() == pair and card.get_index() == 0,
+			"break-out revert: the card returns to its pair slot")
+	var oof: bool = RegistryLib._screens["port"]["cards.market"] \
+			.get("out_of_flow", false)
+	_check(not oof,
+			"break-out revert: the out-of-flow mark is cleared")
+	card.free()
+	_drop_root(root)
+	await get_tree().process_frame
 	await _test_free_resize_only_no_collapse()
 
 

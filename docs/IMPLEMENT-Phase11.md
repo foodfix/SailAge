@@ -256,9 +256,23 @@ slot's file inventory:
   the DIRECT parent's rect (local-space clamp, exact for this game's
   translation-only hierarchies; the screen root is the outermost
   parent), and the studio drag clamps to the parent row's rect from
-  the tree. The element list indents by parent-chain depth (└ prefix +
-  18 px per level) so the hierarchy reads at a glance. Registry suite
-  55 checks (the parent-bounds clamp pinned).
+  parent's rect from the tree. The element list indents by parent-chain
+  depth (└ prefix + 18 px per level) so the hierarchy reads at a
+  glance. Registry suite 55 checks (the parent-bounds clamp pinned).
+- **Drag out of the flow (2026-11-09, user direction — drag must move
+  anything, within the registered parent):** the pair-de-registration
+  fixed the TREE's parentage, but dragging a facility card still did
+  nothing — container children had no move. Now an x/y move on a
+  container child LEAVES ITS FLOW CONTAINER: the element re-parents to
+  the screen root, CONFINED to the registered parent's rect (captured
+  at break-out; facility_grid for the cards), the tree keeps nesting it
+  under that parent (kind reports free → the studio's drag and
+  inspector switch automatically), and revert re-inserts it at its
+  baseline slot. `data_ordered` still locks only the in-flow ORDER
+  (▲/▼) — dragging is allowed. The studio enables drag-move for every
+  connected element. Registry suite 61 checks (break-out, confinement,
+  tree parentage, revert-slot pinned); 80-* §4.8.9 child Move cell +
+  10-* §4.23 x/y row amended.
 - **The hierarchical element list + the trail's parent field (2026-11-09,
   tree readability round 2):** the list rendered rows in REGISTRATION
   order — a parent sat far above its children and an indented child

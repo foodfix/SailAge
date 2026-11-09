@@ -941,9 +941,13 @@ function layRenderBoxes() {
   tag.className = "lay-box-tag";
   tag.textContent = e.id;
   box.appendChild(tag);
-  const dragable = kind !== "child" && !layLocked(e) && LAY.connected;
+  // Drag-move for EVERY connected element (2026-11-09 user direction —
+  // drag must move anything): container children leave their flow
+  // container game-side and are confined to the registered parent's
+  // rect; `layLocked` still hides the reorder buttons only.
+  const dragable = LAY.connected;
   box.style.cursor = dragable ? "move" : "default";
-  if (dragable || (kind === "child" && LAY.connected)) {
+  if (dragable) {
     const se = document.createElement("div");
     se.className = "lay-se";
     se.title = kind === "child" ? "resize (min_w/min_h)" : "resize";

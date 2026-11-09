@@ -193,6 +193,7 @@ static func _capture(control: Control) -> Dictionary:
 		"size": control.size,
 		"min": control.custom_minimum_size,
 		"index": control.get_index(),
+		"parent": weakref(control.get_parent()),
 		"anchors": [control.anchor_left, control.anchor_top,
 			control.anchor_right, control.anchor_bottom],
 		"offsets": [control.offset_left, control.offset_top,
@@ -312,10 +313,20 @@ static func _apply(rec: Dictionary, control: Control,
 			and control.get_parent() is Container:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		control.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	# 3. Geometry.
+	# 3. Geometry. A container child that receives an x/y override
+	# LEAVES ITS FLOW CONTAINER (the 2026-11-09 user direction — drag
+	# must move anything, within the registered parent): it is
+	# re-parented to the screen root and CONFINED to the registered
+	# parent's rect (facility_grid for the cards) — the tree keeps
+	# reporting the registered parent, and revert re-inserts the
+	# element at its baseline slot.
+	var eff_kind := kind
+	if kind == KIND_CHILD and (overrides.has("x") or overrides.has("y")):
+		_break_out_of_flow(control, rec)
+		eff_kind = KIND_FREE
 	if overrides.has("anchor"):
 		_apply_anchor(control, overrides)
-	elif kind == KIND_FREE:
+	elif eff_kind == KIND_FREE:
 		# Capture BEFORE the anchor reset (the 2026-11-09 resize fix):
 		# `set_anchors_preset` rewrites the offsets for the new point
 		# anchors, so a `size` read after it is the reset's artifact —
@@ -347,7 +358,20 @@ static func _apply(rec: Dictionary, control: Control,
 		# the plain-translation hierarchies this game builds (no
 		# rotations/scales). The screen root is the outermost parent.
 		var lp := control.get_parent()
-		if lp is Control:
+		var oof: bool = rec.get("out_of_flow", false)
+		if oof:
+			# Broken-out elements are confined to the REGISTERED parent's
+			# rect captured at break-out (facility_grid for the cards) —
+			# "move within its parent", even though the direct parent is
+			# now the screen root.
+			var fb: Array = rec.get("flow_bounds",
+					[0.0, 0.0, 1920.0, 1080.0])
+			size.x = minf(size.x, fb[2])
+			size.y = minf(size.y, fb[3])
+			control.size = size
+			pos.x = clampf(pos.x, fb[0], maxf(fb[0], fb[0] + fb[2] - size.x))
+			pos.y = clampf(pos.y, fb[1], maxf(fb[1], fb[1] + fb[3] - size.y))
+		elif lp is Control:
 			var psize: Vector2 = (lp as Control).size
 			# A parent that reports no size yet (pre-layout, an unsized
 			# rig) has NO reliable bounds — the clamp must not collapse
@@ -370,9 +394,38 @@ static func _apply(rec: Dictionary, control: Control,
 			push_error("LayoutRegistry: sheet override '%s' not applicable"
 					% sheet + " (role %s)" % role)
 
+
+## Re-parents a container child to the screen root so it can float
+## freely, CONFINED to the registered parent's rect captured here
+## (root-local == global: the screen root sits at the scene origin).
+## `rec["out_of_flow"]` + `rec["flow_parent"]` (the tree keeps nesting
+## the element under its registered parent) + `rec["flow_bounds"]`.
+static func _break_out_of_flow(control: Control, rec: Dictionary) -> void:
+	var root_ref: WeakRef = _roots.get(_current)
+	var root = root_ref.get_ref() if root_ref != null else null
+	var parent := control.get_parent()
+	if root == null or parent == null or parent == root:
+		return
+	var anc_id := _registered_ancestor(_current, control)
+	var bounds := Rect2(0.0, 0.0, 1920.0, 1080.0)
+	if anc_id != "":
+		var anc := _live(_screens.get(_current, {}).get(anc_id, {}))
+		if anc != null:
+			bounds = Rect2(anc.global_position, anc.size)
+	rec["flow_parent"] = anc_id
+	rec["flow_bounds"] = [bounds.position.x, bounds.position.y,
+		bounds.size.x, bounds.size.y]
+	parent.remove_child(control)
+	root.add_child(control)
+	rec["out_of_flow"] = true
+
 ## Auto-kind: `free` when the control's parent is the registered screen
-## root, `child` otherwise (an explicit kind wins).
+## root, `child` otherwise (an explicit kind wins). An element that left
+## its flow container (break-out) edits as FREE — its geometry is
+## root-owned and confined to the registered parent's rect.
 static func _resolve_kind(rec: Dictionary, control: Control) -> String:
+	if rec.get("out_of_flow", false):
+		return KIND_FREE
 	var kind := String(rec.get("kind", ""))
 	if kind != "":
 		return kind
@@ -442,6 +495,16 @@ static func revert_element(screen_id: String, id: String) -> void:
 	var baseline: Dictionary = rec.get("baseline", {})
 	if baseline.is_empty():
 		return
+	# A broken-out element first returns to its FLOW slot: the original
+	# parent (from the baseline) at the baseline sibling index — then the
+	# kind-based restore below re-establishes the container-owned state.
+	if rec.get("out_of_flow", false):
+		var pref: WeakRef = baseline.get("parent")
+		var orig = pref.get_ref() if pref != null else null
+		if orig != null and control.get_parent() != orig:
+			control.get_parent().remove_child(control)
+			orig.add_child(control)
+		rec["out_of_flow"] = false
 	var kind := _resolve_kind(rec, control)
 	if kind == KIND_CHILD:
 		# Container-owned geometry (the 2026-11-09 live-session fix): a
@@ -532,7 +595,12 @@ static func tree(screen_id: String) -> Array:
 			},
 			"sheet": String(rec.get("sheet", "")),
 			"locked": bool(rec.get("data_ordered")),
-			"parent": _registered_ancestor(screen_id, control),
+			# A broken-out element keeps nesting under its REGISTERED
+			# parent (facility_grid for the cards) even though its live
+			# parent is now the screen root — the studio's hierarchy,
+			# drag clamp and inspector all follow the registered chain.
+			"parent": String(rec.get("flow_parent",
+					_registered_ancestor(screen_id, control))),
 			"clipped": _inside_scroll(control),
 			"min_tiles": _content_min_tiles(control),
 		})
