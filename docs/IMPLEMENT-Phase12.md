@@ -85,25 +85,57 @@ fragment files (`data/layout_fragments/<screen>.json`) and the master
 assembles them into the single `data/ui_layout.json` at each merge gate
 (one shared file ⇒ agents never edit it concurrently).
 
-## 5. Acceptance criteria (fill at W4)
+## 5. Acceptance criteria (filled at W4)
 
-- [ ] `python3 tools/validate_data.py` exit 0 (groups 1–14, v2 rules) on
+- [x] `python3 tools/validate_data.py` exit 0 (groups 1–14, v2 rules) on
       the shipped populated file; negative probes per rule
-      (`--self-test-g14`).
-- [ ] Full suite sweep green (count recorded below; every re-pinned
-      suite named in the status log).
-- [ ] `nest_audit` extended to ALL screens: every registered row nests
-      inside its registered parent; zero flow containers remain under
-      any registered element (structural audit — walk node chains
-      between parent and child: only registered/plain Controls allowed,
-      no Container subclasses except the list viewports).
-- [ ] Both locales fit (the locale suites against the v2 file).
-- [ ] Live studio loop: drag/resize/commit/restart applies; revert
-      restores the data rect; the deleted flow paths (break-out,
-      co-flow freeze, flag pins) are gone from the code.
-- [ ] `build_ui_art`/`build_shore` rebuilds byte-identical (no art
-      change); save format, EventBus, `SAVE_VERSION` untouched.
-- [ ] Capture determinism: run the capture twice ⇒ byte-identical file.
+      (`--self-test-g14`, 18/18 cases).
+- [x] Full suite sweep green — **66/66, 380 s, zombie/hang 0** (the
+      quiet-machine W4 run; every re-pinned suite named in the status
+      log's merge records).
+- [x] `nest_audit` extended to ALL screens — the capture tool's
+      `--audit` mode: **32/32 screens OK** (every registered-child →
+      registered-parent chain walks only registered/plain Controls; no
+      Container subclass except the clipped ScrollContainer viewports;
+      0 nest violations — clipped list members exempted per the
+      containment guard's convention).
+- [x] Both locales fit (the zh/en legs of the bounds suite, the chart's
+      locale-rebind section, test_ui_window_sizes, and the per-screen
+      locale suites — all green against the v2 file).
+- [x] Live studio loop: the W3-E probe transcript (valid v2 commit
+      writes canonical bytes behind the validator gate; an invalid
+      commit is refused with the file byte-unchanged; the v1-shape
+      pre-gate fails fast) + the merged-tree endpoint spot-check; the
+      deleted flow paths verified gone from the code (one docstring
+      mention of their deletion is the only hit).
+- [x] `build_ui_art`/`build_shore` rebuilds byte-identical (validator
+      group 13, green in every gate run); save format, EventBus,
+      `SAVE_VERSION` 9 untouched.
+- [x] Capture determinism: `--all` twice ⇒ byte-identical 32/32;
+      `assemble_layout --check` canonical against the shipped file.
+
+## 5a. W4 findings worth the record
+
+- **The capture ⇔ file fixpoint**: the first all-screens capture on the
+  managed tree drifted 32 rows (content-min floors applied — heights
+  grew a tile where fonts demanded) and exposed one INERT row
+  (`chart.debug_panel` — the panel renders authored; its stale file row
+  never applied). One assemble → re-capture iteration reached the
+  fixpoint; the double-capture protocol then ran on the SHIPPED file.
+- **The O(n³) apply**: the per-element ancestor walk blew the chart's
+  §4.6 500 ms open budget at 1848 ms once the chart was managed —
+  fixed by the per-pass `_parent_map` memoization (1848 → 41 ms,
+  45×); behavior identical, audit + captures stable.
+- **The battle-bar clamp**: the parent-bounds clamp bounds quantized UP
+  to whole tiles (the §4.23 canvas-sliver row is in bounds — a raw
+  1080-px clamp pulled the §4.7.1 bar up 8 px).
+- **Visual notes for user review** (the locked "keep today's look" has
+  three known, recorded deltas, all restudio-able): the market/inn/
+  guild/palace/tavern lower bands re-flowed onto the canvas (the old
+  flow overflowed 34 tiles); the hail portrait bust quantized 72×96 →
+  48×64 (aspect kept, 2-tile row rhythm); fixed plates replace the
+  content-hugging dialogs (confirm/dialog_box/duel/gameover) whose
+  bodies now scroll in their viewports.
 
 ## 6. Status log
 
@@ -194,3 +226,23 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   validator exit 0. D2 (the finish-up slot) launched for the W2-D
   debt: sandbox/dossier/fleet_view/officer_roster interiors +
   character_card.
+- **D2 merged (2026-11-10): ✅** — the W2-D debt cleared:
+  sandbox/dossier/fleet_view/officer_roster interiors flattened;
+  character_card landed whole (39 elements + attributes/skills lists,
+  one rect set across the player/officer/NPC variants — **32/32
+  screens managed**). D2 also caught test_fleet's fleet-view section
+  silently crashing since the partial (103 → 185 checks). Gates:
+  battle_sandbox 155 / character_card 141 / fleet 185 / intel_window
+  65 ALL PASS; D2's structural probe 98 records, 0 flow containers.
+- **W4 acceptance (2026-11-10): ✅** — the §5 block above, all boxes
+  checked. The record's highlights: the structural audit lives in the
+  capture tool (`--audit`, 32/32 OK); the capture ⇔ file fixpoint
+  ran to byte-stability (the first managed capture drifted 32 rows —
+  content-min floors + one inert `chart.debug_panel` row found and
+  resolved); the double capture byte-identical 32/32 on the SHIPPED
+  file; and the quiet-machine sweep caught the managed chart's O(n³)
+  apply (1848 ms open) — fixed by the `_parent_map` memoization
+  (41 ms). Final state: **66/66 suites green (380 s, zombie/hang 0);
+  validator exit 0 (1–14); 32 screens / 825 element rows + 21 list
+  blocks shipped; the studio writes the v2 file behind the validator
+  gate.** Phase 12 complete.
