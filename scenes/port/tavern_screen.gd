@@ -62,8 +62,15 @@ const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 ## §4.12.1 (W6-A): the recruit dialog renders the §4.12 officer card (the
 ## officer entry).
 const CardLib := preload("res://scenes/ui/character_card.gd")
+## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
+## every persistent control registers at build time with a stable
+## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
+## no-op (registration only, nothing moves).
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
+## This screen's id in the registry (LayoutRegistry.SCREENS).
+const LAYOUT_SCREEN := "tavern"
 
 ## Tab ids (`select_tab` argument / [method active_tab] return).
 const TAB_CREW := "crew"
@@ -211,6 +218,10 @@ var _spar_rng := RandomNumberGenerator.new()
 ## chance, uses, roll}`; the row re-renders its result line from it.
 var last_spar: Dictionary = {}
 
+## Phase-11 (§4.8.9): per dynamic section, true once its first build has
+## registered (see [_register_dynamic] for the first-build/rebuild split).
+var _layout_built: Dictionary = {}
+
 ## True while a TavernEngine/Character transaction is running; the EventBus
 ## refresh handlers do nothing then (see [method hire_heads]).
 var _busy: bool = false
@@ -253,11 +264,16 @@ func _ready() -> void:
 	_port_id = _read_current_port()
 
 	_build_table_and_spar_sections()
+	_register_layout()
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
 	refresh()
+
+	# Phase-11 (§4.8.9): the build is registered — activate the screen (pins
+	# the root, captures baselines, applies the committed table; ships {}).
+	RegistryLib.screen_active(LAYOUT_SCREEN, self)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -497,19 +513,34 @@ func _bind_officers() -> void:
 	_clear(_roster)
 
 	var available: Array = TavernEngineLib.officers_at_port(_port_id)
+	var recruit_entries: Array = []
 	if available.is_empty():
-		_recruitable.add_child(_make_label(
+		var empty := _make_label(
 			I18n.t_key("tavern.no_officers"), "Empty"
-		))
+		)
+		_recruitable.add_child(empty)
+		recruit_entries.append({
+			"control": empty, "id": "officers.recruitable.empty",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	for officer_id in available:
-		_recruitable.add_child(_build_recruitable_row(str(officer_id)))
+		_recruitable.add_child(_build_recruitable_row(str(officer_id),
+			recruit_entries))
+	_register_dynamic("recruitable", recruit_entries)
 
 	_roster_header.text = I18n.t_key("char.officers")
 	var employed: Array = CharacterLib.employed_officers()
+	var roster_entries: Array = []
 	if employed.is_empty():
-		_roster.add_child(_make_label(I18n.t_key("char.no_officers"), "Empty"))
+		var empty := _make_label(I18n.t_key("char.no_officers"), "Empty")
+		_roster.add_child(empty)
+		roster_entries.append({
+			"control": empty, "id": "officers.roster.empty",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	for officer_id in employed:
-		_roster.add_child(_build_roster_row(str(officer_id)))
+		_roster.add_child(_build_roster_row(str(officer_id), roster_entries))
+	_register_dynamic("roster", roster_entries)
 
 	# One shared reason for the whole recruitable list: roster full first
 	# (docs/50-* §6), then short of gold (§6 "button disabled with price shown").
@@ -525,14 +556,20 @@ func _bind_officers() -> void:
 	_officer_reason.visible = not reason.is_empty()
 
 
-func _build_recruitable_row(officer_id: String) -> Control:
+func _build_recruitable_row(officer_id: String, entries: Array) -> Control:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	var row := HBoxContainer.new()
 	row.name = "Officer_%s" % officer_id
+	var row_id := "officers.recruitable.%s" % officer_id
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(_make_label(I18n.t(officer.get("name", {})), "Name"))
+	var name_label := _make_label(I18n.t(officer.get("name", {})), "Name")
+	info.add_child(name_label)
 	var role_key := str(ROLE_KEYS.get(str(officer.get("role", "")), "char.none"))
 	var subtitle := _make_label("%s · %s" % [
 		I18n.t_key(role_key),
@@ -541,12 +578,13 @@ func _build_recruitable_row(officer_id: String) -> Control:
 	subtitle.theme_type_variation = "Dim"
 	info.add_child(subtitle)
 	var stats: Dictionary = officer.get("stats", {})
-	info.add_child(_make_label(I18n.fmt("tavern.stats", {
+	var stats_label := _make_label(I18n.fmt("tavern.stats", {
 		"leadership": int(stats.get("leadership", 0)),
 		"seamanship": int(stats.get("seamanship", 0)),
 		"combat": int(stats.get("combat", 0)),
 		"navigation": int(stats.get("navigation", 0)),
-	}), "Stats"))
+	}), "Stats")
+	info.add_child(stats_label)
 	var bio := _make_label(I18n.t(officer.get("bio", {})), "Bio")
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bio.custom_minimum_size.x = 560
@@ -583,6 +621,26 @@ func _build_recruitable_row(officer_id: String) -> Control:
 	card_button.pressed.connect(open_recruit_dialog.bind(officer_id))
 	action.add_child(card_button)
 	row.add_child(action)
+	entries.append_array([
+		{"control": info, "id": "%s.info" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": name_label, "id": "%s.info.name" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": subtitle, "id": "%s.info.role" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": stats_label, "id": "%s.info.stats" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": bio, "id": "%s.info.bio" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": action, "id": "%s.action" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": cost, "id": "%s.action.cost" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.action.recruit" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+		{"control": card_button, "id": "%s.action.card" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
 	return row
 
 
@@ -628,10 +686,15 @@ func _after_recruit(ok: bool) -> void:
 	refresh()
 
 
-func _build_roster_row(officer_id: String) -> Control:
+func _build_roster_row(officer_id: String, entries: Array) -> Control:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	var row := HBoxContainer.new()
 	row.name = "Employed_%s" % officer_id
+	var row_id := "officers.roster.%s" % officer_id
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 	var name_label := _make_label(I18n.t(officer.get("name", {})), "Name")
 	name_label.custom_minimum_size.x = 260
@@ -652,6 +715,16 @@ func _build_roster_row(officer_id: String) -> Control:
 	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
 	button.pressed.connect(dismiss_officer.bind(officer_id))
 	row.add_child(button)
+	entries.append_array([
+		{"control": name_label, "id": "%s.name" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": role_label, "id": "%s.role" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": wage, "id": "%s.wage" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.dismiss" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
 	return row
 
 
@@ -692,30 +765,38 @@ func _bind_rumors() -> void:
 	else:
 		for discovery_id in DiscoveryLib.hints(_port_id, GameState.day):
 			_rumors.append({"id": str(discovery_id)})
+	var entries: Array = []
 	for entry in _rumors:
-		_rumor_rows.add_child(_build_rumor_row(str(entry["id"])))
-	_bind_aliveness_rows()
+		_rumor_rows.add_child(_build_rumor_row(str(entry["id"]), entries))
+	_bind_aliveness_rows(entries)
 	_bind_table()
 	_bind_spar()
+	_register_dynamic("rumors", entries)
 	_rumor_empty.visible = _rumors.is_empty() and _rumor_texts.is_empty()
 
 
 ## The task L rows of the rumors tab, in §4.7.8 order: telegraphs, live
 ## fleets and departures/arrivals, then the captains section and the posters.
-func _bind_aliveness_rows() -> void:
+func _bind_aliveness_rows(entries: Array) -> void:
 	if _port_id.is_empty() or GameState.player.is_empty():
 		return
 	for row in NpcIntelLib.rumor_rows(_port_id):
 		# Phase 7 (docs/80-* §4.7.14): allegiance investment telegraphs, under
 		# their own section header, right after the demand-event rows.
 		if str(row.get("kind", "")) == "investment":
-			_bind_investment_row(row)
+			_bind_investment_row(row, entries)
 			continue
 		var text := _rumor_text(row)
 		if text.is_empty():
 			continue
 		_rumor_texts.append(text)
-		_rumor_rows.add_child(_make_label(text, "RumorAliveness"))
+		var label := _make_label(text, "RumorAliveness")
+		_rumor_rows.add_child(label)
+		entries.append({
+			"control": label,
+			"id": "rumors.rows.rumor.%d" % _rumor_texts.size(), "opts": {
+				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+		})
 	# Captains sighted in the tavern (§4.7.8), then the gone-ashore notes.
 	# Phase 8 (§4.11.1): each sighting row is interactive — the befriend verb
 	# (+1 stance, once per captain per port-visit day).
@@ -725,6 +806,10 @@ func _bind_aliveness_rows() -> void:
 		var header := _make_label(_t_key("captain.section.tavern"),
 			"CaptainsHeader")
 		_rumor_rows.add_child(header)
+		entries.append({
+			"control": header, "id": "rumors.rows.captains_header",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 		for entry in captains:
 			var row_text := "%s · %s" % [str(entry.get("name", "")),
 				I18n.t_key("captain.role.%s" % str(entry.get("role", "")))]
@@ -736,21 +821,28 @@ func _bind_aliveness_rows() -> void:
 				"nation_id": str(entry.get("nation_id", "")),
 			}
 			_captain_rows.append(row)
-			_rumor_rows.add_child(_build_captain_row(row, row_text))
+			_rumor_rows.add_child(_build_captain_row(row, row_text, entries))
+		var ashore_count := 0
 		for entry in NpcIntelLib.gone_ashore(_port_id):
+			ashore_count += 1
 			var ashore := I18n.fmt("captain.gone_ashore",
 				{"name": str(entry.get("name", ""))})
 			_rumor_texts.append(ashore)
 			var label := _make_label(ashore, "CaptainAshore")
 			label.theme_type_variation = "Dim"
 			_rumor_rows.add_child(label)
+			entries.append({
+				"control": label,
+				"id": "rumors.rows.ashore.%d" % ashore_count, "opts": {
+					"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+			})
 	# Wanted posters within Chebyshev 40 (§4.7.8) — each row carries its own
 	# `captain.poster.title` line, so no extra section header is invented.
 	var posters: Array = NpcIntelLib.wanted_posters(_port_id)
 	if not posters.is_empty():
 		for poster in posters:
 			_poster_rows.append(poster)
-			_rumor_rows.add_child(_build_poster_row(poster))
+			_rumor_rows.add_child(_build_poster_row(poster, entries))
 
 
 ## One rumor row's localized text (the seeded rows come from `npc_intel`).
@@ -783,17 +875,22 @@ func _rumor_text(row: Dictionary) -> String:
 ## One wanted poster (§4.7.8): title (name + tier) with the captain's §4.8
 ## role badge, last-known position hint, reward hint, and the one
 ## "buy a round — 20g" reveal action.
-func _build_poster_row(poster: Dictionary) -> Control:
+func _build_poster_row(poster: Dictionary, entries: Array) -> Control:
 	var id := str(poster.get("id", ""))
 	var row := VBoxContainer.new()
 	row.name = "Poster_%s" % id
+	var row_id := "rumors.rows.poster.%s" % id
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 	var title_row := HBoxContainer.new()
 	title_row.name = "TitleRow"
 	# §4.8 role badge (the poster payload carries no role — resolve it from
 	# the canon card; an unknown captain renders the flat fallback: no icon).
 	var canon: Dictionary = CaptainsLib.captain(str(poster.get("captain_id", "")))
-	_attach_role_badge(title_row, str(canon.get("role", "")))
+	var badge_icon := _attach_role_badge(title_row, str(canon.get("role", "")))
 	var title := _make_label(I18n.fmt("captain.poster.title", {
 		"name": str(poster.get("name", "")),
 		"tier": int(poster.get("tier", 1)),
@@ -826,6 +923,23 @@ func _build_poster_row(poster: Dictionary) -> Control:
 		button.pressed.connect(func() -> void: buy_reveal(id))
 	bottom.add_child(button)
 	row.add_child(bottom)
+	entries.append_array([
+		{"control": title_row, "id": "%s.title_row" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": title, "id": "%s.title_row.title" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": bottom, "id": "%s.bottom" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": hint, "id": "%s.bottom.hint" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.bottom.reveal" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
+	if badge_icon != null:
+		entries.append({
+			"control": badge_icon, "id": "%s.title_row.badge" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	return row
 
 
@@ -861,11 +975,15 @@ func buy_reveal(fleet_id: String) -> String:
 ## down the `tavern.invest.header` section header, then the row itself as
 ## `tavern.invest.row` — `{nation} 在 {port} 投资 {amount} 金` (the names and
 ## amount are supplied by the `npc_intel.gd` guard read).
-func _bind_investment_row(row: Dictionary) -> void:
+func _bind_investment_row(row: Dictionary, entries: Array) -> void:
 	if _invest_rows.is_empty():
 		var header := _make_label(I18n.t_key("tavern.invest.header"),
 			"InvestHeader")
 		_rumor_rows.add_child(header)
+		entries.append({
+			"control": header, "id": "rumors.rows.invest_header",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	var text := I18n.fmt("tavern.invest.row", {
 		"nation": str(row.get("nation_name", "-")),
 		"port": str(row.get("port_name", "-")),
@@ -879,7 +997,12 @@ func _bind_investment_row(row: Dictionary) -> void:
 		"text": text,
 	})
 	_rumor_texts.append(text)
-	_rumor_rows.add_child(_make_label(text, "InvestRow"))
+	var label := _make_label(text, "InvestRow")
+	_rumor_rows.add_child(label)
+	entries.append({
+		"control": label, "id": "rumors.rows.invest.%d" % _invest_rows.size(),
+		"opts": {"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 
 ## The investment telegraph rows currently rendered (the seams a headless
@@ -908,10 +1031,11 @@ func rumor_texts() -> Array:
 ## captain's §4.8 role badge plus the 交好 befriend verb (stance +1, once per
 ## captain per port-visit day — the hail rule). Disabled rows gray-render
 ## with their `hail.befriend.used` term.
-func _build_captain_row(row: Dictionary, row_text: String) -> Control:
+func _build_captain_row(row: Dictionary, row_text: String,
+		entries: Array) -> Control:
 	var box := HBoxContainer.new()
 	box.name = "Captain_%s" % str(row["id"])
-	_attach_role_badge(box, str(row.get("role", "")))
+	var badge_icon := _attach_role_badge(box, str(row.get("role", "")))
 
 	var text := _make_label(row_text, "Text")
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -929,6 +1053,20 @@ func _build_captain_row(row: Dictionary, row_text: String) -> Control:
 		button.pressed.connect(func() -> void: befriend_captain(captain_id,
 			str(row.get("name", ""))))
 	box.add_child(button)
+	var row_id := "rumors.rows.captain.%s" % str(row["id"])
+	entries.append_array([
+		{"control": box, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
+		{"control": text, "id": "%s.text" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.befriend" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
+	if badge_icon != null:
+		entries.append({
+			"control": badge_icon, "id": "%s.badge" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	return box
 
 
@@ -1007,21 +1145,31 @@ func _bind_table() -> void:
 	var header := _make_label(I18n.t_key("captain.table.title"), "TableHeader")
 	_table_box.add_child(header)
 	_table_rows = _port_sighting_rows()
+	var entries: Array = [{
+		"control": header, "id": "captains_table.header",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	}]
 	if _table_rows.is_empty():
 		var empty := _make_label(I18n.t_key("captain.table.empty"), "Empty")
 		empty.theme_type_variation = "Dim"
 		_table_box.add_child(empty)
+		entries.append({
+			"control": empty, "id": "captains_table.empty",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
+		_register_dynamic("table", entries)
 		return
 	for row in _table_rows:
-		_table_box.add_child(_build_table_row(row))
+		_table_box.add_child(_build_table_row(row, entries))
+	_register_dynamic("table", entries)
 
 
 ## One captains'-table row: the §4.8 role badge, the index text and the
 ## inspect verb.
-func _build_table_row(row: Dictionary) -> Control:
+func _build_table_row(row: Dictionary, entries: Array) -> Control:
 	var box := HBoxContainer.new()
 	box.name = "TableRow_%s" % str(row["captain_id"])
-	_attach_role_badge(box, str(row.get("role", "")))
+	var badge_icon := _attach_role_badge(box, str(row.get("role", "")))
 
 	var facility_key := "port.%s" % str(row.get("facility", ""))
 	var facility_name := I18n.t_key(facility_key)
@@ -1043,6 +1191,20 @@ func _build_table_row(row: Dictionary) -> Control:
 	button.pressed.connect(func() -> void: inspect_captain(
 		str(row.get("captain_id", ""))))
 	box.add_child(button)
+	var row_id := "captains_table.rows.%s" % str(row["captain_id"])
+	entries.append_array([
+		{"control": box, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
+		{"control": label, "id": "%s.text" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.inspect" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
+	if badge_icon != null:
+		entries.append({
+			"control": badge_icon, "id": "%s.badge" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	return box
 
 
@@ -1108,10 +1270,11 @@ func place_spar_bet() -> Dictionary:
 
 ## Appends the bout's result line (the win/lose `tavern.spar.*` texts with the
 ## gold amount composed in). [method _bind_spar] re-appends it after every
-## rebuild, so the line survives the `gold_changed` refresh.
-func _append_spar_result(result: Dictionary) -> void:
+## rebuild, so the line survives the `gold_changed` refresh. Returns the line
+## (the spar registration's read).
+func _append_spar_result(result: Dictionary) -> Control:
 	if _spar_box == null:
-		return
+		return null
 	var key := "tavern.spar.win" if bool(result.get("won", false)) \
 		else "tavern.spar.lose"
 	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
@@ -1122,6 +1285,7 @@ func _append_spar_result(result: Dictionary) -> void:
 	line.theme_type_variation = "Good" if bool(result.get("won", false)) \
 		else "Warn"
 	_spar_box.add_child(line)
+	return line
 
 
 ## Rebinds the sparring row from state: the title, the stake + win-chance
@@ -1131,8 +1295,13 @@ func _bind_spar() -> void:
 	if _spar_box == null:
 		return
 	_clear(_spar_box)
+	var entries: Array = []
 	var header := _make_label(_t_key("tavern.spar.title"), "SparHeader")
 	_spar_box.add_child(header)
+	entries.append({
+		"control": header, "id": "spar.header",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
 
 	var chance := TavernEngineLib.spar_win_chance(
 		SkillsLib.effective_skill("swordplay"))
@@ -1142,6 +1311,10 @@ func _bind_spar() -> void:
 	}), "SparTerms")
 	terms.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_spar_box.add_child(terms)
+	entries.append({
+		"control": terms, "id": "spar.terms",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
 
 	var row := HBoxContainer.new()
 	row.name = "SparControls"
@@ -1172,28 +1345,52 @@ func _bind_spar() -> void:
 		bet.pressed.connect(place_spar_bet)
 	row.add_child(bet)
 	_spar_box.add_child(row)
+	entries.append_array([
+		{"control": row, "id": "spar.controls",
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": down, "id": "spar.controls.stake_down",
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+		{"control": up, "id": "spar.controls.stake_up",
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+		{"control": bet, "id": "spar.controls.bet",
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
 
 	# The latest bout's result line survives every rebuild (the reveal-text
 	# discipline: the answer stays after the refresh).
 	if not last_spar.is_empty():
-		_append_spar_result(last_spar)
+		var line := _append_spar_result(last_spar)
+		entries.append({
+			"control": line, "id": "spar.result",
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
+	_register_dynamic("spar", entries)
 
 
-func _build_rumor_row(discovery_id: String) -> Control:
+func _build_rumor_row(discovery_id: String, entries: Array) -> Control:
 	var discovery: Dictionary = DataLoader.get_discovery(discovery_id)
 	var hinted := DiscoveryLib.is_hinted(discovery_id)
 	var row := VBoxContainer.new()
 	row.name = "Rumor_%s" % discovery_id
+	var row_id := "rumors.rows.%s" % discovery_id
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 	var hint := _make_label(I18n.t(DiscoveryLib.hint_text(discovery_id)), "Hint")
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(hint)
+	entries.append({
+		"control": hint, "id": "%s.hint" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
 
 	var bottom := HBoxContainer.new()
 	bottom.name = "Bottom"
 	# The §4.8 `scroll` icon marks the purchasable rumor (a natural slot at
 	# the row's head; an absent id renders nothing — the flat fallback).
-	_attach_scroll_badge(bottom)
+	var scroll_icon := _attach_scroll_badge(bottom)
 	# The 100g buys the *location*: the name appears only once hinted
 	# (docs/80-* §4.7.3).
 	var name_label := _make_label(
@@ -1219,15 +1416,29 @@ func _build_rumor_row(discovery_id: String) -> Control:
 		button.pressed.connect(func() -> void: buy_rumor(discovery_id))
 	bottom.add_child(button)
 	row.add_child(bottom)
+	entries.append_array([
+		{"control": bottom, "id": "%s.bottom" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": name_label, "id": "%s.bottom.name" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.bottom.buy" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
+	if scroll_icon != null:
+		entries.append({
+			"control": scroll_icon, "id": "%s.bottom.scroll_badge" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN},
+		})
 	return row
 
 
 ## Prepends the §4.8 `scroll` hero to a rumor row head (the hero-64 rule:
-## 1:1 64); an absent id adds nothing (the flat fallback).
-func _attach_scroll_badge(row: HBoxContainer) -> void:
+## 1:1 64); an absent id adds nothing (the flat fallback). Returns the badge
+## icon (null when nothing was added — the row registration's read).
+func _attach_scroll_badge(row: HBoxContainer) -> Control:
 	var texture := UiKitLib.hero_texture("scroll")
 	if texture == null:
-		return
+		return null
 	var icon := TextureRect.new()
 	icon.name = "ScrollBadge"
 	icon.texture = texture
@@ -1236,16 +1447,18 @@ func _attach_scroll_badge(row: HBoxContainer) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	row.add_child(icon)
 	row.move_child(icon, 0)
+	return icon
 
 
 ## Prepends the §4.8 `role_{role}` badge to a sighting/poster row; an absent
-## id or an unknown role adds nothing (the flat fallback).
-func _attach_role_badge(row: HBoxContainer, role: String) -> void:
+## id or an unknown role adds nothing (the flat fallback). Returns the badge
+## icon (null when nothing was added — the row registration's read).
+func _attach_role_badge(row: HBoxContainer, role: String) -> Control:
 	if role.is_empty():
-		return
+		return null
 	var texture := UiKitLib.hero_texture("role_%s" % role)
 	if texture == null:
-		return
+		return null
 	var icon := TextureRect.new()
 	icon.name = "RoleBadge"
 	icon.texture = texture
@@ -1254,6 +1467,100 @@ func _attach_role_badge(row: HBoxContainer, role: String) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	row.add_child(icon)
 	row.move_child(icon, 0)
+	return icon
+
+
+# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
+
+## Registers every persistent control with its stable hierarchical id —
+## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
+## apply walk changes nothing (no moves, no resizes, no restyles).
+func _register_layout() -> void:
+	_reg($Background, "background", RegistryLib.ROLE_PANEL)
+	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
+	_reg(_gold, "header.gold", RegistryLib.ROLE_PLAIN)
+	_reg(_back_button, "header.back", RegistryLib.ROLE_BUTTON)
+	_reg($Layout/VBox/Tabs, "tabs", RegistryLib.ROLE_PLAIN)
+	_reg(_crew_tab, "tabs.crew", RegistryLib.ROLE_BUTTON)
+	_reg(_officers_tab, "tabs.officers", RegistryLib.ROLE_BUTTON)
+	_reg(_rumors_tab, "tabs.rumors", RegistryLib.ROLE_BUTTON)
+	_reg($Layout/VBox/Body, "body", RegistryLib.ROLE_PLAIN)
+	_reg(_crew_panel, "crew", RegistryLib.ROLE_PLAIN)
+	_reg(_crew_count, "crew.count", RegistryLib.ROLE_PLAIN)
+	_reg(_morale, "crew.morale", RegistryLib.ROLE_PLAIN)
+	_reg(_per_head, "crew.per_head", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Body/CrewPanel/HireRow, "crew.hire_row",
+		RegistryLib.ROLE_PLAIN)
+	_reg(_hire_1, "crew.hire_row.hire_1", RegistryLib.ROLE_BUTTON)
+	_reg(_hire_10, "crew.hire_row.hire_10", RegistryLib.ROLE_BUTTON)
+	_reg(_fill, "crew.hire_row.fill", RegistryLib.ROLE_BUTTON)
+	_reg($Layout/VBox/Body/CrewPanel/FireRow, "crew.fire_row",
+		RegistryLib.ROLE_PLAIN)
+	_reg(_fire_1, "crew.fire_row.fire_1", RegistryLib.ROLE_BUTTON)
+	_reg(_fire_10, "crew.fire_row.fire_10", RegistryLib.ROLE_BUTTON)
+	_reg(_down_to_min, "crew.fire_row.down_to_min", RegistryLib.ROLE_BUTTON)
+	_reg(_reason, "crew.reason", RegistryLib.ROLE_PLAIN)
+	_reg(_min_note, "crew.min_note", RegistryLib.ROLE_PLAIN)
+	_reg(_officers_panel, "officers", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Body/OfficersPanel/RecruitableScroll,
+		"officers.recruitable_scroll", RegistryLib.ROLE_PLAIN)
+	_reg(_recruitable, "officers.recruitable", RegistryLib.ROLE_PLAIN)
+	_reg(_roster_header, "officers.roster_header", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Body/OfficersPanel/RosterScroll,
+		"officers.roster_scroll", RegistryLib.ROLE_PLAIN)
+	_reg(_roster, "officers.roster", RegistryLib.ROLE_PLAIN)
+	_reg(_officer_reason, "officers.reason", RegistryLib.ROLE_PLAIN)
+	_reg(_rumors_panel, "rumors", RegistryLib.ROLE_PLAIN)
+	_reg(_rumor_tournament, "rumors.tournament", RegistryLib.ROLE_PLAIN)
+	_reg(_rumor_price, "rumors.price", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Body/RumorsPanel/Scroll, "rumors.scroll",
+		RegistryLib.ROLE_PLAIN)
+	_reg(_rumor_rows, "rumors.rows", RegistryLib.ROLE_PLAIN)
+	_reg(_rumor_empty, "rumors.empty", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Toast, "toast", RegistryLib.ROLE_PLAIN)
+	_reg(_table_box, "captains_table", RegistryLib.ROLE_PLAIN)
+	_reg(_spar_box, "spar", RegistryLib.ROLE_PLAIN)
+
+
+## One static registration — kind omitted (auto-derives from the parent).
+func _reg(control: Control, id: String, role: String) -> void:
+	RegistryLib.register(LAYOUT_SCREEN, control, id, {"role": role})
+
+
+## Registers one rebuilt dynamic row set (the rumor/aliveness/captain/poster
+## rows, the officers lists, the captains' table, the sparring row, the
+## morale bar). `entries` = [{control, id, opts}]. A section's FIRST build
+## registers synchronously — inside `_ready`, ahead of `screen_active`, so
+## the activation walk captures the rows' baselines. A REbuild defers one
+## frame: the cleared rows are queue_freed but still live within this frame,
+## and a same-frame re-register would read as a duplicate id — after the
+## frame's delete flush the same-id replacement is silent. A pass whose
+## screen died meanwhile has only dead nodes to visit: the instance-bound
+## one-shot dies with it (nothing left to register). (The buy-reveal text
+## line is not registered: `buy_reveal` appends it and the same-frame
+## `gold_changed` refresh clears it again, so it never survives a frame.)
+func _register_dynamic(section: String, entries: Array) -> void:
+	if not _layout_built.has(section):
+		_layout_built[section] = true
+		for entry in entries:
+			RegistryLib.register(LAYOUT_SCREEN, entry["control"],
+				entry["id"], entry["opts"])
+		return
+	var apply := func() -> void:
+		for entry in entries:
+			var candidate: Variant = entry["control"]
+			# The Variant guard comes first: a freed node fails
+			# `is_instance_valid` safely, while a typed assignment of it
+			# would be a runtime error.
+			if not is_instance_valid(candidate) or not (candidate is Control):
+				continue
+			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
+				entry["opts"])
+		RegistryLib.apply_screen(LAYOUT_SCREEN)
+	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 
 # --- Button handlers -------------------------------------------------------
@@ -1341,6 +1648,10 @@ func _refresh_morale_bar() -> void:
 	_morale_bar = UiKitLib.value_bar(GameState.morale, 100, tier)
 	parent.add_child(_morale_bar)
 	parent.move_child(_morale_bar, _morale.get_index() + 1)
+	_register_dynamic("morale_bar", [{
+		"control": _morale_bar, "id": "crew.morale_bar",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	}])
 
 
 ## Transient action feedback (docs/80-* §4.7) through the kit toast atom

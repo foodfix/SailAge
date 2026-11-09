@@ -31,8 +31,15 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## hour charges go through the one clock seam.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
+## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
+## every persistent control registers at build time with a stable
+## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
+## no-op (registration only, nothing moves).
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
+## This screen's id in the registry (LayoutRegistry.SCREENS).
+const LAYOUT_SCREEN := "guild"
 ## Type tag → `ui_strings` key (`80-*` §4.7.4).
 const TYPE_KEYS := {
 	"delivery": "quest.type.delivery",
@@ -71,6 +78,9 @@ var _port_id: String = ""
 var _offers: Array = []
 ## The discovery ids currently listed for report.
 var _reports: Array = []
+## Phase-11 (§4.8.9): per dynamic section, true once its first build has
+## registered (see [_register_dynamic] for the first-build/rebuild split).
+var _layout_built: Dictionary = {}
 
 
 func _ready() -> void:
@@ -89,7 +99,11 @@ func _ready() -> void:
 	_back_button.pressed.connect(go_back)
 
 	_port_id = _read_current_port()
+	_register_layout()
 	refresh()
+	# Phase-11 (§4.8.9): the build is registered — activate the screen (pins
+	# the root, captures baselines, applies the committed table; ships {}).
+	RegistryLib.screen_active(LAYOUT_SCREEN, self)
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.quests_changed.connect(refresh)
@@ -266,13 +280,24 @@ func _bind_offers() -> void:
 		else "ui.empty")
 	if _offers.is_empty():
 		return
+	var entries: Array = []
 	for index in _offers.size():
-		_offers_rows.add_child(_build_offer_row(_offers[index], index))
+		_offers_rows.add_child(_build_offer_row(_offers[index], index,
+			entries))
+	_register_dynamic("offers", entries)
 
 
-func _build_offer_row(offer: Dictionary, index: int) -> Control:
+func _build_offer_row(offer: Dictionary, index: int,
+		entries: Array) -> Control:
+	var row_id := str(offer.get("instance_id", ""))
+	if row_id.is_empty():
+		row_id = "%d" % index
 	var row := VBoxContainer.new()
 	row.name = "Offer_%d" % index
+	entries.append({
+		"control": row, "id": "offers.rows.%s" % row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+	})
 
 	var top := HBoxContainer.new()
 	var tag := _make_label(I18n.t_key(str(TYPE_KEYS.get(
@@ -291,6 +316,22 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 	days.theme_type_variation = "Dim"
 	top.add_child(days)
 	row.add_child(top)
+	entries.append({
+		"control": top, "id": "offers.rows.%s.top" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+	entries.append({
+		"control": tag, "id": "offers.rows.%s.top.tag" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+	entries.append({
+		"control": line, "id": "offers.rows.%s.top.objective" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+	entries.append({
+		"control": days, "id": "offers.rows.%s.top.days" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
 
 	var bottom := HBoxContainer.new()
 	var reward := _make_label(_reward_text(offer), "Reward")
@@ -314,7 +355,23 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 		hint.disabled = true
 		hint.tooltip_text = I18n.t(_hint_text(offer))
 		bottom.add_child(hint)
+		entries.append({
+			"control": hint, "id": "offers.rows.%s.bottom.hint" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON},
+		})
 	row.add_child(bottom)
+	entries.append({
+		"control": bottom, "id": "offers.rows.%s.bottom" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+	entries.append({
+		"control": reward, "id": "offers.rows.%s.bottom.reward" % row_id,
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+	entries.append({
+		"control": accept, "id": "offers.rows.%s.bottom.accept" % row_id,
+		"opts": {"role": RegistryLib.ROLE_BUTTON},
+	})
 	return row
 
 
@@ -351,11 +408,13 @@ func _bind_reports() -> void:
 	_reports = DiscoveryLib.unreported()
 	_reports_empty.visible = _reports.is_empty()
 	_reports_empty.text = I18n.t_key("guild.report.none")
+	var entries: Array = []
 	for discovery_id in _reports:
-		_reports_rows.add_child(_build_report_row(str(discovery_id)))
+		_reports_rows.add_child(_build_report_row(str(discovery_id), entries))
+	_register_dynamic("reports", entries)
 
 
-func _build_report_row(discovery_id: String) -> Control:
+func _build_report_row(discovery_id: String, entries: Array) -> Control:
 	var discovery: Dictionary = DataLoader.get_discovery(discovery_id)
 	var row := HBoxContainer.new()
 	row.name = "Report_%s" % discovery_id
@@ -375,7 +434,82 @@ func _build_report_row(discovery_id: String) -> Control:
 	button.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 	button.pressed.connect(func() -> void: report_discovery(discovery_id))
 	row.add_child(button)
+	var row_id := "reports.rows.%s" % discovery_id
+	entries.append_array([
+		{"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
+		{"control": name_label, "id": "%s.name" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": reward, "id": "%s.reward" % row_id,
+			"opts": {"role": RegistryLib.ROLE_PLAIN}},
+		{"control": button, "id": "%s.report" % row_id,
+			"opts": {"role": RegistryLib.ROLE_BUTTON}},
+	])
 	return row
+
+
+# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
+
+## Registers every persistent control with its stable hierarchical id —
+## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
+## apply walk changes nothing (no moves, no resizes, no restyles).
+func _register_layout() -> void:
+	_reg(_background, "background", RegistryLib.ROLE_PANEL)
+	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
+	_reg(_gold, "header.gold", RegistryLib.ROLE_PLAIN)
+	_reg(_fame, "header.fame", RegistryLib.ROLE_PLAIN)
+	_reg(_back_button, "header.back", RegistryLib.ROLE_BUTTON)
+	_reg($Layout/VBox/Offers, "offers", RegistryLib.ROLE_PLAIN)
+	_reg(_offers_heading, "offers.heading", RegistryLib.ROLE_PLAIN)
+	_reg(_offers_hint, "offers.refresh_hint", RegistryLib.ROLE_PLAIN)
+	_reg(_announce, "offers.announce", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Offers/Scroll, "offers.scroll", RegistryLib.ROLE_PLAIN)
+	_reg(_offers_rows, "offers.rows", RegistryLib.ROLE_PLAIN)
+	_reg(_offers_empty, "offers.empty", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Reports, "reports", RegistryLib.ROLE_PLAIN)
+	_reg(_reports_heading, "reports.heading", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Reports/Scroll, "reports.scroll", RegistryLib.ROLE_PLAIN)
+	_reg(_reports_rows, "reports.rows", RegistryLib.ROLE_PLAIN)
+	_reg(_reports_empty, "reports.empty", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
+	_reg($Layout/VBox/Toast, "toast", RegistryLib.ROLE_PLAIN)
+
+
+## One static registration — kind omitted (auto-derives from the parent).
+func _reg(control: Control, id: String, role: String) -> void:
+	RegistryLib.register(LAYOUT_SCREEN, control, id, {"role": role})
+
+
+## Registers one rebuilt dynamic row set (the offer/report rows). `entries`
+## = [{control, id, opts}]. A section's FIRST build registers synchronously
+## — inside `_ready`, ahead of `screen_active`, so the activation walk
+## captures the rows' baselines. A REbuild defers one frame: the cleared
+## rows are queue_freed but still live within this frame, and a same-frame
+## re-register would read as a duplicate id — after the frame's delete
+## flush the same-id replacement is silent. A pass whose screen died
+## meanwhile has only dead nodes to visit: the instance-bound one-shot dies
+## with it (nothing left to register).
+func _register_dynamic(section: String, entries: Array) -> void:
+	if not _layout_built.has(section):
+		_layout_built[section] = true
+		for entry in entries:
+			RegistryLib.register(LAYOUT_SCREEN, entry["control"],
+				entry["id"], entry["opts"])
+		return
+	var apply := func() -> void:
+		for entry in entries:
+			var candidate: Variant = entry["control"]
+			# The Variant guard comes first: a freed node fails
+			# `is_instance_valid` safely, while a typed assignment of it
+			# would be a runtime error.
+			if not is_instance_valid(candidate) or not (candidate is Control):
+				continue
+			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
+				entry["opts"])
+		RegistryLib.apply_screen(LAYOUT_SCREEN)
+	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 
 # --- Helpers --------------------------------------------------------------
