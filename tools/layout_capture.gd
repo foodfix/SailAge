@@ -75,7 +75,9 @@ const W2D_SCENES := {
 	"gameover": GAMEOVER_SCENE,
 	"ending": ENDING_SCENE,
 	"duel": DUEL_SCENE,
-	"intel_window": "res://scenes/ui_shared/intel_window.tscn",
+	"intel_window": INTEL_WINDOW_SCENE,
+	"reputation_view": "res://scenes/ui_shared/reputation_view.tscn",
+	"captain_view": "res://scenes/ui_shared/captain_view.tscn",
 }
 
 
@@ -415,3 +417,29 @@ func _open_intel_window(window: Control) -> void:
 	if not offers.is_empty():
 		QuestGenLib.accept(offers[0], "lisbon", GameState.day)
 	window.call("open_tab", "quests")
+
+
+# --- rig: reputation_view (W2-D) -----------------------------------------------
+
+func _rig_reputation_view() -> void:
+	_rig_modal_run()
+	GameState.player["reputation"]["spain"] = 12
+	GameState.player["reputation"]["ottoman"] = -8
+
+
+## The fixture view: a fresh build renders the six-nation table (the view
+## is live from _ready; refresh fills the cells).
+func _open_reputation_view(view: Control) -> void:
+	view.call("refresh")
+
+
+# --- rig: captain_view (W2-D) ---------------------------------------------------
+
+func _rig_captain_view() -> void:
+	_rig_modal_run()
+	GameState.day = 41
+
+
+## The fixture view: refresh renders the nation/day line + the player card.
+func _open_captain_view(view: Control) -> void:
+	view.call("refresh")

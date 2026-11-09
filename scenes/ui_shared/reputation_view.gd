@@ -15,10 +15,16 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
-@onready var _title: Label = $Body/Title
-@onready var _rows: GridContainer = $Body/Page/Sections/Rows
-@onready var _hint: Label = $Body/Page/Sections/Hint
+## This view's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "reputation_view"
+
+## The registered-ancestor id pass runs once at build (the view is alive
+## only inside its host; its records die with it).
+@onready var _title: Label = $Title
+@onready var _rows: Control = $Rows
+@onready var _hint: Label = $Hint
 
 
 func _ready() -> void:
@@ -26,6 +32,14 @@ func _ready() -> void:
 	# secondary hint text uses the theme's `Dim` variation.
 	_title.modulate = PaletteLib.ACCENT
 	_hint.theme_type_variation = "Dim"
+	# Phase 12 (docs/80-* §4.8.9): the absolute-tile layout — the view's
+	# elements at their data rects in the 32×12-tile view space (the intel
+	# window pins the view root to its content rect); the six-nation rows
+	# flatten into name/value cells at fixed slots (the GridContainer is
+	# deleted). The view registers + activates at build (a full-rect page).
+	RegistryLib.register(SCREEN_ID, _title, "title")
+	RegistryLib.register(SCREEN_ID, _rows, "rows")
+	RegistryLib.register(SCREEN_ID, _hint, "hint")
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.port_entered.connect(_on_port_entered)
 
@@ -42,8 +56,8 @@ func refresh() -> void:
 		if DataLoader.ui_strings.has("char.reputation.hint") else ""
 	_hint.visible = not _hint.text.is_empty()
 	var nation_id := str(GameState.player.get("nation_id", ""))
-	_rows.columns = 2
 	_clear(_rows)
+	var index := 0
 	for nation in DataLoader.nations_list:
 		var other_id := str(nation.get("id", ""))
 		var value := CharacterLib.reputation(other_id)
@@ -53,14 +67,25 @@ func refresh() -> void:
 		# state tint via `modulate`).
 		if other_id == nation_id:
 			name_label.modulate = PaletteLib.ACCENT
+		name_label.position = Vector2(0, float(index * PaletteLib.CHROME_TILE))
+		name_label.size = Vector2(12 * PaletteLib.CHROME_TILE,
+			float(PaletteLib.CHROME_TILE))
+		RegistryLib.register(SCREEN_ID, name_label, "rows.%s.name" % other_id,
+			{"data_ordered": true})
 		var value_label := _make_label(format_signed(value))
 		value_label.name = "Value_%s" % other_id
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value_label.custom_minimum_size.x = 96
 		value_label.modulate = PaletteLib.GOOD if value > 0 \
 			else (PaletteLib.BAD if value < 0 else Color.WHITE)
+		value_label.position = Vector2(12 * PaletteLib.CHROME_TILE,
+			float(index * PaletteLib.CHROME_TILE))
+		value_label.size = Vector2(4 * PaletteLib.CHROME_TILE,
+			float(PaletteLib.CHROME_TILE))
+		RegistryLib.register(SCREEN_ID, value_label, "rows.%s.value" % other_id,
+			{"data_ordered": true})
 		_rows.add_child(name_label)
 		_rows.add_child(value_label)
+		index += 1
 
 
 ## True when the table is rendering (test hook: the row count check).

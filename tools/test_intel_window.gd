@@ -181,8 +181,10 @@ func _test_reputation_tab() -> void:
 	# Every nation appears — none hidden (docs/50-* §6).
 	var found := 0
 	for nation in DataLoader.nations_list:
+		# Phase 12: the cells are direct children of the registered `rows`
+		# group (the Page/Sections flow chain is deleted).
 		if view.get_node_or_null(
-				"Body/Page/Sections/Rows/Rep_%s" % str(nation.get("id", ""))) != null:
+				"Rows/Rep_%s" % str(nation.get("id", ""))) != null:
 			found += 1
 	_check(found == DataLoader.nations_list.size(),
 		"no nation row is hidden (%d/%d)" % [found, DataLoader.nations_list.size()])
