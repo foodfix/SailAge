@@ -420,10 +420,20 @@ func _bind_captains() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
-		_place(empty, Rect2i(0, 0, CAPTAINS_BASE_W, 1))
+		# The empty marker is a `captains` LIST MEMBER placed at the
+		# block's row 0 (builder-owned placement — the coverage check
+		# exempts list members; docs/80-* §4.8.9).
+		var rect := RegistryLib.list_rect(LAYOUT_SCREEN, CAPTAINS_LIST, 0)
+		if rect == Rect2():
+			rect = Rect2(Vector2.ZERO,
+					Vector2(CAPTAINS_BASE_W, CAPTAINS_ROW_H) * float(TILE))
+		empty.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		empty.position = rect.position
+		empty.size = rect.size
 		_register_dynamic("captains", [{
 			"control": empty, "id": "captains.rows.empty",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
+			"opts": {"role": RegistryLib.ROLE_PLAIN,
+				"list": CAPTAINS_LIST},
 		}])
 		return
 	var entries: Array = []

@@ -1323,10 +1323,17 @@ func _bind_table() -> void:
 		var empty := _make_label(I18n.t_key("captain.table.empty"), "Empty")
 		empty.theme_type_variation = "Dim"
 		_table_box.add_child(empty)
-		_place(empty, Rect2i(0, TABLE_BASE_Y, TABLE_W, 1))
+		# The empty marker is a `table` LIST MEMBER placed at the
+		# block's row 0 (builder-owned placement — the coverage check
+		# exempts list members; docs/80-* §4.8.9).
+		var rect := _list_row_rect(TABLE_LIST, 0, TABLE_W, TABLE_ROW_H)
+		empty.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		empty.position = rect.position
+		empty.size = rect.size
 		entries.append({
 			"control": empty, "id": "captains_table.empty",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
+			"opts": {"role": RegistryLib.ROLE_PLAIN,
+				"list": TABLE_LIST},
 		})
 		_register_dynamic("table", entries)
 		return

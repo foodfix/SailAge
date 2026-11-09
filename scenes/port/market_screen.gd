@@ -1562,9 +1562,18 @@ func _refresh_captains() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
-		_place(empty, Rect2i(0, 0, CAPTAINS_W, 1))
+		# The empty marker is a `captains` LIST MEMBER placed at the
+		# block's row 0 (builder-owned placement — the coverage check
+		# exempts list members, and the seeded-rig capture never sees
+		# the empty state; docs/80-* §4.8.9).
+		var rect := _list_row_rect(CAPTAINS_LIST, 0, CAPTAINS_W,
+				CAPTAINS_ROW_H)
+		empty.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		empty.position = rect.position
+		empty.size = rect.size
 		# Phase-11 W3-B (docs/80-* §4.8.9).
-		RegistryLib.register("market", empty, "captains.empty")
+		RegistryLib.register("market", empty, "captains.empty",
+				{"list": CAPTAINS_LIST})
 		return
 	var index := 0
 	for entry in _captain_rows:

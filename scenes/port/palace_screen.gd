@@ -755,10 +755,17 @@ func _bind_bounty_board() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_board_box.add_child(empty)
-		_place(empty, Rect2i(0, 0, BOARD_W, 1))
+		# The empty marker is a `board` LIST MEMBER placed at the
+		# block's row 0 (builder-owned placement — the coverage check
+		# exempts list members; docs/80-* §4.8.9).
+		var rect := _list_row_rect(BOARD_LIST, 0, BOARD_W, BOARD_ROW_H)
+		empty.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		empty.position = rect.position
+		empty.size = rect.size
 		_register_dynamic("board", [{
 			"control": empty, "id": "board.rows.empty",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
+			"opts": {"role": RegistryLib.ROLE_PLAIN,
+				"list": BOARD_LIST},
 		}])
 		return
 	var index := 0
