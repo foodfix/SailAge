@@ -127,13 +127,65 @@ func _rig_port() -> void:
 	GameState.market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list)
 	GameState.market_events = []
-	GameState.npc_fleets = []
+	# Phase 12 W2-A (the list blocks must derive): the harbor table loads
+	# (`ensure_map`) so the docked-fleet queries resolve Lisbon's berth, then
+	# three docked fleets — two traders (market/inn rolls) and one coaster
+	# (tavern roll) — plus a hunter at the pier (palace bounty board) and one
+	# pirate at sea within the §4.7.8 poster radius (palace inform). Canon
+	# captain ids only (`data/captains.json`); the seeded facility/presence
+	# rolls are stable for these fixed ids, port and day. One
+	# found-but-unreported discovery feeds the guild's report list.
+	DataLoader.ensure_map()
+	GameState.npc_fleets = [
+		_rig_fleet("cap_w2a_trader_2", "cap_trader_0002", "trader",
+			"holland", true),
+		_rig_fleet("cap_w2a_trader_4", "cap_trader_0003", "trader",
+			"england", true),
+		_rig_fleet("cap_w2a_coaster_1", "cap_coaster_0001", "coaster",
+			"spain", true),
+		_rig_fleet("cap_w2a_hunter_1", "cap_hunter_0001", "hunter",
+			"portugal", true),
+		_rig_fleet("cap_w2a_pirate_1", "pirate_edward_bloodhand", "pirate",
+			"", false),
+	]
 	GameState.npc_port_log = []
+	var found := str(DataLoader.discoveries_list[0].get("id", ""))
+	GameState.discoveries_found = [found] if not found.is_empty() else []
+	GameState.discoveries_reported = []
 	EconomyLib.reset_overrides()
 	var port: Dictionary = DataLoader.get_port("lisbon")
 	GameState.world = {
 		"position": port.get("position", {"x": 0, "y": 0}).duplicate(),
 		"clock_fraction": 0.5, "weather": "fair",
+	}
+
+
+## One minimal NPC fleet for the rig: docked at Lisbon on its berth when
+## `docked` (dwell active), at sea three tiles southeast otherwise (the
+## wanted-poster family). The shape is the `npc_fleets.gd` fleet dict's
+## live-read subset (`position_of`, `docked_fleets`, the seeded rolls).
+func _rig_fleet(id: String, captain_id: String, role: String,
+		nation_id: String, docked: bool) -> Dictionary:
+	var cell := DataLoader.port_cell("lisbon")
+	if not docked:
+		cell += Vector2i(3, 3)
+	return {
+		"id": id,
+		"role": role,
+		"nation_id": nation_id,
+		"cell": {"x": cell.x, "y": cell.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain_id": captain_id,
+		"cooldown_until_day": 0,
+		"seed": 0,
+		"dest_port_id": "lisbon" if docked else "",
+		"dwell_until_day": GameState.day + 3 if docked else 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
 	}
 
 
