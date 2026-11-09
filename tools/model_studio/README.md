@@ -198,8 +198,15 @@ registry strips the family prefix).
 
 The **Layout** tab swaps the card grid for a live UI-layout editor:
 screen list + element tree on the left, the game's real viewport frame
-with 32 px-tile boxes on the canvas, the override inspector on the
+with the 32 px-tile grid on the canvas, the override inspector on the
 right, and the commit bar underneath.
+
+- **Selection model (2026-11-09 user direction — the list is the only
+  selection surface):** pick an element in the tree; the canvas then
+  renders ONLY that element's box (nothing selected — no boxes), and
+  that single box is the only thing the canvas can drag (free/anchored
+  move, `min_w`/`min_h` resize for container children). Canvas clicks
+  never select.
 
 - **Launch contract** — the game carries the bridge; the studio never
   launches Godot. Start the game with

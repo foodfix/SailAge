@@ -857,61 +857,62 @@ function layRenderBoxes() {
   const host = layEl("lay-boxes");
   host.textContent = "";
   const note = layEl("lay-canvas-note");
-  note.hidden = !!LAY.tree.length;
-  note.textContent = LAY.connected
-    ? (LAY.screen ? "no tree for this screen" : "pick a screen")
-    : "no frame — connect the bridge and pick a screen";
-  for (const e of LAY.tree) {
-    const r = layRect(e);
-    if (!r) continue;
-    const kind = layKind(e);
-    const box = document.createElement("div");
-    box.className = "lay-box" + (kind === "child" ? " child" : "")
-      + (kind === "plain" ? " plain" : "")
-      + (e.id === LAY.sel ? " active" : "");
-    const p = layBoxPos(r);
-    box.style.left = p.left + "%";
-    box.style.top = p.top + "%";
-    box.style.width = p.width + "%";
-    box.style.height = p.height + "%";
-    box.dataset.id = e.id;
-    const tag = document.createElement("span");
-    tag.className = "lay-box-tag";
-    tag.textContent = e.id;
-    box.appendChild(tag);
-    const dragable = kind !== "child" && !layLocked(e) && LAY.connected;
-    box.style.cursor = dragable ? "move" : "default";
-    if (dragable || (kind === "child" && LAY.connected)) {
-      const se = document.createElement("div");
-      se.className = "lay-se";
-      se.title = kind === "child" ? "resize (min_w/min_h)" : "resize";
-      se.addEventListener("mousedown", (ev) => {
-        ev.stopPropagation(); ev.preventDefault();
-        LAY.drag = { mode: "resize", e: JSON.parse(JSON.stringify(e)),
-                     r: layRect(e) };
-        box.classList.add("dragging");
-      });
-      box.appendChild(se);
-    }
-    if (dragable) {
-      box.addEventListener("mousedown", (ev) => {
-        ev.preventDefault();
-        const g = layPointerTiles(ev);
-        LAY.drag = { mode: "move", e: JSON.parse(JSON.stringify(e)),
-                     r: layRect(e),
-                     off: { x: g.x - r.x, y: g.y - r.y } };
-        box.classList.add("dragging");
-      });
-    }
-    box.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      LAY.sel = e.id;
-      layRenderTree();
-      layRenderBoxes();
-      layRenderInspector();
-    });
-    host.appendChild(box);
+  // The simplified canvas model (2026-11-09 user direction): the element
+  // LIST is the only selection surface, and the canvas renders ONLY the
+  // selected element's box — nothing selected, no boxes at all.
+  if (!LAY.sel) {
+    note.hidden = !LAY.tree.length;
+    note.textContent = LAY.connected && LAY.tree.length
+      ? "pick an element in the list (left) to edit it"
+      : (LAY.connected
+        ? (LAY.screen ? "no tree for this screen" : "pick a screen")
+        : "no frame — connect the bridge and pick a screen");
+    return;
   }
+  const e = LAY.tree.find(x => x.id === LAY.sel);
+  if (!e) return;  // the selection vanished (rebuild) — tree receipt clears it
+  note.hidden = true;
+  const r = layRect(e);
+  if (!r) return;
+  const kind = layKind(e);
+  const box = document.createElement("div");
+  box.className = "lay-box active" + (kind === "child" ? " child" : "")
+    + (kind === "plain" ? " plain" : "");
+  const p = layBoxPos(r);
+  box.style.left = p.left + "%";
+  box.style.top = p.top + "%";
+  box.style.width = p.width + "%";
+  box.style.height = p.height + "%";
+  box.dataset.id = e.id;
+  const tag = document.createElement("span");
+  tag.className = "lay-box-tag";
+  tag.textContent = e.id;
+  box.appendChild(tag);
+  const dragable = kind !== "child" && !layLocked(e) && LAY.connected;
+  box.style.cursor = dragable ? "move" : "default";
+  if (dragable || (kind === "child" && LAY.connected)) {
+    const se = document.createElement("div");
+    se.className = "lay-se";
+    se.title = kind === "child" ? "resize (min_w/min_h)" : "resize";
+    se.addEventListener("mousedown", (ev) => {
+      ev.stopPropagation(); ev.preventDefault();
+      LAY.drag = { mode: "resize", e: JSON.parse(JSON.stringify(e)),
+                   r: layRect(e) };
+      box.classList.add("dragging");
+    });
+    box.appendChild(se);
+  }
+  if (dragable) {
+    box.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      const g = layPointerTiles(ev);
+      LAY.drag = { mode: "move", e: JSON.parse(JSON.stringify(e)),
+                   r: layRect(e),
+                   off: { x: g.x - r.x, y: g.y - r.y } };
+      box.classList.add("dragging");
+    });
+  }
+  host.appendChild(box);
 }
 
 function layPointerTiles(ev) {
