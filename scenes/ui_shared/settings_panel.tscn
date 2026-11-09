@@ -22,142 +22,162 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.4)
 
-[node name="Center" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 608.0
+offset_top = 192.0
+offset_right = 1312.0
+offset_bottom = 864.0
+mouse_filter = 0
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(640, 0)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="Body" type="VBoxContainer" parent="Center/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Title" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 32.0
+offset_right = 672.0
+offset_bottom = 96.0
 theme_override_font_sizes/font_size = 32
 
-[node name="Density" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Label" type="Label" parent="Center/Panel/Margin/Body/Density"]
-layout_mode = 2
+[node name="DensityLabel" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 96.0
+offset_right = 672.0
+offset_bottom = 128.0
 theme_override_font_sizes/font_size = 20
 
-[node name="Presets" type="HBoxContainer" parent="Center/Panel/Margin/Body/Density"]
-layout_mode = 2
-theme_override_constants/separation = 8
-alignment = 1
+[node name="Presets" type="Control" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 128.0
+offset_right = 672.0
+offset_bottom = 192.0
+mouse_filter = 2
 
-[node name="Current" type="Label" parent="Center/Panel/Margin/Body/Density"]
-layout_mode = 2
+[node name="Current" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 192.0
+offset_right = 672.0
+offset_bottom = 224.0
 
-[node name="Hint" type="Label" parent="Center/Panel/Margin/Body/Density"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
+[node name="Hint" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 224.0
+offset_right = 672.0
+offset_bottom = 288.0
 autowrap_mode = 3
 
-[node name="InputRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="InputLabel" type="Label" parent="Center/Panel/Margin/Body/InputRow"]
-layout_mode = 2
+[node name="InputLabel" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 288.0
+offset_right = 192.0
+offset_bottom = 352.0
 theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
 
-[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Margin/Body/InputRow"]
-layout_mode = 2
-theme_override_constants/separation = 8
+[node name="InputButtons" type="Control" parent="Panel"]
+layout_mode = 0
+offset_left = 224.0
+offset_top = 288.0
+offset_right = 480.0
+offset_bottom = 352.0
+mouse_filter = 2
 
-[node name="InputCurrent" type="Label" parent="Center/Panel/Margin/Body/InputRow"]
-layout_mode = 2
+[node name="InputCurrent" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 288.0
+offset_right = 672.0
+offset_bottom = 352.0
+vertical_alignment = 1
 
-[node name="CurrentModeRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="CurrentModeLabel" type="Label" parent="Center/Panel/Margin/Body/CurrentModeRow"]
-layout_mode = 2
+[node name="CurrentModeLabel" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 352.0
+offset_right = 192.0
+offset_bottom = 416.0
 theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
 
-[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Margin/Body/CurrentModeRow"]
-layout_mode = 2
-theme_override_constants/separation = 8
+[node name="CurrentModeButtons" type="Control" parent="Panel"]
+layout_mode = 0
+offset_left = 224.0
+offset_top = 352.0
+offset_right = 480.0
+offset_bottom = 416.0
+mouse_filter = 2
 
-[node name="CurrentModeCurrent" type="Label" parent="Center/Panel/Margin/Body/CurrentModeRow"]
-layout_mode = 2
+[node name="CurrentModeCurrent" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 352.0
+offset_right = 672.0
+offset_bottom = 416.0
+vertical_alignment = 1
 
-[node name="DebugRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="DebugLabel" type="Label" parent="Center/Panel/Margin/Body/DebugRow"]
-layout_mode = 2
+[node name="DebugLabel" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 416.0
+offset_right = 192.0
+offset_bottom = 480.0
 theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
 
-[node name="DebugButton" type="Button" parent="Center/Panel/Margin/Body/DebugRow"]
-custom_minimum_size = Vector2(96, 40)
-layout_mode = 2
+[node name="DebugButton" type="Button" parent="Panel"]
+layout_mode = 0
+offset_left = 224.0
+offset_top = 416.0
+offset_right = 320.0
+offset_bottom = 480.0
 
-[node name="DebugHint" type="Label" parent="Center/Panel/Margin/Body/DebugRow"]
-layout_mode = 2
+[node name="DebugHint" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 352.0
+offset_top = 416.0
+offset_right = 640.0
+offset_bottom = 480.0
+vertical_alignment = 1
 
-[node name="LocaleRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="LocaleLabel" type="Label" parent="Center/Panel/Margin/Body/LocaleRow"]
-layout_mode = 2
+[node name="LocaleLabel" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 480.0
+offset_right = 192.0
+offset_bottom = 544.0
 theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
 
-[node name="LocaleButton" type="Button" parent="Center/Panel/Margin/Body/LocaleRow"]
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
+[node name="LocaleButton" type="Button" parent="Panel"]
+layout_mode = 0
+offset_left = 224.0
+offset_top = 480.0
+offset_right = 384.0
+offset_bottom = 544.0
 
-[node name="SaveRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+[node name="SaveButton" type="Button" parent="Panel"]
 visible = false
-layout_mode = 2
-alignment = 1
+layout_mode = 0
+offset_left = 224.0
+offset_top = 544.0
+offset_right = 480.0
+offset_bottom = 608.0
 
-[node name="SaveButton" type="Button" parent="Center/Panel/Margin/Body/SaveRow"]
-custom_minimum_size = Vector2(240, 40)
-layout_mode = 2
-
-[node name="ReturnRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+[node name="ReturnButton" type="Button" parent="Panel"]
 visible = false
-layout_mode = 2
-alignment = 1
+layout_mode = 0
+offset_left = 224.0
+offset_top = 608.0
+offset_right = 480.0
+offset_bottom = 672.0
 
-[node name="ReturnButton" type="Button" parent="Center/Panel/Margin/Body/ReturnRow"]
-custom_minimum_size = Vector2(240, 40)
-layout_mode = 2
-
-[node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 2
-
-[node name="Close" type="Button" parent="Center/Panel/Margin/Body/Footer"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="Close" type="Button" parent="Panel"]
+layout_mode = 0
+offset_left = 544.0
+offset_top = 608.0
+offset_right = 672.0
+offset_bottom = 672.0

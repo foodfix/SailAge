@@ -19,6 +19,10 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This screen's layout id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "ending"
 
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 
@@ -28,13 +32,26 @@ const RPG_NEMESIS_SLOTS := 3
 ## A veteran needs ≥ 90 sea-days served (docs/70-* §4.7).
 const RPG_VETERAN_SEA_DAYS := 90
 
+## The RPG rows' list block (docs/10-* §4.23 — tiles, content-node space);
+## the shipped data row mirrors these constants exactly.
+const LIST_RPG := "rpg"
+const RPG_BASE_TILES := Rect2i(0, 0, 16, 1)
+const RPG_ROW_H_TILES := 1
+
+## The six summary rows' §4.14 order (the `_add_row` key set).
+const SUMMARY_KEYS: Array[String] = [
+	"ending.days", "ending.gold", "ending.fame", "ending.titles",
+	"ending.discoveries", "ending.battles",
+]
+
 @onready var _background: Panel = $Background
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _subtitle: Label = $Center/Panel/Margin/Body/Subtitle
-@onready var _rows: VBoxContainer = $Center/Panel/Margin/Body/Rows
-@onready var _rpg_rows: VBoxContainer = $Center/Panel/Margin/Body/RpgRows
-@onready var _continue: Button = $Center/Panel/Margin/Body/Footer/Continue
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _subtitle: Label = $Panel/Subtitle
+@onready var _rows: Control = $Panel/Rows
+@onready var _rpg_viewport: ScrollContainer = $Panel/RpgViewport
+@onready var _rpg_rows: Control = $Panel/RpgViewport/RpgRows
+@onready var _continue: Button = $Panel/Continue
 
 ## `true` when showing a retired save rather than a fresh retirement.
 var summary_mode: bool = false
@@ -43,21 +60,36 @@ var summary: Dictionary = {}
 
 
 func _ready() -> void:
-	# §4.9 sweep (W4-B): the panel chrome is the theme's PanelContainer
-	# stylebox (the scene's local stylebox resource is gone); the subtitle is
-	# secondary text → the `Dim` variation. The title's 32px is the
-	# scene's own pin (`ending_screen.tscn`).
+	# §4.9 sweep (W4-B): the panel chrome is the theme's panel stylebox; the
+	# subtitle is secondary text → the `Dim` variation. The title's 32px is
+	# the scene's own pin (`ending_screen.tscn`).
 	_subtitle.theme_type_variation = "Dim"
-	_continue.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_continue.pressed.connect(continue_to_title)
 	EventBus.locale_changed.connect(_on_locale_changed)
+	# Phase 12 (docs/80-* §4.8.9): the absolute-tile layout — the S16 plate
+	# is the fixed `21,6,18,22` rect, the summary rows and the Continue
+	# button direct off the panel, the RPG rows the `rpg` list block inside
+	# the `rpg_viewport` scroll. A full screen registers + activates at
+	# build (it is alive only while shown).
+	RegistryLib.register(SCREEN_ID, _background, "background",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _subtitle, "panel.subtitle")
+	RegistryLib.register(SCREEN_ID, _rows, "panel.rows")
+	RegistryLib.register(SCREEN_ID, _rpg_viewport, "panel.rpg_viewport")
+	RegistryLib.register(SCREEN_ID, _continue, "panel.continue",
+		{"role": "button"})
 
 	# A load of a retired slot routes here with the summary already extracted
 	# (`SaveSystem.last_retired_summary`); a fresh retirement uses live state.
+	# Either path builds the rows (each registers where it builds), then the
+	# activation applies the committed layout.
 	if SaveSystem.last_loaded_retired and not SaveSystem.last_retired_summary.is_empty():
 		open_summary(SaveSystem.last_retired_summary)
 	else:
 		open_live()
+	RegistryLib.screen_active(SCREEN_ID, self)
 
 
 ## Fresh retirement: reads the live run.
@@ -144,7 +176,29 @@ func _add_row(key: String, values: Dictionary) -> void:
 	label.name = "Row_%s" % key.replace(".", "_")
 	label.text = I18n.fmt(key, values)
 	# Ink is the theme's TEXT (§4.9 sweep).
+	# Computed stacking (docs/10-* §4.23): the six §4.14 summary rows sit at
+	# one row per index inside the registered `panel.rows` group.
+	var index := SUMMARY_KEYS.find(key)
+	label.position = Vector2(0, float(index * PaletteLib.CHROME_TILE))
+	label.size = Vector2(_rows.size.x, float(PaletteLib.CHROME_TILE))
 	_rows.add_child(label)
+	RegistryLib.register(SCREEN_ID, label, "rows.%s" % key.get_slice(".", 1),
+		{"data_ordered": true})
+
+
+## RPG row *i*'s rect: the list block's `list_rect` when the screen's v2
+## table is live, else the same authored constants (the interim pre-merge
+## state — the shipped data row mirrors them exactly).
+func _rpg_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, LIST_RPG, index)
+	if rect != Rect2():
+		return rect
+	var tile := float(PaletteLib.CHROME_TILE)
+	return Rect2(
+		float(RPG_BASE_TILES.position.x) * tile,
+		float(index * RPG_ROW_H_TILES) * tile,
+		float(RPG_BASE_TILES.size.x) * tile,
+		float(RPG_BASE_TILES.size.y) * tile)
 
 
 # --- Phase-8 RPG segment (docs/70-* §4.7; docs/80-* §4.14) -------------------
@@ -210,6 +264,11 @@ func _bind_rpg() -> void:
 	else:
 		_add_rpg_row("Row_rpg_bio",
 			"%s\n%s" % [I18n.t_key("ending.rpg.bio"), bio])
+	# The content node's stacked extent (the plain-Control scroll content).
+	_rpg_rows.custom_minimum_size = Vector2(
+		_rpg_viewport.size.x,
+		float(_rpg_rows.get_child_count() * RPG_ROW_H_TILES
+			* PaletteLib.CHROME_TILE))
 
 
 ## The nemesis ranking: met captains with `wins > 0`, wins descending and
@@ -297,7 +356,14 @@ func _add_rpg_row(row_name: String, text: String, dim := false) -> void:
 	# theme's TEXT ink.
 	if dim:
 		label.theme_type_variation = "Dim"
+	# Computed stacking (docs/10-* §4.23): row *i* at `base + i·row_h` in
+	# the viewport's content node — no flow underneath.
+	var index := _rpg_rows.get_child_count()
+	label.position = _rpg_rect(index).position
+	label.size = _rpg_rect(index).size
 	_rpg_rows.add_child(label)
+	RegistryLib.register(SCREEN_ID, label, "rpg.%d" % index,
+		{"list": LIST_RPG, "data_ordered": true})
 
 
 func _clear_rpg() -> void:
@@ -315,7 +381,10 @@ func _clear() -> void:
 
 
 func _on_locale_changed(_locale: String) -> void:
+	# The rebuild path: rows are rebuilt (re-registered), then the committed
+	# layout re-applies.
 	_bind()
+	RegistryLib.apply_layout(SCREEN_ID)
 
 
 func _exit_tree() -> void:

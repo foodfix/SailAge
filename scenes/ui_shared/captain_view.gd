@@ -31,15 +31,20 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## The §4.12 unified card (the player entry).
 const CardLib := preload("res://scenes/ui/character_card.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This view's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "captain_view"
 
 ## Layout contract (amended 2026-11-03, the intel-window fit fix): the page is
-## ONE vertical scroll (`Body/Page`) holding the card.
+## ONE vertical scroll (`page`) holding the card.
 ## Nested scrolls were dropped — the card publishes its full content height
 ## (`80-*` §4.12.1), so the page scroll owns the whole page and nothing can
 ## grow upward past the tab row.
-@onready var _nation: Label = $Body/Nation
-@onready var _levelup: Label = $Body/LevelUp
-@onready var _card_host: Container = $Body/Page/Sections/CardHost
+@onready var _nation: Label = $Nation
+@onready var _levelup: Label = $LevelUp
+@onready var _page: ScrollContainer = $Page
+@onready var _card_host: Control = $Page/CardHost
 
 ## The ONE §4.12 card instance (the player entry).
 var _card: Control = null
@@ -56,8 +61,21 @@ func _ready() -> void:
 	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
 	_card = card_scene.instantiate()
 	_card.name = "PlayerCard"
-	_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_card_host.add_child(_card)
+	# The viewport's content node is a plain Control sized to the viewport
+	# (the card's own internal scroll owns overflow, exactly the pre-Phase-12
+	# sizing); the card fills it through full-rect anchors.
+	_card_host.custom_minimum_size = _page.size
+	_card.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	# Phase 12 (docs/80-* §4.8.9): the absolute-tile layout — nation line,
+	# level-up banner and the page viewport at their data rects in the
+	# 32×12-tile view space; the card hangs directly off the viewport's
+	# plain-Control content node. The view registers + activates at build.
+	RegistryLib.register(SCREEN_ID, _nation, "nation")
+	RegistryLib.register(SCREEN_ID, _levelup, "levelup")
+	RegistryLib.register(SCREEN_ID, _page, "page")
+	RegistryLib.screen_active(SCREEN_ID, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_data_changed)

@@ -111,12 +111,12 @@ func _test_button_presence() -> void:
 func _test_tabs_and_labels() -> void:
 	_window.open_tab(IntelWindowLib.TAB_CAPTAIN)
 	var order: Array = [
-		["char.title", _window.get_node("Center/Panel/Margin/Body/Tabs/CaptainTab")],
-		["char.reputation", _window.get_node("Center/Panel/Margin/Body/Tabs/ReputationTab")],
-		["officers.title", _window.get_node("Center/Panel/Margin/Body/Tabs/OfficersTab")],
-		["fleet.title", _window.get_node("Center/Panel/Margin/Body/Tabs/FleetTab")],
-		["chart.title", _window.get_node("Center/Panel/Margin/Body/Tabs/ChartTab")],
-		["char.quests", _window.get_node("Center/Panel/Margin/Body/Tabs/QuestsTab")],
+		["char.title", _window.get_node("Panel/CaptainTab")],
+		["char.reputation", _window.get_node("Panel/ReputationTab")],
+		["officers.title", _window.get_node("Panel/OfficersTab")],
+		["fleet.title", _window.get_node("Panel/FleetTab")],
+		["chart.title", _window.get_node("Panel/ChartTab")],
+		["char.quests", _window.get_node("Panel/QuestsTab")],
 	]
 	var mismatch := ""
 	for pair in order:
@@ -126,12 +126,12 @@ func _test_tabs_and_labels() -> void:
 			break
 	_check(mismatch.is_empty(),
 		"the five tabs carry their ui_strings labels in order (%s)" % mismatch)
-	_check(_window.get_node("Center/Panel/Margin/Body/TitleRow/Title").text
+	_check(_window.get_node("Panel/Title").text
 		== I18n.t_key("ui.intel"),
 		"the window title reads ui.intel")
 	# One content area visible at a time.
 	_window.select_tab(IntelWindowLib.TAB_OFFICERS)
-	var content := _window.get_node("Center/Panel/Margin/Body/Content")
+	var content := _window.get_node("Panel/Content")
 	var visible_count := 0
 	for child in content.get_children():
 		if child is Control and child.visible:
@@ -146,7 +146,7 @@ func _test_tabs_and_labels() -> void:
 func _test_captain_tab() -> void:
 	_window.open_tab(IntelWindowLib.TAB_CAPTAIN)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/CaptainView")
+		"Panel/Content/CaptainView")
 	_check(view.visible, "the 船长 tab shows the captain view")
 	var card: Control = view.player_card()
 	_check(card != null and card.visible,
@@ -173,7 +173,7 @@ func _test_captain_tab() -> void:
 func _test_reputation_tab() -> void:
 	_window.open_tab(IntelWindowLib.TAB_REPUTATION)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/ReputationView")
+		"Panel/Content/ReputationView")
 	_check(view.visible, "the 声望 tab shows the reputation view")
 	_check(view.row_count() == DataLoader.nations_list.size() * 2,
 		"the reputation table renders all six nations (%d cells)"
@@ -181,14 +181,16 @@ func _test_reputation_tab() -> void:
 	# Every nation appears — none hidden (docs/50-* §6).
 	var found := 0
 	for nation in DataLoader.nations_list:
+		# Phase 12: the cells are direct children of the registered `rows`
+		# group (the Page/Sections flow chain is deleted).
 		if view.get_node_or_null(
-				"Body/Page/Sections/Rows/Rep_%s" % str(nation.get("id", ""))) != null:
+				"Rows/Rep_%s" % str(nation.get("id", ""))) != null:
 			found += 1
 	_check(found == DataLoader.nations_list.size(),
 		"no nation row is hidden (%d/%d)" % [found, DataLoader.nations_list.size()])
 	# The captain page no longer carries the table (the split is real).
 	var captain: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/CaptainView")
+		"Panel/Content/CaptainView")
 	_check(captain.get_node_or_null("Body/Page/Sections/ReputationRows") == null,
 		"the 船长 page no longer duplicates the reputation table")
 	_window.close()
@@ -198,15 +200,13 @@ func _test_reputation_tab() -> void:
 ## counter, one row per active quest with the abandon path.
 func _test_quests_tab() -> void:
 	_window.open_tab(IntelWindowLib.TAB_QUESTS)
-	var box: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/QuestsBox")
-	_check(box.visible, "the 委托 tab shows the quest list")
-	var slots: Label = box.get_node("QuestSlots")
+	var slots: Label = _window.get_node("Panel/QuestsSlots")
+	_check(slots.visible, "the 委托 tab shows the quest list")
 	_check(slots.text == I18n.fmt("quest.slots", {
 		"used": QuestGenLib.active_count(),
 		"max": QuestGenLib.max_active_quests(),
 	}), "the slots counter reads quest.slots (%s)" % slots.text)
-	var rows: Container = box.get_node("QuestScroll/QuestRows")
+	var rows: Control = _window.get_node("Panel/QuestsViewport/QuestRows")
 	_check(rows.get_child_count() == QuestGenLib.active_quests().size(),
 		"one row per active quest (%d)" % rows.get_child_count())
 	# The abandon path: a fresh run has no quest to abandon without accepting
@@ -221,14 +221,16 @@ func _test_quests_tab() -> void:
 func _test_fleet_tab() -> void:
 	_window.open_tab(IntelWindowLib.TAB_FLEET)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/FleetView")
+		"Panel/Content/FleetView")
 	_check(view.visible, "the 船队 tab shows the fleet view")
 	_check(view.is_read_only(),
 		"the fixture run (at sea) renders the view read-only")
-	var rows: Container = view.get_node("Body/Scroll/Rows")
+	# Phase 12: the Body chain is deleted — the ships viewport hangs off
+	# the view root.
+	var rows: Control = view.get_node("Scroll/Rows")
 	_check(rows.get_child_count() == GameState.fleet.size(),
 		"one ship row per hull (%d)" % rows.get_child_count())
-	var totals: Container = view.get_node("Body/Totals")
+	var totals: Control = view.get_node("Totals")
 	_check(totals.get_child_count() >= 2,
 		"the totals block renders (title row + supplies row)")
 	_check(view.row_widget(0).get("promote", null) == null,
@@ -241,14 +243,14 @@ func _test_fleet_tab() -> void:
 func _test_officers_table() -> void:
 	_window.open_tab(IntelWindowLib.TAB_OFFICERS)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/OfficerRosterView")
+		"Panel/Content/OfficerRosterView")
 	_check(view.visible, "the 官员 tab shows the roster view")
 	_check(view.stat_mode() == "attributes",
 		"the table starts on the attribute columns")
 	# Toggle to the skills columns: 8 player skills + 3 officer-only.
 	view.set_stat_mode("skills")
 	_check(view.stat_mode() == "skills", "the 技能 toggle switches the columns")
-	var header: Control = view.get_node("Body/TableScroll/Table/Header")
+	var header: Control = view.get_node("TableScroll/Table/Header")
 	var stat_headers := 0
 	for child in header.get_children():
 		if str(child.name).begins_with("Stat_"):
@@ -256,7 +258,7 @@ func _test_officers_table() -> void:
 	_check(stat_headers == SkillsLib.KEYS.size() + SkillsLib.OFFICER_KEYS.size(),
 		"the skills table carries the 8+3 columns (%d)" % stat_headers)
 	view.set_stat_mode("attributes")
-	header = view.get_node("Body/TableScroll/Table/Header")
+	header = view.get_node("TableScroll/Table/Header")
 	var attr_headers := 0
 	for child in header.get_children():
 		if str(child.name).begins_with("Stat_"):
@@ -265,7 +267,7 @@ func _test_officers_table() -> void:
 	# The fresh run employs nobody: the empty state shows (§4.6.2).
 	_check(view.officer_ids().is_empty(),
 		"a fresh run lists no officers")
-	_check(view.get_node("Body/TableEmpty").visible,
+	_check(view.get_node("TableEmpty").visible,
 		"the empty state shows for a run with no officers")
 	_window.close()
 
@@ -287,15 +289,18 @@ func _test_officers_detail() -> void:
 
 	_window.open_tab(IntelWindowLib.TAB_OFFICERS)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/OfficerRosterView")
+		"Panel/Content/OfficerRosterView")
 	_check(view.officer_ids() == [hire_id],
 		"the table lists the employed officer (%s)" % str(view.officer_ids()))
 	# Click the row (the row Control's gui_input activation) → the detail page.
-	var row: Control = view.get_node("Body/TableScroll/Table/Officer_%s" % hire_id)
-	row.call("_on_row_pressed", hire_id)
+	var row: Control = view.get_node("TableScroll/Table/Officer_%s" % hire_id)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	row.gui_input.emit(click)
 	_check(view.detail_officer() == hire_id,
 		"clicking the row opens the detail page")
-	_check(view.get_node("Body/Detail").visible,
+	_check(view.get_node("Detail").visible,
 		"the detail page replaces the table")
 	var actions: Dictionary = view.action_buttons(hire_id)
 	for action in ["talk", "gift", "train", "appoint"]:
@@ -304,8 +309,8 @@ func _test_officers_detail() -> void:
 	_check(view.dismiss_button(hire_id) is Button,
 		"the detail page carries the dismiss action")
 	# Back returns to the table.
-	view.get_node("Body/Detail/DetailPage/DetailTop/DetailBack").pressed.emit()
-	_check(view.detail_officer() == "" and not view.get_node("Body/Detail").visible,
+	(view.find_child("DetailBack", true, false) as Button).pressed.emit()
+	_check(view.detail_officer() == "" and not view.get_node("Detail").visible,
 		"back returns to the table")
 	_window.close()
 	# Cleanup: dismiss through the model funnel.
@@ -319,11 +324,10 @@ func _test_chart_tab() -> void:
 	var chart: Control = ChartScreenLib.attach_to(_host)
 	_check(not chart.is_open(), "fixture: the chart starts closed")
 	_window.open_tab(IntelWindowLib.TAB_CAPTAIN)
-	_check(_window.has_node(
-		"Center/Panel/Margin/Body/Content/ChartBox") == false,
+	_check(_window.find_child("ChartBox", true, false) == null,
 		"the chart launcher page is gone (the tab is an action)")
 	var tab: Button = _window.get_node(
-		"Center/Panel/Margin/Body/Tabs/ChartTab")
+		"Panel/ChartTab")
 	tab.pressed.emit()
 	_check(chart.is_open() and not _window.is_open(),
 		"pressing the 海图 tab enters S17 directly and closes the window")
@@ -386,12 +390,12 @@ func _test_locale_rebind() -> void:
 	_check(_hud.intel_button().text == I18n.t_key("ui.intel"),
 		"the intel button re-labels on locale change (%s)"
 		% _hud.intel_button().text)
-	_check(_window.get_node("Center/Panel/Margin/Body/TitleRow/Title").text
+	_check(_window.get_node("Panel/Title").text
 		== I18n.t_key("ui.intel"), "the window title re-binds")
 	_window.open_tab(IntelWindowLib.TAB_OFFICERS)
 	var view: Control = _window.get_node(
-		"Center/Panel/Margin/Body/Content/OfficerRosterView")
-	_check(view.get_node("Body/Controls/AttributesToggle").text
+		"Panel/Content/OfficerRosterView")
+	_check(view.get_node("AttributesToggle").text
 		== I18n.t_key("char.stats"), "the toggle labels re-bind")
 	I18n.set_locale(_locale_before)
 	_check(_hud.intel_button().text == I18n.t_key("ui.intel"),

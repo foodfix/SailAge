@@ -511,8 +511,7 @@ func _test_s19_modal() -> void:
 		"S19 lists the five locked presets in order (%s)"
 		% ", ".join(panel.preset_ids()))
 	# The current line formats with the localised preset name.
-	var current_label: Label = panel.get_node(
-		"Center/Panel/Margin/Body/Density/Current")
+	var current_label: Label = panel.get_node("Panel/Current")
 	var current_expected := I18n.fmt("settings.density.current",
 		{"preset": I18n.t_key("settings.density.normal")})
 	_check(current_label.text == current_expected,

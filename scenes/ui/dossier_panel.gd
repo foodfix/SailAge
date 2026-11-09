@@ -37,8 +37,12 @@ const CardLib := preload("res://scenes/ui/character_card.gd")
 ## The career log's fleet-sourced reads (composition hulls, arrival day).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+## Phase 12 (docs/80-* §4.8.9): the dossier registers under its layout id.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const SCENE_PATH := "res://scenes/ui/dossier_panel.tscn"
+## This modal's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "dossier"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -61,13 +65,15 @@ var _open := false
 ## The card rendered inside the panel (the card-identity pin reads its
 ## `rendered_data()` through [method card_widget]).
 var _card: Control = null
+## The id pass runs once per instance (records persist across closes).
+var _ids_registered := false
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _header: Label = $Center/Panel/Margin/Body/Header
-@onready var _content: VBoxContainer = $Center/Panel/Margin/Body/Scroll/Content
-@onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _header: Label = $Panel/Header
+@onready var _content: Control = $Panel/Scroll/Content
+@onready var _close_button: Button = $Panel/Close
 
 
 ## Opens a dossier for `captain_id` under `host` (default: the current
@@ -107,6 +113,20 @@ func setup(captain_id: String) -> void:
 	_open = true
 	visible = true
 	add_to_group(MODAL_GROUP)
+	# Phase 12: register at the first OPEN, activate at every open. PARTIAL
+	# CONVERSION (W2-D budget): the plate + its fixed slots are registered
+	# (the deleted Margin/Body/Footer chain is gone); the career-log rows
+	# inside the content node keep their authored flow until the follow-up.
+	if not _ids_registered:
+		RegistryLib.register(SCREEN_ID, _dim, "dim")
+		RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+		RegistryLib.register(SCREEN_ID, _title, "panel.title")
+		RegistryLib.register(SCREEN_ID, _header, "panel.header")
+		RegistryLib.register(SCREEN_ID, _content, "panel.content")
+		RegistryLib.register(SCREEN_ID, _close_button, "panel.close",
+			{"role": "button"})
+		_ids_registered = true
+	RegistryLib.screen_active(SCREEN_ID, self)
 	_refresh()
 	_close_button.grab_focus()
 
@@ -164,11 +184,22 @@ func _refresh() -> void:
 	_header.text = " ".join(_header_parts(canon))
 	_clear(_content)
 
+	# Phase 12 (docs/80-* §4.8.9): the content node is a plain Control —
+	# the card and the career-log rows take explicit positions (a running
+	# y cursor over measured heights; no flow). The card fills the content
+	# width; its own internal scroll owns its overflow exactly as before.
+	var y := 0.0
+	var width := _content.size.x
+
 	# The full §4.12 card (identify = full reveal — no gating here).
 	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
 	_card = card_scene.instantiate()
 	_card.name = "Card"
 	_content.add_child(_card)
+	var card_height := 420.0
+	_card.position = Vector2(0, y)
+	_card.size = Vector2(width, card_height)
+	y += card_height
 	_card.setup_person(CardLib.KIND_NPC, CardLib.card_data(
 		CardLib.KIND_NPC, _captain_id))
 
@@ -178,16 +209,30 @@ func _refresh() -> void:
 	var familiarity_line := _label("%s: %d" % [
 		I18n.t_key("dossier.familiarity"), familiarity])
 	familiarity_line.name = "Familiarity"
+	familiarity_line.position = Vector2(0, y)
+	y += 32.0
+	familiarity_line.size = Vector2(width, 32.0)
 	_content.add_child(familiarity_line)
 	if tier > 0:
 		var tier_name := _dim_label(I18n.t_key("dossier.tier.%d"
 			% CardLib.TIER_NAME_NUMBERS[tier - 1]))
 		tier_name.name = "TierName"
+		tier_name.position = Vector2(0, y)
+		tier_name.size = Vector2(width, 32.0)
+		y += 32.0
 		_content.add_child(tier_name)
 
-	# The career log, gated section by section (§4.11.3, locked).
+	# The career log, gated section by section (§4.11.3, locked). A section
+	# is a 2-line row (its label + its data/locked line — the tiny
+	# section VBox stays the section's internal stacking).
 	for section in LOG_SECTIONS:
-		_content.add_child(_log_section(section, tier))
+		var section_row: Control = _log_section(section, tier)
+		section_row.position = Vector2(0, y)
+		y += 64.0
+		section_row.size = Vector2(width, 64.0)
+		_content.add_child(section_row)
+	# The content node's stacked extent (the plain-Control scroll content).
+	_content.custom_minimum_size = Vector2(width, y)
 
 
 ## The header's second line: role · tier · level, and — stance ≥ +2 — the

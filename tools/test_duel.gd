@@ -697,7 +697,7 @@ func _test_loss_paths() -> void:
 	add_child(screen)
 	screen.route_to_title = false
 	screen.open_reason("captured")
-	var reason_row: Label = screen.get_node("Center/Panel/Margin/Body/Reason")
+	var reason_row: Label = screen.get_node("Panel/Reason")
 	var has_key := DataLoader.ui_strings.has("gameover.captured")
 	_check("captured" in screen.REASONS,
 		"the game-over reason set accepts `captured` ({starvation, scurvy, sunk, "
@@ -851,9 +851,12 @@ func _test_modal() -> void:
 	var dim: ColorRect = modal.get_node("Dim")
 	_check(is_equal_approx(dim.color.a, 0.4),
 		"the dim is 40%% black (§4.7: got %.2f)" % dim.color.a)
-	var panel: Control = modal.get_node("Center/Panel")
-	_check(panel.custom_minimum_size.x == 480.0,
-		"the panel is 480px wide (§4.8: got %.0f)" % panel.custom_minimum_size.x)
+	var panel: Control = modal.get_node("Panel")
+	# Phase 12: the plate is the fixed `22,11,15,12` tile rect (480px) — the
+	# width rides the data rect (`data/layout_fragments/duel.json`), not a
+	# flow minimum.
+	_check(panel.size.x == 480.0,
+		"the panel is 480px wide (§4.8: got %.0f)" % panel.size.x)
 
 	# One row per round, each with the two rolls and a verdict.
 	_check(modal.round_count() == DOC_ROUNDS.size(),
@@ -873,7 +876,7 @@ func _test_modal() -> void:
 	_check(str(modal.result()["result"]) == "capture",
 		"result() exposes the outcome (%s)" % str(modal.result()["result"]))
 	# The header names both captains (§4.7.1) — names are data, not keys.
-	var header: Label = modal.get_node("Center/Panel/Margin/Body/Header")
+	var header: Label = modal.get_node("Panel/Header")
 	_check(header.text.contains("You") and header.text.contains("Pirate captain"),
 		"the header names both captains (%s)" % header.text)
 	# Round verdicts use the §4.12.5 keys when merged, numbers otherwise.
@@ -895,7 +898,7 @@ func _test_modal() -> void:
 	# both locales — the "no <key> anywhere" done-when.
 	I18n.set_locale("en")
 	var english_result: String = (modal.get_node(
-		"Center/Panel/Margin/Body/Result") as Label).text
+		"Panel/Result") as Label).text
 	var leaks: Array[String] = []
 	for locale in ["en", "zh"]:
 		I18n.set_locale(locale)
@@ -905,7 +908,7 @@ func _test_modal() -> void:
 		% str(leaks))
 	# The result line rebinds on `locale_changed` (§6 mid-dialog toggle).
 	I18n.set_locale("en")
-	var result_label: Label = modal.get_node("Center/Panel/Margin/Body/Result")
+	var result_label: Label = modal.get_node("Panel/Result")
 	_check(result_label.text == english_result,
 		"the result line rebinds back to the English text after a round-trip (%s)"
 		% result_label.text)
@@ -914,11 +917,13 @@ func _test_modal() -> void:
 		"a locale rebind does not duplicate the round rows (%d)" % modal.round_count())
 
 	# The single acknowledgement button (there is no retreat, §4.6).
-	var acknowledge: Button = modal.get_node("Center/Panel/Margin/Body/Footer/Acknowledge")
+	var acknowledge: Button = modal.get_node("Panel/Acknowledge")
 	_check(acknowledge.text == I18n.t_key("ui.ok"),
 		"the single button is the shared `ui.ok` acknowledgement (%s)" % acknowledge.text)
-	_check(acknowledge.custom_minimum_size.y == float(PaletteLib.BUTTON_H),
-		"…at the §4.8 40px button height (%.0f)" % acknowledge.custom_minimum_size.y)
+	# Phase 12: the button is the 2-tile `panel.acknowledge` rect (the tile
+	# grid floor — `PaletteLib.BUTTON_H` = 2 tiles).
+	_check(acknowledge.size.y == float(PaletteLib.BUTTON_H),
+		"…at the §4.8 tile-grid button height (%.0f)" % acknowledge.size.y)
 	_check(modal.find_children("*", "Button", true, false).size() == 1,
 		"…and it is the only button: boarding commits, there is no cancel")
 
@@ -1004,9 +1009,9 @@ func _test_modal_with_keys(modal: Node, payload: Dictionary) -> void:
 		DataLoader.ui_strings[key] = (doubles[key] as Dictionary).duplicate(true)
 
 	modal.open_duel(payload)
-	var title: Label = modal.get_node("Center/Panel/Margin/Body/Title")
-	var result_label: Label = modal.get_node("Center/Panel/Margin/Body/Result")
-	var committed: Label = modal.get_node("Center/Panel/Margin/Body/Committed")
+	var title: Label = modal.get_node("Panel/Title")
+	var result_label: Label = modal.get_node("Panel/Result")
+	var committed: Label = modal.get_node("Panel/Committed")
 	_check(title.visible and title.text == I18n.t_key("duel.title"),
 		"with the keys merged the modal shows duel.title (%s)" % title.text)
 	_check((modal.round_rows()[0]["verdict"] as Label).text == I18n.t_key("duel.round.win"),

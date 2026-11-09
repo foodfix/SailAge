@@ -251,12 +251,13 @@ func _test_confirm_dialog() -> void:
 	var dialog: Control = ConfirmScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the flow chain is deleted — the plate IS the registered
+	# `panel` element (a fixed tile rect, `data/layout_fragments/confirm.json`).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open_key("fleet.jettison.confirm",
 		{"ship": "Ship 1", "good": "Wine", "qty": 30})
-	# Message boxes hug their message (80-* edge-case table: "text wraps;
-	# dialog grows vertically to max 400px then scrolls") — the height is
-	# resizable BY DESIGN; the 480px width must never drift.
+	# The absolute-tile plate is a fixed rect: the width must never drift (the
+	# body viewport scrolls long messages, `panel.body`).
 	await assert_window_size_invariant(
 		"confirm dialog (width; height by design)", panel, [
 			func() -> void:
@@ -282,10 +283,13 @@ func _test_dialog_box() -> void:
 	var dialog: Control = DialogBoxScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the flow chain is deleted — the plate IS the registered
+	# `panel` element (a fixed tile rect,
+	# `data/layout_fragments/dialog_box.json`).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open_text("A short line.")
-	# Message boxes hug their message (80-* edge-case table: grows to 400px
-	# then scrolls) — height by design; the width must never drift.
+	# The absolute-tile plate is a fixed rect: the width must never drift (the
+	# body viewport scrolls long messages, `panel.body`).
 	await assert_window_size_invariant(
 		"dialog box (width; height by design)", panel, [
 			func() -> void:
@@ -347,7 +351,10 @@ func _test_duel_modal() -> void:
 	var modal: Control = DuelScene.instantiate()
 	_host.add_child(modal)
 	await _settle()
-	var panel: Control = modal.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/duel.json`; the round rows are the
+	# `rounds` list block inside it).
+	var panel: Control = modal.get_node("Panel")
 	modal.open_duel(_duel_config(33))
 	await assert_window_size_invariant("duel modal", panel, [
 		func() -> void:
@@ -365,7 +372,10 @@ func _test_save_slot_dialog() -> void:
 	var dialog: Control = SaveSlotScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/save_slot.json`; the slot rows are the
+	# `slots` list block inside it).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open(0)
 	await assert_window_size_invariant("save-slot dialog", panel, [
 		func() -> void:
@@ -385,7 +395,9 @@ func _test_settings_panel() -> void:
 	await _settle()
 	panel_screen.call("open")
 	await _settle()
-	var panel: Control = panel_screen.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/settings.json`).
+	var panel: Control = panel_screen.get_node("Panel")
 	var checkbox: Button = null
 	for node in panel_screen.find_children("Check", "", true, false):
 		if node is Button:
@@ -411,7 +423,7 @@ func _test_intel_window() -> void:
 	await _settle()
 	window.call("open")
 	await _settle()
-	var panel: Control = window.get_node("Center/Panel")
+	var panel: Control = window.get_node("Panel")
 	await assert_window_size_invariant("intel window", panel, [
 		func() -> void: window.call("open_tab", "reputation"),
 		func() -> void: window.call("open_tab", "officers"),
@@ -433,7 +445,7 @@ func _test_dossier_panel() -> void:
 		captain = _first_captain_id("trader", 1)
 	var panel_window: Control = DossierLib.open_for(captain, _host)
 	await _settle()
-	var panel: Control = panel_window.get_node("Center/Panel")
+	var panel: Control = panel_window.get_node("Panel")
 	await assert_window_size_invariant("dossier panel", panel, [
 		func() -> void:
 			panel_window.call("setup", _first_captain_id("trader", 1)),
@@ -484,9 +496,10 @@ func _test_fleet_view() -> void:
 	view.call("rebuild")
 	await _settle()
 	# A view that lists ships grows with the roster BY DESIGN (the intel
-	# window hosting it is the pinned surface) — the column geometry (the
-	# Body's width) must never drift.
-	await assert_window_size_invariant("fleet view", view.get_node("Body"), [
+	# window hosting it is the pinned surface) — the view root IS the fixed
+	# 32×12-tile element tree (`data/layout_fragments/fleet_view.json`); the
+	# pinned surface is the ships viewport.
+	await assert_window_size_invariant("fleet view", view.get_node("Scroll"), [
 		func() -> void:
 			GameState.fleet = [
 				_make_ship(45, 45), _make_ship(30, 30), _make_ship(20, 20),
@@ -519,8 +532,10 @@ func _test_officer_roster_view() -> void:
 		actions.append(func() -> void: skills.pressed.emit())
 	if attributes != null:
 		actions.append(func() -> void: attributes.pressed.emit())
+	# Phase 12: the Body chain is deleted — the view root IS the fixed
+	# 32×12-tile element tree (`data/layout_fragments/officer_roster.json`).
 	await assert_window_size_invariant(
-		"officers roster view", roster.get_node("Body"), actions)
+		"officers roster view", roster, actions)
 	roster.queue_free()
 	await _settle()
 
@@ -644,7 +659,9 @@ func _test_full_screens() -> void:
 	_host.add_child(ending)
 	await _settle()
 	ending.call("open_live")
-	await assert_window_size_invariant("ending screen", ending, [
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/ending.json`).
+	await assert_window_size_invariant("ending screen", ending.get_node("Panel"), [
 		func() -> void: I18n.set_locale("zh"),
 		func() -> void: I18n.set_locale("en"),
 	])
@@ -655,10 +672,13 @@ func _test_full_screens() -> void:
 	_host.add_child(gameover)
 	await _settle()
 	gameover.call("open_reason", "starved")
-	await assert_window_size_invariant("game-over screen", gameover, [
-		func() -> void: I18n.set_locale("zh"),
-		func() -> void: I18n.set_locale("en"),
-	])
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/gameover.json`).
+	await assert_window_size_invariant("game-over screen",
+		gameover.get_node("Panel"), [
+			func() -> void: I18n.set_locale("zh"),
+			func() -> void: I18n.set_locale("en"),
+		])
 	gameover.queue_free()
 	await _settle()
 
@@ -681,9 +701,8 @@ func _test_battle_windows() -> void:
 
 	screen.call("open_menu")
 	await _settle()
-	var menu_panel: Control = screen.get_node("BattleMenu/Center/Panel")
-	var ai_button: Button = screen.get_node(
-		"BattleMenu/Center/Panel/Margin/Body/AiAnimate")
+	var menu_panel: Control = screen.get_node("BattleMenu/Panel")
+	var ai_button: Button = screen.get_node("BattleMenu/Panel/AiAnimate")
 	await assert_window_size_invariant("battle menu window", menu_panel, [
 		func() -> void:
 			ai_button.pressed.emit(),
@@ -695,7 +714,11 @@ func _test_battle_windows() -> void:
 
 	# The after-action report: a victory over 1 ship vs 3 ships renders
 	# different loot lines — the report window must hold its geometry.
+	# Phase 12: the first screen frees first — one live instance per layout
+	# screen id (the registry's contract), so the two probes boot clean.
 	var reports: Array = []
+	screen.queue_free()
+	await _settle()
 	for count in [1, 3]:
 		var screen2: Control = BattleScene.instantiate()
 		_host.add_child(screen2)
@@ -708,7 +731,7 @@ func _test_battle_windows() -> void:
 		await _settle()
 		screen2.call("run_to_completion", 30)
 		await _settle()
-		reports.append((screen2.get_node("AfterAction/Center/Panel") as Control).size)
+		reports.append((screen2.get_node("AfterAction/Panel") as Control).size)
 		screen2.queue_free()
 		await _settle()
 	_checks += 1
@@ -719,7 +742,6 @@ func _test_battle_windows() -> void:
 		print("PASS  after-action report window pinned across outcomes (%s)"
 			% str(reports[0]))
 
-	screen.queue_free()
 	await _settle()
 
 	# The sandbox hosts docked panels over a full-viewport root.

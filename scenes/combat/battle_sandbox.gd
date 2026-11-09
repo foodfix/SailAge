@@ -57,6 +57,12 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase 12 (docs/80-* §4.8.9): the chrome registers under the sandbox's
+## layout id.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This screen's layout id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "sandbox"
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -221,12 +227,49 @@ func _ready() -> void:
 	_build_static_widgets()
 	_build_panels()
 	_build_conditions_row()
+	# Phase 12 (docs/80-* §4.8.9): the S21 chrome's persistent controls
+	# register their stable ids and activate at build. PARTIAL CONVERSION
+	# (W2-D budget): the region panels and the fixed static widgets are
+	# registered and captured; the editor rows inside the panels keep their
+	# authored flow until the follow-up pass deletes them.
+	_register_chrome_ids()
+	RegistryLib.screen_active(SCREEN_ID, self)
 	# The S10 round-trip restore (§4.7.16 "configuration kept on return");
 	# otherwise the doc-example defaults seeded from the live run's reads.
 	var restored: Dictionary = last_config if last_config is Dictionary else {}
 	if restored.is_empty():
 		restored = _default_config()
 	_load_config(restored)
+
+
+## The id pass — the fixed static widgets + the three region panels + the
+## strip's action buttons (the deep editor fields stay unregistered for
+## now — see the _ready note).
+func _register_chrome_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _background, "background",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "title")
+	RegistryLib.register(SCREEN_ID, _zero_write, "zero_write")
+	RegistryLib.register(SCREEN_ID, _back_hint, "back_hint")
+	RegistryLib.register(SCREEN_ID, _toast, "toast")
+	RegistryLib.register(SCREEN_ID, _player_panel, "player_panel",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _enemy_panel, "enemy_panel",
+		{"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _conditions_panel, "conditions_panel",
+		{"role": "panel"})
+	if _start_button != null:
+		RegistryLib.register(SCREEN_ID, _start_button, "actions.start",
+			{"role": "button"})
+	if _random_all_button != null:
+		RegistryLib.register(SCREEN_ID, _random_all_button, "actions.random",
+			{"role": "button"})
+	if _import_button != null:
+		RegistryLib.register(SCREEN_ID, _import_button, "actions.import",
+			{"role": "button"})
+	if _export_button != null:
+		RegistryLib.register(SCREEN_ID, _export_button, "actions.export",
+			{"role": "button"})
 
 
 # --- Build ------------------------------------------------------------------

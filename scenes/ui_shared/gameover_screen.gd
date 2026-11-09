@@ -17,6 +17,10 @@ extends Control
 ## other run state beyond the router call.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This screen's layout id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "gameover"
 
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 ## §4.7: modals dim the background by 40% black.
@@ -33,10 +37,10 @@ const REASONS: Array[String] = ["starvation", "scurvy", "sunk", "captured"]
 signal returning_to_title
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _reason: Label = $Center/Panel/Margin/Body/Reason
-@onready var _hint: Button = $Center/Panel/Margin/Body/Footer/Return
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _reason: Label = $Panel/Reason
+@onready var _hint: Button = $Panel/Return
 
 ## Game-over reason ("" while standalone / before [method open_reason]).
 var reason: String = ""
@@ -54,11 +58,21 @@ func _ready() -> void:
 	# line keeps its ACCENT tint via `modulate`. The title's 48px is the
 	# scene's own pin (`gameover_screen.tscn`).
 	_reason.modulate = PaletteLib.ACCENT
-	_hint.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_hint.pressed.connect(func() -> void: return_to_title())
 	EventBus.locale_changed.connect(_on_locale_changed)
 	visible = true
 	add_to_group(MODAL_GROUP)
+	# Phase 12 (docs/80-* §4.8.9): the absolute-tile layout — the S9 plate is
+	# the fixed `22,13,15,8` rect, the children direct off the panel. The
+	# screen registers + activates at build: the game-over host instantiates
+	# it fresh per game-over (`game_over_host.gd`), so registration here IS
+	# registration at open over the run scene.
+	RegistryLib.register(SCREEN_ID, _dim, "dim")
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _reason, "panel.reason")
+	RegistryLib.register(SCREEN_ID, _hint, "panel.return", {"role": "button"})
+	RegistryLib.screen_active(SCREEN_ID, self)
 	_bind()
 
 

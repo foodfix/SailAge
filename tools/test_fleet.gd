@@ -735,7 +735,7 @@ func _test_panel() -> void:
 			sea_window.open_tab("fleet")
 			await get_tree().process_frame
 			var sea_panel: Control = world.get_node_or_null(
-				"IntelWindowLayer/IntelWindow/Center/Panel/Margin/Body/Content/FleetView")
+				"IntelWindowLayer/IntelWindow/Panel/Content/FleetView")
 			_check(sea_panel != null and sea_panel.is_read_only(),
 				"the at-sea fleet view is read-only (§4.4, §6)")
 			_check(world.has_method("_modal_open") and world._modal_open(),

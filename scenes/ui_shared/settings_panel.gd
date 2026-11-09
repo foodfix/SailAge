@@ -53,8 +53,11 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const SCENE_PATH := "res://scenes/ui_shared/settings_panel.tscn"
+## This modal's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "settings"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -113,28 +116,29 @@ var _mode_buttons: Dictionary = {}
 var route_to_menu: bool = true
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _density_label: Label = $Center/Panel/Margin/Body/Density/Label
-@onready var _preset_row: HBoxContainer = $Center/Panel/Margin/Body/Density/Presets
-@onready var _current: Label = $Center/Panel/Margin/Body/Density/Current
-@onready var _hint: Label = $Center/Panel/Margin/Body/Density/Hint
-@onready var _input_label: Label = $Center/Panel/Margin/Body/InputRow/InputLabel
-@onready var _input_buttons: HBoxContainer = $Center/Panel/Margin/Body/InputRow/Buttons
-@onready var _input_current: Label = $Center/Panel/Margin/Body/InputRow/InputCurrent
-@onready var _current_mode_label: Label = $Center/Panel/Margin/Body/CurrentModeRow/CurrentModeLabel
-@onready var _current_mode_buttons: HBoxContainer = $Center/Panel/Margin/Body/CurrentModeRow/Buttons
-@onready var _current_mode_current: Label = $Center/Panel/Margin/Body/CurrentModeRow/CurrentModeCurrent
-@onready var _debug_label: Label = $Center/Panel/Margin/Body/DebugRow/DebugLabel
-@onready var _debug_button: Button = $Center/Panel/Margin/Body/DebugRow/DebugButton
-@onready var _debug_hint: Label = $Center/Panel/Margin/Body/DebugRow/DebugHint
-@onready var _locale_row: Label = $Center/Panel/Margin/Body/LocaleRow/LocaleLabel
-@onready var _locale_button: Button = $Center/Panel/Margin/Body/LocaleRow/LocaleButton
-@onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
-@onready var _save_row: HBoxContainer = $Center/Panel/Margin/Body/SaveRow
-@onready var _save_button: Button = $Center/Panel/Margin/Body/SaveRow/SaveButton
-@onready var _return_row: HBoxContainer = $Center/Panel/Margin/Body/ReturnRow
-@onready var _return_button: Button = $Center/Panel/Margin/Body/ReturnRow/ReturnButton
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _density_label: Label = $Panel/DensityLabel
+@onready var _preset_row: Control = $Panel/Presets
+@onready var _current: Label = $Panel/Current
+@onready var _hint: Label = $Panel/Hint
+@onready var _input_label: Label = $Panel/InputLabel
+@onready var _input_buttons: Control = $Panel/InputButtons
+@onready var _input_current: Label = $Panel/InputCurrent
+@onready var _current_mode_label: Label = $Panel/CurrentModeLabel
+@onready var _current_mode_buttons: Control = $Panel/CurrentModeButtons
+@onready var _current_mode_current: Label = $Panel/CurrentModeCurrent
+@onready var _debug_label: Label = $Panel/DebugLabel
+@onready var _debug_button: Button = $Panel/DebugButton
+@onready var _debug_hint: Label = $Panel/DebugHint
+@onready var _locale_row: Label = $Panel/LocaleLabel
+@onready var _locale_button: Button = $Panel/LocaleButton
+@onready var _close_button: Button = $Panel/Close
+@onready var _save_button: Button = $Panel/SaveButton
+@onready var _return_button: Button = $Panel/ReturnButton
+
+## The id pass runs once per instance (records persist across closes).
+var _ids_registered := false
 
 ## The S4-mounted return confirmation (`confirm_dialog.tscn`); created on
 ## first use and reused (the §4.7 destructive-action rule).
@@ -202,13 +206,55 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save_pressed)
 	_debug_button.toggle_mode = true
 	_debug_button.pressed.connect(_on_debug_pressed)
-	_return_row.visible = host_is_port()
-	_save_row.visible = host_is_port()
+	_return_button.visible = host_is_port()
+	_save_button.visible = host_is_port()
 	_build_presets()
 	_build_mode_row(_input_buttons, INPUT_MODES, _on_input_mode_pressed)
 	_build_mode_row(_current_mode_buttons, CURRENT_MODES,
 		_on_current_mode_pressed)
 	EventBus.locale_changed.connect(_on_locale_changed)
+
+
+## The id pass — every persistent control under its stable hierarchical id.
+## Modals register AT OPEN (see confirm_dialog.gd); the preset and
+## control-preference buttons register where they build (dynamic children
+## with data-derived segments).
+func _register_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _dim, "dim")
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _density_label, "panel.density_label")
+	RegistryLib.register(SCREEN_ID, _preset_row, "panel.presets")
+	RegistryLib.register(SCREEN_ID, _current, "panel.current")
+	RegistryLib.register(SCREEN_ID, _hint, "panel.hint")
+	RegistryLib.register(SCREEN_ID, _input_label, "panel.input_label")
+	RegistryLib.register(SCREEN_ID, _input_buttons, "panel.input_buttons")
+	RegistryLib.register(SCREEN_ID, _input_current, "panel.input_current")
+	RegistryLib.register(SCREEN_ID, _current_mode_label,
+		"panel.current_mode_label")
+	RegistryLib.register(SCREEN_ID, _current_mode_buttons,
+		"panel.current_mode_buttons")
+	RegistryLib.register(SCREEN_ID, _current_mode_current,
+		"panel.current_mode_current")
+	RegistryLib.register(SCREEN_ID, _debug_label, "panel.debug_label")
+	RegistryLib.register(SCREEN_ID, _debug_button, "panel.debug_button",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _debug_hint, "panel.debug_hint")
+	RegistryLib.register(SCREEN_ID, _locale_row, "panel.locale_label")
+	RegistryLib.register(SCREEN_ID, _locale_button, "panel.locale_button",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _save_button, "panel.save_button",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _return_button, "panel.return_button",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _close_button, "panel.close",
+		{"role": "button"})
+	for preset in _preset_buttons:
+		RegistryLib.register(SCREEN_ID, _preset_buttons[preset],
+			"presets.%s" % preset, {"role": "button", "data_ordered": true})
+	for mode_key in _mode_buttons:
+		RegistryLib.register(SCREEN_ID, _mode_buttons[mode_key],
+			str(mode_key), {"role": "button", "data_ordered": true})
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -226,6 +272,13 @@ func _unhandled_input(event: InputEvent) -> void:
 # --- Public API ------------------------------------------------------------
 
 func open() -> void:
+	# Phase 12: register at the first OPEN, activate at every open (the
+	# apply walk re-applies the committed data rects, idempotent), then
+	# rebind.
+	if not _ids_registered:
+		_register_ids()
+		_ids_registered = true
+	RegistryLib.screen_active(SCREEN_ID, self)
 	visible = true
 	add_to_group(MODAL_GROUP)
 	rebuild()
@@ -434,11 +487,6 @@ func rebuild() -> void:
 	_close_button.text = I18n.t_key("settings.close")
 	_return_button.text = I18n.t_key("settings.return_menu")
 	_save_button.text = I18n.t_key("port.save")
-	# docs/80-* §4.7: saving is offered only while docked — the panel shows
-	# the action on the S4 mount and disables it when the precondition is off.
-	_return_row.visible = host_is_port()
-	_save_row.visible = host_is_port()
-	_save_button.disabled = not SaveSystem.can_save_here()
 	for preset in _preset_buttons:
 		var button: Button = _preset_buttons[preset]
 		button.text = _preset_name(str(preset))
@@ -453,6 +501,11 @@ func rebuild() -> void:
 	_debug_button.text = I18n.t_key(
 		"settings.debug.on" if debug_overlays else "settings.debug.off")
 	_debug_button.button_pressed = debug_overlays
+	# docs/80-* §4.7: saving is offered only while docked — the panel shows
+	# the action on the S4 mount and disables it when the precondition is off.
+	_return_button.visible = host_is_port()
+	_save_button.visible = host_is_port()
+	_save_button.disabled = not SaveSystem.can_save_here()
 
 
 ## Refreshes the two control-preference rows' pressed state from
@@ -475,7 +528,9 @@ func mode_buttons_refresh_selection() -> void:
 ## The preset row, data-driven from `npc_config.json` (`presets` preserves
 ## the JSON order: deserted, low, normal, high, extreme — the §4.6.3
 ## wireframe order). Falls back to the locked five should the data ever lack
-## the block, so the panel can never render empty.
+## the block, so the panel can never render empty. Phase 12: absolute
+## placement — one 4×2-tile toggle at a 4-tile pitch inside the registered
+## `panel.presets` group rect (no flow box).
 func _build_presets() -> void:
 	_preset_ids = []
 	var presets = DataLoader.npc_config.get("presets", {})
@@ -485,14 +540,20 @@ func _build_presets() -> void:
 	else:
 		for preset in ["deserted", "low", "normal", "high", "extreme"]:
 			_preset_ids.append(preset)
+	var index := 0
 	for preset in _preset_ids:
 		var button := Button.new()
 		button.name = "Preset_%s" % preset
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(128, PaletteLib.BUTTON_H)
+		button.position = Vector2(float(index * 4 * PaletteLib.CHROME_TILE), 0)
+		button.size = Vector2(128, PaletteLib.BUTTON_H)
 		button.pressed.connect(_on_preset_pressed.bind(str(preset)))
 		_preset_row.add_child(button)
 		_preset_buttons[str(preset)] = button
+		if _ids_registered:
+			RegistryLib.register(SCREEN_ID, button, "presets.%s" % preset,
+				{"role": "button", "data_ordered": true})
+		index += 1
 
 
 func _on_preset_pressed(preset: String) -> void:
@@ -501,18 +562,25 @@ func _on_preset_pressed(preset: String) -> void:
 
 ## The two control-preference rows, built in §4.6.3 wireframe order from the
 ## pinned id lists (`INPUT_MODES` / `CURRENT_MODES`) — the same toggle style
-## as the preset row (128×40, selection refreshed by [method rebuild]).
-func _build_mode_row(row: HBoxContainer, modes: Array[String],
+## as the preset row (4×2 tiles at a 4-tile pitch inside the registered
+## group rect; selection refreshed by [method rebuild]).
+func _build_mode_row(row: Control, modes: Array[String],
 		handler: Callable) -> void:
 	var family := INPUT_KEY if row == _input_buttons else CURRENT_KEY
+	var index := 0
 	for mode in modes:
 		var button := Button.new()
 		button.name = "Mode_%s_%s" % [family.get_slice(".", 1), mode]
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(128, PaletteLib.BUTTON_H)
+		button.position = Vector2(float(index * 4 * PaletteLib.CHROME_TILE), 0)
+		button.size = Vector2(128, PaletteLib.BUTTON_H)
 		button.pressed.connect(handler.bind(str(mode)))
 		row.add_child(button)
 		_mode_buttons[family + "." + str(mode)] = button
+		if _ids_registered:
+			RegistryLib.register(SCREEN_ID, button, "%s.%s" % [family, mode],
+				{"role": "button", "data_ordered": true})
+		index += 1
 
 
 func _on_input_mode_pressed(mode: String) -> void:
@@ -543,6 +611,9 @@ static func _mode_name(family: String, mode: String) -> String:
 
 func _on_locale_changed(_locale: String) -> void:
 	if visible:
+		# The rebuild path: re-apply the committed rects (idempotent), then
+		# rebind the labels.
+		RegistryLib.apply_layout(SCREEN_ID)
 		rebuild()
 
 

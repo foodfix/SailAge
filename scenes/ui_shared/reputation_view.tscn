@@ -12,38 +12,26 @@ size_flags_vertical = 3
 clip_contents = true
 script = ExtResource("1_repview")
 
-[node name="Body" type="VBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = -8.0
-grow_horizontal = 1
-grow_vertical = 1
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Body"]
-layout_mode = 2
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 1024.0
+offset_bottom = 32.0
 theme_override_font_sizes/font_size = 16
 
-[node name="Page" type="ScrollContainer" parent="Body"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-horizontal_scroll_mode = 1
+[node name="Rows" type="Control" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 64.0
+offset_right = 512.0
+offset_bottom = 256.0
+mouse_filter = 2
 
-[node name="Sections" type="VBoxContainer" parent="Body/Page"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 8
-
-[node name="Rows" type="GridContainer" parent="Body/Page/Sections"]
-layout_mode = 2
-columns = 2
-
-[node name="Hint" type="Label" parent="Body/Page/Sections"]
-layout_mode = 2
+[node name="Hint" type="Label" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 320.0
+offset_right = 1024.0
+offset_bottom = 352.0
 autowrap_mode = 3

@@ -37,6 +37,10 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const DuelLib := preload("res://scripts/combat/duel.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This modal's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "duel"
 
 ## §4.7: modals dim the background by 40% black.
 const DIM_ALPHA := 0.4
@@ -49,10 +53,18 @@ const RESULT_KEYS := {"capture": "duel.result.capture", "defeat": "duel.result.d
 const ROUND_KEYS := {"win": "duel.round.win", "loss": "duel.round.loss", "tie": "duel.round.tie"}
 const COMMITTED_KEY := "duel.committed"
 
-## Round-table column widths (px, §4.8 8px base unit).
-const COL_ROUND_W := 64.0
-const COL_ROLL_W := 96.0
-const COL_VERDICT_W := 120.0
+## Round-table cell rects (px, inside the 13-tile round row — the row's
+## internals flatten: 2+3+3+4 tiles = 12 of the 13-tile row width).
+const CELL_NUMBER_RECT := Rect2(0, 0, 64, 32)
+const CELL_PLAYER_RECT := Rect2(64, 0, 96, 32)
+const CELL_DEFENDER_RECT := Rect2(160, 0, 96, 32)
+const CELL_VERDICT_RECT := Rect2(256, 0, 128, 32)
+
+## The round rows' list block (docs/10-* §4.23 — tiles, content-node space);
+## the shipped data row mirrors these constants exactly.
+const LIST_ROUNDS := "rounds"
+const ROUNDS_BASE_TILES := Rect2i(0, 0, 13, 1)
+const ROUNDS_ROW_H_TILES := 1
 
 ## Emitted when the player acknowledges the duel (any key / the button).
 ## `Duel.start` awaits it; `EventBus.duel_finished` is emitted in the same
@@ -60,13 +72,14 @@ const COL_VERDICT_W := 120.0
 signal closed
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _header: Label = $Center/Panel/Margin/Body/Header
-@onready var _rounds: VBoxContainer = $Center/Panel/Margin/Body/Rounds
-@onready var _result: Label = $Center/Panel/Margin/Body/Result
-@onready var _committed: Label = $Center/Panel/Margin/Body/Committed
-@onready var _acknowledge: Button = $Center/Panel/Margin/Body/Footer/Acknowledge
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _header: Label = $Panel/Header
+@onready var _rounds_viewport: ScrollContainer = $Panel/RoundsViewport
+@onready var _rounds: Control = $Panel/RoundsViewport/Rounds
+@onready var _result: Label = $Panel/Result
+@onready var _committed: Label = $Panel/Committed
+@onready var _acknowledge: Button = $Panel/Acknowledge
 
 ## The payload last opened (`Duel.preview` shape), `{}` before [method
 ## open_duel]. Re-bound on a locale change, so it is kept.
@@ -76,6 +89,8 @@ var _outcome: Dictionary = {}
 ## True between [method open_duel] and [method close]; guards the
 ## exactly-once `duel_finished` emission.
 var _open := false
+## The id pass runs once per instance (records persist across closes).
+var _ids_registered := false
 ## Round widgets: one `{round, player, defender, verdict, row}` per played
 ## round, in play order (tests read this).
 var _rows: Array = []
@@ -85,14 +100,28 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	# §4.9 sweep (W5-B): the panel chrome is the theme's PanelContainer row;
+	# §4.9 sweep (W5-B): the panel chrome is the theme's panel row;
 	# the semantic text colors ride theme Label variations — the title and
 	# the roll cells read the default TEXT.
 	_header.theme_type_variation = "Accent"
 	_committed.theme_type_variation = "Dim"
-	_acknowledge.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_acknowledge.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)
+
+
+## The id pass — every persistent control under its stable hierarchical id.
+## Modals register AT OPEN (see confirm_dialog.gd); the round rows register
+## where they build (a `rounds` list block + its cell parts).
+func _register_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _dim, "dim")
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _header, "panel.header")
+	RegistryLib.register(SCREEN_ID, _rounds_viewport, "panel.rounds_viewport")
+	RegistryLib.register(SCREEN_ID, _result, "panel.result")
+	RegistryLib.register(SCREEN_ID, _committed, "panel.committed")
+	RegistryLib.register(SCREEN_ID, _acknowledge, "panel.acknowledge",
+		{"role": "button"})
 
 
 ## Modal behaviour (docs/80-* §6 "modals consume all input"): any key or a
@@ -126,6 +155,12 @@ func open_duel(config: Dictionary) -> void:
 	_open = true
 	visible = true
 	add_to_group(MODAL_GROUP)
+	# Phase 12: register at the first OPEN, activate at every open, then
+	# bind (the apply-then-bind order the locale path shares).
+	if not _ids_registered:
+		_register_ids()
+		_ids_registered = true
+	RegistryLib.screen_active(SCREEN_ID, self)
 	_bind()
 	_acknowledge.grab_focus()
 
@@ -211,26 +246,47 @@ func _bind_rounds() -> void:
 	# One row per round actually played (best-of-5 stops at the third win).
 	# Every cell carries text, so a row is readable on its own: the header
 	# above names the two captains and each roll is prefixed with whose it is.
+	# Phase 12 (docs/80-* §4.8.9): computed stacking — row *i* at
+	# `base + i·row_h` inside the viewport's content node, its four cells
+	# absolutely placed inside the row rect (the `rounds` list block).
 	for index in labels.size():
 		var verdict := str(labels[index])
 		var roll: Dictionary = rolls[index] if index < rolls.size() \
 			and rolls[index] is Dictionary else {}
-		var row := HBoxContainer.new()
+		var row := Control.new()
 		row.name = "Round_%d" % (index + 1)
-		var number := _cell(str(index + 1), "Dim", COL_ROUND_W)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		var round_rect := _round_rect(index)
+		row.position = round_rect.position
+		row.size = round_rect.size
+		var number := _cell(str(index + 1), "Dim", CELL_NUMBER_RECT)
 		var player := _cell(
-			_named_roll(attacker, roll.get("player", "-")), "", COL_ROLL_W)
+			_named_roll(attacker, roll.get("player", "-")), "",
+			CELL_PLAYER_RECT)
 		var defender := _cell(
-			_named_roll(defender_name, roll.get("defender", "-")), "", COL_ROLL_W)
+			_named_roll(defender_name, roll.get("defender", "-")), "",
+			CELL_DEFENDER_RECT)
 		var verdict_label := _cell(
-			_verdict_text(verdict), _verdict_variation(verdict), COL_VERDICT_W)
-		for label in [number, player, defender, verdict_label]:
-			row.add_child(label)
+			_verdict_text(verdict), _verdict_variation(verdict),
+			CELL_VERDICT_RECT)
+		for cell in [number, player, defender, verdict_label]:
+			row.add_child(cell)
 		_rounds.add_child(row)
+		RegistryLib.register(SCREEN_ID, row, "rounds.%d" % index,
+			{"list": LIST_ROUNDS, "data_ordered": true})
+		RegistryLib.register(SCREEN_ID, number, "rounds.%d.number" % index)
+		RegistryLib.register(SCREEN_ID, player, "rounds.%d.player" % index)
+		RegistryLib.register(SCREEN_ID, defender, "rounds.%d.defender" % index)
+		RegistryLib.register(SCREEN_ID, verdict_label,
+			"rounds.%d.verdict" % index)
 		_rows.append({
 			"round": number, "player": player, "defender": defender,
 			"verdict": verdict_label, "row": row,
 		})
+	# The content node's stacked extent (the plain-Control scroll content).
+	_rounds.custom_minimum_size = Vector2(
+		_rounds_viewport.size.x,
+		float(labels.size() * ROUNDS_ROW_H_TILES * PaletteLib.CHROME_TILE))
 
 
 ## `"<name> <roll>"`, or the bare roll when no captain name was supplied.
@@ -304,7 +360,10 @@ func _emit_finished() -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	if _open:
+		# The rebuild path: the round rows rebuild (re-register), then the
+		# committed layout re-applies.
 		_bind()
+		RegistryLib.apply_layout(SCREEN_ID)
 
 
 ## `key`'s localised text when `ui_strings.json` carries it, else `fallback`
@@ -317,16 +376,33 @@ func _or(key: String, fallback: String) -> String:
 	return I18n.t_key(key)
 
 
-## One fixed-width round cell. `variation` is a theme Label variation name
-## (§4.9 — "" = the default TEXT label). A long captain name must never
-## widen the 480px panel (§4.8): each cell stays at its column width and
-## trims instead of growing the modal.
-func _cell(text: String, variation: String, width: float) -> Label:
+## One round row's rect: the list block's `list_rect` when the screen's v2
+## table is live, else the same authored constants (the interim pre-merge
+## state — the shipped data row mirrors them exactly).
+func _round_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, LIST_ROUNDS, index)
+	if rect != Rect2():
+		return rect
+	var tile := float(PaletteLib.CHROME_TILE)
+	return Rect2(
+		float(ROUNDS_BASE_TILES.position.x) * tile,
+		float(index * ROUNDS_ROW_H_TILES) * tile,
+		float(ROUNDS_BASE_TILES.size.x) * tile,
+		float(ROUNDS_BASE_TILES.size.y) * tile)
+
+
+## One fixed-width round cell at its absolute slot inside the row rect
+## (the row's internals flatten — no per-row flow box). `variation` is a
+## theme Label variation name (§4.9 — "" = the default TEXT label). A long
+## captain name must never widen the 480px plate (§4.8): each cell stays at
+## its column width and trims instead of growing the modal.
+func _cell(text: String, variation: String, cell_rect: Rect2) -> Label:
 	var label := Label.new()
 	label.text = text
 	if not variation.is_empty():
 		label.theme_type_variation = variation
-	label.custom_minimum_size.x = width
+	label.position = cell_rect.position
+	label.size = cell_rect.size
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

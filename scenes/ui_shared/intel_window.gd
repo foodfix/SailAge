@@ -27,6 +27,7 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CardLib := preload("res://scenes/ui/character_card.gd")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 ## The S17 chart (the 海图 tab's launcher opens it fullscreen).
 const ChartScreenLib := preload("res://scenes/world/chart_screen.gd")
 
@@ -43,32 +44,38 @@ const TAB_FLEET := "fleet"
 const TAB_CHART := "chart"
 const TAB_QUESTS := "quests"
 
+## This modal's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "intel_window"
+
+## The quests rows' list block (docs/10-* §4.23 — tiles, content-node space);
+## the shipped data row mirrors these constants exactly.
+const LIST_QUESTS := "quests"
+const QUESTS_BASE_TILES := Rect2i(0, 0, 32, 2)
+const QUESTS_ROW_H_TILES := 2
+
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/TitleRow/Title
-@onready var _close_button: Button = $Center/Panel/Margin/Body/TitleRow/Close
-@onready var _captain_tab: Button = $Center/Panel/Margin/Body/Tabs/CaptainTab
-@onready var _reputation_tab: Button = $Center/Panel/Margin/Body/Tabs/ReputationTab
-@onready var _officers_tab: Button = $Center/Panel/Margin/Body/Tabs/OfficersTab
-@onready var _fleet_tab: Button = $Center/Panel/Margin/Body/Tabs/FleetTab
-@onready var _chart_tab: Button = $Center/Panel/Margin/Body/Tabs/ChartTab
-@onready var _quests_tab: Button = $Center/Panel/Margin/Body/Tabs/QuestsTab
-@onready var _captain_view: Control = \
-	$Center/Panel/Margin/Body/Content/CaptainView
-@onready var _reputation_view: Control = \
-	$Center/Panel/Margin/Body/Content/ReputationView
-@onready var _officers_view: Control = \
-	$Center/Panel/Margin/Body/Content/OfficerRosterView
-@onready var _fleet_view: Control = $Center/Panel/Margin/Body/Content/FleetView
-@onready var _quests_box: VBoxContainer = \
-	$Center/Panel/Margin/Body/Content/QuestsBox
-@onready var _quest_slots: Label = \
-	$Center/Panel/Margin/Body/Content/QuestsBox/QuestSlots
-@onready var _quest_rows: VBoxContainer = \
-	$Center/Panel/Margin/Body/Content/QuestsBox/QuestScroll/QuestRows
-@onready var _quest_empty: Label = \
-	$Center/Panel/Margin/Body/Content/QuestsBox/QuestEmpty
-@onready var _hint: Label = $Center/Panel/Margin/Body/Hint
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _close_button: Button = $Panel/Close
+@onready var _captain_tab: Button = $Panel/CaptainTab
+@onready var _reputation_tab: Button = $Panel/ReputationTab
+@onready var _officers_tab: Button = $Panel/OfficersTab
+@onready var _fleet_tab: Button = $Panel/FleetTab
+@onready var _chart_tab: Button = $Panel/ChartTab
+@onready var _quests_tab: Button = $Panel/QuestsTab
+@onready var _captain_view: Control = $Panel/Content/CaptainView
+@onready var _reputation_view: Control = $Panel/Content/ReputationView
+@onready var _officers_view: Control = $Panel/Content/OfficerRosterView
+@onready var _fleet_view: Control = $Panel/Content/FleetView
+@onready var _content: Control = $Panel/Content
+@onready var _quest_slots: Label = $Panel/QuestsSlots
+@onready var _quests_viewport: ScrollContainer = $Panel/QuestsViewport
+@onready var _quest_rows: Control = $Panel/QuestsViewport/QuestRows
+@onready var _quest_empty: Label = $Panel/QuestEmpty
+@onready var _hint: Label = $Panel/Hint
+
+## The id pass runs once per instance (records persist across closes).
+var _ids_registered := false
 
 ## The active tab. The window remembers the last one (session-only) so the
 ## HUD button reopens where the player left off (§4.5 backlog item).
@@ -139,6 +146,34 @@ func _ready() -> void:
 	EventBus.fleet_changed.connect(_on_data_changed)
 	EventBus.gold_changed.connect(_on_data_changed)
 	EventBus.quests_changed.connect(_on_data_changed)
+
+
+## The id pass — every persistent control under its stable hierarchical id
+## (the six tabs are a FIXED set — absolute elements, not a list; the four
+## tab views are their own registered screens, the intel window pins their
+## roots to the content rect). Modals register AT OPEN (see confirm_dialog.gd).
+func _register_ids() -> void:
+	RegistryLib.register(SCREEN_ID, _dim, "dim")
+	RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
+	RegistryLib.register(SCREEN_ID, _title, "panel.title")
+	RegistryLib.register(SCREEN_ID, _close_button, "panel.close",
+		{"role": "button"})
+	for pair in [
+		[TAB_CAPTAIN, _captain_tab], [TAB_REPUTATION, _reputation_tab],
+		[TAB_OFFICERS, _officers_tab], [TAB_FLEET, _fleet_tab],
+		[TAB_CHART, _chart_tab], [TAB_QUESTS, _quests_tab],
+	]:
+		RegistryLib.register(SCREEN_ID, pair[1], "tabs.%s" % pair[0],
+			{"role": "button", "data_ordered": true})
+	RegistryLib.register(SCREEN_ID, _content, "panel.content")
+	RegistryLib.register(SCREEN_ID, _captain_view, "content.captain")
+	RegistryLib.register(SCREEN_ID, _reputation_view, "content.reputation")
+	RegistryLib.register(SCREEN_ID, _officers_view, "content.officers")
+	RegistryLib.register(SCREEN_ID, _fleet_view, "content.fleet")
+	RegistryLib.register(SCREEN_ID, _quest_slots, "quests.slots_line")
+	RegistryLib.register(SCREEN_ID, _quests_viewport, "quests.viewport")
+	RegistryLib.register(SCREEN_ID, _quest_empty, "quests.empty")
+	RegistryLib.register(SCREEN_ID, _hint, "panel.hint")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -223,6 +258,12 @@ func open_tab(tab: String) -> void:
 		_tab = tab
 	visible = true
 	add_to_group(MODAL_GROUP)
+	# Phase 12: register at the first OPEN, activate at every open (the
+	# committed data rects re-apply, idempotent).
+	if not _ids_registered:
+		_register_ids()
+		_ids_registered = true
+	RegistryLib.screen_active(SCREEN_ID, self)
 	# 海图 in the whitelist is on purpose: `select_tab` treats it as the action
 	# (it closes the window and enters S17), so `open_tab(TAB_CHART)` must not
 	# first remember it as a page.
@@ -280,7 +321,10 @@ func select_tab(tab: String) -> void:
 	_reputation_view.visible = tab == TAB_REPUTATION
 	_officers_view.visible = tab == TAB_OFFICERS
 	_fleet_view.visible = tab == TAB_FLEET
-	_quests_box.visible = tab == TAB_QUESTS
+	var quests := tab == TAB_QUESTS
+	_quest_slots.visible = quests
+	_quests_viewport.visible = quests
+	_quest_empty.visible = quests
 	_bind_tabs()
 	if visible:
 		_refresh()
@@ -368,52 +412,88 @@ func _build_quests() -> void:
 	})
 	_quest_empty.visible = quests.is_empty()
 	_quest_empty.text = I18n.t_key("ui.empty")
+	var index := 0
 	for quest in quests:
-		_quest_rows.add_child(_build_quest_row(quest))
+		_quest_rows.add_child(_build_quest_row(quest, index))
+		index += 1
+	# The content node's stacked extent (the plain-Control scroll content).
+	_quest_rows.custom_minimum_size = Vector2(
+		_quests_viewport.size.x,
+		float(quests.size() * QUESTS_ROW_H_TILES * PaletteLib.CHROME_TILE))
 
 
-func _build_quest_row(quest: Dictionary) -> Control:
-	var row := VBoxContainer.new()
+## One quest row's rect: the list block's `list_rect` when the screen's v2
+## table is live, else the same authored constants (the interim pre-merge
+## state — the shipped data row mirrors them exactly).
+func _quest_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, LIST_QUESTS, index)
+	if rect != Rect2():
+		return rect
+	var tile := float(PaletteLib.CHROME_TILE)
+	return Rect2(
+		float(QUESTS_BASE_TILES.position.x) * tile,
+		float(index * QUESTS_ROW_H_TILES) * tile,
+		float(QUESTS_BASE_TILES.size.x) * tile,
+		float(QUESTS_BASE_TILES.size.y) * tile)
+
+
+func _build_quest_row(quest: Dictionary, index: int) -> Control:
+	# Phase 12 (docs/80-* §4.8.9): the row is the `quests` list block's
+	# member — a plain Control at `base + i·row_h` with its four parts
+	# absolutely placed inside the row rect (the per-row flow boxes are
+	# deleted).
+	var row := Control.new()
 	row.name = "Quest_%s" % str(quest.get("instance_id", ""))
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	var row_rect := _quest_rect(index)
+	row.position = row_rect.position
+	row.size = row_rect.size
+	RegistryLib.register(SCREEN_ID, row, "quests.%d" % index,
+		{"list": LIST_QUESTS, "data_ordered": true})
 
-	var top := HBoxContainer.new()
-	top.name = "Top"
+	var tile := float(PaletteLib.CHROME_TILE)
 	var tag := _make_label(I18n.t_key(QuestGenLib.type_key(quest)))
 	tag.name = "Tag"
-	tag.custom_minimum_size.x = 120
 	tag.modulate = PaletteLib.ACCENT
-	top.add_child(tag)
+	tag.position = Vector2(0, 0)
+	tag.size = Vector2(4 * tile, tile)
+	RegistryLib.register(SCREEN_ID, tag, "quests.%d.tag" % index)
+	row.add_child(tag)
 	var objective := _make_label(QuestGenLib.objective_text(quest))
 	objective.name = "Objective"
-	objective.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(objective)
+	objective.position = Vector2(4 * tile, 0)
+	objective.size = Vector2(row_rect.size.x - 9 * tile, tile)
+	RegistryLib.register(SCREEN_ID, objective, "quests.%d.objective" % index)
+	row.add_child(objective)
 	var days := _make_label(I18n.fmt("quest.days_left", {
 		"days": maxi(0, int(quest.get("deadline_day", 0)) - int(GameState.day)),
 	}))
 	days.name = "Days"
-	days.custom_minimum_size.x = 140
 	days.theme_type_variation = "Dim"
-	top.add_child(days)
-	row.add_child(top)
-
-	var bottom := HBoxContainer.new()
-	bottom.name = "Bottom"
+	days.position = Vector2(row_rect.size.x - 5 * tile, 0)
+	days.size = Vector2(5 * tile, tile)
+	RegistryLib.register(SCREEN_ID, days, "quests.%d.days" % index)
+	row.add_child(days)
 	# `quest.dest` always names the port, even when the player has never been
 	# there (docs/80-* §4.7.3).
 	var destination := _make_label(I18n.fmt("quest.dest", {
 		"port": _destination_name(quest),
 	}))
 	destination.name = "Destination"
-	destination.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	destination.theme_type_variation = "Dim"
-	bottom.add_child(destination)
+	destination.position = Vector2(0, tile)
+	destination.size = Vector2(row_rect.size.x - 6 * tile, tile)
+	RegistryLib.register(SCREEN_ID, destination, "quests.%d.destination" % index)
+	row.add_child(destination)
 	var abandon := Button.new()
 	abandon.name = "Abandon"
 	abandon.text = I18n.t_key("quest.abandon")
-	abandon.custom_minimum_size = Vector2(180, PaletteLib.BUTTON_H)
+	abandon.position = Vector2(row_rect.size.x - 6 * tile, tile)
+	abandon.size = Vector2(6 * tile, tile)
 	abandon.pressed.connect(func() -> void: abandon_quest(quest))
-	bottom.add_child(abandon)
-	row.add_child(bottom)
+	RegistryLib.register(SCREEN_ID, abandon, "quests.%d.abandon" % index,
+		{"role": "button"})
+	row.add_child(abandon)
 	return row
 
 
@@ -462,8 +542,9 @@ func _on_locale_changed(_locale: String) -> void:
 	_close_button.text = I18n.t_key("ui.close")
 	_bind_tabs()
 	# Rebuild the content while open so a locale toggle mid-window is instant
-	# (§6).
+	# (§6). The rebuild path re-applies the committed rects first.
 	if visible:
+		RegistryLib.apply_layout(SCREEN_ID)
 		_refresh()
 
 

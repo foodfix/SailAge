@@ -26,6 +26,8 @@ const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+const CaptainsLib2 := preload("res://scripts/world/captains.gd")
 
 const TILE := PaletteLib.CHROME_TILE
 ## Settled-frame wait (nest_audit's proven 6).
@@ -43,6 +45,45 @@ const PORT_SCENES := {
 	"guild": "res://scenes/port/guild_screen.tscn",
 	"palace": "res://scenes/port/palace_screen.tscn",
 	"tavern": "res://scenes/port/tavern_screen.tscn",
+}
+
+# --- W2 rigs (each slot appends between its own markers) ----------------------
+
+# --- rig: confirm (W2-D) ---
+const CONFIRM_SCENE := "res://scenes/ui_shared/confirm_dialog.tscn"
+# --- rig: dialog_box (W2-D) ---
+const DIALOG_BOX_SCENE := "res://scenes/ui_shared/dialog_box.tscn"
+# --- rig: save_slot (W2-D) ---
+const SAVE_SLOT_SCENE := "res://scenes/ui_shared/save_slot_dialog.tscn"
+# --- rig: settings (W2-D) ---
+const SETTINGS_SCENE := "res://scenes/ui_shared/settings_panel.tscn"
+# --- rig: gameover (W2-D) ---
+const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
+# --- rig: ending (W2-D) ---
+const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
+# --- rig: duel (W2-D) ---
+const DUEL_SCENE := "res://scenes/combat/duel_modal.tscn"
+# --- rig: intel_window (W2-D) ---
+const INTEL_WINDOW_SCENE := "res://scenes/ui_shared/intel_window.tscn"
+
+## The W2-D shared/combat screens captured so far (extended per commit).
+## The lookup falls back here after PORT_SCENES.
+const W2D_SCENES := {
+	"confirm": CONFIRM_SCENE,
+	"dialog_box": DIALOG_BOX_SCENE,
+	"save_slot": SAVE_SLOT_SCENE,
+	"settings": SETTINGS_SCENE,
+	"gameover": GAMEOVER_SCENE,
+	"ending": ENDING_SCENE,
+	"duel": DUEL_SCENE,
+	"intel_window": INTEL_WINDOW_SCENE,
+	"reputation_view": "res://scenes/ui_shared/reputation_view.tscn",
+	"captain_view": "res://scenes/ui_shared/captain_view.tscn",
+	"battle": "res://scenes/combat/battle_screen.tscn",
+	"sandbox": "res://scenes/combat/battle_sandbox.tscn",
+	"dossier": "res://scenes/ui/dossier_panel.tscn",
+	"fleet_view": "res://scenes/ui_shared/fleet_view.tscn",
+	"officer_roster": "res://scenes/ui_shared/officer_roster_view.tscn",
 }
 
 
@@ -82,7 +123,12 @@ func _capture_screen(screen_id: String) -> bool:
 	var scene: PackedScene = load(_rig_scene_path(screen_id))
 	var screen_root: Control = scene.instantiate()
 	add_child(screen_root)
-	_rig_post(screen_id, screen_root)
+	# The open path: the W2-C screens open in `_rig_post`; the W2-D
+	# modals open (and REGISTER) through their awaited `_open_<id>` hook
+	# (the battle rig plays the battle out to its after-action).
+	await _rig_post(screen_id, screen_root)
+	if has_method("_open_%s" % screen_id):
+		await call("_open_%s" % screen_id, screen_root)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
 	var fragment := _dump_fragment(screen_id)
@@ -167,17 +213,20 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const RIG_OPEN_CELL := Vector2i(1400, 640)
 
 
-## The rig lookup: a W2-C screen, else the port eight, else "" (no rig).
+## The rig lookup: a W2-C screen, else a W2-D screen, else the port
+## eight, else "" (no rig).
 func _rig_scene_path(screen_id: String) -> String:
 	if WORLD_RIG_SCENES.has(screen_id):
 		return String(WORLD_RIG_SCENES[screen_id])
+	if W2D_SCENES.has(screen_id):
+		return String(W2D_SCENES[screen_id])
 	if PORT_SCENES.has(screen_id):
 		return String(PORT_SCENES[screen_id])
 	return ""
 
 
 ## Pre-instantiate fixture boot, dispatched per screen (the port eight
-## share `_rig_port`).
+## share `_rig_port`; the W2-D rigs ride their `_rig_<id>` names).
 func _rig_boot(screen_id: String) -> void:
 	match screen_id:
 		"world":
@@ -191,11 +240,15 @@ func _rig_boot(screen_id: String) -> void:
 		"autopilot_hud":
 			_rig_autopilot()
 		_:
-			_rig_port()
+			if has_method("_rig_%s" % screen_id):
+				call("_rig_%s" % screen_id)
+			else:
+				_rig_port()
 
 
-## Post-instantiate open path (a chart opens itself, the modals open on
-## their fixture payload; the port screens need nothing).
+## Post-instantiate open path (a chart opens itself, the W2-C modals
+## open on their fixture payload; the port screens need nothing — the
+## W2-D modals open through the awaited `_open_<id>` hooks instead).
 func _rig_post(screen_id: String, screen_root: Control) -> void:
 	match screen_id:
 		"chart":
@@ -476,3 +529,282 @@ func _tiles(pos: Vector2, size: Vector2) -> Dictionary:
 		"w": maxi(1, roundi(size.x / float(TILE))),
 		"h": maxi(1, roundi(size.y / float(TILE))),
 	}
+
+
+# --- W2-D rigs (scenes/combat + ui_shared) ------------------------------------
+
+## The modal rigs' shared minimal run (the suites' `new_game`-free shape:
+## direct GameState fields, a caravel, no NPCs — enough for any modal that
+## reads state, harmless for those that don't).
+func _rig_modal_run() -> void:
+	GameState.player = {
+		"nation_id": "portugal",
+		"stats": {"leadership": 10, "seamanship": 10, "combat": 10,
+			"navigation": 10, "luck": 10},
+		"xp": 0, "level": 1, "officers": [], "reputation": {},
+	}
+	for nation in ["portugal", "spain", "england", "holland", "ottoman",
+			"italy"]:
+		GameState.player["reputation"][nation] = 0
+	GameState.fleet = [FleetLib.new_ship("caravel", 0)]
+	GameState.day = 1
+	GameState.gold = 10000
+	GameState.morale = 70
+	GameState.current_port = ""
+	GameState.npc_fleets = []
+
+
+# --- rig: confirm (W2-D) -------------------------------------------------------
+
+func _rig_confirm() -> void:
+	_rig_modal_run()
+
+
+## The fixture message (the window-sizes suite's jettison confirm — a
+## two-line wrapped body, deterministic via `ui_strings.json`).
+func _open_confirm(dialog: Control) -> void:
+	dialog.call("open_key", "fleet.jettison.confirm",
+		{"ship": "Ship 1", "good": "Wine", "qty": 30})
+
+
+# --- rig: dialog_box (W2-D) ----------------------------------------------------
+
+func _rig_dialog_box() -> void:
+	_rig_modal_run()
+
+
+## The fixture message (the suite's short line — text-only dialog).
+func _open_dialog_box(dialog: Control) -> void:
+	dialog.call("open_text", "A short line.")
+
+
+# --- rig: save_slot (W2-D) -----------------------------------------------------
+
+func _rig_save_slot() -> void:
+	_rig_modal_run()
+	GameState.day = 12
+	GameState.gold = 7830
+	# One filled slot + one empty + one corrupt (the §4.6 row states) — the
+	# summary rows need entries; the slots list block derives from the live
+	# rows.
+	DirAccess.make_dir_recursive_absolute(SaveSystem.SLOT_DIR)
+	# The v9 Person block carries no `stats` key (docs/50-* §4.8) — the rig
+	# player's stat block is stripped so slot 1 reads VALID.
+	var player: Dictionary = GameState.player.duplicate(true)
+	player.erase("stats")
+	var save := {
+		"save_version": 9, "saved_at": 1793119712, "phase": 9,
+		"locale": "en", "day": 12, "gold": 7830,
+		"player": player, "fleet": GameState.fleet,
+		"morale": 70,
+		"world": {"position": {"x": 0, "y": 0}, "map_id": "world",
+			"weather": "calm", "sail_trim": "normal", "heading": "E",
+			"wind_dir": "E"},
+		"current_port": "lisbon", "known_ports": ["lisbon"],
+		"explored_tiles": "", "port_investments": {}, "quests": [],
+		"discoveries_found": [], "npc_fleets": [], "officer_states": {},
+		"captain_states": {}, "proximity_cooldowns": {},
+		"market_stocks": {}, "wrecks": [], "npc_preset": "normal",
+		"market_events": [],
+		"control_prefs": {"input_mode": "step", "current_mode": "modifier"},
+		"permits": {"home": false, "foreign": {}},
+		"port_allegiance": {}, "month_invested": {},
+		"nation_treasuries": {}, "fame_commended": {},
+	}
+	var f := FileAccess.open(SaveSystem.slot_path(1), FileAccess.WRITE)
+	f.store_string(JSON.stringify(save))
+	f.close()
+	f = FileAccess.open(SaveSystem.slot_path(2), FileAccess.WRITE)
+	f.store_string("{\"save_version\": 4}")
+	f.close()
+
+
+## The fixture dialog: SAVE mode (all three §4.6 row states on screen).
+func _open_save_slot(dialog: Control) -> void:
+	dialog.call("open", 0)
+
+
+# --- rig: settings (W2-D) ------------------------------------------------------
+
+func _rig_settings() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"  # the S4 mount: Save/Return rows show
+
+
+func _open_settings(panel_screen: Control) -> void:
+	panel_screen.call("open")
+
+
+# --- rig: gameover (W2-D) ------------------------------------------------------
+
+func _rig_gameover() -> void:
+	_rig_modal_run()
+
+
+## The fixture death (a §4.9 reason, so the reason line shows). The screen
+## is live from _ready — no open call needed.
+func _open_gameover(screen: Control) -> void:
+	screen.call("open_reason", "sunk")
+
+
+# --- rig: ending (W2-D) --------------------------------------------------------
+
+func _rig_ending() -> void:
+	_rig_modal_run()
+	# A served run: fame, reported discoveries, battle count, titles, one
+	# met captain with wins + a negative stance (the nemesis/grudge rows).
+	GameState.day = 210
+	GameState.gold = 48250
+	GameState.fame = 88
+	GameState.battles_won = 14
+	GameState.discoveries_reported = ["d_amazon"]
+	GameState.titles["portugal"] = "baron"
+	GameState.captain_states = {
+		"cp_redbeard": {"wins": 3, "stance": -4, "tier_now": 2, "met": 30},
+	}
+
+
+## The fixture retirement (open_live — the fresh-retirement mode). The
+## screen builds at _ready; the open call re-reads live state.
+func _open_ending(screen: Control) -> void:
+	screen.call("open_live")
+
+
+# --- rig: duel (W2-D) ----------------------------------------------------------
+
+func _rig_duel() -> void:
+	_rig_modal_run()
+
+
+## The fixture duel: the full best-of-5 preview against a pirate captain
+## (the round rows' longest state — the `rounds` list block derives from
+## them). The config goes through `Duel.preview` like the suites'.
+func _open_duel(modal: Control) -> void:
+	modal.call("open_duel", {
+		"player_base": 15,
+		"defender_base": 10,
+		"seed": 33,
+		"ship_name": "Sloop",
+		"attacker_name": "You",
+		"defender_name": "Pirate captain",
+	})
+
+
+# --- rig: battle (W2-D) --------------------------------------------------------
+
+## A started battle (the window-sizes suite's pirate-encounter fixture) —
+## the chrome (top bar, bottom bar, command buttons) renders over it.
+func _rig_battle() -> void:
+	_rig_modal_run()
+	GameState.day = 9
+
+
+func _battle_encounter() -> Dictionary:
+	var ships: Array = []
+	for _index in 2:
+		ships.append({
+			"ship_type_id": "sloop",
+			"durability": 40, "crew": 12, "provisions": 0, "water": 0,
+			"cannons": 4, "equipment": {"figurehead": "", "sail": ""},
+			"cargo": {},
+		})
+	return {
+		"id": "hf_9_30_40_pirate", "kind": "pirate", "nation_id": "",
+		"position": {"x": 30, "y": 40}, "day": 9, "ships": ships,
+	}
+
+
+## A started battle, run to its after-action report — the chrome AND the
+## `after_lines` list block capture (the §4.9 bust needs a captain; the
+## composer override is not installed here, so row 0 is text-only).
+func _open_battle(screen: Control) -> void:
+	screen.set("route_to_world", false)
+	screen.call("open_battle", _battle_encounter())
+	await get_tree().process_frame
+	screen.call("run_to_completion", 30)
+
+
+# --- rig: sandbox (W2-D) -------------------------------------------------------
+
+func _rig_sandbox() -> void:
+	_rig_modal_run()
+
+
+# --- rig: dossier (W2-D) -------------------------------------------------------
+
+func _rig_dossier() -> void:
+	_rig_modal_run()
+	CaptainsLib2.ensure(CaptainsLib2.canon_list()[0].get("id", ""))
+
+
+## The fixture dossier: the captain card + career log (setup IS the open).
+func _open_dossier(panel: Control) -> void:
+	panel.call("setup", str(CaptainsLib2.canon_list()[0].get("id", "")))
+
+
+# --- rig: fleet_view (W2-D) ----------------------------------------------------
+
+func _rig_fleet_view() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"
+	GameState.fleet = [FleetLib.new_ship("caravel", 0),
+		FleetLib.new_ship("sloop", 1)]
+
+
+## The fixture view: a two-ship fleet at port (rebuild IS the open).
+func _open_fleet_view(view: Control) -> void:
+	view.call("rebuild")
+
+
+# --- rig: officer_roster (W2-D) -------------------------------------------------
+
+func _rig_officer_roster() -> void:
+	_rig_modal_run()
+	preload("res://scripts/player/character.gd").recruit("off_mateus_alvares")
+
+
+## The fixture view: one employed officer (rebuild IS the open).
+func _open_officer_roster(view: Control) -> void:
+	view.call("rebuild")
+
+
+# --- rig: intel_window (W2-D) --------------------------------------------------
+
+func _rig_intel_window() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"  # the fleet tab's port actions live
+
+
+## The fixture window: opens on the 委托 tab so the `quests` list block
+## captures (one commission accepted at the docked port first).
+func _open_intel_window(window: Control) -> void:
+	var offers: Array = QuestGenLib.available_offers("lisbon", GameState.day)
+	if not offers.is_empty():
+		QuestGenLib.accept(offers[0], "lisbon", GameState.day)
+	window.call("open_tab", "quests")
+
+
+# --- rig: reputation_view (W2-D) -----------------------------------------------
+
+func _rig_reputation_view() -> void:
+	_rig_modal_run()
+	GameState.player["reputation"]["spain"] = 12
+	GameState.player["reputation"]["ottoman"] = -8
+
+
+## The fixture view: a fresh build renders the six-nation table (the view
+## is live from _ready; refresh fills the cells).
+func _open_reputation_view(view: Control) -> void:
+	view.call("refresh")
+
+
+# --- rig: captain_view (W2-D) ---------------------------------------------------
+
+func _rig_captain_view() -> void:
+	_rig_modal_run()
+	GameState.day = 41
+
+
+## The fixture view: refresh renders the nation/day line + the player card.
+func _open_captain_view(view: Control) -> void:
+	view.call("refresh")

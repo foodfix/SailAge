@@ -20,6 +20,11 @@ extends Control
 ## on the EventBus signals while visible.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase 12 (docs/80-* §4.8.9): the view registers under its layout id.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This view's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "officer_roster"
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
 ## The §4.12 unified card (the detail page renders the full officer card).
@@ -71,22 +76,24 @@ var _result_text: String = ""
 ## One widget bundle per table row (test hooks keep the S18 names).
 var _rows: Array = []
 
-@onready var _slots: Label = $Body/Slots
-@onready var _mode_note: Label = $Body/ModeNote
-@onready var _result: Label = $Body/Result
-@onready var _controls: Container = $Body/Controls
-@onready var _attributes_toggle: Button = $Body/Controls/AttributesToggle
-@onready var _skills_toggle: Button = $Body/Controls/SkillsToggle
-@onready var _table_scroll: ScrollContainer = $Body/TableScroll
-@onready var _table: VBoxContainer = $Body/TableScroll/Table
-@onready var _table_empty: Label = $Body/TableEmpty
-@onready var _table_empty_hint: Label = $Body/TableEmptyHint
-@onready var _detail: VBoxContainer = $Body/Detail
-@onready var _detail_back: Button = $Body/Detail/DetailActions/DetailBack
-@onready var _detail_scroll: ScrollContainer = $Body/Detail/DetailScroll
-@onready var _detail_card_host: Container = $Body/Detail/DetailScroll/DetailPage/DetailCardHost
-@onready var _detail_line: Label = $Body/Detail/DetailScroll/DetailPage/DetailLine
-@onready var _detail_actions: HBoxContainer = $Body/Detail/DetailActions
+## Phase 12 (docs/80-* §4.8.9): the deleted `Body` VBox's children sit at
+## their data rects in the 32×12 view space.
+@onready var _slots: Label = $Slots
+@onready var _mode_note: Label = $ModeNote
+@onready var _result: Label = $Result
+@onready var _controls: Control = self
+@onready var _attributes_toggle: Button = $AttributesToggle
+@onready var _skills_toggle: Button = $SkillsToggle
+@onready var _table_scroll: ScrollContainer = $TableScroll
+@onready var _table: Control = $TableScroll/Table
+@onready var _table_empty: Label = $TableEmpty
+@onready var _table_empty_hint: Label = $TableEmptyHint
+@onready var _detail: Control = $Detail
+@onready var _detail_back: Button = $Detail/ActionsRow/DetailBack
+@onready var _detail_scroll: ScrollContainer = $Detail/DetailScroll
+@onready var _detail_card_host: Control = $Detail/DetailScroll/DetailPage/DetailCardHost
+@onready var _detail_line: Label = $Detail/DetailScroll/DetailPage/DetailLine
+@onready var _detail_actions: Container = $Detail/ActionsRow
 @onready var _confirm: Control = $ConfirmDialog
 
 ## The detail page's card + action widgets (rebuilt per open officer).
@@ -110,6 +117,26 @@ func _ready() -> void:
 	_skills_toggle.pressed.connect(func() -> void: set_stat_mode(MODE_SKILLS))
 	_confirm.confirmed.connect(_on_dismiss_confirmed)
 	_confirm.cancelled.connect(_on_dismiss_cancelled)
+	# Phase 12 (docs/80-* §4.8.9): the view registers + activates at build.
+	# PARTIAL CONVERSION (W2-D budget): the fixed slots are registered; the
+	# table rows keep their internal line stacking until the follow-up pass.
+	RegistryLib.register(SCREEN_ID, _slots, "slots")
+	RegistryLib.register(SCREEN_ID, _mode_note, "mode_note")
+	RegistryLib.register(SCREEN_ID, _result, "result")
+	RegistryLib.register(SCREEN_ID, _attributes_toggle, "toggles.attributes",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _skills_toggle, "toggles.skills",
+		{"role": "button"})
+	RegistryLib.register(SCREEN_ID, _table_scroll, "table_viewport")
+	RegistryLib.register(SCREEN_ID, _table, "roster")
+	RegistryLib.register(SCREEN_ID, _table_empty, "table_empty")
+	RegistryLib.register(SCREEN_ID, _table_empty_hint, "table_empty_hint")
+	RegistryLib.register(SCREEN_ID, _detail, "detail")
+	RegistryLib.register(SCREEN_ID, _detail_line, "detail.line")
+	RegistryLib.register(SCREEN_ID, _detail_card_host, "detail.card_host")
+	RegistryLib.register(SCREEN_ID, _detail_back, "detail.back",
+		{"role": "button"})
+	RegistryLib.screen_active(SCREEN_ID, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_data_changed)
@@ -283,6 +310,18 @@ func _build_table() -> void:
 	_table_empty.text = I18n.t_key("char.no_officers")
 	_table_empty_hint.visible = empty
 	_table_empty_hint.text = I18n.t_key("officers.empty_hint")
+	# Phase 12: the table is a plain Control — every child (the header row,
+	# then the officer rows) takes an explicit stacked position over
+	# measured minima (no flow). The rows are the `roster` list members;
+	# the content extent tracks the stack.
+	var y := 0.0
+	var width := _table.size.x
+	for node: Control in _table.get_children():
+		node.position = Vector2(0, y)
+		var height: float = node.get_combined_minimum_size().y
+		node.size = Vector2(width, height)
+		y += height
+	_table.custom_minimum_size = Vector2(width, y)
 
 
 ## The table's header row: the fixed columns + the active stat block's names.
