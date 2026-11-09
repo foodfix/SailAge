@@ -764,7 +764,7 @@ func _test_s14_tabs() -> void:
 	# the view's public seam (the row click funnels into the same call).
 	roster.open_detail(MATEUS)
 	_check(officer_row != null
-		and (officer_row.get_node("Line/Post") as Label).text
+		and (officer_row.get_node("Post") as Label).text
 			== I18n.t_key("officer.post.pilot"),
 		"the post column names the current post (§4.12.3)")
 	roster.queue_free()
