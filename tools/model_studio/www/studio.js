@@ -489,39 +489,110 @@ setInterval(refreshJobs, 6000);
 refreshJobs();
 refreshStatus();
 
-/* ==== Layout tab (Phase 11 W5-D — the §4.8.9 visual layout editor) ======
+/* ==== Layout tab (Phase 12 W3-E — the §4.8.9 v2 absolute-rect editor) ====
    Live bridge: the BROWSER connects DIRECTLY to the game's LayoutBridge
-   ws://127.0.0.1:8765 (90-* §5.7 frozen protocol) — server.py never
-   proxies WS. Every edit is sent as its §5.7 message; the game replies
-   tree + frame and we re-render. The edit session accumulates here as
-   {screen: {element_id: {…overrides}}}, STARTING from the committed
-   data/ui_layout.json so edits compose; Commit POSTs the full table and
-   the server gates it behind tools/validate_data.py before writing.
+   ws://127.0.0.1:8765 (90-* §5.7, the Phase-12 protocol) — server.py
+   never proxies WS. EVERY element drags/resizes as a rect: a drag sends
+   `move {screen, id, x, y}`, a resize sends `resize {screen, id, w, h}`
+   (tiles, parent-relative — a child's tiles address its registered
+   parent's rect; top-level elements address the 60 × 34 canvas the
+   `hello` reports); `assign_sheet` is unchanged. The Phase-11 kind
+   split, the min-override dance, the sibling order and the edge dock
+   are RETIRED game-side (answered `error`/`retired_field`) and the
+   studio never sends them. Dynamic-list members are not editable rows:
+   each list renders as ONE locked, hatched viewport block (the `lists`
+   data is builder-owned; rows stack at base + i·row_h inside the
+   viewport). The edit session accumulates here as the FULL v2 document
+   {version: 2, screens: {<screen>: {elements, lists}}} — STARTING from
+   the committed data/ui_layout.json so edits compose; Commit POSTs the
+   whole document and the server gates it behind tools/validate_data.py
+   before writing (10-* §4.23 bytes: sorted keys, 2-space indent,
+   trailing newline).
    The wire discriminator rides under both `msg` and `type` so either
    reader convention works (the frozen table names messages, not keys). */
 
 const LAY_SHEETS = ["panel", "button", "button_hover", "button_pressed",
   "button_focus", "field", "backdrop"];          // the 7 assignable (§4.8.9)
-const LAY_ANCHORS = ["top", "bottom", "left", "right"];
 const LAY = {
   ws: null, connected: false, connecting: false, loaded: false,
-  screens: [], grid: { w: 60, h: 33 }, tile: 32,
+  screens: [], grid: { w: 60, h: 34 }, tile: 32,
   screen: null, tree: [], sel: null,
-  session: {},              // {screen: {id: {…}}} — starts from committed
+  session: { version: 2, screens: {} },  // the FULL v2 doc — starts committed
+  committed: null,                       // tab-open snapshot (revert target)
   committedText: null, drag: null,
 };
 const DESIGN_W = 1920, DESIGN_H = 1080;   // the locked design canvas (90-* §6)
 const layEl = (id) => document.getElementById(id);
-const layKind = (e) => String((e && e.kind) || "free");
-const layLocked = (e) => !!(e && e.locked);
-// an element's anchor: session override first, then the tree's own report
-const layAnchor = (id) => {
-  const ov = (LAY.session[LAY.screen] || {})[id];
-  if (ov && ov.anchor) return ov.anchor;
-  const el = LAY.tree.find(e => e.id === id);
-  return (el && el.anchor) || null;
+const layKind = (e) => String((e && e.kind) || "free");  // tree wording only
+const layListOf = (e) => String((e && e.list) || "");    // non-empty = member
+const layRect = (e) => {
+  const r = e && e.rect_tiles;
+  return r && [r.x, r.y, r.w, r.h].every(v => typeof v === "number")
+    ? { x: r.x, y: r.y, w: r.w, h: r.h } : null;
 };
-const layOvr = (id) => (LAY.session[LAY.screen] || {})[id] || null;
+const layParentRow = (e) =>
+  (e && e.parent && LAY.tree.find(x => x.id === e.parent)) || null;
+
+// The element's DATA-space rect — parent-relative tiles (the v2 file's
+// address space, 10-* §4.23). The tree dump reports screen-root-relative
+// rects, so a nested element's data x/y is its screen rect minus the
+// registered parent row's.
+function layDataRect(e) {
+  const r = layRect(e);
+  if (!r) return null;
+  const p = layParentRow(e);
+  const pr = p && layRect(p);
+  if (!pr) return { x: r.x, y: r.y, w: r.w, h: r.h };  // root child: data == screen
+  return { x: r.x - pr.x, y: r.y - pr.y, w: r.w, h: r.h };
+}
+
+// The screen-space clamp rect: the registered parent row's rect (rule 1),
+// else the whole canvas (the grid `hello` reports — 60 × 34).
+function layBounds(e) {
+  const p = layParentRow(e);
+  const pr = p && layRect(p);
+  if (pr) return { x: pr.x, y: pr.y, w: Math.max(1, pr.w), h: Math.max(1, pr.h) };
+  return { x: 0, y: 0, w: LAY.grid.w || 60, h: LAY.grid.h || 34 };
+}
+
+// The resize floors (rule 2 + the content clamp): the element's content
+// minimum plus its registered children's extent, in tiles.
+function layFloors(e) {
+  const mt = (e && e.min_tiles) || {};
+  const kt = (e && e.kids_tiles) || {};
+  return { w: Math.max(1, mt.w || 1, kt.w || 1),
+           h: Math.max(1, mt.h || 1, kt.h || 1) };
+}
+
+const layScreenData = (screen) => ((LAY.session.screens || {})[screen]) || {};
+const layElements = (screen) => layScreenData(screen).elements || {};
+const layOvr = (screen, id) => layElements(screen)[id] || null;
+
+// The effective data rect: the session row's fields win over the live
+// tree's (edits compose over what is already committed).
+function layCurrentData(e) {
+  const d = layDataRect(e);
+  if (!d) return null;
+  const ov = layOvr(LAY.screen, e.id) || {};
+  const pick = (k) => (ov[k] != null ? ov[k] : d[k]);
+  return { x: pick("x"), y: pick("y"), w: pick("w"), h: pick("h") };
+}
+
+// The merged + clamped data rect for a typed patch: inside the parent's
+// rect (rule 1), never below the floors (rule 2) — the client-side
+// mirror of the game-side clamps.
+function layClampedPatch(e, patch) {
+  const merged = Object.assign({}, layCurrentData(e)
+    || { x: 0, y: 0, w: 2, h: 2 });
+  for (const [k, v] of Object.entries(patch)) if (v != null) merged[k] = v;
+  const pr = layBounds(e);
+  const f = layFloors(e);
+  merged.w = Math.min(Math.max(f.w, merged.w), pr.w);
+  merged.h = Math.min(Math.max(f.h, merged.h), pr.h);
+  merged.x = Math.min(Math.max(0, merged.x), Math.max(0, pr.w - merged.w));
+  merged.y = Math.min(Math.max(0, merged.y), Math.max(0, pr.h - merged.h));
+  return merged;
+}
 
 function layMsg(text, cls) {
   const el = layEl("lay-msg");
@@ -548,17 +619,45 @@ function laySend(name, payload) {
   return true;
 }
 
-// merge `patch` into the element's session override; a null value removes
-// the key (the Revert semantics — never resurrect a dropped override)
+// merge `patch` into the element's session row; a null value removes the
+// key. A new row is seeded with the element's FULL current data rect —
+// the v2 file stores complete {x, y, w, h} rows, so any edit commits a
+// complete row (§8.9 item 3).
 function layPatch(id, patch) {
-  const scr = (LAY.session[LAY.screen] = LAY.session[LAY.screen] || {});
-  const ov = (scr[id] = scr[id] || {});
+  const scr = (LAY.session.screens = LAY.session.screens || {});
+  const data = (scr[LAY.screen] = scr[LAY.screen] || {});
+  const els = (data.elements = data.elements || {});
+  const e = LAY.tree.find(x => x.id === id);
+  if (!els[id] && e) {
+    const seed = layDataRect(e);
+    if (seed) els[id] = { x: seed.x, y: seed.y, w: seed.w, h: seed.h };
+  }
+  const ov = (els[id] = els[id] || {});
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) delete ov[k];
     else ov[k] = v;
   }
-  if (!Object.keys(ov).length) delete scr[id];
+  if (!Object.keys(ov).length) delete els[id];
+  if (!Object.keys(data.elements).length
+      && !Object.keys(data.lists || {}).length) delete scr[LAY.screen];
   layRenderSessionInfo();
+}
+
+// Session revert (the Phase-12 semantics): the element's session row goes
+// back to the tab-open committed row — or disappears when THIS session
+// created it. The v2 file has no code defaults underneath, so "revert"
+// means the committed data rect, never a deleted row.
+function layRestoreCommittedRow(screen, id) {
+  const scr = (LAY.session.screens || {})[screen];
+  if (!scr || !scr.elements) return;
+  const committedEls = ((((LAY.committed || {}).screens || {})[screen])
+    || {}).elements;
+  if (committedEls && committedEls[id] != null)
+    scr.elements[id] = JSON.parse(JSON.stringify(committedEls[id]));
+  else delete scr.elements[id];
+  if (!Object.keys(scr.elements).length
+      && !Object.keys(scr.lists || {}).length)
+    delete LAY.session.screens[screen];
 }
 
 function layoutOpen() {
@@ -580,7 +679,9 @@ async function layoutLoadFile() {
   const ta = layEl("lay-file"), badge = layEl("lay-valid");
   if (!body || body.content == null) {
     LAY.committedText = null;
-    ta.value = "(absent — the game applies code defaults; commit creates it)";
+    LAY.committed = null;
+    LAY.session = { version: 2, screens: {} };
+    ta.value = "(absent — commit creates the v2 file)";
     badge.textContent = "validator: —";
   } else {
     LAY.committedText = body.content;
@@ -589,12 +690,16 @@ async function layoutLoadFile() {
       + (body.valid == null ? "—" : body.valid ? "pass" : "FAIL");
     badge.className = "badge " + (body.valid === false ? "pbad"
       : body.valid ? "pok" : "");
-    try {
-      LAY.session = JSON.parse(body.content);   // session starts committed
-      if (typeof LAY.session !== "object" || !LAY.session) LAY.session = {};
-    } catch (e) {
-      LAY.session = {};
-      layMsg("committed ui_layout.json does not parse — session starts empty",
+    let parsed = null;
+    try { parsed = JSON.parse(body.content); } catch (e) { parsed = null; }
+    if (parsed && parsed.version === 2 && parsed.screens
+        && typeof parsed.screens === "object") {
+      LAY.session = parsed;                     // session starts committed
+      LAY.committed = JSON.parse(body.content); // pristine revert snapshot
+    } else {
+      LAY.session = { version: 2, screens: {} };
+      LAY.committed = null;
+      layMsg("committed ui_layout.json is not v2 — session starts empty",
         "error");
     }
   }
@@ -609,22 +714,30 @@ function layoutWire() {
   layEl("lay-commit-btn").addEventListener("click", layoutCommit);
   layEl("lay-revert").addEventListener("click", () => {
     if (!LAY.sel) { layMsg("no element selected", "error"); return; }
-    const scr = LAY.session[LAY.screen] || {};
-    delete scr[LAY.sel];
-    if (LAY.session[LAY.screen] && !Object.keys(LAY.session[LAY.screen]).length)
-      delete LAY.session[LAY.screen];
+    const row = LAY.tree.find(x => x.id === LAY.sel);
+    if (row && layListOf(row)) {
+      layMsg("list member — the block is builder-owned, nothing to revert",
+        "error");
+      return;
+    }
+    layRestoreCommittedRow(LAY.screen, LAY.sel);
     laySend("revert", { screen: LAY.screen, id: LAY.sel });
+    layRenderBoxes();
+    layRenderInspector();
     layRenderSessionInfo();
-    layMsg(`reverted ${LAY.sel} (code default)`, "done");
+    layMsg(`reverted ${LAY.sel} (the committed data rect)`, "done");
   });
   layEl("lay-reset").addEventListener("click", () => {
     if (!LAY.screen) return;
-    delete LAY.session[LAY.screen];
+    for (const id of Object.keys(layElements(LAY.screen)))
+      layRestoreCommittedRow(LAY.screen, id);
     laySend("reset_screen", { screen: LAY.screen });
+    layRenderBoxes();
+    layRenderInspector();
     layRenderSessionInfo();
-    layMsg(`reset screen ${LAY.screen}`, "done");
+    layMsg(`reset screen ${LAY.screen} (the committed data rects)`, "done");
   });
-  // canvas pointer interactions (selection, drag-move, SE resize)
+  // canvas pointer interactions (drag-move, SE resize of the one box)
   const canvas = layEl("lay-canvas");
   canvas.addEventListener("mousemove", layDragMove);
   window.addEventListener("mouseup", layDragEnd);
@@ -678,12 +791,13 @@ function layoutMsg(m) {
   switch (name) {
     case "hello":
       LAY.screens = Array.isArray(m.screens) ? m.screens : [];
-      if (m.grid) LAY.grid = m.grid;
+      if (m.grid) LAY.grid = m.grid;      // 60 × 34 (the Phase-12 grid)
       if (m.tile) LAY.tile = m.tile;
       if (!LAY.screen || !LAY.screens.includes(LAY.screen))
         LAY.screen = LAY.screens[0] || null;
       laySend("get_tree", {});
-      layMsg(`hello — ${LAY.screens.length} screen(s)`, "done");
+      layMsg(`hello — ${LAY.screens.length} screen(s), grid `
+        + `${LAY.grid.w}×${LAY.grid.h}`, "done");
       break;
     case "screen_changed":
       if (m.screen && m.screen !== LAY.screen) {
@@ -750,17 +864,6 @@ function layRenderScreens() {
   }
 }
 
-function laySiblings(id) {
-  // flat tree → same-parent siblings (hierarchical dotted ids)
-  const dot = id.lastIndexOf(".");
-  const parent = dot < 0 ? "" : id.slice(0, dot);
-  return LAY.tree.filter(e => {
-    const eid = e.id || "";
-    const d = eid.lastIndexOf(".");
-    return (d < 0 ? "" : eid.slice(0, d)) === parent;
-  });
-}
-
 function layRenderTree() {
   const host = layEl("lay-tree");
   host.textContent = "";
@@ -776,11 +879,10 @@ function layRenderTree() {
     host.appendChild(s);
     return;
   }
-  // The parent/child depth per row (2026-11-09 user direction — the
-  // hierarchy shows as indentation): each row carries its nearest
-  // registered ancestor (`parent`), so the depth is the parent-chain
-  // length. Cycles are impossible (the walk follows registration
-  // order), but the step cap keeps a pathological dump bounded.
+  // The parent/child depth per row (the hierarchy shows as indentation):
+  // each row carries its nearest registered ancestor (`parent`), so the
+  // depth is the parent-chain length. The step cap keeps a pathological
+  // dump bounded.
   const parentOf = {};
   for (const e of LAY.tree) parentOf[e.id] = e.parent || "";
   const depthOf = (id) => {
@@ -788,14 +890,9 @@ function layRenderTree() {
     while (p && d < 32) { d += 1; p = parentOf[p]; }
     return d;
   };
-  // HIERARCHICAL ORDER (the 2026-11-09 tree-readability fix): rows
-  // arrive in registration order — a parent may sit far above its
-  // children, and an indented child next to an unrelated row reads as
-  // belonging to THAT row (the reported "cards.market belongs to
-  // footer"). Render the forest instead: every parent is immediately
-  // followed by its descendants (DFS over the parent links, in
-  // registration order within each group); orphans (a parent id that
-  // is absent from the dump) keep their registration position at the
+  // HIERARCHICAL ORDER (kept from Phase 11): rows arrive in registration
+  // order — render the forest instead, every parent immediately followed
+  // by its descendants; orphans keep their registration position at the
   // end so no row is lost.
   const children = {};
   for (const e of LAY.tree) {
@@ -816,20 +913,23 @@ function layRenderTree() {
   }
   for (const e of ordered) {
     const depth = depthOf(e.id);
+    const member = layListOf(e);
     const row = document.createElement("div");
-    row.className = "lay-el" + (e.id === LAY.sel ? " active" : "");
+    row.className = "lay-el" + (e.id === LAY.sel ? " active" : "")
+      + (member ? " ismember" : "");
     row.style.paddingLeft = (6 + depth * 18) + "px";
     const id = document.createElement("span");
     id.className = "lay-el-id";
     id.textContent = (depth > 0 ? "└ " : "") + e.id;
     id.title = `${e.id} — ${layKind(e)}${e.role ? ` · ${e.role}` : ""}`
+      + (member ? ` · list ${member}` : "")
       + (depth > 0 ? ` · depth ${depth}` : "");
     row.appendChild(id);
-    const ovr = layOvr(e.id);
+    const ovr = layOvr(LAY.screen, e.id);
     if (ovr) {
       const dot = document.createElement("span");
       dot.className = "lay-ovr";
-      dot.title = "has a session override";
+      dot.title = "has a session edit";
       dot.textContent = "●";
       row.appendChild(dot);
     }
@@ -841,32 +941,17 @@ function layRenderTree() {
     }
     const kind = document.createElement("span");
     kind.className = "lay-kind";
-    kind.textContent = layKind(e);
+    kind.textContent = member ? "list row" : layKind(e);
     row.appendChild(kind);
-    if (layLocked(e)) {
-      const lock = document.createElement("span");
-      lock.className = "lay-lock";
-      lock.title = "data-pinned order (§4.8.9 locked order) — reorder ignored";
-      lock.textContent = "🔒";
-      row.appendChild(lock);
-    }
-    if ((e.id || "").includes(".")) {   // container children: order buttons
-      for (const [lbl, delta] of [["▲", -1], ["▼", 1]]) {
-        const b = document.createElement("button");
-        b.textContent = lbl;
-        b.disabled = layLocked(e) || !LAY.connected;
-        b.title = `reorder ${e.id} (${delta > 0 ? "later" : "earlier"} sibling)`;
-        b.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          const sib = laySiblings(e.id);
-          const idx = Math.max(0, sib.findIndex(x => x.id === e.id));
-          const order = Math.max(0, Math.min(sib.length - 1, idx + delta));
-          if (order === idx) return;
-          layPatch(e.id, { order });
-          laySend("reorder", { screen: LAY.screen, id: e.id, order });
-        });
-        row.appendChild(b);
-      }
+    if (member) {
+      // a dynamic-row member: rendered as part of the list's locked
+      // viewport block on the canvas — never a draggable row
+      const tag = document.createElement("span");
+      tag.className = "lay-list-tag";
+      tag.title = `dynamic row of list ${member} — stacked by the block `
+        + `(base + i·row_h), not editable`;
+      tag.textContent = `⊆ ${member}`;
+      row.appendChild(tag);
     }
     row.addEventListener("click", () => {
       LAY.sel = e.id;
@@ -888,31 +973,68 @@ function layBoxPos(r) {
   };
 }
 
-function layParentRect(e) {
-  // The parent-bounds clamp (2026-11-09 user direction): an element
-  // cannot move or resize outside its parent — the drag clamps to the
-  // parent row's rect from the tree (the game enforces the same bound
-  // for typed values); no registered parent = the whole canvas.
-  const p = e.parent && LAY.tree.find(x => x.id === e.parent);
-  const pr = p && layRect(p);
-  if (pr) return { x: pr.x, y: pr.y,
-                   w: Math.max(1, pr.w), h: Math.max(1, pr.h) };
-  return { x: 0, y: 0, w: LAY.grid.w || 60, h: 33 };
+function unionRects(rects) {
+  if (!rects.length) return null;
+  const x0 = Math.min(...rects.map(r => r.x));
+  const y0 = Math.min(...rects.map(r => r.y));
+  const x1 = Math.max(...rects.map(r => r.x + r.w));
+  const y1 = Math.max(...rects.map(r => r.y + r.h));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
-function layRect(e) {
-  const r = e && e.rect_tiles;
-  return r && [r.x, r.y, r.w, r.h].every(v => typeof v === "number")
-    ? { x: r.x, y: r.y, w: r.w, h: r.h } : null;
+// Dynamic-list members are not editable rows: every list with member rows
+// in the tree renders as ONE locked viewport block — hatched, labeled
+// `<list> · row_h`, never draggable, never editable (the `lists` data is
+// builder-owned; rows stack at base + i·row_h inside the viewport). The
+// block rect comes from the session's committed lists data; without it
+// the block degrades to the member rows' union extent.
+function renderListBlocks(host) {
+  const ids = [];
+  for (const e of LAY.tree) {
+    const l = layListOf(e);
+    if (l && !ids.includes(l)) ids.push(l);
+  }
+  const selRow = LAY.sel && LAY.tree.find(x => x.id === LAY.sel);
+  const selList = selRow ? layListOf(selRow) : "";
+  for (const listId of ids) {
+    const block = (layScreenData(LAY.screen).lists || {})[listId] || null;
+    let rect = null, label = listId;
+    if (block && block.viewport) {
+      const v = block.viewport;
+      if ([v.x, v.y, v.w, v.h].every(n => typeof n === "number")) {
+        rect = { x: v.x, y: v.y, w: v.w, h: v.h };
+        label = `${listId} · row_h ${block.row_h}`;
+      }
+    }
+    if (!rect) {
+      rect = unionRects(LAY.tree.filter(x => layListOf(x) === listId)
+        .map(layRect).filter(Boolean));
+      if (rect) label = `${listId} · rows (block not committed yet)`;
+    }
+    if (!rect) continue;
+    const div = document.createElement("div");
+    div.className = "lay-listblock" + (selList === listId ? " active" : "");
+    const p = layBoxPos(rect);
+    div.style.left = p.left + "%";
+    div.style.top = p.top + "%";
+    div.style.width = p.width + "%";
+    div.style.height = p.height + "%";
+    const tag = document.createElement("span");
+    tag.className = "lay-listblock-tag";
+    tag.textContent = `🔒 ${label} — locked viewport (builder-owned)`;
+    div.appendChild(tag);
+    host.appendChild(div);
+  }
 }
 
 function layRenderBoxes() {
   const host = layEl("lay-boxes");
   host.textContent = "";
   const note = layEl("lay-canvas-note");
-  // The simplified canvas model (2026-11-09 user direction): the element
-  // LIST is the only selection surface, and the canvas renders ONLY the
-  // selected element's box — nothing selected, no boxes at all.
+  renderListBlocks(host);
+  // The simplified canvas model (kept from Phase 11): the element LIST is
+  // the only selection surface, and the canvas renders ONLY the selected
+  // element's box (plus the locked list blocks above).
   if (!LAY.sel) {
     note.hidden = !LAY.tree.length;
     note.textContent = LAY.connected && LAY.tree.length
@@ -924,13 +1046,11 @@ function layRenderBoxes() {
   }
   const e = LAY.tree.find(x => x.id === LAY.sel);
   if (!e) return;  // the selection vanished (rebuild) — tree receipt clears it
-  note.hidden = true;
+  if (layListOf(e)) return;  // a list member: the highlighted block IS it
   const r = layRect(e);
   if (!r) return;
-  const kind = layKind(e);
   const box = document.createElement("div");
-  box.className = "lay-box active" + (kind === "child" ? " child" : "")
-    + (kind === "plain" ? " plain" : "");
+  box.className = "lay-box active";
   const p = layBoxPos(r);
   box.style.left = p.left + "%";
   box.style.top = p.top + "%";
@@ -941,38 +1061,24 @@ function layRenderBoxes() {
   tag.className = "lay-box-tag";
   tag.textContent = e.id;
   box.appendChild(tag);
-  // Drag-move for EVERY connected element (2026-11-09 user direction —
-  // drag must move anything): container children leave their flow
-  // container game-side and are confined to the registered parent's
-  // rect; `layLocked` still hides the reorder buttons only.
+  // Drag-move + SE resize for EVERY element alike (the Phase-12 rule:
+  // one path for all) — a drag sends move {x, y}, a resize sends
+  // resize {w, h}; clamps mirror the game client-side (the parent row's
+  // rect + the min_tiles/kids_tiles floors).
   const dragable = LAY.connected;
   box.style.cursor = dragable ? "move" : "default";
   if (dragable) {
     const se = document.createElement("div");
     se.className = "lay-se";
-    se.title = kind === "child" ? "resize (min_w/min_h)" : "resize";
+    se.title = "resize (w/h tiles)";
     se.addEventListener("mousedown", (ev) => {
       ev.stopPropagation(); ev.preventDefault();
-      // The drag floor (2026-11-09 grid guarantee): the element's
-      // content minimum in tiles, quantized — plus its registered
-      // CHILDREN's extent (a parent cannot shrink so its children end
-      // up outside). The game clamps to the same floors, so the box
-      // never draws below what the control can be and never fights the
-      // reply.
-      const sheetFloor = kind !== "child" && e.role !== "plain" ? 2 : 1;
-      const floorW = Math.max(sheetFloor,
-        e.min_tiles ? e.min_tiles.w : 1,
-        e.kids_tiles ? e.kids_tiles.w : 1);
-      const floorH = Math.max(sheetFloor,
-        e.min_tiles ? e.min_tiles.h : 1,
-        e.kids_tiles ? e.kids_tiles.h : 1);
+      const f = layFloors(e);
       LAY.drag = { mode: "resize", e: JSON.parse(JSON.stringify(e)),
-                   r: layRect(e), floorW, floorH };
+                   r: layRect(e), floorW: f.w, floorH: f.h };
       box.classList.add("dragging");
     });
     box.appendChild(se);
-  }
-  if (dragable) {
     box.addEventListener("mousedown", (ev) => {
       ev.preventDefault();
       const g = layPointerTiles(ev);
@@ -994,20 +1100,26 @@ function layPointerTiles(ev) {
   };
 }
 
-function layClampRect(r, gridW) {
-  const gw = gridW || LAY.grid.w || 60;
+function layClampRect(r) {
+  const gw = LAY.grid.w || 60, gh = LAY.grid.h || 34;
   const w = Math.max(0, Math.min(r.w, gw - r.x));
-  const h = Math.max(0, Math.min(r.h, 33 - r.y));
+  const h = Math.max(0, Math.min(r.h, gh - r.y));
   return { x: Math.max(0, r.x), y: Math.max(0, r.y), w, h };
+}
+
+// screen-space rect → data-space (parent-relative) tiles
+function layToData(e, r) {
+  const p = layParentRow(e);
+  const pr = p && layRect(p);
+  if (!pr) return { x: r.x, y: r.y };
+  return { x: r.x - pr.x, y: r.y - pr.y };
 }
 
 function layDragMove(ev) {
   if (!LAY.drag) return;
   const { mode, e, r, off } = LAY.drag;
-  const kind = layKind(e);
-  const anchor = layAnchor(e.id);
   const p = layPointerTiles(ev);
-  const pr = layParentRect(e);
+  const bounds = layBounds(e);
   const patchBox = (nr) => {
     const box = layEl("lay-boxes").querySelector(
       `.lay-box[data-id="${CSS.escape(e.id)}"]`);
@@ -1019,110 +1131,36 @@ function layDragMove(ev) {
     box.style.height = pos.height + "%";
   };
   if (mode === "move") {
-    // pointer target = grab point minus the grab offset inside the box
+    // pointer target = grab point minus the grab offset inside the box;
+    // clamped INSIDE the parent row's rect (rule 1)
     const tx = off ? p.x - off.x : p.x;
     const ty = off ? p.y - off.y : p.y;
-    if (kind === "anchored") {
-      // anchored: along-edge drag only (§4.8.9) — top/bottom drag x,
-      // left/right drag y; the edge span itself never moves
-      if (!anchor || anchor === "top" || anchor === "bottom") {
-        const nx = Math.max(pr.x, Math.min(tx, pr.x + pr.w - r.w));
-        if (nx === r.x) return;
-        LAY.drag.r = Object.assign({}, r, { x: nx });
-        patchBox(LAY.drag.r);
-        laySend("move", { screen: LAY.screen, id: e.id, x: nx });
-        layPatch(e.id, { x: nx });
-      } else {
-        const ny = Math.max(pr.y, Math.min(ty, pr.y + pr.h - r.h));
-        if (ny === r.y) return;
-        LAY.drag.r = Object.assign({}, r, { y: ny });
-        patchBox(LAY.drag.r);
-        laySend("move", { screen: LAY.screen, id: e.id, y: ny });
-        layPatch(e.id, { y: ny });
-      }
-    } else {
-      // free/plain: both axes, quantized to tiles, clamped INSIDE the
-      // parent rect (the parent-bounds rule)
-      const pr = layParentRect(e);
-      const nx = Math.max(pr.x, Math.min(tx, pr.x + pr.w - r.w));
-      const ny = Math.max(pr.y, Math.min(ty, pr.y + pr.h - r.h));
-      if (nx === r.x && ny === r.y) return;
-      LAY.drag.r = Object.assign({}, r, { x: nx, y: ny });
-      patchBox(LAY.drag.r);
-      laySend("move", { screen: LAY.screen, id: e.id, x: nx, y: ny });
-      layPatch(e.id, { x: nx, y: ny });
-    }
+    const nx = Math.max(bounds.x, Math.min(tx, bounds.x + bounds.w - r.w));
+    const ny = Math.max(bounds.y, Math.min(ty, bounds.y + bounds.h - r.h));
+    if (nx === r.x && ny === r.y) return;
+    LAY.drag.r = Object.assign({}, r, { x: nx, y: ny });
+    patchBox(LAY.drag.r);
+    const d = layToData(e, LAY.drag.r);
+    laySend("move", { screen: LAY.screen, id: e.id, x: d.x, y: d.y });
+    layPatch(e.id, { x: d.x, y: d.y });
   } else if (mode === "resize") {
-    // The drag floor captured at mousedown (the sheet floor + the
-    // element's content minimum + its registered children's extent —
-    // a parent cannot shrink so its children end up outside).
-    const floorW = LAY.drag.floorW;
-    const floorH = LAY.drag.floorH;
-    if (kind === "child") {
-      // container child: SE handle drives custom_minimum_size — the box
-      // FOLLOWS the handle (drawing the requested min rect); the
-      // authoritative reply may keep the parent-stretched rect on axes
-      // the parent owns, which lands at drag end. Sends are throttled:
-      // one message per tile would flood tree+frame replies that
-      // re-render the box mid-drag.
-      const nw = Math.max(floorW, Math.min(p.x - r.x, pr.x + pr.w - r.x));
-      const nh = Math.max(floorH, Math.min(p.y - r.y, pr.y + pr.h - r.y));
-      if (nw === (LAY.drag.lastW || 0) && nh === (LAY.drag.lastH || 0)) return;
-      LAY.drag.lastW = nw; LAY.drag.lastH = nh;
-      patchBox({ x: r.x, y: r.y, w: nw, h: nh });
-      layThrottledSend("resize", { screen: LAY.screen, id: e.id,
-                          min_w: nw, min_h: nh });
-      layPatch(e.id, { min_w: nw, min_h: nh });
-    } else if (kind === "anchored") {
-      // anchored: resize = the span from the anchored edge
-      if (!anchor || anchor === "top") {
-        const nh = Math.max(floorH, p.y - r.y);
-        if (nh === r.h) return;
-        LAY.drag.r = Object.assign({}, r, { h: nh });
-        patchBox(LAY.drag.r);
-        layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
-        layPatch(e.id, { h: nh });
-      } else if (anchor === "bottom") {
-        const nh = Math.max(floorH, r.y + r.h - p.y);
-        const ny = r.y + r.h - nh;
-        if (nh === r.h) return;
-        LAY.drag.r = Object.assign({}, r, { y: ny, h: nh });
-        patchBox(LAY.drag.r);
-        layThrottledSend("resize", { screen: LAY.screen, id: e.id, h: nh });
-        layPatch(e.id, { h: nh });
-      } else if (anchor === "left") {
-        const nw = Math.max(floorW, p.x - r.x);
-        if (nw === r.w) return;
-        LAY.drag.r = Object.assign({}, r, { w: nw });
-        patchBox(LAY.drag.r);
-        layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw });
-        layPatch(e.id, { w: nw });
-      } else {  // right
-        const nw = Math.max(floorW, r.x + r.w - p.x);
-        const nx = r.x + r.w - nw;
-        if (nw === r.w) return;
-        LAY.drag.r = Object.assign({}, r, { x: nx, w: nw });
-        patchBox(LAY.drag.r);
-        layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw });
-        layPatch(e.id, { w: nw });
-      }
-    } else {  // free/plain: SE handle drives w/h
-      // resize clamps INSIDE the parent rect (the parent-bounds rule):
-      // the dragged size can never extend past the parent's edges.
-      const pr = layParentRect(e);
-      const nw = Math.max(floorW, Math.min(p.x - r.x, pr.x + pr.w - r.x));
-      const nh = Math.max(floorH, Math.min(p.y - r.y, pr.y + pr.h - r.y));
-      if (nw === r.w && nh === r.h) return;
-      LAY.drag.r = Object.assign({}, r, { w: nw, h: nh });
-      patchBox(LAY.drag.r);
-      layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw, h: nh });
-      layPatch(e.id, { w: nw, h: nh });
-    }
+    // the floors captured at mousedown (content minimum + registered
+    // children's extent — a parent cannot shrink so its children end up
+    // outside), clamped inside the parent's edges
+    const nw = Math.max(LAY.drag.floorW,
+      Math.min(p.x - r.x, bounds.x + bounds.w - r.x));
+    const nh = Math.max(LAY.drag.floorH,
+      Math.min(p.y - r.y, bounds.y + bounds.h - r.y));
+    if (nw === r.w && nh === r.h) return;
+    LAY.drag.r = Object.assign({}, r, { w: nw, h: nh });
+    patchBox(LAY.drag.r);
+    layThrottledSend("resize", { screen: LAY.screen, id: e.id, w: nw, h: nh });
+    layPatch(e.id, { w: nw, h: nh });
   }
 }
 
-/* The drag-send throttle (the 2026-11-09 resize feel fix): one WS message
- * per tile change floods the bridge's tree+frame replies, and each reply
+/* The drag-send throttle (kept from Phase 11): one WS message per tile
+ * change floods the bridge's tree+frame replies, and each reply
  * re-renders the box from the authoritative rect — mid-drag that fights
  * the optimistic box. Sends coalesce to one per 150 ms, and `layDragEnd`
  * flushes the trailing one so the last state always lands. */
@@ -1189,27 +1227,38 @@ function layRenderInspector() {
     host.appendChild(s);
     return;
   }
-  const kind = layKind(e);
   const r = layRect(e);
-  const ovr = layOvr(e.id) || {};
-  const anchor = layAnchor(e.id);
+  const d = layCurrentData(e);
+  const member = layListOf(e);
   const meta = document.createElement("div");
   meta.className = "lay-meta";
-  meta.textContent = `id: ${e.id}\nkind: ${kind}${e.role ? ` · role: ${e.role}` : ""}`
-    + (r ? `\nrect: ${r.x},${r.y} ${r.w}×${r.h} tiles (${r.w * 32}×${r.h * 32} px)` : "")
-    + (layLocked(e) ? "\n🔒 data-pinned order — reorder ignored" : "");
+  meta.textContent = `id: ${e.id}\nkind: ${layKind(e)}${e.role ? ` · role: ${e.role}` : ""}`
+    + (e.parent ? `\nparent: ${e.parent}` : "")
+    + (r ? `\nrect (screen): ${r.x},${r.y} ${r.w}×${r.h} tiles (${r.w * 32}×${r.h * 32} px)` : "")
+    + (d ? `\nrect (data, parent-relative): ${d.x},${d.y} ${d.w}×${d.h} tiles` : "");
   meta.style.whiteSpace = "pre-wrap";
   host.appendChild(meta);
 
+  if (member) {
+    // a dynamic-row member: read-only — the block is builder-owned
+    const note = document.createElement("div");
+    note.className = "lay-meta";
+    note.textContent = `⊆ dynamic row of list ${member} — rows stack at `
+      + `base + i·row_h inside the block's viewport; the block is `
+      + `builder-owned and not editable here.`;
+    host.appendChild(note);
+    return;
+  }
+
   const section = (t) => {
-    const d = document.createElement("div");
-    d.className = "lay-sec";
+    const d2 = document.createElement("div");
+    d2.className = "lay-sec";
     const lab = document.createElement("div");
     lab.className = "lay-pan-title";
     lab.textContent = t;
-    d.appendChild(lab);
-    host.appendChild(d);
-    return d;
+    d2.appendChild(lab);
+    host.appendChild(d2);
+    return d2;
   };
   const dis = !LAY.connected;
   const editNote = document.createElement("div");
@@ -1217,11 +1266,12 @@ function layRenderInspector() {
   if (dis) editNote.textContent = "connect the bridge to edit live";
   host.appendChild(editNote);
 
-  if (kind !== "plain") {   // plain: sheet n/a (§4.8.9)
+  if (e.role !== "plain") {   // plain: sheet n/a (§4.8.9)
     const sec = section("sheet (one of the 7 nine-patches)");
     const sel = document.createElement("select");
     sel.disabled = dis;
-    const cur = ovr.sheet != null ? ovr.sheet : (e.sheet || "");
+    const ov = layOvr(LAY.screen, e.id) || {};
+    const cur = ov.sheet != null ? ov.sheet : (e.sheet || "");
     for (const s of LAY_SHEETS) {
       const o = document.createElement("option");
       o.value = s; o.textContent = s;
@@ -1230,7 +1280,7 @@ function layRenderInspector() {
     }
     if (!cur) {
       const o = document.createElement("option");
-      o.value = ""; o.textContent = "(code default)"; o.selected = true;
+      o.value = ""; o.textContent = "(theme default)"; o.selected = true;
       o.disabled = true;
       sel.insertBefore(o, sel.firstChild);
     }
@@ -1242,130 +1292,51 @@ function layRenderInspector() {
     sec.appendChild(sel);
   }
 
-  const sec2 = section("override (tile integers)");
-  if (kind === "free" || kind === "anchored") {
-    // anchor dropdown — free may gain one; anchored may change it.
-    // Anchors live in the committed file (no §5.7 message), so this
-    // edits the session only: "applied at game restart".
-    const row = document.createElement("div");
-    row.className = "lay-row";
-    const lab = document.createElement("label");
-    lab.textContent = "anchor";
-    lab.title = "edge anchor — committed only; applied at game restart "
-      + "(anchor and y are mutually exclusive, §8.9 item 5)";
-    const sel = document.createElement("select");
-    for (const a of ["", ...LAY_ANCHORS]) {
-      const o = document.createElement("option");
-      o.value = a; o.textContent = a === "" ? "(none — free x/y)" : a;
-      if ((anchor || "") === a) o.selected = true;
-      sel.appendChild(o);
-    }
-    sel.addEventListener("change", () => {
-      const v = sel.value || null;
-      if (v) {
-        const patch = { anchor: v, y: null };   // anchor ⇒ no y (§8.9 item 5)
-        if (v === "left" || v === "right") patch.x = null;
-        layPatch(e.id, patch);
-      } else {
-        layPatch(e.id, { anchor: null });
-      }
-      layRenderInspector();
-    });
-    row.append(lab, sel);
-    sec2.appendChild(row);
-    const alongX = !anchor || anchor === "top" || anchor === "bottom";
-    if (alongX) {
-      sec2.appendChild(layIntInput("x", (ovr.x != null ? ovr.x : r ? r.x : null),
-        (v) => { if (v == null) return; layPatch(e.id, { x: v });
-                 laySend("move", { screen: LAY.screen, id: e.id, x: v }); },
-        "absolute tile column (free) / along-edge span (anchored top|bottom)"));
-    } else {
-      sec2.appendChild(layIntInput("y", (ovr.y != null ? ovr.y : r ? r.y : null),
-        (v) => { if (v == null) return; layPatch(e.id, { y: v });
-                 laySend("move", { screen: LAY.screen, id: e.id, y: v }); },
-        "absolute tile row (free) / along-edge span (anchored left|right)"));
-    }
-    if (!anchor || anchor === "top" || anchor === "bottom") {
-      sec2.appendChild(layIntInput("h", (ovr.h != null ? ovr.h : r ? r.h : null),
-        (v) => { if (v == null) return; layPatch(e.id, { h: v });
-                 laySend("resize", { screen: LAY.screen, id: e.id, h: v }); },
-        "height in tiles (with a top|bottom anchor: the span from the edge)"));
-    }
-    if (!anchor || anchor === "left" || anchor === "right") {
-      sec2.appendChild(layIntInput("w", (ovr.w != null ? ovr.w : r ? r.w : null),
-        (v) => { if (v == null) return; layPatch(e.id, { w: v });
-                 laySend("resize", { screen: LAY.screen, id: e.id, w: v }); },
-        "width in tiles (with a left|right anchor: the span from the edge)"));
-    }
-  } else if (kind === "child") {
-    // min_w/min_h are OVERRIDE inputs (2026-11-09 live-session fix): a
-    // container child's live rect is the PARENT's layout decision (the
-    // reported facility_grid "min_w 58" was its stretched rect, not a
-    // min), and the runtime min is not in the tree dump — so with no
-    // override the fields stay empty ("—"). The live rect is in the
-    // meta block above.
-    sec2.appendChild(layIntInput("min_w", (ovr.min_w != null ? ovr.min_w : null),
-      (v) => { if (v == null) return; layPatch(e.id, { min_w: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_w: v }); },
-      "custom_minimum_size width (tiles) — empty = code default"));
-    sec2.appendChild(layIntInput("min_h", (ovr.min_h != null ? ovr.min_h : null),
-      (v) => { if (v == null) return; layPatch(e.id, { min_h: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_h: v }); },
-      "custom_minimum_size height (tiles) — empty = code default"));
-    sec2.appendChild(layIntInput("order", ovr.order != null ? ovr.order : null,
-      (v) => { if (v == null) return; layPatch(e.id, { order: v });
-               laySend("reorder", { screen: LAY.screen, id: e.id, order: v }); },
-      "sibling index (ignored for data-pinned orders — 🔒)"));
-  } else {  // plain — moves/resizes "as per kind" (§4.8.9): offer both
-    sec2.appendChild(layIntInput("x", (ovr.x != null ? ovr.x : r ? r.x : null),
-      (v) => { if (v == null) return; layPatch(e.id, { x: v });
-               laySend("move", { screen: LAY.screen, id: e.id, x: v }); },
-      "as per the element's underlying kind"));
-    sec2.appendChild(layIntInput("y", (ovr.y != null ? ovr.y : r ? r.y : null),
-      (v) => { if (v == null) return; layPatch(e.id, { y: v });
-               laySend("move", { screen: LAY.screen, id: e.id, y: v }); },
-      "as per the element's underlying kind"));
-    sec2.appendChild(layIntInput("w", (ovr.w != null ? ovr.w : r ? r.w : null),
-      (v) => { if (v == null) return; layPatch(e.id, { w: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, w: v }); },
-      "as per the element's underlying kind"));
-    sec2.appendChild(layIntInput("h", (ovr.h != null ? ovr.h : r ? r.h : null),
-      (v) => { if (v == null) return; layPatch(e.id, { h: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, h: v }); },
-      "as per the element's underlying kind"));
-    sec2.appendChild(layIntInput("min_w", ovr.min_w != null ? ovr.min_w : null,
-      (v) => { if (v == null) return; layPatch(e.id, { min_w: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_w: v }); }));
-    sec2.appendChild(layIntInput("min_h", ovr.min_h != null ? ovr.min_h : null,
-      (v) => { if (v == null) return; layPatch(e.id, { min_h: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_h: v }); }));
-  }
-  // min_w/min_h apply to ANY control (§4.23) — offer them where the kind
-  // block above didn't already
-  if (kind === "free" || kind === "anchored") {
-    const sec3 = section("min size (any control)");
-    sec3.appendChild(layIntInput("min_w", ovr.min_w != null ? ovr.min_w : null,
-      (v) => { if (v == null) return; layPatch(e.id, { min_w: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_w: v }); }));
-    sec3.appendChild(layIntInput("min_h", ovr.min_h != null ? ovr.min_h : null,
-      (v) => { if (v == null) return; layPatch(e.id, { min_h: v });
-               laySend("resize", { screen: LAY.screen, id: e.id, min_h: v }); }));
-  }
-  const ovrKeys = Object.keys(layOvr(e.id) || {});
+  const sec2 = section("rect (tiles — parent-relative)");
+  sec2.appendChild(layIntInput("x", d ? d.x : null, (v) => {
+    if (v == null) return;
+    const m = layClampedPatch(e, { x: v });
+    layPatch(e.id, { x: m.x, y: m.y });
+    laySend("move", { screen: LAY.screen, id: e.id, x: m.x, y: m.y });
+  }, "tile column inside the registered parent's rect (top-level: the canvas)"));
+  sec2.appendChild(layIntInput("y", d ? d.y : null, (v) => {
+    if (v == null) return;
+    const m = layClampedPatch(e, { y: v });
+    layPatch(e.id, { x: m.x, y: m.y });
+    laySend("move", { screen: LAY.screen, id: e.id, x: m.x, y: m.y });
+  }, "tile row inside the registered parent's rect (top-level: the canvas)"));
+  sec2.appendChild(layIntInput("w", d ? d.w : null, (v) => {
+    if (v == null) return;
+    const m = layClampedPatch(e, { w: v });
+    layPatch(e.id, { w: m.w, h: m.h });
+    laySend("resize", { screen: LAY.screen, id: e.id, w: m.w, h: m.h });
+  }, "width in tiles (never below the min_tiles/kids_tiles floors)"));
+  sec2.appendChild(layIntInput("h", d ? d.h : null, (v) => {
+    if (v == null) return;
+    const m = layClampedPatch(e, { h: v });
+    layPatch(e.id, { w: m.w, h: m.h });
+    laySend("resize", { screen: LAY.screen, id: e.id, w: m.w, h: m.h });
+  }, "height in tiles (never below the min_tiles/kids_tiles floors)"));
+
+  const ovrKeys = Object.keys(layOvr(LAY.screen, e.id) || {});
   const state = document.createElement("div");
   state.className = "lay-meta";
   state.textContent = ovrKeys.length
-    ? `session override: ${ovrKeys.join(", ")}` : "session override: none";
+    ? `session row: ${ovrKeys.join(", ")}` : "session row: none";
   host.appendChild(state);
 }
 
 function layRenderSessionInfo() {
-  let screens = 0, els = 0;
-  for (const [s, m] of Object.entries(LAY.session)) {
-    if (m && typeof m === "object") { screens++; els += Object.keys(m).length; }
+  const screens = LAY.session.screens || {};
+  let scr = 0, els = 0;
+  for (const data of Object.values(screens)) {
+    if (data && typeof data === "object") {
+      scr++;
+      els += Object.keys(data.elements || {}).length;
+    }
   }
   layEl("lay-session-info").textContent =
-    `session: ${screens} screen(s), ${els} element override(s)`
+    `session: ${scr} screen(s), ${els} element row(s)`
     + (LAY.committedText == null ? " · committed file absent" : "");
 }
 
@@ -1381,7 +1352,7 @@ async function layoutCommit() {
     const r = await fetch("/api/layout/commit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: LAY.session }),
+      body: JSON.stringify({ layout: LAY.session }),   // the FULL v2 doc
     });
     const body = await r.json().catch(() => ({}));
     if (body.ok) {
@@ -1395,11 +1366,11 @@ async function layoutCommit() {
       // are owed. The set is concrete: the layout guards + the
       // port-screen behavior suites.
       const remind = layEl("lay-remind");
-      remind.textContent = "⚠ layout overrides committed — before playing "
-        + "on, run: python3 tools/run_tests.py --only test_layout --jobs 4"
-        + " + the port-screen suites (market/port_hub/inn/tavern/palace/"
-        + "shipyard/quests). The studio cannot run Godot — the committed "
-        + "file is the suites' input (80-* §4.8.9 both-locale guard).";
+      remind.textContent = "⚠ layout committed — before playing on, run: "
+        + "python3 tools/run_tests.py --only test_layout --jobs 4 + the "
+        + "port-screen suites (market/port_hub/inn/tavern/palace/shipyard/"
+        + "quests). The studio cannot run Godot — the committed file is "
+        + "the suites' input (80-* §4.8.9 both-locale guard).";
       remind.hidden = false;
       await layoutLoadFile();          // show the committed bytes
     } else {
@@ -1416,3 +1387,4 @@ async function layoutCommit() {
     btn.disabled = false;
   }
 }
+

@@ -139,7 +139,7 @@ footer {
   font-size: 10px; color: var(--dim);
 }
 
-/* ---- Layout tab (Phase 11 W5-D — the §4.8.9 studio layout editor) ---- */
+/* ---- Layout tab (Phase 12 W3-E — the §4.8.9 v2 absolute-rect editor) --- */
 body.layout-mode #grid { display: none; }
 body.layout-mode footer { display: none; }
 #layout { padding: 10px 16px 24px; display: flex; flex-direction: column; gap: 8px; }
@@ -180,9 +180,12 @@ body.layout-mode footer { display: none; }
   font-size: 9px; color: #9cc4dc; border: 1px dashed #2f6f9e;
   border-radius: 7px; padding: 0 5px; flex: none;
 }
+.lay-el .lay-list-tag {
+  font-size: 9px; color: #9cc4dc; border: 1px dashed #2f6f9e;
+  border-radius: 7px; padding: 0 5px; flex: none;
+}
+.lay-el.ismember { opacity: .8; }
 .lay-el .lay-ovr { color: var(--gold-hi); flex: none; }
-.lay-el .lay-lock { flex: none; }
-.lay-el button { padding: 0 6px; font-size: 10px; line-height: 16px; }
 
 .lay-canvas {
   position: relative; width: 100%; aspect-ratio: 16 / 9;
@@ -209,8 +212,6 @@ body.layout-mode footer { display: none; }
   position: absolute; border: 1px solid rgba(217, 164, 65, .75);
   background: rgba(217, 164, 65, .08); cursor: move;
 }
-.lay-box.child { border-style: dashed; cursor: default; }
-.lay-box.plain { border-color: rgba(138, 146, 156, .6); background: rgba(138, 146, 156, .06); }
 .lay-box.active { border-color: var(--gold-hi); background: rgba(217, 164, 65, .16);
   box-shadow: 0 0 0 1px var(--gold-hi); z-index: 3; }
 .lay-box .lay-box-tag {
@@ -224,6 +225,26 @@ body.layout-mode footer { display: none; }
   background: var(--gold-hi); border: 1px solid #10141f; cursor: nwse-resize;
 }
 .lay-box.dragging { opacity: .8; z-index: 4; }
+/* dynamic-list viewport blocks (Phase 12): locked, hatched, never
+   editable — pointer-events none so they never block the element box */
+.lay-listblock {
+  position: absolute; pointer-events: none;
+  border: 1px dashed rgba(138, 146, 156, .8);
+  background: repeating-linear-gradient(45deg,
+    rgba(138, 146, 156, .14) 0 6px, transparent 6px 12px);
+}
+.lay-listblock.active {
+  border-color: var(--gold-hi);
+  background: repeating-linear-gradient(45deg,
+    rgba(217, 164, 65, .18) 0 6px, transparent 6px 12px);
+}
+.lay-listblock .lay-listblock-tag {
+  position: absolute; top: -1px; left: -1px; font-size: 8px; line-height: 1.5;
+  background: rgba(20, 24, 36, .85); color: #9cc4dc;
+  padding: 0 4px; border-radius: 0 0 4px 0; white-space: nowrap;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.lay-listblock.active .lay-listblock-tag { color: var(--gold-hi); }
 .lay-canvas-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 
 .lay-insp { display: flex; flex-direction: column; gap: 6px; }
