@@ -133,8 +133,16 @@ static func register(screen_id: String, control: Control, id: String,
 		"baseline": {},
 		"sheet": "",
 	}
-	if per_screen.has(id) and _live(per_screen[id]) != null:
-		push_error("LayoutRegistry: %s duplicate id '%s'" % [screen_id, id])
+	if per_screen.has(id):
+		# The rebuild flow (2026-11-09 master adjudication): a rebuilt row
+		# re-registers while the OLD node still lives inside its
+		# `queue_free` window — that replacement is the DESIGNED path and
+		# must not log. Only a live, not-dying duplicate is the contract
+		# breach (the ids are the contract, §4.8.9).
+		var existing := _live(per_screen[id])
+		if existing != null and not existing.is_queued_for_deletion():
+			push_error("LayoutRegistry: %s duplicate id '%s'"
+					% [screen_id, id])
 	per_screen[id] = rec
 
 
