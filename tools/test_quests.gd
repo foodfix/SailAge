@@ -481,7 +481,7 @@ func _test_guild_screen() -> void:
 	_check(screen.offer_rows().size() == 2,
 		"the accepted offer leaves the screen's list")
 	# An empty list states the real reason (docs/80-* §4.7.3).
-	var empty_label: Label = screen.get_node("Layout/VBox/Offers/Empty")
+	var empty_label: Label = screen.get_node("offers/Empty")
 	_check(not empty_label.visible, "the empty line stays hidden while offers exist")
 	# Fill every slot: the list empties and the line names the slot cap.
 	screen.refresh()

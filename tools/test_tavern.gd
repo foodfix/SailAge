@@ -468,21 +468,21 @@ func _test_screen_crew_tab() -> void:
 	_make_run(CARAVEL_MIN, 1000)
 	var screen = _mount_tavern()
 	_check(screen.active_tab() == "crew", "the crew tab opens first")
-	_check(screen.get_node("Layout/VBox/Body/CrewPanel").visible,
+	_check(screen.get_node("body/CrewPanel").visible,
 		"the crew panel is visible on open")
-	_check(not screen.get_node("Layout/VBox/Body/OfficersPanel").visible,
+	_check(not screen.get_node("body/OfficersPanel").visible,
 		"the officers panel is hidden on open")
 
-	var count: Label = screen.get_node("Layout/VBox/Body/CrewPanel/CrewCount")
+	var count: Label = screen.get_node("body/CrewPanel/CrewCount")
 	_check(count.text == I18n.fmt("tavern.crew_count", {"crew": 15, "max": 45}),
 		"crew row reads 15/45 (%s)" % count.text)
-	var per_head: Label = screen.get_node("Layout/VBox/Body/CrewPanel/PerHead")
+	var per_head: Label = screen.get_node("body/CrewPanel/PerHead")
 	_check(per_head.text == I18n.fmt("tavern.per_head", {"price": 20}),
 		"cost preview reads 20g per head (%s)" % per_head.text)
 
-	var hire_1: Button = screen.get_node("Layout/VBox/Body/CrewPanel/HireRow/Hire1")
-	var hire_10: Button = screen.get_node("Layout/VBox/Body/CrewPanel/HireRow/Hire10")
-	var fill: Button = screen.get_node("Layout/VBox/Body/CrewPanel/HireRow/Fill")
+	var hire_1: Button = screen.get_node("body/CrewPanel/HireRow/Hire1")
+	var hire_10: Button = screen.get_node("body/CrewPanel/HireRow/Hire10")
+	var fill: Button = screen.get_node("body/CrewPanel/HireRow/Fill")
 	_check(hire_1.text == I18n.fmt("tavern.hire", {"qty": 1}), "Hire 1 label")
 	_check(hire_10.text == I18n.fmt("tavern.hire", {"qty": 10}), "Hire 10 label")
 	_check(fill.text == I18n.t_key("tavern.fill"), "Fill label")
@@ -504,7 +504,7 @@ func _test_screen_crew_tab() -> void:
 	_check(TavernEngineLib.crew() == CARAVEL_MAX, "the Fill button tops up to 45")
 	_check(hire_1.disabled and hire_10.disabled and fill.disabled,
 		"all hire buttons disable at crew_max")
-	var reason: Label = screen.get_node("Layout/VBox/Body/CrewPanel/Reason")
+	var reason: Label = screen.get_node("body/CrewPanel/Reason")
 	_check(reason.visible and not reason.text.is_empty(),
 		"a disabled reason is shown at the cap (%s)" % reason.text)
 	_check(reason.text.contains("45"), "the cap reason names crew_max 45 (%s)"
@@ -524,14 +524,14 @@ func _test_screen_crew_tab() -> void:
 	# Fire buttons: disabled at crew_min, enabled above, "Down to min" exact.
 	_make_run(CARAVEL_MIN, 1000)
 	screen.refresh()
-	var fire_1: Button = screen.get_node("Layout/VBox/Body/CrewPanel/FireRow/Fire1")
-	var fire_10: Button = screen.get_node("Layout/VBox/Body/CrewPanel/FireRow/Fire10")
-	var down: Button = screen.get_node("Layout/VBox/Body/CrewPanel/FireRow/DownToMin")
+	var fire_1: Button = screen.get_node("body/CrewPanel/FireRow/Fire1")
+	var fire_10: Button = screen.get_node("body/CrewPanel/FireRow/Fire10")
+	var down: Button = screen.get_node("body/CrewPanel/FireRow/DownToMin")
 	_check(fire_1.disabled and fire_10.disabled and down.disabled,
 		"all fire buttons disable at crew_min")
 	_check(not fire_1.tooltip_text.is_empty(),
 		"a disabled fire button explains the floor (%s)" % fire_1.tooltip_text)
-	var min_note: Label = screen.get_node("Layout/VBox/Body/CrewPanel/MinNote")
+	var min_note: Label = screen.get_node("body/CrewPanel/MinNote")
 	_check(min_note.text == I18n.fmt("tavern.crew_min_note", {"crew": 15}),
 		"the crew_min note reads 15 (%s)" % min_note.text)
 
@@ -557,9 +557,9 @@ func _test_screen_crew_tab() -> void:
 		"the crew row rebinds in zh (%s)" % count.text)
 	_check(per_head.text == I18n.fmt("tavern.per_head", {"price": 20}),
 		"the per-head preview rebinds in zh (%s)" % per_head.text)
-	_check(screen.get_node("Layout/VBox/Tabs/CrewTab").text ==
+	_check(screen.get_node("tabs/CrewTab").text ==
 		I18n.t_key("tavern.crew_tab"), "the crew tab label rebinds in zh")
-	_check(screen.get_node("Layout/VBox/Tabs/OfficersTab").text ==
+	_check(screen.get_node("tabs/OfficersTab").text ==
 		I18n.t_key("tavern.officers_tab"), "the officers tab label rebinds in zh")
 	I18n.set_locale("en")
 	screen.refresh()
@@ -600,13 +600,13 @@ func _test_screen_officers_tab() -> void:
 
 	screen.select_tab("officers")
 	_check(screen.active_tab() == "officers", "the officers tab can be selected")
-	_check(screen.get_node("Layout/VBox/Body/OfficersPanel").visible,
+	_check(screen.get_node("body/OfficersPanel").visible,
 		"the officers panel is visible")
-	_check(not screen.get_node("Layout/VBox/Body/CrewPanel").visible,
+	_check(not screen.get_node("body/CrewPanel").visible,
 		"the crew panel is hidden")
 
-	var list: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/OfficersPanel/RecruitableScroll/Recruitable"
+	var list: Control = screen.get_node(
+		"body/OfficersPanel/RecruitableScroll/Recruitable"
 	)
 	# Lisbon's v2 pool: Mateus plus the legends banded there.
 	var lisbon_pool: Array = TavernEngineLib.officers_at_port("lisbon")
@@ -617,17 +617,15 @@ func _test_screen_officers_tab() -> void:
 	if row == null:
 		_unmount_tavern()
 		return
-	var info: VBoxContainer = row.get_child(0)
-	_check(info.get_node("Name").text ==
+	_check((row.get_node("Name") as Label).text ==
 		I18n.t(DataLoader.get_officer("off_mateus_alvares")["name"]),
 		"the row shows the officer's data name")
-	_check(not info.get_node("Role").text.begins_with("<")
-		and not info.get_node("Stats").text.begins_with("<"),
+	_check(not (row.get_node("Role") as Label).text.begins_with("<")
+		and not (row.get_node("Stats") as Label).text.begins_with("<"),
 		"the row renders no raw i18n keys for the retired role/stats fields")
 
-	var action: VBoxContainer = row.get_child(1)
-	var cost: Label = action.get_node("Cost")
-	var recruit: Button = action.get_node("Recruit")
+	var cost: Label = row.get_node("Cost")
+	var recruit: Button = row.get_node("Recruit")
 	_check(cost.text == I18n.fmt("tavern.signing_cost", {"amount": 300}),
 		"the signing cost reads 300g at CHA 10 (%s)" % cost.text)
 	_check(recruit.text == I18n.t_key("tavern.recruit"), "the button says Recruit")
@@ -641,8 +639,8 @@ func _test_screen_officers_tab() -> void:
 	_check(list.get_node_or_null("Officer_off_mateus_alvares") == null,
 		"the officer leaves the recruitable list")
 
-	var roster: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/OfficersPanel/RosterScroll/Roster"
+	var roster: Control = screen.get_node(
+		"body/OfficersPanel/RosterScroll/Roster"
 	)
 	var employed_row: Control = roster.get_node_or_null(
 		"Employed_off_mateus_alvares")
@@ -673,7 +671,7 @@ func _test_screen_officers_tab() -> void:
 			break
 		CharacterLib.recruit(str(officer["id"]))
 	screen.refresh()
-	var reason: Label = screen.get_node("Layout/VBox/Body/OfficersPanel/Reason")
+	var reason: Label = screen.get_node("body/OfficersPanel/Reason")
 	_check(reason.visible, "a full-roster reason is shown")
 	_check(reason.text == I18n.fmt("char.officers_full", {"max": 12}),
 		"the reason uses char.officers_full with 12 (%s)" % reason.text)
@@ -685,7 +683,7 @@ func _test_screen_officers_tab() -> void:
 	var fresh_row: Control = list.get_node_or_null("Officer_off_mateus_alvares")
 	_check(fresh_row != null, "the fresh run lists Mateus again")
 	if fresh_row != null:
-		var button2: Button = fresh_row.get_child(1).get_node("Recruit")
+		var button2: Button = fresh_row.get_node("Recruit")
 		_check(button2.disabled, "Recruit is disabled at 100g for a 300g officer")
 		_check(not button2.tooltip_text.is_empty(),
 			"the disabled recruit button shows the price (%s)" % button2.tooltip_text)
@@ -702,11 +700,11 @@ func _test_screen_officers_tab() -> void:
 	GameState.current_port = "lisbon"
 	I18n.set_locale("zh")
 	screen.refresh()
-	_check(screen.get_node("Layout/VBox/Header/Title").text ==
+	_check(screen.get_node("header/Title").text ==
 		I18n.fmt("tavern.title", {
 			"port": I18n.t(DataLoader.get_port("lisbon")["name"]),
 		}), "the title rebinds in zh (%s)"
-		% screen.get_node("Layout/VBox/Header/Title").text)
+		% screen.get_node("header/Title").text)
 	I18n.set_locale("en")
 
 
@@ -721,20 +719,20 @@ func _test_screen_rumors_tab() -> void:
 
 	screen.select_tab("rumors")
 	_check(screen.active_tab() == "rumors", "the rumours tab can be selected")
-	_check(screen.get_node("Layout/VBox/Body/RumorsPanel").visible,
+	_check(screen.get_node("body/RumorsPanel").visible,
 		"the rumours panel is visible")
-	_check(not screen.get_node("Layout/VBox/Body/CrewPanel").visible,
+	_check(not screen.get_node("body/CrewPanel").visible,
 		"the crew panel is hidden on the rumours tab")
-	_check(screen.get_node("Layout/VBox/Tabs/RumorsTab").text
+	_check(screen.get_node("tabs/RumorsTab").text
 		== I18n.t_key("tavern.rumor_tab"), "the tab says Rumours")
 
-	var price: Label = screen.get_node("Layout/VBox/Body/RumorsPanel/Price")
+	var price: Label = screen.get_node("body/RumorsPanel/Price")
 	_check(price.text == I18n.fmt("tavern.rumor.price", {"gold": 100}),
 		"the tab shows the 100g price (%s)" % price.text)
 
 	# The monthly tournament is announced here too (§4.6).
 	var announce: Label = screen.get_node(
-		"Layout/VBox/Body/RumorsPanel/Tournament")
+		"body/RumorsPanel/Tournament")
 	var status: Dictionary = TournamentLib.status("lisbon", GameState.day)
 	var expected_announce := I18n.fmt("tournament.status", {
 		"port": I18n.t(DataLoader.get_port(str(status["host"]))["name"]),
@@ -747,8 +745,8 @@ func _test_screen_rumors_tab() -> void:
 	_check(announce.text == expected_announce,
 		"the tab announces this month's tournament (%s)" % announce.text)
 
-	var rows: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/RumorsPanel/Scroll/Rows"
+	var rows: Control = screen.get_node(
+		"body/RumorsPanel/Scroll/Rows"
 	)
 	_check(rows.get_child_count() == DiscoveryLib.HINTS_PER_VISIT,
 		"up to three hint rows are listed (%d)" % rows.get_child_count())
@@ -762,7 +760,7 @@ func _test_screen_rumors_tab() -> void:
 	_check(hint_label.text == I18n.t(
 		DataLoader.get_discovery(discovery_id)["region_hint"]),
 		"the row shows the region hint free")
-	var buy: Button = row.get_node("Bottom/Buy")
+	var buy: Button = row.get_node("Buy")
 	_check(buy.text == I18n.t_key("tavern.rumor.buy"),
 		"the buy button says Buy the rumour (%s)" % buy.text)
 	_check(not buy.disabled, "Buy is enabled with 1000g")
@@ -774,10 +772,10 @@ func _test_screen_rumors_tab() -> void:
 	_check(DiscoveryLib.is_hinted(discovery_id),
 		"the bought hint is marked hinted")
 	row = rows.get_child(0)
-	_check(row.get_node("Bottom/Name").text
+	_check(row.get_node("Name").text
 		== I18n.t(DataLoader.get_discovery(discovery_id)["name"]),
 		"the discovery name is revealed after buying")
-	var buy2: Button = row.get_node("Bottom/Buy")
+	var buy2: Button = row.get_node("Buy")
 	_check(buy2.disabled, "a hinted rumour cannot be bought twice")
 	_check(buy2.text == I18n.t_key("tavern.rumor.bought"),
 		"the bought row reads Already known (%s)" % buy2.text)
@@ -787,7 +785,7 @@ func _test_screen_rumors_tab() -> void:
 	_make_run(CARAVEL_MIN, 99)
 	GameState.day = 12
 	screen.refresh()
-	var poor: Button = rows.get_child(0).get_node("Bottom/Buy")
+	var poor: Button = rows.get_child(0).get_node("Buy")
 	_check(poor.disabled, "Buy is disabled with 99g")
 	_check(poor.tooltip_text == I18n.t_key("tavern.rumor.no_gold"),
 		"the disabled reason is tavern.rumor.no_gold (%s)" % poor.tooltip_text)
@@ -797,7 +795,7 @@ func _test_screen_rumors_tab() -> void:
 	for entry in DataLoader.discoveries_list:
 		GameState.discoveries_found.append(str((entry as Dictionary)["id"]))
 	screen.refresh()
-	var empty: Label = screen.get_node("Layout/VBox/Body/RumorsPanel/Empty")
+	var empty: Label = screen.get_node("body/RumorsPanel/Empty")
 	_check(empty.visible and empty.text == I18n.t_key("tavern.rumor.none"),
 		"all discoveries found shows tavern.rumor.none (%s)" % empty.text)
 

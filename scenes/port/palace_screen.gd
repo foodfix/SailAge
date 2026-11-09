@@ -46,10 +46,8 @@ const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 ## Phase-8 W5-C (docs/80-* §4.11.3): the dossier flag goes through the W4-A
 ## module (the panel itself is W6-A's — this screen owns only the entry).
 const CaptainsLib := preload("res://scripts/world/captains.gd")
-## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
-## every persistent control registers at build time with a stable
-## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
-## no-op (registration only, nothing moves).
+## The Phase-12 absolute-tile layout registry (docs/80-* §4.8.9): the data
+## file is the layout; the registration below feeds the capture fragment.
 const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 ## §4.1b port hours (added 2026-11-02): the bay fill action's window guard and
@@ -63,6 +61,34 @@ const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
 const BATTLE_SCENE := "res://scenes/combat/battle_screen.tscn"
 ## This screen's id in the registry (LayoutRegistry.SCREENS).
 const LAYOUT_SCREEN := "palace"
+
+## --- The authored tile table (parent-relative 32-px tiles; Phase 12) ---------
+## One tile = `Palette.CHROME_TILE`. The screen root is the canvas; the rows
+## group carries its own rect and its row groups address the group's space.
+## The board/inform sections are dynamic list blocks (non-scrolling: the
+## block's viewport is the base itself); a row's parts are absolutely-placed
+## children of the row node.
+const TILE := PaletteLib.CHROME_TILE
+## The bounty-board list block (content-node tiles): row *i* at
+## `(0, i·row_h)` — a 2-tile row (the 64-px dossier button sets the pitch).
+const BOARD_LIST := "board"
+const BOARD_W := 58
+const BOARD_ROW_H := 2
+## Board-row internals (row-local tiles): the §4.8 badge slot, the sighting
+## line, and the open-dossier verb at the right edge.
+const BOARD_BADGE_RECT := Rect2i(0, 0, 1, 2)
+const BOARD_TEXT_W := 41
+const BOARD_DOSSIER_RECT := Rect2i(51, 0, 7, 2)
+## The inform list block: same 2-tile pitch.
+const INFORM_LIST := "inform"
+const INFORM_W := 58
+const INFORM_ROW_H := 2
+## Inform-row internals: badge · wanted caption · the 500g inform verb · the
+## dossier entry.
+const INFORM_BADGE_RECT := Rect2i(0, 0, 1, 2)
+const INFORM_TEXT_W := 41
+const INFORM_BUTTON_RECT := Rect2i(43, 0, 7, 2)
+const INFORM_DOSSIER_RECT := Rect2i(51, 0, 7, 2)
 
 # --- Phase-7 permit + commendation constants (docs/30-* §4.10, 70-* §4.1,
 # --- 80-* §4.7.13) ---------------------------------------------------------
@@ -122,39 +148,48 @@ signal tournament_started(round_number: int)
 
 @onready var _background: Panel = $Background
 @onready var _hud: Control = get_node_or_null("HUD")
-@onready var _title: Label = $Layout/VBox/Header/Title
-@onready var _rep: Label = $Layout/VBox/Header/Rep
-@onready var _fame: Label = $Layout/VBox/Header/Fame
-@onready var _back_button: Button = $Layout/VBox/Header/Back
-@onready var _title_row: Label = $Layout/VBox/Rows/TitleRow/Current
-@onready var _title_next: Label = $Layout/VBox/Rows/TitleRow/Next
-@onready var _ceremony: Button = $Layout/VBox/Rows/TitleRow/Ceremony
-@onready var _mission_label: Label = $Layout/VBox/Rows/MissionRow/Label
-@onready var _mission_button: Button = $Layout/VBox/Rows/MissionRow/Action
-@onready var _repair_label: Label = $Layout/VBox/Rows/RepairRow/Label
-@onready var _repair_button: Button = $Layout/VBox/Rows/RepairRow/Action
-@onready var _bounty_label: Label = $Layout/VBox/Rows/BountyRow/Label
-@onready var _bounty_button: Button = $Layout/VBox/Rows/BountyRow/Action
-@onready var _tournament_label: Label = $Layout/VBox/Rows/TournamentRow/Label
-@onready var _tournament_button: Button = $Layout/VBox/Rows/TournamentRow/Action
-@onready var _retire_button: Button = $Layout/VBox/Rows/RetireRow/Retire
+@onready var _header: Control = $header
+@onready var _title: Label = $header/Title
+@onready var _rep: Label = $header/Rep
+@onready var _fame: Label = $header/Fame
+@onready var _back_button: Button = $header/Back
+@onready var _rows: Control = $Rows
+@onready var _title_row: Label = $Rows/TitleRow/Current
+@onready var _title_next: Label = $Rows/TitleRow/Next
+@onready var _ceremony: Button = $Rows/TitleRow/Ceremony
+@onready var _mission_row: Control = $Rows/MissionRow
+@onready var _mission_label: Label = $Rows/MissionRow/Label
+@onready var _mission_button: Button = $Rows/MissionRow/Action
+@onready var _repair_row: Control = $Rows/RepairRow
+@onready var _repair_label: Label = $Rows/RepairRow/Label
+@onready var _repair_button: Button = $Rows/RepairRow/Action
+@onready var _bounty_row: Control = $Rows/BountyRow
+@onready var _bounty_label: Label = $Rows/BountyRow/Label
+@onready var _bounty_button: Button = $Rows/BountyRow/Action
+@onready var _permit_header: Label = $Rows/PermitHeader
+@onready var _permit_home_row: Control = $Rows/PermitHomeRow
+@onready var _permit_foreign_row: Control = $Rows/PermitForeignRow
+@onready var _tournament_row: Control = $Rows/TournamentRow
+@onready var _tournament_label: Label = $Rows/TournamentRow/Label
+@onready var _tournament_button: Button = $Rows/TournamentRow/Action
+@onready var _retire_row: Control = $Rows/RetireRow
+@onready var _retire_button: Button = $Rows/RetireRow/Retire
 @onready var _confirm: Control = $ConfirmDialog
 ## The §4.7.13 commendation dialog (message + OK chrome, `dialog_box.tscn`).
 @onready var _commend: Control = $CommendDialog
 ## Phase-7 permit section (§4.7.13): header + one row per applicable kind.
-@onready var _permit_header: Label = $Layout/VBox/Rows/PermitHeader
 @onready var _permit_rows: Dictionary = {
 	PERMIT_HOME: {
-		"row": $Layout/VBox/Rows/PermitHomeRow,
-		"label": $Layout/VBox/Rows/PermitHomeRow/Label,
-		"note": $Layout/VBox/Rows/PermitHomeRow/Note,
-		"buy": $Layout/VBox/Rows/PermitHomeRow/Action,
+		"row": $Rows/PermitHomeRow,
+		"label": $Rows/PermitHomeRow/Label,
+		"note": $Rows/PermitHomeRow/Note,
+		"buy": $Rows/PermitHomeRow/Action,
 	},
 	PERMIT_FOREIGN: {
-		"row": $Layout/VBox/Rows/PermitForeignRow,
-		"label": $Layout/VBox/Rows/PermitForeignRow/Label,
-		"note": $Layout/VBox/Rows/PermitForeignRow/Note,
-		"buy": $Layout/VBox/Rows/PermitForeignRow/Action,
+		"row": $Rows/PermitForeignRow,
+		"label": $Rows/PermitForeignRow/Label,
+		"note": $Rows/PermitForeignRow/Note,
+		"buy": $Rows/PermitForeignRow/Action,
 	},
 }
 ## Ids behind the open commendation, so a locale change recomposes the text.
@@ -169,13 +204,13 @@ var bout_pending: bool = false
 ## Task L (§4.7.8): the bounty board (code-built above the footer) —
 ## docked hunter captains. Hunter sightings are palace-only.
 var _board_header: Label = null
-var _board_box: VBoxContainer = null
+var _board_box: Control = null
 var _hunter_rows: Array = []
 ## Phase-8 W5-C (docs/80-* §4.11.1): the inform-on-pirates section, built
 ## under the bounty board — wanted pirate/privateer rows with the fixed 500g
 ## reveal + the dossier entry.
 var _inform_header: Label = null
-var _inform_box: VBoxContainer = null
+var _inform_box: Control = null
 var _inform_rows: Array = []
 ## Fleet ids already informed on this visit → their reveal text (re-rendered
 ## after every rebuild, the tavern's `_revealed` discipline).
@@ -224,6 +259,9 @@ func _ready() -> void:
 		_confirm.confirmed.connect(retire)
 	_port_id = _read_current_port()
 	_nation_id = PalaceEngineLib.nation_of(_port_id)
+	# Phase 12 (§4.8.9): the authored tile rects — every static at its data
+	# rect, the groups as plain Controls, before anything registers.
+	_place_statics()
 	_build_bounty_board()
 	_build_inform_section()
 	_register_layout()
@@ -247,6 +285,59 @@ func _ready() -> void:
 	if next_round > 0:
 		bout_pending = true
 		call_deferred("_start_bout", next_round)
+
+
+## Phase 12 (§4.8.9): one authored rect = one `position`/`size` write, in
+## the DIRECT parent's tile space (point anchors everywhere; nothing is
+## stretched).
+func _place(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(TILE)
+	control.size = Vector2(rect.size) * float(TILE)
+
+
+## The authored tile table — today's captured look, flattened to the grid
+## (see the fragment this screen's capture emits: `data/layout_fragments/
+## palace.json`).
+func _place_statics() -> void:
+	_place(_header, Rect2i(1, 1, 58, 2))
+	_place(_title, Rect2i(0, 0, 46, 1))
+	_place(_rep, Rect2i(46, 1, 5, 1))
+	_place(_fame, Rect2i(52, 1, 2, 1))
+	_place(_back_button, Rect2i(54, 0, 4, 2))
+	_place(_rows, Rect2i(1, 3, 58, 25))
+	_place($Rows/TitleRow, Rect2i(0, 0, 58, 2))
+	_place(_title_row, Rect2i(0, 1, 9, 1))
+	_place(_title_next, Rect2i(9, 1, 42, 1))
+	_place(_ceremony, Rect2i(51, 0, 7, 2))
+	_place(_mission_row, Rect2i(0, 2, 58, 2))
+	_place(_mission_label, Rect2i(0, 1, 51, 1))
+	_place(_mission_button, Rect2i(51, 0, 7, 2))
+	_place(_repair_row, Rect2i(0, 4, 58, 2))
+	_place(_repair_label, Rect2i(0, 1, 51, 1))
+	_place(_repair_button, Rect2i(51, 0, 7, 2))
+	_place(_bounty_row, Rect2i(0, 6, 58, 2))
+	_place(_bounty_label, Rect2i(0, 1, 51, 1))
+	_place(_bounty_button, Rect2i(51, 0, 7, 2))
+	_place(_permit_header, Rect2i(0, 8, 58, 1))
+	_place(_permit_home_row, Rect2i(0, 9, 58, 2))
+	_place(_permit_rows[PERMIT_HOME]["label"] as Control,
+		Rect2i(0, 0, 36, 2))
+	_place(_permit_rows[PERMIT_HOME]["note"] as Control,
+		Rect2i(36, 0, 15, 2))
+	_place(_permit_rows[PERMIT_HOME]["buy"] as Control, Rect2i(51, 0, 7, 2))
+	_place(_permit_foreign_row, Rect2i(0, 11, 58, 2))
+	_place(_permit_rows[PERMIT_FOREIGN]["label"] as Control,
+		Rect2i(0, 0, 36, 2))
+	_place(_permit_rows[PERMIT_FOREIGN]["note"] as Control,
+		Rect2i(36, 0, 15, 2))
+	_place(_permit_rows[PERMIT_FOREIGN]["buy"] as Control,
+		Rect2i(51, 0, 7, 2))
+	_place(_tournament_row, Rect2i(0, 13, 58, 2))
+	_place(_tournament_label, Rect2i(0, 1, 50, 1))
+	_place(_tournament_button, Rect2i(50, 0, 8, 2))
+	_place(_retire_row, Rect2i(0, 15, 58, 2))
+	_place(_retire_button, Rect2i(0, 0, 7, 2))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -608,19 +699,30 @@ func hunter_rows() -> Array:
 	return _hunter_rows.duplicate()
 
 
-## Builds the board shell once (header + rows box) above the footer.
+## Builds the board shell once (header + rows group) under the rows group,
+## at its authored rects. The rows group is the board list block's content
+## node (a plain Control — nothing inside it is flow-laid).
 func _build_bounty_board() -> void:
-	var footer: Control = $Layout/VBox/Footer
-	var layout: Node = footer.get_parent()
-	var footer_index := footer.get_index()
 	_board_header = Label.new()
 	_board_header.name = "BountyBoardHeader"
-	layout.add_child(_board_header)
-	_board_box = VBoxContainer.new()
+	add_child(_board_header)
+	_place(_board_header, Rect2i(1, 21, 58, 1))
+	_board_box = Control.new()
 	_board_box.name = "BountyBoardRows"
-	layout.add_child(_board_box)
-	layout.move_child(_board_header, footer_index)
-	layout.move_child(_board_box, footer_index + 1)
+	_board_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_board_box)
+	_place(_board_box, Rect2i(1, 22, 58, 4))
+
+
+## Row *i*'s rect for a non-scrolling list block — px in the rows group's
+## space: the data block when managed, the same tiles authored otherwise.
+func _list_row_rect(list_id: String, index: int, w: int, row_h: int) -> Rect2:
+	var rect := RegistryLib.list_rect(LAYOUT_SCREEN, list_id, index)
+	if rect != Rect2():
+		return rect
+	return Rect2(
+		Vector2(0, index * row_h) * float(TILE),
+		Vector2(w, row_h) * float(TILE))
 
 
 ## The docked hunter captains sighted at this port (§4.7.8: the bounty board
@@ -646,58 +748,72 @@ func _bind_bounty_board() -> void:
 			"role": str(entry.get("role", "")),
 			"nation_id": str(entry.get("nation_id", "")),
 		})
+	var entries: Array = []
 	if _hunter_rows.is_empty():
 		var empty := Label.new()
 		empty.name = "Empty"
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_board_box.add_child(empty)
+		_place(empty, Rect2i(0, 0, BOARD_W, 1))
 		_register_dynamic("board", [{
 			"control": empty, "id": "board.rows.empty",
 			"opts": {"role": RegistryLib.ROLE_PLAIN},
 		}])
 		return
-	var entries: Array = []
+	var index := 0
 	for entry in _hunter_rows:
-		var row := HBoxContainer.new()
-		row.name = "Hunter_%s" % str(entry["id"])
-		# §4.8 role badge on the sighting row (the flat fallback renders
-		# nothing until the registry fills at W4-D).
-		var badge_icon := _attach_role_badge(row, str(entry["role"]))
-		var text := Label.new()
-		text.name = "Text"
-		text.text = "%s · %s" % [str(entry["name"]),
-			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(text)
-		var dossier := UiKitLib.button("dossier.open_from_bounty")
-		dossier.name = "Dossier"
-		dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-		dossier.pressed.connect(_open_dossier.bind(
-			str(entry.get("captain_id", ""))))
-		row.add_child(dossier)
-		_board_box.add_child(row)
-		var row_id := "board.rows.%s" % str(entry["id"])
-		entries.append_array([
-			{"control": row, "id": row_id, "opts": {
-				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
-			{"control": text, "id": "%s.text" % row_id,
-				"opts": {"role": RegistryLib.ROLE_PLAIN}},
-			{"control": dossier, "id": "%s.dossier" % row_id,
-				"opts": {"role": RegistryLib.ROLE_BUTTON}},
-		])
-		if badge_icon != null:
-			entries.append({
-				"control": badge_icon, "id": "%s.badge" % row_id,
-				"opts": {"role": RegistryLib.ROLE_PLAIN},
-			})
+		_build_hunter_row(entry, index, entries)
+		index += 1
 	_register_dynamic("board", entries)
+
+
+## One bounty row: a plain Control at the block's row rect; the §4.8 badge,
+## the sighting line and the open-dossier verb are absolutely-placed children
+## of the row (no per-row flow containers, §4.8.9). The row is a list member
+## (`board`); its parts are unregistered (locked viewport blocks in the
+## studio).
+func _build_hunter_row(entry: Dictionary, index: int, entries: Array) -> void:
+	var row := Control.new()
+	row.name = "Hunter_%s" % str(entry["id"])
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_board_box.add_child(row)
+	var rect := _list_row_rect(BOARD_LIST, index, BOARD_W, BOARD_ROW_H)
+	row.position = rect.position
+	row.size = rect.size
+	var row_id := "board.rows.%s" % str(entry["id"])
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+			"list": BOARD_LIST},
+	})
+	# §4.8 role badge on the sighting row (the flat fallback renders
+	# nothing until the registry fills at W4-D).
+	var badge_icon := _attach_role_badge(row, str(entry["role"]))
+	var text_x := 0
+	if badge_icon != null:
+		_place(badge_icon, BOARD_BADGE_RECT)
+		text_x = 1
+	var text := Label.new()
+	text.name = "Text"
+	text.text = "%s · %s" % [str(entry["name"]),
+		I18n.t_key("captain.role.%s" % str(entry["role"]))]
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(text)
+	_place(text, Rect2i(text_x, 0, BOARD_TEXT_W - text_x, 2))
+	var dossier := UiKitLib.button("dossier.open_from_bounty")
+	dossier.name = "Dossier"
+	dossier.pressed.connect(_open_dossier.bind(
+		str(entry.get("captain_id", ""))))
+	row.add_child(dossier)
+	_place(dossier, BOARD_DOSSIER_RECT)
 
 
 ## Prepends the §4.8 `role_{role}` badge to a board/inform row; an absent id
 ## or an unknown role adds nothing (the flat fallback). Returns the badge
-## icon (null when nothing was added — the row registration's read).
-func _attach_role_badge(row: HBoxContainer, role: String) -> Control:
+## icon (null when nothing was added — the row registration's read). The
+## caller places the returned icon inside the row (the badge slot rect).
+func _attach_role_badge(row: Control, role: String) -> Control:
 	if role.is_empty():
 		return null
 	var texture := UiKitLib.hero_texture("role_%s" % role)
@@ -706,11 +822,11 @@ func _attach_role_badge(row: HBoxContainer, role: String) -> Control:
 	var icon := TextureRect.new()
 	icon.name = "RoleBadge"
 	icon.texture = texture
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.custom_minimum_size = Vector2(32, 32)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	row.add_child(icon)
-	row.move_child(icon, 0)
 	return icon
 
 
@@ -736,18 +852,18 @@ func dossiers_opened() -> Array:
 	return _dossiers_opened.duplicate()
 
 
-## Builds the inform section shell once (header + rows box), under the bounty
-## board and above the footer.
+## Builds the inform section shell once (header + rows group), under the
+## bounty board, at its authored rects.
 func _build_inform_section() -> void:
-	var layout: Node = _board_box.get_parent()
 	_inform_header = Label.new()
 	_inform_header.name = "InformHeader"
-	layout.add_child(_inform_header)
-	_inform_box = VBoxContainer.new()
+	add_child(_inform_header)
+	_place(_inform_header, Rect2i(1, 27, 58, 1))
+	_inform_box = Control.new()
 	_inform_box.name = "InformRows"
-	layout.add_child(_inform_box)
-	layout.move_child(_inform_header, _board_box.get_index() + 1)
-	layout.move_child(_inform_box, _inform_header.get_index() + 1)
+	_inform_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_inform_box)
+	_place(_inform_box, Rect2i(1, 28, 58, 4))
 
 
 ## Binds the inform rows: every at-sea pirate/privateer within the poster
@@ -781,75 +897,85 @@ func _bind_inform_rows() -> void:
 			"reward_gold": int(poster.get("reward_gold", 0)),
 		})
 	var entries: Array = []
+	var index := 0
 	for row in _inform_rows:
-		_inform_box.add_child(_build_inform_row(row, entries))
+		_build_inform_row(row, index, entries)
+		index += 1
 	for fleet_id in _informed:
 		var line := Label.new()
 		line.name = "InformText_%s" % str(fleet_id)
 		line.text = str(_informed[fleet_id])
 		_inform_box.add_child(line)
+		var rect := _list_row_rect(INFORM_LIST, index, INFORM_W,
+			INFORM_ROW_H)
+		line.position = rect.position
+		line.size = rect.size
+		index += 1
 		entries.append({
 			"control": line,
 			"id": "inform.rows.text.%s" % str(fleet_id), "opts": {
-				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true},
+				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+				"list": INFORM_LIST},
 		})
 	_register_dynamic("inform", entries)
 
 
 ## One inform row: the wanted caption (the §4.7.8 poster title) with the
 ## captain's §4.8 role badge, the fixed 500g inform action, and the dossier
-## entry.
-func _build_inform_row(row: Dictionary, entries: Array) -> Control:
-	var box := HBoxContainer.new()
-	box.name = "Inform_%s" % str(row["id"])
-	var badge_icon := _attach_role_badge(box, str(CaptainsLib.captain(
-		str(row.get("captain_id", ""))).get("role", "")))
+## entry — absolutely-placed children of a plain Control at the block's row
+## rect (a `inform` list member; parts unregistered).
+func _build_inform_row(row_data: Dictionary, index: int,
+		entries: Array) -> void:
+	var row := Control.new()
+	row.name = "Inform_%s" % str(row_data["id"])
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_inform_box.add_child(row)
+	var rect := _list_row_rect(INFORM_LIST, index, INFORM_W, INFORM_ROW_H)
+	row.position = rect.position
+	row.size = rect.size
+	var badge_icon := _attach_role_badge(row, str(CaptainsLib.captain(
+		str(row_data.get("captain_id", ""))).get("role", "")))
+	var text_x := 0
+	if badge_icon != null:
+		_place(badge_icon, INFORM_BADGE_RECT)
+		text_x = 1
 
 	var text := Label.new()
 	text.name = "Text"
 	text.text = I18n.fmt("captain.poster.title", {
-		"name": str(row.get("name", "")),
-		"tier": int(row.get("tier", 1)),
+		"name": str(row_data.get("name", "")),
+		"tier": int(row_data.get("tier", 1)),
 	})
 	# The §4.8 danger tint marks a wanted poster (the theme's `Bad`
 	# variation).
 	text.theme_type_variation = "Bad"
-	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(text)
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(text)
+	_place(text, Rect2i(text_x, 0, INFORM_TEXT_W - text_x, 2))
 
 	var inform := Button.new()
 	inform.name = "Inform"
 	inform.text = _inform_text("palace.inform.action")
-	inform.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	if not PalaceEngineLib.can_inform(_port_id):
 		inform.disabled = true
 		inform.tooltip_text = I18n.t_key("captain.reveal.no_gold")
 	else:
-		inform.pressed.connect(inform_on.bind(str(row.get("id", ""))))
-	box.add_child(inform)
+		inform.pressed.connect(inform_on.bind(str(row_data.get("id", ""))))
+	row.add_child(inform)
+	_place(inform, INFORM_BUTTON_RECT)
 
 	var dossier := UiKitLib.button("dossier.open_from_bounty")
 	dossier.name = "Dossier"
-	dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-	dossier.pressed.connect(_open_dossier.bind(str(row.get("captain_id", ""))))
-	box.add_child(dossier)
-	var row_id := "inform.rows.%s" % str(row["id"])
-	entries.append_array([
-		{"control": box, "id": row_id, "opts": {
-			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
-		{"control": text, "id": "%s.text" % row_id,
-			"opts": {"role": RegistryLib.ROLE_PLAIN}},
-		{"control": inform, "id": "%s.inform" % row_id,
-			"opts": {"role": RegistryLib.ROLE_BUTTON}},
-		{"control": dossier, "id": "%s.dossier" % row_id,
-			"opts": {"role": RegistryLib.ROLE_BUTTON}},
-	])
-	if badge_icon != null:
-		entries.append({
-			"control": badge_icon, "id": "%s.badge" % row_id,
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
-		})
-	return box
+	dossier.pressed.connect(_open_dossier.bind(
+		str(row_data.get("captain_id", ""))))
+	row.add_child(dossier)
+	_place(dossier, INFORM_DOSSIER_RECT)
+	var row_id := "inform.rows.%s" % str(row_data["id"])
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+			"list": INFORM_LIST},
+	})
 
 
 ## The inform click (§4.11.1): the fixed 500g reveal — the engine charges and
@@ -1204,65 +1330,60 @@ func _set_commend_button() -> void:
 
 # --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
 
-## Registers every persistent control with its stable hierarchical id —
-## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
-## apply walk changes nothing (no moves, no resizes, no restyles). The
-## shared dialogs register as whole surfaces only (their internals are the
-## ui_shared fast-follow, §4.8.9 scope note).
+## Registers every persistent control with its stable hierarchical id. The
+## statics carry the authored rects above (the capture emits them as the
+## screen's fragment); the board/inform rows are list members — their ids
+## carry the `list` flag and take `list_rect` positions. The shared dialogs
+## register as whole surfaces only (their internals are the ui_shared
+## fast-follow, §4.8.9 scope note).
 func _register_layout() -> void:
 	_reg(_background, "background", RegistryLib.ROLE_PANEL)
-	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_header, "header", RegistryLib.ROLE_PLAIN)
 	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
 	_reg(_rep, "header.rep", RegistryLib.ROLE_PLAIN)
 	_reg(_fame, "header.fame", RegistryLib.ROLE_PLAIN)
 	_reg(_back_button, "header.back", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows, "rows", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Rows/TitleRow, "rows.title", RegistryLib.ROLE_PLAIN)
+	_reg(_rows, "rows", RegistryLib.ROLE_PLAIN)
+	_reg($Rows/TitleRow, "rows.title", RegistryLib.ROLE_PLAIN)
 	_reg(_title_row, "rows.title.current", RegistryLib.ROLE_PLAIN)
 	_reg(_title_next, "rows.title.next", RegistryLib.ROLE_PLAIN)
 	_reg(_ceremony, "rows.title.ceremony", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/MissionRow, "rows.mission", RegistryLib.ROLE_PLAIN)
+	_reg(_mission_row, "rows.mission", RegistryLib.ROLE_PLAIN)
 	_reg(_mission_label, "rows.mission.label", RegistryLib.ROLE_PLAIN)
 	_reg(_mission_button, "rows.mission.action", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/RepairRow, "rows.repair", RegistryLib.ROLE_PLAIN)
+	_reg(_repair_row, "rows.repair", RegistryLib.ROLE_PLAIN)
 	_reg(_repair_label, "rows.repair.label", RegistryLib.ROLE_PLAIN)
 	_reg(_repair_button, "rows.repair.action", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/BountyRow, "rows.bounty", RegistryLib.ROLE_PLAIN)
+	_reg(_bounty_row, "rows.bounty", RegistryLib.ROLE_PLAIN)
 	_reg(_bounty_label, "rows.bounty.label", RegistryLib.ROLE_PLAIN)
 	_reg(_bounty_button, "rows.bounty.action", RegistryLib.ROLE_BUTTON)
 	_reg(_permit_header, "rows.permit_header", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Rows/PermitHomeRow, "rows.permit_home",
-		RegistryLib.ROLE_PLAIN)
+	_reg(_permit_home_row, "rows.permit_home", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_HOME]["label"] as Control,
 		"rows.permit_home.label", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_HOME]["note"] as Control,
 		"rows.permit_home.note", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_HOME]["buy"] as Control,
 		"rows.permit_home.buy", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/PermitForeignRow, "rows.permit_foreign",
-		RegistryLib.ROLE_PLAIN)
+	_reg(_permit_foreign_row, "rows.permit_foreign", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_FOREIGN]["label"] as Control,
 		"rows.permit_foreign.label", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_FOREIGN]["note"] as Control,
 		"rows.permit_foreign.note", RegistryLib.ROLE_PLAIN)
 	_reg(_permit_rows[PERMIT_FOREIGN]["buy"] as Control,
 		"rows.permit_foreign.buy", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/TournamentRow, "rows.tournament",
-		RegistryLib.ROLE_PLAIN)
+	_reg(_tournament_row, "rows.tournament", RegistryLib.ROLE_PLAIN)
 	_reg(_tournament_label, "rows.tournament.label", RegistryLib.ROLE_PLAIN)
 	_reg(_tournament_button, "rows.tournament.action",
 		RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Rows/RetireRow, "rows.retire", RegistryLib.ROLE_PLAIN)
+	_reg(_retire_row, "rows.retire", RegistryLib.ROLE_PLAIN)
 	_reg(_retire_button, "rows.retire.button", RegistryLib.ROLE_BUTTON)
-	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Toast, "toast", RegistryLib.ROLE_PLAIN)
-	_reg($ConfirmDialog, "confirm_dialog", RegistryLib.ROLE_PLAIN)
-	_reg($CommendDialog, "commend_dialog", RegistryLib.ROLE_PLAIN)
 	_reg(_board_header, "board.header", RegistryLib.ROLE_PLAIN)
 	_reg(_board_box, "board.rows", RegistryLib.ROLE_PLAIN)
 	_reg(_inform_header, "inform.header", RegistryLib.ROLE_PLAIN)
 	_reg(_inform_box, "inform.rows", RegistryLib.ROLE_PLAIN)
+	_reg($ConfirmDialog, "confirm_dialog", RegistryLib.ROLE_PLAIN)
+	_reg($CommendDialog, "commend_dialog", RegistryLib.ROLE_PLAIN)
 
 
 ## One static registration — kind omitted (auto-derives from the parent).
@@ -1296,7 +1417,7 @@ func _register_dynamic(section: String, entries: Array) -> void:
 				continue
 			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
 				entry["opts"])
-		RegistryLib.apply_screen(LAYOUT_SCREEN)
+		RegistryLib.apply_layout(LAYOUT_SCREEN)
 	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 

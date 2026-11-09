@@ -127,8 +127,9 @@ func _test_port_facility_cards() -> void:
 		"the docked hub builds its facility cards (got %d)" % buttons.size())
 	for button in buttons:
 		var facility_id := str(button.get_meta("facility_id"))
-		var token: TextureRect = button.get_node_or_null(
-			"Card/NameRow/Token")
+		# Phase 12: the token is a direct child of the card button at its
+		# authored 2×2-tile slot (the Card/NameRow flow stack is gone).
+		var token: TextureRect = button.get_node_or_null("Token")
 		if token == null:
 			_check(false, "%s: the card carries a Token slot" % facility_id)
 			continue
@@ -144,9 +145,9 @@ func _test_port_facility_cards() -> void:
 			"%s: the token renders the 64 hero 1:1 (got %s)" % [facility_id,
 				str(token.texture.get_size()) if token.texture != null
 				else "null"])
-		_check(int(token.custom_minimum_size.x) == 64
-			and int(token.custom_minimum_size.y) == 64,
-			"%s: the token slot is 64×64 (no 32 fallback)" % facility_id)
+		_check(int(token.size.x) == 64 and int(token.size.y) == 64,
+			"%s: the token slot is the authored 64×64 rect (no 32 fallback)"
+				% facility_id)
 	hub.queue_free()
 
 
@@ -163,7 +164,7 @@ func _test_market_hero_slots() -> void:
 	screen.set("_selected_good", "wine")
 	screen._refresh_info_strip()
 	var hero: TextureRect = screen.get_node_or_null(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/GoodHero")
+		"TableFrame/Table/GoodHero")
 	if hero == null:
 		_check(false, "the market info strip mounts its hero slot")
 	else:
@@ -172,22 +173,18 @@ func _test_market_hero_slots() -> void:
 			"the info-strip hero renders the 64 good hero (got %s)"
 				% str(hero.texture.get_size() if hero.texture != null
 					else "null"))
-		_check(int(hero.custom_minimum_size.x) == 64,
-			"the info-strip hero slot is 64px")
+		_check(int(hero.size.x) == 64,
+			"the info-strip hero slot is the authored 2-tile rect (64px)")
 	# The row slots: every GoodIcon carries a 64 texture in a 64 slot; a
 	# TrendMark, when visible, is 64 too.
-	var rows_box: VBoxContainer = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows")
+	var rows_box: Control = screen.get_node(
+		"TableFrame/Table/GoodsScroll/GoodsRows")
 	var icons_ok := true
 	var trends_seen := 0
 	for row in rows_box.get_children():
 		if not str(row.name).begins_with("Row_"):
 			continue
-		var good_icon: TextureRect = row.get_node_or_null(
-			"GoodCell/GoodIcon")
-		if good_icon == null:
-			# the good cell's node path varies by column spec — walk it
-			good_icon = _find_descendant(row, "GoodIcon")
+		var good_icon: TextureRect = row.get_node_or_null("GoodIcon")
 		if good_icon == null or good_icon.texture == null \
 				or good_icon.texture.get_size() != Vector2(64, 64):
 			icons_ok = false

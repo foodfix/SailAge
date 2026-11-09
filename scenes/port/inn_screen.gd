@@ -18,6 +18,19 @@ extends Control
 ## renders and routes (docs/90-* §4 "scripts/ holds pure-logic classes").
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
+##
+## **Absolute tile layout (Phase 12 W2-A, docs/80-* §4.8.9; 10-* §4.23).** The
+## node tree IS the element tree: every group parent is a plain Control at its
+## data rect and every leaf hangs directly off its registered parent — the
+## flow containers (MarginContainer → VBox chains) are deleted. The build code
+## authors the tile rects below (today's captured look, flattened to the
+## 32-tile grid); `data/ui_layout.json` (assembled from this screen's capture
+## fragment) is the whole truth once managed — the authored values are the
+## same, so `apply_layout` is idempotent. The captains section is the screen's
+## one dynamic list: rows register `{"list": "captains"}` and take
+## [method LayoutRegistry.list_rect] positions (the same tiles as the
+## authored fallback block), and a row's parts are absolutely-placed children
+## of the row node.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
@@ -31,15 +44,30 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Task L (docs/80-* §4.7.8): the "captains resting" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
-## Phase-11 W4-C (docs/80-UI-UX.md §4.8.9): the layout-id registry seam —
-## every persistent control registers at build time with a stable
-## hierarchical id; `data/ui_layout.json` ships {} so the apply walk is a
-## no-op (registration only, nothing moves).
+## The Phase-12 absolute-tile layout registry (docs/80-* §4.8.9): the data
+## file is the layout; the registration below feeds the capture fragment.
 const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## This screen's id in the registry (LayoutRegistry.SCREENS).
 const LAYOUT_SCREEN := "inn"
+
+## --- The authored tile table (parent-relative 32-px tiles) -------------------
+## One tile = `Palette.CHROME_TILE`. The screen root is the canvas; group
+## parents carry their own rects and their children address the group's space.
+
+const TILE := PaletteLib.CHROME_TILE
+## The captains list block (content-node tiles): row *i* at
+## `(0, i·row_h)`, size `(w, row_h)` — non-scrolling, so the block's viewport
+## is the base itself (the capture emits the same values).
+const CAPTAINS_LIST := "captains"
+const CAPTAINS_BASE_W := 58
+const CAPTAINS_ROW_H := 2
+## Captain-row internals (row-local tiles): the §4.8 role badge slot, the
+## sighting line, and the limited-talk verb at the right edge.
+const CAPTAIN_BADGE_RECT := Rect2i(0, 0, 1, 2)
+const CAPTAIN_TEXT_W := 44
+const CAPTAIN_TALK_RECT := Rect2i(52, 0, 6, 2)
 
 ## Phase-8 W5-C (docs/80-* §4.11.1): the limited-talk `ui_strings` keys —
 ## reported for the W6-D residual merge; until then the rows render from this
@@ -60,7 +88,7 @@ const TALK_FALLBACK_STRINGS := {
 const MORALE_GOOD_MIN := 40
 const MORALE_WARN_MIN := 20
 
-## The morale value_bar next to the status line (built once in `_ready`,
+## The morale value_bar under the status line (built once in `_ready`,
 ## re-tiered in `_bind`). Null-safe until it is built.
 var _morale_bar: ProgressBar = null
 
@@ -74,15 +102,19 @@ signal left_inn
 
 @onready var _background: Panel = $Background
 @onready var _hud: Control = $HUD
-@onready var _title: Label = $Layout/VBox/Header/Title
-@onready var _morale_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Morale
-@onready var _gold_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Gold
-@onready var _day_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Day
-@onready var _rest_button: Button = $Layout/VBox/Actions/RestButton
-@onready var _rest_hint: Label = $Layout/VBox/Actions/RestHint
-@onready var _odd_job_button: Button = $Layout/VBox/Actions/OddJobButton
-@onready var _odd_job_hint: Label = $Layout/VBox/Actions/OddJobHint
-@onready var _back_button: Button = $Layout/VBox/Footer/Back
+@onready var _header: Control = $header
+@onready var _title: Label = $header/Title
+@onready var _status: Panel = $status
+@onready var _morale_label: Label = $status/Morale
+@onready var _gold_label: Label = $status/Gold
+@onready var _day_label: Label = $status/Day
+@onready var _actions: Control = $actions
+@onready var _rest_button: Button = $actions/RestButton
+@onready var _rest_hint: Label = $actions/RestHint
+@onready var _odd_job_button: Button = $actions/OddJobButton
+@onready var _odd_job_hint: Label = $actions/OddJobHint
+@onready var _footer: Control = $footer
+@onready var _back_button: Button = $footer/Back
 
 ## Routing switch for headless tests (the `port_screen.route_to_world`
 ## convention): with `false`, [method leave] runs the state transition and
@@ -97,10 +129,10 @@ var last_message_key: String = ""
 ## Current disabled-reason key for the odd-job button (`""` when enabled).
 var _odd_job_reason: String = ""
 
-## Task L (§4.7.8): the "captains resting" list (code-built under the odd-job
-## rows) — header + row labels and the `{id, name, role}` seam rows.
+## Task L (§4.7.8): the "captains resting" list (code-built under the actions
+## group) — header + rows group and the `{id, name, role}` seam rows.
 var _captains_header: Label = null
-var _captains_box: VBoxContainer = null
+var _captains_box: Control = null
 var _captain_rows: Array = []
 ## Phase-11 (§4.8.9): per dynamic section, true once its first build has
 ## registered (see [_register_dynamic] for the first-build/rebuild split).
@@ -113,7 +145,7 @@ func _ready() -> void:
 	GameOverHostLib.attach_to(self)
 	# Phase-10 sweep: label colors retire to the theme (TEXT is the theme
 	# default; secondary hints carry the `Dim` variation) and the status box
-	# renders the themed PanelContainer chrome — the hand-built box is gone.
+	# renders the themed Panel chrome — the hand-built box is gone.
 	_rest_hint.theme_type_variation = "Dim"
 	_odd_job_hint.theme_type_variation = "Dim"
 	for button in [_rest_button, _odd_job_button, _back_button]:
@@ -126,13 +158,17 @@ func _ready() -> void:
 	# the sea viewport (minimap + weather glyph) stays hidden as on S4.
 	_hud.set_minimap_visible(false)
 
+	# Phase 12 (§4.8.9): the authored tile rects — every static at its data
+	# rect, the groups as plain Controls, before anything registers.
+	_place_statics()
 	_build_captains_section()
 	_register_layout()
 
 	_bind()
 
 	# Phase-11 (§4.8.9): the build is registered — activate the screen (pins
-	# the root, captures baselines, applies the committed table; ships {}).
+	# the root, captures baselines, applies the committed table; the interim
+	# `{}` file leaves the authored rects standing).
 	RegistryLib.screen_active(LAYOUT_SCREEN, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -140,6 +176,34 @@ func _ready() -> void:
 	EventBus.day_advanced.connect(_on_day_advanced)
 	EventBus.clock_changed.connect(_on_clock_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
+
+
+## Phase 12 (§4.8.9): one authored rect = one `position`/`size` write, in
+## the DIRECT parent's tile space (point anchors everywhere; nothing is
+## stretched).
+func _place(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(TILE)
+	control.size = Vector2(rect.size) * float(TILE)
+
+
+## The authored tile table — today's captured look, flattened to the grid
+## (see the fragment this screen's capture emits: `data/layout_fragments/
+## inn.json`).
+func _place_statics() -> void:
+	_place(_header, Rect2i(1, 1, 58, 1))
+	_place(_title, Rect2i(0, 0, 58, 1))
+	_place(_status, Rect2i(1, 2, 58, 6))
+	_place(_morale_label, Rect2i(1, 1, 57, 1))
+	_place(_gold_label, Rect2i(1, 3, 57, 1))
+	_place(_day_label, Rect2i(1, 4, 57, 1))
+	_place(_actions, Rect2i(1, 9, 58, 10))
+	_place(_rest_button, Rect2i(0, 0, 10, 2))
+	_place(_rest_hint, Rect2i(0, 2, 58, 1))
+	_place(_odd_job_button, Rect2i(0, 4, 13, 2))
+	_place(_odd_job_hint, Rect2i(0, 6, 58, 2))
+	_place(_footer, Rect2i(1, 30, 58, 2))
+	_place(_back_button, Rect2i(54, 0, 4, 2))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -230,18 +294,19 @@ func _bind() -> void:
 	_back_button.text = I18n.t_key("ui.back")
 
 
-## Re-tiered kit value_bar beside the morale line (§4.9: the atom bakes the
-## tier into its fill at build time, so a changed morale rebuilds it).
+## Re-tiered kit value_bar under the morale line (§4.9: the atom bakes the
+## tier into its fill at build time, so a changed morale rebuilds it). The
+## bar is a registered static (`status.morale_bar`) at its authored slot —
+## the rebuild re-places it there.
 func _refresh_morale_bar() -> void:
-	var parent := _morale_label.get_parent()
 	if _morale_bar != null and is_instance_valid(_morale_bar):
-		parent.remove_child(_morale_bar)
+		_status.remove_child(_morale_bar)
 		_morale_bar.queue_free()
 	var tier := UiKitLib.auto_tier(GameState.morale, MORALE_GOOD_MIN,
 		MORALE_WARN_MIN)
 	_morale_bar = UiKitLib.value_bar(GameState.morale, 100, tier)
-	parent.add_child(_morale_bar)
-	parent.move_child(_morale_bar, _morale_label.get_index() + 1)
+	_status.add_child(_morale_bar)
+	_place(_morale_bar, Rect2i(1, 2, 57, 1))
 	_register_dynamic("morale_bar", [{
 		"control": _morale_bar, "id": "status.morale_bar",
 		"opts": {"role": RegistryLib.ROLE_PLAIN},
@@ -300,20 +365,30 @@ func captain_rows() -> Array:
 	return _captain_rows.duplicate()
 
 
-## Builds the section shell once (header + rows box) under the odd-job rows.
+## Builds the section shell once (header + rows group) under the actions
+## group, at its authored rects. The rows group is the captains list block's
+## content node (a plain Control — nothing inside it is flow-laid).
 func _build_captains_section() -> void:
-	var actions: Control = $Layout/VBox/Actions
-	var footer: Control = $Layout/VBox/Footer
-	var layout: Node = actions.get_parent()
-	var footer_index := footer.get_index()
 	_captains_header = Label.new()
 	_captains_header.name = "CaptainsHeader"
-	layout.add_child(_captains_header)
-	_captains_box = VBoxContainer.new()
+	add_child(_captains_header)
+	_place(_captains_header, Rect2i(1, 20, 58, 1))
+	_captains_box = Control.new()
 	_captains_box.name = "CaptainsRows"
-	layout.add_child(_captains_box)
-	layout.move_child(_captains_header, footer_index)
-	layout.move_child(_captains_box, footer_index + 1)
+	_captains_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_captains_box)
+	_place(_captains_box, Rect2i(1, 21, 58, 4))
+
+
+## Row *i*'s rect for the captains list block — px in the rows group's space:
+## the data block when managed, the same tiles authored otherwise.
+func _captain_row_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(LAYOUT_SCREEN, CAPTAINS_LIST, index)
+	if rect != Rect2():
+		return rect
+	return Rect2(
+		Vector2(0, index * CAPTAINS_ROW_H) * float(TILE),
+		Vector2(CAPTAINS_BASE_W, CAPTAINS_ROW_H) * float(TILE))
 
 
 ## The docked captains whose seeded facility roll landed on the inn (any
@@ -345,66 +420,81 @@ func _bind_captains() -> void:
 		empty.text = "-"
 		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
+		_place(empty, Rect2i(0, 0, CAPTAINS_BASE_W, 1))
 		_register_dynamic("captains", [{
 			"control": empty, "id": "captains.rows.empty",
 			"opts": {"role": RegistryLib.ROLE_PLAIN},
 		}])
 		return
 	var entries: Array = []
+	var index := 0
 	for entry in _captain_rows:
-		var row := HBoxContainer.new()
-		row.name = "Captain_%s" % str(entry["id"])
-		var text := Label.new()
-		text.name = "Text"
-		text.text = "%s · %s" % [str(entry["name"]),
-			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		row.add_child(text)
-		# §4.8 role badges (§4.9 icon params): the sighting row carries the
-		# captain's role badge; an absent id renders nothing (the flat
-		# fallback — the registry fills at W4-D).
-		var badge := UiKitLib.hero_texture("role_%s" % str(entry["role"]))
-		var badge_icon: Control = null
-		if badge != null:
-			var icon := TextureRect.new()
-			icon.name = "RoleBadge"
-			icon.texture = badge
-			icon.custom_minimum_size = Vector2(32, 32)
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			row.add_child(icon)
-			row.move_child(icon, 0)
-			badge_icon = icon
-		# Phase-8 W5-C (docs/80-* §4.11.1): the 受限谈话 limited-talk verb —
-		# +1 extra familiarity for one sighted captain, once per port visit.
-		var talk := UiKitLib.button("interact.verb.talk")
-		talk.name = "Talk"
-		talk.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
-		var captain_id := str(entry.get("captain_id", ""))
-		if not InnEngineLib.can_talk(port_id):
-			talk.disabled = true
-			talk.tooltip_text = _talk_text("inn.talk.done")
-		elif captain_id.is_empty():
-			talk.disabled = true
-		else:
-			talk.pressed.connect(_on_talk_pressed.bind(captain_id,
-				str(entry["name"])))
-		row.add_child(talk)
-		_captains_box.add_child(row)
-		var row_id := "captains.rows.%s" % str(entry["id"])
-		entries.append_array([
-			{"control": row, "id": row_id, "opts": {
-				"role": RegistryLib.ROLE_PLAIN, "data_ordered": true}},
-			{"control": text, "id": "%s.text" % row_id,
-				"opts": {"role": RegistryLib.ROLE_PLAIN}},
-			{"control": talk, "id": "%s.talk" % row_id,
-				"opts": {"role": RegistryLib.ROLE_BUTTON}},
-		])
-		if badge_icon != null:
-			entries.append({
-				"control": badge_icon, "id": "%s.badge" % row_id,
-				"opts": {"role": RegistryLib.ROLE_PLAIN},
-			})
+		_build_captain_row(entry, index, entries)
+		index += 1
 	_register_dynamic("captains", entries)
+
+
+## One captain row: a plain Control at the block's row rect; the sighting
+## text, the §4.8 role badge (an absent id adds nothing — the flat fallback)
+## and the 受限谈话 limited-talk verb are absolutely-placed children of the
+## row (no per-row flow containers, §4.8.9).
+func _build_captain_row(entry: Dictionary, index: int,
+		entries: Array) -> void:
+	var row := Control.new()
+	row.name = "Captain_%s" % str(entry["id"])
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_captains_box.add_child(row)
+	row.position = _captain_row_rect(index).position
+	row.size = _captain_row_rect(index).size
+	var row_id := "captains.rows.%s" % str(entry["id"])
+	entries.append({
+		"control": row, "id": row_id, "opts": {
+			"role": RegistryLib.ROLE_PLAIN, "data_ordered": true,
+			"list": CAPTAINS_LIST},
+	})
+	# The §4.8 role badge (§4.9 icon params): an absent id renders nothing
+	# (the flat fallback — the registry fills at W4-D).
+	var badge := UiKitLib.hero_texture("role_%s" % str(entry["role"]))
+	var text_x := 0
+	if badge != null:
+		var icon := TextureRect.new()
+		icon.name = "RoleBadge"
+		icon.texture = badge
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		row.add_child(icon)
+		_place(icon, CAPTAIN_BADGE_RECT)
+		text_x = 1
+	var text := Label.new()
+	text.name = "Text"
+	text.text = "%s · %s" % [str(entry["name"]),
+		I18n.t_key("captain.role.%s" % str(entry["role"]))]
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(text)
+	_place(text, Rect2i(text_x, 0, CAPTAIN_TEXT_W - text_x, 2))
+	# Phase-8 W5-C (docs/80-* §4.11.1): the 受限谈话 limited-talk verb —
+	# +1 extra familiarity for one sighted captain, once per port visit.
+	var talk := UiKitLib.button("interact.verb.talk")
+	talk.name = "Talk"
+	var captain_id := str(entry.get("captain_id", ""))
+	if not InnEngineLib.can_talk(_port_id()):
+		talk.disabled = true
+		talk.tooltip_text = _talk_text("inn.talk.done")
+	elif captain_id.is_empty():
+		talk.disabled = true
+	else:
+		talk.pressed.connect(_on_talk_pressed.bind(captain_id,
+			str(entry["name"])))
+	row.add_child(talk)
+	_place(talk, CAPTAIN_TALK_RECT)
+
+
+func _port_id() -> String:
+	var value = GameState.current_port
+	if not (value is String) or (value as String).is_empty():
+		return ""
+	return value
 
 
 ## The limited-talk click (§4.11.1): one +1 familiarity per port visit, the
@@ -455,26 +545,27 @@ func _port_name() -> String:
 	return I18n.t(port.get("name", {})) if not port.is_empty() else "-"
 
 
-# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase-11 W4-C) -------------
+# --- Layout id registry (docs/80-UI-UX.md §4.8.9, Phase 12 W2-A) -------------
 
-## Registers every persistent control with its stable hierarchical id —
-## bookkeeping only: the committed `data/ui_layout.json` ships `{}`, so the
-## apply walk changes nothing (no moves, no resizes, no restyles).
+## Registers every persistent control with its stable hierarchical id. The
+## statics carry the authored rects above (the capture emits them as the
+## screen's fragment); the captain rows are list members — their ids carry
+## the `list` flag and take `list_rect` positions.
+
 func _register_layout() -> void:
 	_reg(_background, "background", RegistryLib.ROLE_PANEL)
-	_reg($Layout, "layout", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Header, "header", RegistryLib.ROLE_PLAIN)
+	_reg(_header, "header", RegistryLib.ROLE_PLAIN)
 	_reg(_title, "header.title", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Status, "status", RegistryLib.ROLE_PANEL)
+	_reg(_status, "status", RegistryLib.ROLE_PANEL)
 	_reg(_morale_label, "status.morale", RegistryLib.ROLE_PLAIN)
 	_reg(_gold_label, "status.gold", RegistryLib.ROLE_PLAIN)
 	_reg(_day_label, "status.day", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Actions, "actions", RegistryLib.ROLE_PLAIN)
+	_reg(_actions, "actions", RegistryLib.ROLE_PLAIN)
 	_reg(_rest_button, "actions.rest", RegistryLib.ROLE_BUTTON)
 	_reg(_rest_hint, "actions.rest_hint", RegistryLib.ROLE_PLAIN)
 	_reg(_odd_job_button, "actions.work_odd_job", RegistryLib.ROLE_BUTTON)
 	_reg(_odd_job_hint, "actions.odd_job_hint", RegistryLib.ROLE_PLAIN)
-	_reg($Layout/VBox/Footer, "footer", RegistryLib.ROLE_PLAIN)
+	_reg(_footer, "footer", RegistryLib.ROLE_PLAIN)
 	_reg(_back_button, "footer.back", RegistryLib.ROLE_BUTTON)
 	_reg(_captains_header, "captains.header", RegistryLib.ROLE_PLAIN)
 	_reg(_captains_box, "captains.rows", RegistryLib.ROLE_PLAIN)
@@ -511,7 +602,7 @@ func _register_dynamic(section: String, entries: Array) -> void:
 				continue
 			RegistryLib.register(LAYOUT_SCREEN, candidate, entry["id"],
 				entry["opts"])
-		RegistryLib.apply_screen(LAYOUT_SCREEN)
+		RegistryLib.apply_layout(LAYOUT_SCREEN)
 	get_tree().process_frame.connect(apply, CONNECT_ONE_SHOT)
 
 

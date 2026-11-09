@@ -436,7 +436,7 @@ func _test_menu_wiring() -> void:
 		"open_facility('inn') routes to inn_screen.tscn (got %s)"
 		% ("null" if inn == null else inn.scene_file_path))
 	if inn != null and inn.scene_file_path == INN_SCENE:
-		_check((inn.get_node("Layout/VBox/Header/Title") as Label).text
+		_check((inn.get_node("header/Title") as Label).text
 			== I18n.fmt("inn.title", {"port": I18n.t(
 				DataLoader.get_port("lisbon")["name"])}),
 			"the routed screen titles itself with the docked port")
@@ -466,27 +466,27 @@ func _test_scene_states() -> void:
 	var inn = _mount_inn(host)
 	await get_tree().process_frame
 
-	var title: Label = inn.get_node("Layout/VBox/Header/Title")
+	var title: Label = inn.get_node("header/Title")
 	_check(title.text == I18n.fmt("inn.title", {"port": "Lisbon"}),
 		"title shows the docked port (%s)" % title.text)
-	var morale: Label = inn.get_node("Layout/VBox/Status/Margin/StatusVBox/Morale")
+	var morale: Label = inn.get_node("status/Morale")
 	_check(morale.text.contains("70") and morale.text.contains(
 		I18n.t_key("world.morale.good")),
 		"status box shows morale 70 (Good): %s" % morale.text)
-	var gold: Label = inn.get_node("Layout/VBox/Status/Margin/StatusVBox/Gold")
+	var gold: Label = inn.get_node("status/Gold")
 	_check(gold.text == I18n.fmt("ui.gold_amount", {"gold": "1,000"}),
 		"status box shows 1,000g (%s)" % gold.text)
-	var day: Label = inn.get_node("Layout/VBox/Status/Margin/StatusVBox/Day")
+	var day: Label = inn.get_node("status/Day")
 	_check(day.text == I18n.fmt("world.day_time", {
 			"day": 10, "time": SailingSimLib.clock_text()}),
 		"status box shows day 10 with the clock (%s)" % day.text)
 
-	var rest: Button = inn.get_node("Layout/VBox/Actions/RestButton")
+	var rest: Button = inn.get_node("actions/RestButton")
 	_check(rest.text == I18n.fmt("inn.rest_cost", {"day": 3, "price": 30}),
 		"rest button labels the 3-day price (30g): %s" % rest.text)
 	_check(not rest.disabled, "rest is enabled at 1000g")
-	var odd: Button = inn.get_node("Layout/VBox/Actions/OddJobButton")
-	var hint: Label = inn.get_node("Layout/VBox/Actions/OddJobHint")
+	var odd: Button = inn.get_node("actions/OddJobButton")
+	var hint: Label = inn.get_node("actions/OddJobHint")
 	_check(odd.disabled, "odd job is disabled with a ship")
 	_check(odd.text == I18n.t_key("inn.odd_job.ineligible"),
 		"disabled odd job shows the generic ineligible label (%s)" % odd.text)
@@ -516,7 +516,7 @@ func _test_scene_states() -> void:
 	GameState.gold = 29
 	inn.refresh()
 	_check(rest.disabled, "rest is disabled at 29g")
-	var rest_hint: Label = inn.get_node("Layout/VBox/Actions/RestHint")
+	var rest_hint: Label = inn.get_node("actions/RestHint")
 	_check(rest_hint.visible, "the gold reason line is visible at 29g")
 	_check(rest_hint.text == I18n.t_key("inn.no_gold"),
 		"the gold reason is inn.no_gold (%s)" % rest_hint.text)
@@ -530,8 +530,8 @@ func _test_scene_states() -> void:
 	GameState.debug_strip_fleet()
 	inn.refresh()
 	await get_tree().process_frame
-	odd = inn.get_node("Layout/VBox/Actions/OddJobButton")
-	hint = inn.get_node("Layout/VBox/Actions/OddJobHint")
+	odd = inn.get_node("actions/OddJobButton")
+	hint = inn.get_node("actions/OddJobHint")
 	_check(inn.odd_job_enabled(), "relief is enabled when shipless + broke")
 	_check(odd.text == I18n.t_key("inn.odd_job.offer"),
 		"the enabled button shows inn.odd_job.offer (%s)" % odd.text)
@@ -591,10 +591,10 @@ func _test_scene_locale_rebind() -> void:
 	var inn = _mount_inn(host)
 	await get_tree().process_frame
 
-	var rest: Button = inn.get_node("Layout/VBox/Actions/RestButton")
-	var odd: Button = inn.get_node("Layout/VBox/Actions/OddJobButton")
-	var title: Label = inn.get_node("Layout/VBox/Header/Title")
-	var back: Button = inn.get_node("Layout/VBox/Footer/Back")
+	var rest: Button = inn.get_node("actions/RestButton")
+	var odd: Button = inn.get_node("actions/OddJobButton")
+	var title: Label = inn.get_node("header/Title")
+	var back: Button = inn.get_node("footer/Back")
 	var english := {
 		"title": title.text, "rest": rest.text, "odd": odd.text, "back": back.text,
 	}
@@ -629,11 +629,11 @@ func _test_scene_standalone() -> void:
 	var inn = _mount_inn(host)
 	await get_tree().process_frame
 
-	var title: Label = inn.get_node("Layout/VBox/Header/Title")
+	var title: Label = inn.get_node("header/Title")
 	_check(title.text == I18n.fmt("inn.title", {"port": "-"}),
 		"standalone: the title falls back to a placeholder (%s)" % title.text)
-	var rest: Button = inn.get_node("Layout/VBox/Actions/RestButton")
-	var odd: Button = inn.get_node("Layout/VBox/Actions/OddJobButton")
+	var rest: Button = inn.get_node("actions/RestButton")
+	var odd: Button = inn.get_node("actions/OddJobButton")
 	_check(rest.disabled, "standalone: rest is disabled (no run)")
 	_check(odd.disabled, "standalone: the odd job is disabled (no run)")
 	var esc := InputEventAction.new()

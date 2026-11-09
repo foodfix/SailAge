@@ -221,7 +221,10 @@ func _test_provisions_dialog() -> void:
 	await _settle()
 	dialog.open()
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the panel is a plain Panel at its authored 27×21-tile rect —
+	# the absolute layout cannot drift, so the invariant walks the dialog
+	# root (whose full-rect anchors pin it to the host canvas).
+	var panel: Control = dialog.get_node("Panel")
 	var sizes := await assert_window_size_invariant(
 		"provisions dialog (the reported repro)", panel, [
 			func() -> void:

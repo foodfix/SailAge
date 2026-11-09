@@ -453,16 +453,16 @@ func _test_set_sail_round_trip() -> void:
 	# --- The T10 shell -----------------------------------------------------
 	var lisbon: Dictionary = DataLoader.get_port("lisbon")
 	var nation: Dictionary = DataLoader.get_nation("portugal")
-	_check((port.get_node("Layout/VBox/Header/TitleRow/PortName") as Label).text
+	_check((port.get_node("header/PortName") as Label).text
 		== I18n.t(lisbon["name"]),
 		"port header shows the localized port name")
-	_check((port.get_node("Layout/VBox/Header/TitleRow/NationName") as Label).text
+	_check((port.get_node("header/NationName") as Label).text
 		== I18n.t(nation["name"]),
 		"port header shows the localized nation")
-	_check((port.get_node("Layout/VBox/Header/Greeting") as Label).text
+	_check((port.get_node("header/Greeting") as Label).text
 		== I18n.t(lisbon["flavor"]),
 		"the greeting banner shows the port's flavor line")
-	_check((port.get_node("Layout/VBox/Header/TitleRow/NationSwatch") as ColorRect).color
+	_check((port.get_node("header/NationSwatch") as ColorRect).color
 		== PaletteLib.nation_color(str(nation["color"])),
 		"the nation swatch uses the nation color")
 	var hud = port.get_node_or_null("HUD")
@@ -473,7 +473,7 @@ func _test_set_sail_round_trip() -> void:
 		_check((hud.get_node("TopRow/Gold") as Label).text
 			== I18n.fmt("ui.gold_amount", {"gold": hud.format_thousands(GameState.gold)}),
 			"the S4 HUD still renders the live gold bar")
-	var sail: Button = port.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = port.get_node("footer/SetSail")
 	_check(sail.text == I18n.t_key("port.set_sail"),
 		"the Set Sail button uses port.set_sail (%s)" % sail.text)
 	_check(not sail.disabled, "Set Sail is enabled while docked")
@@ -521,7 +521,7 @@ func _test_set_sail_round_trip() -> void:
 
 	# Locale rebinding.
 	I18n.set_locale("zh")
-	_check((port.get_node("Layout/VBox/Header/Greeting") as Label).text
+	_check((port.get_node("header/Greeting") as Label).text
 		== I18n.t(lisbon["flavor"]),
 		"the port screen rebinds on locale_changed")
 	_check(sail.text == I18n.t_key("port.set_sail"),
@@ -571,11 +571,11 @@ func _test_set_sail_round_trip() -> void:
 	port._unhandled_input(esc)
 	await tree.process_frame
 	_check(prompt.is_open(), "Esc re-opens the prompt")
-	_check(prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").disabled == false,
+	_check(prompt.get_node("Panel/Footer/Sail").disabled == false,
 		"Set Sail is enabled with a crew and a day of supplies")
 	# §4.1b: capture the docked clock just before the sail for the +1h assert.
 	var fraction_before_sail := float(GameState.world["clock_fraction"])
-	prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").pressed.emit()
+	prompt.get_node("Panel/Footer/Sail").pressed.emit()
 	await tree.process_frame
 	await tree.process_frame
 
@@ -625,14 +625,14 @@ func _test_port_screen_standalone() -> void:
 
 	_check(port.port_id() == "", "standalone: port_id() is empty")
 	_check(port.port_data().is_empty(), "standalone: port_data() is empty")
-	var name_label: Label = port.get_node("Layout/VBox/Header/TitleRow/PortName")
+	var name_label: Label = port.get_node("header/PortName")
 	_check(name_label.text == "-", "standalone: the port name is a placeholder (%s)"
 		% name_label.text)
-	var greeting: Label = port.get_node("Layout/VBox/Header/Greeting")
+	var greeting: Label = port.get_node("header/Greeting")
 	_check(greeting.text == "", "standalone: the greeting banner is empty, not <key>")
-	var day_greeting: Label = port.get_node("Layout/VBox/Header/DayGreeting")
+	var day_greeting: Label = port.get_node("header/DayGreeting")
 	_check(not day_greeting.visible, "standalone: the day greeting row is hidden")
-	var sail: Button = port.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = port.get_node("footer/SetSail")
 	_check(sail.disabled, "standalone: Set Sail is disabled with nowhere to sail from")
 	_check(sail.text == I18n.t_key("port.set_sail"),
 		"standalone: the button label still binds (%s)" % sail.text)

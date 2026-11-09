@@ -36,6 +36,14 @@ extends Control
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
+##
+## **Absolute tile layout (Phase 12 W2-A, docs/80-* §4.8.9; 10-* §4.23).** The
+## node tree IS the element tree: header/footer/facility_grid are plain
+## Controls at their authored tile rects, every leaf hangs directly off its
+## registered parent, and the flow containers (MarginContainer → VBox →
+## HBox pairs) are deleted. The §4.8.1 facility grid does not scroll — its
+## cards are STATIC elements, two per row at the fixed grid slots (each card
+## 10 × 2 tiles = the 320 × 64 spec), so the grid needs no list block.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-10 sweep (§4.9): the §4.8.1 facility cards carry the generated
@@ -108,6 +116,25 @@ const FACILITY_STUB_KEY := "port.stub.phase3"
 ## state — the state lives in the card's status line + disabled flag only.
 const FACILITY_CARD_SIZE := Vector2(320, 64)
 
+## --- The authored tile table (parent-relative 32-px tiles; Phase 12) ---------
+## One tile = `Palette.CHROME_TILE`. The screen root is the canvas; group
+## parents carry their own rects and their children address the group's space.
+const TILE := PaletteLib.CHROME_TILE
+## The §4.8.1 fixed grid slots, two 10×2-tile cards per row, in the §4.1
+## facility order (the grid never scrolls — the cards are static elements).
+const CARD_SLOTS: Array[Vector2i] = [
+	Vector2i(0, 0), Vector2i(10, 0),
+	Vector2i(0, 2), Vector2i(10, 2),
+	Vector2i(0, 5), Vector2i(10, 5),
+]
+## Card internals (card-local tiles): the facility name over the status
+## line; with the §4.8.1 token icon present the name starts after its
+## 2-tile slot.
+const CARD_NAME_RECT := Rect2i(0, 0, 10, 1)
+const CARD_NAME_WITH_ICON_RECT := Rect2i(2, 0, 8, 1)
+const CARD_STATUS_RECT := Rect2i(0, 1, 10, 1)
+const CARD_ICON_RECT := Rect2i(0, 0, 2, 2)
+
 ## Emitted when a facility row (or anything else) asks for a facility screen;
 ## [method open_facility] emits it before deciding, so a test or a future stub
 ## can observe the intent without a scene swap.
@@ -121,17 +148,17 @@ signal rebound
 
 @onready var _background: Panel = $Background
 @onready var _hud: Control = $HUD
-@onready var _port_name: Label = $Layout/VBox/Header/TitleRow/PortName
-@onready var _nation_swatch: ColorRect = $Layout/VBox/Header/TitleRow/NationSwatch
-@onready var _nation_name: Label = $Layout/VBox/Header/TitleRow/NationName
-@onready var _greeting: Label = $Layout/VBox/Header/Greeting
-@onready var _day_greeting: Label = $Layout/VBox/Header/DayGreeting
-@onready var _facility_heading: Label = $Layout/VBox/Facilities/Heading
-@onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
-@onready var _header_box: VBoxContainer = $Layout/VBox/Header
-@onready var _footer: HBoxContainer = $Layout/VBox/Footer
-@onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
-@onready var _settings_button: Button = $Layout/VBox/Footer/Settings
+@onready var _header: Control = $header
+@onready var _port_name: Label = $header/PortName
+@onready var _nation_swatch: ColorRect = $header/NationSwatch
+@onready var _nation_name: Label = $header/NationName
+@onready var _greeting: Label = $header/Greeting
+@onready var _day_greeting: Label = $header/DayGreeting
+@onready var _facility_heading: Label = $facility_heading
+@onready var _facility_rows: Control = $facility_grid
+@onready var _footer: Control = $footer
+@onready var _set_sail_button: Button = $footer/SetSail
+@onready var _settings_button: Button = $footer/Settings
 
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
@@ -185,10 +212,9 @@ func _ready() -> void:
 	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
 	# only *allowed* in port; this row is the discoverable entry point.
 
-	# Phase-11 W3-B (docs/80-* §4.8.9): the scene-built surfaces register
-	# their stable ids first; the §4.8.1 facility cards register where
-	# `_sync_facility_rows` builds them (inside `_bind`), then the screen
-	# activates once after the full build.
+	# Phase 12 (§4.8.9): the authored tile rects — every static at its data
+	# rect, the groups as plain Controls, before anything registers.
+	_place_statics()
 	_register_static_ids()
 
 	# S4 keeps the same bars as S3, but the sea viewport (minimap + weather
@@ -220,14 +246,41 @@ func _ready() -> void:
 	RegistryLib.screen_active("port", self)
 
 
+## Phase 12 (§4.8.9): one authored rect = one `position`/`size` write, in
+## the DIRECT parent's tile space (point anchors everywhere; nothing is
+## stretched).
+func _place(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(TILE)
+	control.size = Vector2(rect.size) * float(TILE)
+
+
+## The authored tile table — today's captured look, flattened to the grid
+## (see the fragment this screen's capture emits: `data/layout_fragments/
+## port.json`).
+func _place_statics() -> void:
+	_place(_header, Rect2i(1, 2, 58, 4))
+	_place(_nation_swatch, Rect2i(0, 0, 1, 1))
+	_place(_port_name, Rect2i(1, 0, 3, 1))
+	_place(_nation_name, Rect2i(5, 1, 2, 1))
+	_place(_greeting, Rect2i(0, 2, 58, 1))
+	_place(_day_greeting, Rect2i(0, 3, 58, 1))
+	_place(_facility_heading, Rect2i(1, 6, 58, 1))
+	_place(_facility_rows, Rect2i(1, 7, 58, 7))
+	_place(_footer, Rect2i(1, 30, 58, 2))
+	_place(_set_sail_button, Rect2i(45, 0, 8, 2))
+	_place(_settings_button, Rect2i(53, 0, 5, 2))
+
+
 ## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
 ## stable hierarchical ids. Roles only tag what a `sheet` override may
 ## target (the styling itself stays in `ui_theme.gd`); kinds auto-derive
 ## (this screen has no edge-docked bars). The shared HUD and the ui_shared
-## modals are the §4.8.9 fast-follows — not registered here.
+## modals are the §4.8.9 fast-follows — not registered here. The §4.8.1
+## facility cards register where `_sync_facility_rows` builds them.
 func _register_static_ids() -> void:
 	RegistryLib.register("port", _background, "background", {"role": "panel"})
-	RegistryLib.register("port", _header_box, "header")
+	RegistryLib.register("port", _header, "header")
 	RegistryLib.register("port", _port_name, "header.port_name")
 	RegistryLib.register("port", _nation_swatch, "header.nation_swatch")
 	RegistryLib.register("port", _nation_name, "header.nation_name")
@@ -315,9 +368,9 @@ func port_data() -> Dictionary:
 	return DataLoader.get_port(_port_id)
 
 
-## Container the facility rows live in, in the §4.7 wireframe order. It sits
+## Container the facility cards live in, in the §4.7 wireframe order. It sits
 ## between the greeting banner and Set Sail.
-func facility_container() -> VBoxContainer:
+func facility_container() -> Control:
 	return _facility_rows
 
 
@@ -349,22 +402,25 @@ func is_facility_enabled(facility_id: String) -> bool:
 ## [method open_facility]. *Which* cards exist, and their enabled state, are
 ## decided by [method _sync_facility_rows] from the port's `facilities` data;
 ## this helper only guarantees the wiring, the §4.8.1 card spec and the
-## name/status labels.
+## name/status labels. The card takes the next free §4.8.1 grid slot.
 func add_facility_row(facility_id: String, text_key: String, enabled: bool = true) -> Button:
 	var button := _make_facility_button(facility_id, text_key, enabled)
 	_facility_rows.add_child(button)
+	_place(button, Rect2i(
+		CARD_SLOTS[mini(_facility_rows.get_child_count() - 1,
+			CARD_SLOTS.size() - 1)], Vector2i(10, 2)))
 	_apply_card_labels(button)
 	return button
 
 
 ## A facility card Button (docs/80-* §4.8.1), not yet parented: a 320×64
-## Button whose surface is covered by a mouse-transparent, centered VBox
-## holding the §4.8.1 facility-token icon beside the facility-name label over
-## the status line (Godot Button text is single-line, so the lines live in
-## child labels, referenced through the button's `name_label`/`status_label`
-## metas). The token icon rides the kit registry (`facility_{id}`); an absent
-## id renders nothing and the card keeps its §4.8.1 two-line layout — the
-## flat fallback, no crash. Name/status texts are applied by
+## Button whose surface carries the §4.8.1 facility-token icon beside the
+## facility-name label over the status line as absolutely-placed children
+## (Godot Button text is single-line, so the lines live in child labels,
+## referenced through the button's `name_label`/`status_label` metas). The
+## token icon rides the kit registry (`facility_{id}`); an absent id renders
+## nothing and the card keeps its §4.8.1 two-line layout — the flat
+## fallback, no crash. Name/status texts are applied by
 ## [method _apply_card_labels].
 func _make_facility_button(facility_id: String, text_key: String,
 		enabled: bool) -> Button:
@@ -380,22 +436,11 @@ func _make_facility_button(facility_id: String, text_key: String,
 	# facility_rows always overwrites this with the §4.8.1 state.
 	button.set_meta("status_key",
 		"port.facility.open_now" if enabled else FACILITY_STUB_KEY)
-	var card := VBoxContainer.new()
-	card.name = "Card"
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card.alignment = BoxContainer.ALIGNMENT_CENTER
-	button.add_child(card)
 	# The name row: the facility token as the card's full-height left
 	# emblem — the §4.8 hero 64 (2026-11-08, `facility64_<id>` through
 	# the kit registry; a missing hero id falls back to the halved 32
 	# token at 32) — beside the name label; mouse-transparent like the
 	# rest. The 320×64 card envelope is unchanged.
-	var name_row := HBoxContainer.new()
-	name_row.name = "NameRow"
-	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	card.add_child(name_row)
 	var token := UiKitLib.icon_texture("facility64_%s" % facility_id)
 	var token_size := 64
 	if token == null:
@@ -409,23 +454,20 @@ func _make_facility_button(facility_id: String, text_key: String,
 		icon.custom_minimum_size = Vector2(token_size, token_size)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		name_row.add_child(icon)
+		button.add_child(icon)
+		_place(icon, CARD_ICON_RECT)
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_child(name_label)
+	_place(name_label, CARD_NAME_WITH_ICON_RECT if token != null \
+		else CARD_NAME_RECT)
 	var status_label := Label.new()
 	status_label.name = "Status"
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var text_stack := VBoxContainer.new()
-	text_stack.name = "TextStack"
-	text_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	text_stack.alignment = BoxContainer.ALIGNMENT_CENTER
-	text_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_stack.add_child(name_label)
-	text_stack.add_child(status_label)
-	name_row.add_child(text_stack)
+	button.add_child(status_label)
+	_place(status_label, CARD_STATUS_RECT)
 	button.set_meta("name_label", name_label)
 	button.set_meta("status_label", status_label)
 	# A disabled stub has no target: `pressed` never fires on a disabled
@@ -450,18 +492,15 @@ func facility_card_texts(facility_id: String) -> Dictionary:
 	}
 
 
-## Every facility card Button in the container, recursively (the fixed grid
-## pairs the cards inside `HBoxContainer`s), in display order. Public so tests
-## and future screens can walk the cards without knowing the layout.
+## Every facility card Button in the grid, in display order. Public so tests
+## and future screens can walk the cards without knowing the layout. (The
+## Phase-12 grid hangs the cards directly off facility_grid — no pair
+## containers — so the walk is one level.)
 func facility_buttons() -> Array:
 	var buttons: Array = []
 	for child in _facility_rows.get_children():
 		if child is Button and child.has_meta("facility_id"):
 			buttons.append(child)
-		elif child is Container:
-			for grandchild in child.get_children():
-				if grandchild is Button and grandchild.has_meta("facility_id"):
-					buttons.append(grandchild)
 	return buttons
 
 
@@ -770,8 +809,9 @@ func _sync_facility_rows(port: Dictionary) -> void:
 
 	# The fixed grid: every present facility takes the next two-per-line
 	# slot, open or closed alike (docs/80-* §4.8.1) — the layout never
-	# depends on the state.
-	var pair: HBoxContainer = null
+	# depends on the state. (Phase 12: the cards hang directly off
+	# facility_grid at the authored CARD_SLOTS slots — no pair containers.)
+	var slot := 0
 	for facility_id in FACILITY_ORDER:
 		if not (facilities as Dictionary).has(facility_id):
 			continue
@@ -796,15 +836,10 @@ func _sync_facility_rows(port: Dictionary) -> void:
 		elif enabled:
 			status_key = "port.facility.open_now"
 		var button := _make_facility_button(facility_id, label_key, enabled)
-		if pair == null or pair.get_child_count() >= 2:
-			pair = HBoxContainer.new()
-			pair.name = "Pair_%d" % _facility_rows.get_child_count()
-			_facility_rows.add_child(pair)
-		# The pair HBox itself is the grid's two-per-line PLUMBING, not a
-		# meaningful element (2026-11-09 user direction — cards belong to
-		# facility_grid): it is deliberately NOT registered, so the cards'
-		# registered parent chain skips straight to facility_grid.
-		pair.add_child(button)
+		_facility_rows.add_child(button)
+		var slot_rect := CARD_SLOTS[mini(slot, CARD_SLOTS.size() - 1)]
+		slot += 1
+		_place(button, Rect2i(slot_rect, Vector2i(10, 2)))
 		button.set_meta("status_key", status_key)
 		if not enabled:
 			# Disabled cards keep their reason as a tooltip too (the status

@@ -571,8 +571,8 @@ func _test_palace_flow() -> void:
 	screen.route_to_port = false
 	add_child(screen)
 	await get_tree().process_frame
-	var label: Label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
-	var button: Button = screen.get_node("Layout/VBox/Rows/TournamentRow/Action")
+	var label: Label = screen.get_node("Rows/TournamentRow/Label")
+	var button: Button = screen.get_node("Rows/TournamentRow/Action")
 	_check(label.text == I18n.fmt("tournament.status", {
 		"port": I18n.t(DataLoader.get_port("lisbon")["name"]),
 		"first": 1, "last": 5,
@@ -616,7 +616,7 @@ func _test_palace_flow() -> void:
 	_check(GameState.last_tournament_outcome.is_empty(),
 		"the settlement is consumed by the one-shot read")
 	screen._report_tournament(reported)
-	label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
+	label = screen.get_node("Rows/TournamentRow/Label")
 	_check(label.text == I18n.fmt("tournament.prize",
 		{"gold": "10,000", "fame": 100}),
 		"a won bracket reports tournament.prize (%s)" % label.text)
@@ -627,7 +627,7 @@ func _test_palace_flow() -> void:
 		"repaired": 12,
 	}
 	screen._report_tournament(GameState.last_tournament_outcome)
-	label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
+	label = screen.get_node("Rows/TournamentRow/Label")
 	_check(label.text == I18n.fmt("tournament.consolation", {"gold": "500"}),
 		"a lost bracket reports tournament.consolation (%s)" % label.text)
 
@@ -650,7 +650,7 @@ func _test_palace_flow() -> void:
 	_check(leaked.is_empty(), "the tournament row prints no raw <key> (%s)"
 		% str(leaked.slice(0, 3)))
 	I18n.set_locale("zh")
-	label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
+	label = screen.get_node("Rows/TournamentRow/Label")
 	_check(label.text.contains(_ui_zh("tournament.status").split("{")[0]),
 		"the zh row uses the zh frame (%s)" % label.text)
 	I18n.set_locale("en")

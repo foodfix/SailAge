@@ -12,281 +12,29 @@
       "x": 1,
       "y": 4
     },
-    "catalog_rows": {
-      "h": 25,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
     "catalog_scroll": {
       "h": 26,
-      "w": 28,
+      "w": 27,
       "x": 1,
       "y": 2
     },
     "catalog_title": {
       "h": 1,
-      "w": 28,
+      "w": 27,
       "x": 1,
       "y": 1
     },
     "equip.player.armor": {
-      "h": 2,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "equip.player.armor.buy.eq_saint_medallion": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 1
-    },
-    "equip.player.armor.slot": {
-      "h": 1,
-      "w": 3,
-      "x": 0,
-      "y": 0
-    },
-    "equip.player.armor.unequip": {
-      "h": 1,
-      "w": 2,
-      "x": 25,
-      "y": 0
-    },
-    "equip.player.armor.worn": {
-      "h": 1,
-      "w": 22,
-      "x": 3,
-      "y": 0
-    },
-    "equip.player.armor.worn_hero": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "equip.player.weapon": {
-      "h": 2,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
-    "equip.player.weapon.buy.eq_cutlass": {
-      "h": 1,
-      "w": 14,
-      "x": 14,
-      "y": 1
-    },
-    "equip.player.weapon.buy.eq_zweihander": {
-      "h": 1,
-      "w": 14,
-      "x": 0,
-      "y": 1
-    },
-    "equip.player.weapon.slot": {
-      "h": 1,
-      "w": 3,
-      "x": 0,
-      "y": 0
-    },
-    "equip.player.weapon.unequip": {
-      "h": 1,
-      "w": 2,
-      "x": 25,
-      "y": 0
-    },
-    "equip.player.weapon.worn": {
-      "h": 1,
-      "w": 22,
-      "x": 3,
-      "y": 0
-    },
-    "equip.player.weapon.worn_hero": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0": {
-      "h": 7,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0.cannons": {
-      "h": 1,
-      "w": 2,
-      "x": 2,
-      "y": 3
-    },
-    "fleet.0.cannons_label": {
-      "h": 1,
-      "w": 2,
-      "x": 0,
-      "y": 3
-    },
-    "fleet.0.cannons_max": {
-      "h": 1,
-      "w": 2,
-      "x": 5,
-      "y": 3
-    },
-    "fleet.0.crew": {
-      "h": 1,
-      "w": 20,
-      "x": 8,
-      "y": 1
-    },
-    "fleet.0.durability": {
-      "h": 1,
-      "w": 4,
-      "x": 4,
-      "y": 1
-    },
-    "fleet.0.durability_bar": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 1
-    },
-    "fleet.0.equip.figurehead": {
-      "h": 1,
-      "w": 28,
+      "h": 4,
+      "w": 27,
       "x": 0,
       "y": 4
     },
-    "fleet.0.equip.figurehead.slot": {
-      "h": 1,
-      "w": 3,
+    "equip.player.weapon": {
+      "h": 4,
+      "w": 27,
       "x": 0,
       "y": 0
-    },
-    "fleet.0.equip.figurehead.unequip": {
-      "h": 1,
-      "w": 2,
-      "x": 25,
-      "y": 0
-    },
-    "fleet.0.equip.figurehead.worn": {
-      "h": 1,
-      "w": 22,
-      "x": 3,
-      "y": 0
-    },
-    "fleet.0.equip.figurehead.worn_hero": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0.equip.sail": {
-      "h": 2,
-      "w": 28,
-      "x": 0,
-      "y": 5
-    },
-    "fleet.0.equip.sail.buy.eq_brocade_sails": {
-      "h": 1,
-      "w": 14,
-      "x": 0,
-      "y": 1
-    },
-    "fleet.0.equip.sail.buy.eq_cotton_sails": {
-      "h": 1,
-      "w": 14,
-      "x": 14,
-      "y": 1
-    },
-    "fleet.0.equip.sail.slot": {
-      "h": 1,
-      "w": 3,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0.equip.sail.unequip": {
-      "h": 1,
-      "w": 2,
-      "x": 25,
-      "y": 0
-    },
-    "fleet.0.equip.sail.worn": {
-      "h": 1,
-      "w": 22,
-      "x": 3,
-      "y": 0
-    },
-    "fleet.0.equip.sail.worn_hero": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0.name": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
-    "fleet.0.points": {
-      "h": 1,
-      "w": 2,
-      "x": 3,
-      "y": 2
-    },
-    "fleet.0.points_1": {
-      "h": 1,
-      "w": 1,
-      "x": 6,
-      "y": 2
-    },
-    "fleet.0.points_10": {
-      "h": 1,
-      "w": 1,
-      "x": 7,
-      "y": 2
-    },
-    "fleet.0.points_max": {
-      "h": 1,
-      "w": 2,
-      "x": 8,
-      "y": 2
-    },
-    "fleet.0.preview": {
-      "h": 1,
-      "w": 16,
-      "x": 10,
-      "y": 2
-    },
-    "fleet.0.refit": {
-      "h": 1,
-      "w": 1,
-      "x": 6,
-      "y": 3
-    },
-    "fleet.0.refit_note": {
-      "h": 1,
-      "w": 17,
-      "x": 8,
-      "y": 3
-    },
-    "fleet.0.refit_sellback": {
-      "h": 1,
-      "w": 3,
-      "x": 25,
-      "y": 3
-    },
-    "fleet.0.repair": {
-      "h": 1,
-      "w": 2,
-      "x": 26,
-      "y": 2
-    },
-    "fleet.0.repair_label": {
-      "h": 1,
-      "w": 3,
-      "x": 0,
-      "y": 2
     },
     "fleet_panel": {
       "h": 28,
@@ -294,21 +42,15 @@
       "x": 30,
       "y": 4
     },
-    "fleet_rows": {
-      "h": 7,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
     "fleet_scroll": {
-      "h": 20,
-      "w": 28,
+      "h": 16,
+      "w": 27,
       "x": 1,
-      "y": 7
+      "y": 11
     },
     "fleet_title": {
       "h": 1,
-      "w": 28,
+      "w": 27,
       "x": 1,
       "y": 1
     },
@@ -337,311 +79,54 @@
       "y": 0
     },
     "player_equip": {
-      "h": 5,
-      "w": 28,
+      "h": 9,
+      "w": 27,
       "x": 1,
       "y": 2
     },
     "player_equip.rows": {
-      "h": 4,
-      "w": 28,
+      "h": 8,
+      "w": 27,
       "x": 0,
       "y": 1
     },
     "player_equip.title": {
       "h": 1,
-      "w": 28,
+      "w": 27,
       "x": 0,
       "y": 0
-    },
-    "rows.caravel": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 9
-    },
-    "rows.caravel.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.caravel.name": {
-      "h": 1,
-      "w": 20,
-      "x": 0,
-      "y": 1
-    },
-    "rows.caravel.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.caravel.role": {
-      "h": 1,
-      "w": 3,
-      "x": 20,
-      "y": 1
-    },
-    "rows.caravel.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.caravela_redonda": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 12
-    },
-    "rows.caravela_redonda.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.caravela_redonda.name": {
-      "h": 1,
-      "w": 19,
-      "x": 0,
-      "y": 1
-    },
-    "rows.caravela_redonda.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.caravela_redonda.role": {
-      "h": 1,
-      "w": 3,
-      "x": 20,
-      "y": 1
-    },
-    "rows.caravela_redonda.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.carrack": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 19
-    },
-    "rows.carrack.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.carrack.name": {
-      "h": 1,
-      "w": 19,
-      "x": 0,
-      "y": 1
-    },
-    "rows.carrack.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.carrack.role": {
-      "h": 1,
-      "w": 3,
-      "x": 20,
-      "y": 1
-    },
-    "rows.carrack.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.galleon": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 22
-    },
-    "rows.galleon.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.galleon.name": {
-      "h": 1,
-      "w": 20,
-      "x": 0,
-      "y": 1
-    },
-    "rows.galleon.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.galleon.role": {
-      "h": 1,
-      "w": 2,
-      "x": 20,
-      "y": 1
-    },
-    "rows.galleon.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.latin": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 0
-    },
-    "rows.latin.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.latin.name": {
-      "h": 1,
-      "w": 20,
-      "x": 0,
-      "y": 1
-    },
-    "rows.latin.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.latin.role": {
-      "h": 1,
-      "w": 2,
-      "x": 21,
-      "y": 1
-    },
-    "rows.latin.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.nao": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 15
-    },
-    "rows.nao.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.nao.name": {
-      "h": 1,
-      "w": 19,
-      "x": 0,
-      "y": 1
-    },
-    "rows.nao.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.nao.role": {
-      "h": 1,
-      "w": 3,
-      "x": 20,
-      "y": 1
-    },
-    "rows.nao.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.pinnace": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 6
-    },
-    "rows.pinnace.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.pinnace.name": {
-      "h": 1,
-      "w": 20,
-      "x": 0,
-      "y": 1
-    },
-    "rows.pinnace.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.pinnace.role": {
-      "h": 1,
-      "w": 2,
-      "x": 21,
-      "y": 1
-    },
-    "rows.pinnace.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
-    },
-    "rows.sloop": {
-      "h": 3,
-      "w": 28,
-      "x": 0,
-      "y": 3
-    },
-    "rows.sloop.buy": {
-      "h": 2,
-      "w": 2,
-      "x": 26,
-      "y": 0
-    },
-    "rows.sloop.name": {
-      "h": 1,
-      "w": 20,
-      "x": 0,
-      "y": 1
-    },
-    "rows.sloop.price": {
-      "h": 1,
-      "w": 3,
-      "x": 22,
-      "y": 1
-    },
-    "rows.sloop.role": {
-      "h": 1,
-      "w": 2,
-      "x": 21,
-      "y": 1
-    },
-    "rows.sloop.stats": {
-      "h": 1,
-      "w": 28,
-      "x": 0,
-      "y": 2
     }
   },
-  "lists": {}
+  "lists": {
+    "catalog": {
+      "base": {
+        "h": 3,
+        "w": 27,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 3,
+      "viewport": {
+        "h": 26,
+        "w": 27,
+        "x": 1,
+        "y": 2
+      }
+    },
+    "fleet": {
+      "base": {
+        "h": 16,
+        "w": 27,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 16,
+      "viewport": {
+        "h": 16,
+        "w": 27,
+        "x": 1,
+        "y": 11
+      }
+    }
+  }
 }

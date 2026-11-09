@@ -125,10 +125,15 @@ func _capture_screen(screen_id: String) -> bool:
 	add_child(screen_root)
 	# The open path: the W2-C screens open in `_rig_post`; the W2-D
 	# modals open (and REGISTER) through their awaited `_open_<id>` hook
-	# (the battle rig plays the battle out to its after-action).
+	# (the battle rig plays the battle out to its after-action); the W2-A
+	# provisions prompt is a hidden modal — its lists and its real look
+	# exist only open, so the rig opens it (a no-op for every other
+	# screen: the guard is has_method-based).
 	await _rig_post(screen_id, screen_root)
 	if has_method("_open_%s" % screen_id):
 		await call("_open_%s" % screen_id, screen_root)
+	if screen_root.has_method("open_on"):
+		screen_root.open_on(null)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
 	var fragment := _dump_fragment(screen_id)
@@ -165,6 +170,10 @@ func _rig_port() -> void:
 			"italy"]:
 		GameState.player["reputation"][nation] = 0
 	GameState.fleet = [FleetLib.new_ship("caravel", 0)]
+	# Phase 12 W2-A (the list blocks must derive): the caravel carries a
+	# trade-good stack so the provisions dialog's cargo jettison list has a
+	# member (fleet order, then sorted good ids — the locked order).
+	GameState.fleet[0]["cargo"] = {"wine": 20}
 	GameState.day = 1
 	GameState.gold = 10000
 	GameState.morale = 70
@@ -174,8 +183,31 @@ func _rig_port() -> void:
 	GameState.market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list)
 	GameState.market_events = []
-	GameState.npc_fleets = []
+	# Phase 12 W2-A (the list blocks must derive): the harbor table loads
+	# (`ensure_map`) so the docked-fleet queries resolve Lisbon's berth, then
+	# three docked fleets — two traders (market/inn rolls) and one coaster
+	# (tavern roll) — plus a hunter at the pier (palace bounty board) and one
+	# pirate at sea within the §4.7.8 poster radius (palace inform). Canon
+	# captain ids only (`data/captains.json`); the seeded facility/presence
+	# rolls are stable for these fixed ids, port and day. One
+	# found-but-unreported discovery feeds the guild's report list.
+	DataLoader.ensure_map()
+	GameState.npc_fleets = [
+		_rig_fleet("cap_w2a_trader_2", "cap_trader_0002", "trader",
+			"holland", true),
+		_rig_fleet("cap_w2a_trader_4", "cap_trader_0003", "trader",
+			"england", true),
+		_rig_fleet("cap_w2a_coaster_1", "cap_coaster_0001", "coaster",
+			"spain", true),
+		_rig_fleet("cap_w2a_hunter_1", "cap_hunter_0001", "hunter",
+			"portugal", true),
+		_rig_fleet("cap_w2a_pirate_1", "pirate_edward_bloodhand", "pirate",
+			"", false),
+	]
 	GameState.npc_port_log = []
+	var found := str(DataLoader.discoveries_list[0].get("id", ""))
+	GameState.discoveries_found = [found] if not found.is_empty() else []
+	GameState.discoveries_reported = []
 	EconomyLib.reset_overrides()
 	var port: Dictionary = DataLoader.get_port("lisbon")
 	GameState.world = {
@@ -465,6 +497,36 @@ func _rig_first_captain(role: String, tier: int) -> String:
 			return str((card as Dictionary).get("id", ""))
 	return ""
 # --- end rig: world family (W2-C) ---------------------------------------------
+
+
+
+## One minimal NPC fleet for the rig: docked at Lisbon on its berth when
+## `docked` (dwell active), at sea three tiles southeast otherwise (the
+## wanted-poster family). The shape is the `npc_fleets.gd` fleet dict's
+## live-read subset (`position_of`, `docked_fleets`, the seeded rolls).
+func _rig_fleet(id: String, captain_id: String, role: String,
+		nation_id: String, docked: bool) -> Dictionary:
+	var cell := DataLoader.port_cell("lisbon")
+	if not docked:
+		cell += Vector2i(3, 3)
+	return {
+		"id": id,
+		"role": role,
+		"nation_id": nation_id,
+		"cell": {"x": cell.x, "y": cell.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain_id": captain_id,
+		"cooldown_until_day": 0,
+		"seed": 0,
+		"dest_port_id": "lisbon" if docked else "",
+		"dwell_until_day": GameState.day + 3 if docked else 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
+	}
 
 
 ## The v2 fragment for one captured screen: parent-relative element

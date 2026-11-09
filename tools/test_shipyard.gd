@@ -875,8 +875,8 @@ func _test_screen() -> void:
 
 	# Catalog: the port's stock list (lisbon's 8 locked hulls), not the
 	# global 16-type roster — Phase 7's per-port rows (40-* §4.3.1).
-	var catalog: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll/CatalogRows")
+	var catalog: Control = screen.get_node(
+		"CatalogPanel/CatalogScroll/CatalogRows")
 	_check(catalog.get_child_count() == 8,
 		"the catalog mirrors lisbon's 8-hull stock list (got %d)"
 		% catalog.get_child_count())
@@ -886,26 +886,26 @@ func _test_screen() -> void:
 	# Role labels: the §4.7.15 keys are MERGED now, so rows localise — the
 	# raw enum token survives only as the documented fallback (exercised
 	# below with fixture-local key absence, never the shipped data).
-	var galleon_role: Label = catalog.get_node("Catalog_galleon/Top/Role")
+	var galleon_role: Label = catalog.get_node("Catalog_galleon/Role")
 	_check(galleon_role.text == I18n.t_key("shipyard.role.war"),
 		"the merged role key localises the galleon (%s)" % galleon_role.text)
-	_check(catalog.get_node("Catalog_latin/Top/Role").text
+	_check(catalog.get_node("Catalog_latin/Role").text
 			== I18n.t_key("shipyard.role.coastal"),
 		"the latin carries the coastal role label (%s)"
-		% (catalog.get_node("Catalog_latin/Top/Role") as Label).text)
-	_check(catalog.get_node("Catalog_caravel/Top/Role").text
+		% (catalog.get_node("Catalog_latin/Role") as Label).text)
+	_check(catalog.get_node("Catalog_caravel/Role").text
 			== I18n.t_key("shipyard.role.trade"),
 		"the caravel carries the trade role label (%s)"
-		% (catalog.get_node("Catalog_caravel/Top/Role") as Label).text)
+		% (catalog.get_node("Catalog_caravel/Role") as Label).text)
 	# zh pass (40-* §4.3.1): 战舰 / 商船 / 沿岸 — plus the zh tier note
 	# 需发展度 {dev} at the dev-1 port.
 	GameState.locale = "zh"
 	screen.rebuild()
 	await get_tree().process_frame
 	var zh_roles := "%s|%s|%s" % [
-		(catalog.get_node("Catalog_galleon/Top/Role") as Label).text,
-		(catalog.get_node("Catalog_caravel/Top/Role") as Label).text,
-		(catalog.get_node("Catalog_latin/Top/Role") as Label).text]
+		(catalog.get_node("Catalog_galleon/Role") as Label).text,
+		(catalog.get_node("Catalog_caravel/Role") as Label).text,
+		(catalog.get_node("Catalog_latin/Role") as Label).text]
 	_check(zh_roles == "%s|%s|%s" % [I18n.t_key("shipyard.role.war"),
 			I18n.t_key("shipyard.role.trade"),
 			I18n.t_key("shipyard.role.coastal")],
@@ -925,19 +925,19 @@ func _test_screen() -> void:
 		"shipyard.role.trade", "shipyard.role.coastal"])
 	screen.rebuild()
 	await get_tree().process_frame
-	_check((catalog.get_node("Catalog_galleon/Top/Role") as Label).text == "war",
+	_check((catalog.get_node("Catalog_galleon/Role") as Label).text == "war",
 		"with the keys stripped the role falls back to the data token (got '%s')"
-		% (catalog.get_node("Catalog_galleon/Top/Role") as Label).text)
-	_check((catalog.get_node("Catalog_latin/Top/Role") as Label).text == "coastal",
+		% (catalog.get_node("Catalog_galleon/Role") as Label).text)
+	_check((catalog.get_node("Catalog_latin/Role") as Label).text == "coastal",
 		"the stripped latin carries the coastal role token")
 	_unstash_ui_keys(role_stash)
 	GameState.locale = "en"
 	screen.rebuild()
 	await get_tree().process_frame
-	_check((catalog.get_node("Catalog_galleon/Top/Role") as Label).text
+	_check((catalog.get_node("Catalog_galleon/Role") as Label).text
 			== I18n.t_key("shipyard.role.war"),
 		"restoring the keys re-localises the roles (%s)"
-		% (catalog.get_node("Catalog_galleon/Top/Role") as Label).text)
+		% (catalog.get_node("Catalog_galleon/Role") as Label).text)
 	_inject_keys(SHIPYARD_UI_KEYS)
 	screen.rebuild()
 	await get_tree().process_frame
@@ -1070,8 +1070,8 @@ func _test_screen() -> void:
 		"…with the 'shipyard.invalid_points' reason (%s)"
 		% screen.fleet_widget(0)["refit"].tooltip_text)
 	var refit_note: Label = screen.get_node(
-		"Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll/FleetRows/Fleet_0"
-		+ "/Margin/Box/RefitRow/RefitNote_0")
+		"FleetPanel/FleetScroll/FleetRows/Fleet_0"
+		+ "/RefitNote_0")
 	_check(refit_note.text == I18n.fmt("shipyard.repair_cost", {"amount": 0}),
 		"…and the live cost note prices 0 cannons (%s)" % refit_note.text)
 
@@ -1116,8 +1116,8 @@ func _test_screen() -> void:
 		% points.text)
 	# The Max button selects exactly those 10.
 	screen.get_node(
-		"Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll/FleetRows/Fleet_0"
-		+ "/Margin/Box/Actions/PointsMax_0"
+		"FleetPanel/FleetScroll/FleetRows/Fleet_0"
+		+ "/PointsMax_0"
 	).pressed.emit()
 	_check(points.text == "10", "the Max button picks the whole damage (got '%s')"
 		% points.text)
@@ -1189,9 +1189,9 @@ func _test_screen() -> void:
 	# Locale rebind: every visible string follows the toggle (§6).
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	var title: Label = screen.get_node("Layout/VBox/Header/Title")
+	var title: Label = screen.get_node("header/Title")
 	var catalog_title: Label = screen.get_node(
-		"Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogTitle")
+		"CatalogPanel/CatalogTitle")
 	_check(title.text == I18n.fmt("shipyard.title", {
 			"port": I18n.t(DataLoader.get_port("lisbon")["name"])}),
 		"the title rebinds to zh (%s)" % title.text)
@@ -1206,7 +1206,7 @@ func _test_screen() -> void:
 	screen.went_back.connect(func() -> void: went_back[0] = true)
 	screen._unhandled_input(esc)
 	_check(went_back[0], "Esc emits went_back (S6 → S4)")
-	screen.get_node("Layout/VBox/Header/Back").pressed.emit()
+	screen.get_node("header/Back").pressed.emit()
 	_check(went_back[0], "the Back button takes the same edge")
 	_check(PortScreenLib.FACILITY_SCENES.get("shipyard", "")
 			== "res://scenes/port/shipyard_screen.tscn",
@@ -1223,10 +1223,10 @@ func _test_screen() -> void:
 	add_child(standalone)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(standalone.get_node("Layout/VBox/Header/Title").text
+	_check(standalone.get_node("header/Title").text
 			== I18n.t_key("port.shipyard"),
 		"standalone: the header falls back to the shipyard noun (%s)"
-		% standalone.get_node("Layout/VBox/Header/Title").text)
+		% standalone.get_node("header/Title").text)
 	_check(standalone.fleet_widget(0)["promote"] == null,
 		"standalone: the flagship row still has no Promote (at sea)")
 	standalone.queue_free()
