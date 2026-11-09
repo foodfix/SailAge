@@ -283,10 +283,13 @@ func _test_dialog_box() -> void:
 	var dialog: Control = DialogBoxScene.instantiate()
 	_host.add_child(dialog)
 	await _settle()
-	var panel: Control = dialog.get_node("Center/Panel")
+	# Phase 12: the flow chain is deleted — the plate IS the registered
+	# `panel` element (a fixed tile rect,
+	# `data/layout_fragments/dialog_box.json`).
+	var panel: Control = dialog.get_node("Panel")
 	dialog.open_text("A short line.")
-	# Message boxes hug their message (80-* edge-case table: grows to 400px
-	# then scrolls) — height by design; the width must never drift.
+	# The absolute-tile plate is a fixed rect: the width must never drift (the
+	# body viewport scrolls long messages, `panel.body`).
 	await assert_window_size_invariant(
 		"dialog box (width; height by design)", panel, [
 			func() -> void:

@@ -272,3 +272,14 @@ func _rig_confirm() -> void:
 func _open_confirm(dialog: Control) -> void:
 	dialog.call("open_key", "fleet.jettison.confirm",
 		{"ship": "Ship 1", "good": "Wine", "qty": 30})
+
+
+# --- rig: dialog_box (W2-D) ----------------------------------------------------
+
+func _rig_dialog_box() -> void:
+	_rig_modal_run()
+
+
+## The fixture message (the suite's short line — text-only dialog).
+func _open_dialog_box(dialog: Control) -> void:
+	dialog.call("open_text", "A short line.")

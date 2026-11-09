@@ -22,57 +22,48 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.4)
 
-[node name="Center" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 704.0
+offset_top = 384.0
+offset_right = 1184.0
+offset_bottom = 704.0
+mouse_filter = 0
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(480, 0)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="Body" type="VBoxContainer" parent="Center/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="Scroll" type="ScrollContainer" parent="Center/Panel/Margin/Body"]
-custom_minimum_size = Vector2(448, 0)
-layout_mode = 2
+[node name="Body" type="ScrollContainer" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 32.0
+offset_right = 448.0
+offset_bottom = 224.0
 follow_focus = true
 horizontal_scroll_mode = 0
 
-[node name="IconRow" type="HBoxContainer" parent="Center/Panel/Margin/Body/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Icon" type="TextureRect" parent="Center/Panel/Margin/Body/Scroll/IconRow"]
-visible = false
-layout_mode = 2
+[node name="Content" type="Control" parent="Panel/Body"]
+layout_mode = 1
+anchors_preset = 0
 mouse_filter = 2
 
-[node name="Message" type="Label" parent="Center/Panel/Margin/Body/Scroll/IconRow"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Icon" type="TextureRect" parent="Panel/Body/Content"]
+layout_mode = 0
+offset_right = 64.0
+offset_bottom = 64.0
+custom_minimum_size = Vector2(64, 64)
+mouse_filter = 2
+
+[node name="Message" type="Label" parent="Panel/Body/Content"]
+layout_mode = 0
+offset_left = 64.0
+offset_right = 416.0
+offset_bottom = 192.0
+custom_minimum_size = Vector2(352, 0)
 text = "-"
 autowrap_mode = 3
 
-[node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 2
-
-[node name="OK" type="Button" parent="Center/Panel/Margin/Body/Footer"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
+[node name="OK" type="Button" parent="Panel"]
+layout_mode = 0
+offset_left = 320.0
+offset_top = 224.0
+offset_right = 448.0
+offset_bottom = 288.0
 text = "OK"
