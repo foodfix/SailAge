@@ -21,6 +21,10 @@ API:
   POST /api/accept           {job} — marks the current result accepted
   POST /api/prompt           {job, prompt} — persist a prompt edit alone
   GET  /api/status           worker state, queue, current job
+  GET  /api/layout/file      the committed data/ui_layout.json (+mtime, verdict)
+  POST /api/layout/commit    {layout} — serialize (10-* §4.23), validate in a
+                             full tools/validate_data.py pass over a staged
+                             tree, write ONLY on pass (the single-writer rule)
   GET  /thumb/<kind>/<job>   draft | raw | snapped PNG (cache-busting ?v=)
   GET  /thumb/td/<l>/<deg>   top-down rotation previews (NEAREST)
   GET  /thumb/fx/<ship>/<kind>  wake previews: anim.gif | comp.png | shipped.png
@@ -39,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -79,6 +84,8 @@ class Studio:
         self.qcond = threading.Condition(self.lock)
         self._thumb_cache: "OrderedDict[str, bytes]" = OrderedDict()
         self.last_warnings: list[str] = []   # registry skip/degrade notes
+        self.layout_valid: bool | None = None  # last commit-gate verdict
+        self.layout_gate = threading.Lock()    # one commit at a time
         chain.init(repo)
         self.report = self._read_json(
             os.path.join(self.raw(), "report.json"), {})
@@ -123,6 +130,114 @@ class Studio:
 
     def save_accepted(self, data: dict) -> None:
         self._write_json(self._json_path("accepted.json"), data)
+
+    # -- layout overrides (Phase 11 W5-D — 10-* §4.23, 80-* §4.8.9) ------
+    # The studio is the SINGLE WRITER of data/ui_layout.json: the game
+    # and its bridge never touch the filesystem. Every commit is gated
+    # behind a full tools/validate_data.py pass (run IN-PROCESS-ladder
+    # style, the same subprocess mechanism the accept flows use for
+    # build_ui_art) over a staged SAILAGE_DATA_ROOT tree, so the real
+    # file is written ONLY on validator exit 0.
+    LAYOUT_TIMEOUT_S = 240   # full validator pass ≈ 26 s; spec bound < 30 s
+
+    def layout_path(self) -> str:
+        return os.path.join(self.repo, "data", "ui_layout.json")
+
+    def layout_file(self) -> dict:
+        """GET /api/layout/file — the committed override table text, its
+        mtime, and the last in-session commit-gate verdict. NEVER
+        raises: a missing file degrades to the {content: null} shape."""
+        path = self.layout_path()
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read()
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return {"content": None, "mtime": None,
+                    "valid": self.layout_valid}
+        return {"content": text, "mtime": mtime, "valid": self.layout_valid}
+
+    def commit_layout(self, table: dict) -> dict:
+        """POST /api/layout/commit — serialize EXACTLY per §4.23 (sorted
+        keys, 2-space indent, trailing newline), gate the candidate
+        behind the full validator pass, write ONLY on exit 0. Returns
+        {ok: True, bytes: n} or {ok: False, error: text} — never raises,
+        never a 500 (the registry-never-raises rule)."""
+        try:
+            text = json.dumps(table, indent=2, sort_keys=True) + "\n"
+        except (TypeError, ValueError) as exc:
+            return {"ok": False, "error": f"serialize failed: "
+                                          f"{type(exc).__name__}: {exc}"}
+        with self.layout_gate:  # one commit at a time (the file write + gate)
+            verdict = self._validate_layout_text(text)
+            if not verdict["ok"]:
+                self.layout_valid = False
+                log(f"layout commit REJECTED: {verdict['error'][:200]}")
+                return {"ok": False, "error": verdict["error"]}
+            data = text.encode("utf-8")
+            try:
+                chain.atomic_write(self.layout_path(), data)
+            except OSError as exc:
+                self.layout_valid = False
+                return {"ok": False, "error": f"write failed: "
+                                              f"{type(exc).__name__}: {exc}"}
+        self.layout_valid = True
+        log(f"layout committed: {len(data)} bytes, "
+            f"{len(table)} screen(s) — validator gate passed")
+        return {"ok": True, "bytes": len(data)}
+
+    def _validate_layout_text(self, text: str) -> dict:
+        """One full tools/validate_data.py pass over a STAGED tree whose
+        data/ is the real repo's data with the CANDIDATE ui_layout.json —
+        the validator's own staged-sim protocol (SAILAGE_DATA_ROOT, the
+        --data-root resolution point). Groups 8/13 read tools/ + assets/
+        from the staged tree (the builder preference + ART_ROOT), so
+        both are symlinked read-only. The real file is NEVER touched
+        here; the staged tree is discarded whatever the outcome."""
+        real_data = os.path.join(self.repo, "data")
+        if not os.path.isdir(real_data):
+            return {"ok": False, "error": f"repo data/ not found: "
+                                          f"{real_data}"}
+        try:
+            with tempfile.TemporaryDirectory(
+                    prefix="studio_layout_gate_") as tmp:
+                staged = os.path.join(tmp, "data")
+                os.mkdir(staged)
+                for name in os.listdir(real_data):
+                    if name == "ui_layout.json":
+                        continue  # the candidate replaces this one
+                    os.symlink(os.path.join(real_data, name),
+                               os.path.join(staged, name))
+                with open(os.path.join(staged, "ui_layout.json"), "w",
+                          encoding="utf-8") as fh:
+                    fh.write(text)
+                os.symlink(os.path.join(self.repo, "tools"),
+                           os.path.join(tmp, "tools"))
+                assets = os.path.join(self.repo, "assets")
+                if os.path.isdir(assets):
+                    os.symlink(assets, os.path.join(tmp, "assets"))
+                env = dict(os.environ)
+                env["SAILAGE_DATA_ROOT"] = tmp
+                proc = subprocess.run(
+                    [sys.executable,
+                     os.path.join(self.repo, "tools", "validate_data.py")],
+                    capture_output=True, text=True,
+                    timeout=self.LAYOUT_TIMEOUT_S,
+                    cwd=self.repo, env=env)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": f"validator timed out after "
+                                          f"{self.LAYOUT_TIMEOUT_S}s"}
+        except OSError as exc:
+            return {"ok": False, "error": f"gate staging failed: "
+                                          f"{type(exc).__name__}: {exc}"}
+        if proc.returncode == 0:
+            return {"ok": True}
+        out = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        fail_line = next((ln for ln in out.splitlines()
+                          if ln.startswith("FAIL")), None)
+        error = fail_line or (out[-500:] if out else
+                              f"validator exited {proc.returncode}")
+        return {"ok": False, "error": error}
 
     # -- registry ---------------------------------------------------------
     # -- thumbnails -------------------------------------------------------
@@ -1418,6 +1533,12 @@ class Handler(BaseHTTPRequestHandler):
                                  "registry":
                                      {"warnings":
                                       list(self.studio.last_warnings)}})
+            elif path == "/api/layout/file":
+                info = self.studio.layout_file()  # never raises
+                if info.get("content") is None:
+                    self._json(404, info)  # the {content:null} shape
+                else:
+                    self._json(200, info)
             elif path.startswith("/thumb/"):
                 self._thumb(path)
             else:
@@ -1539,6 +1660,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._accept(data)
             elif path == "/api/prompt":
                 self._prompt(data)
+            elif path == "/api/layout/commit":
+                self._layout_commit(data)
             else:
                 self._json(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001 — per-request guard
@@ -1761,6 +1884,25 @@ class Handler(BaseHTTPRequestHandler):
                 prompts.pop(job_id, None)  # empty -> back to canonical
             self.studio.save_prompts(prompts)
         self._json(200, {"ok": True, "job": job_id, "custom": bool(prompt)})
+
+    def _layout_commit(self, data: dict) -> None:
+        """POST /api/layout/commit — the session table is the FULL
+        override object (the browser session starts from the committed
+        file, so edits compose); the server never merges. Always 200:
+        the gate verdict rides the body, never a 500."""
+        layout = data.get("layout")
+        if layout is None:
+            self._json(200, {"ok": False,
+                             "error": "missing 'layout' — the full "
+                                      "override object "
+                                      "{screen: {element: {…}}}"})
+            return
+        if not isinstance(layout, dict):
+            self._json(200, {"ok": False,
+                             "error": "'layout' must be an object "
+                                      "(screen → element → overrides)"})
+            return
+        self._json(200, self.studio.commit_layout(layout))
 
     def _accept(self, data: dict) -> None:
         job_id = data.get("job", "")

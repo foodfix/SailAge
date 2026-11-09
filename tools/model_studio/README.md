@@ -188,9 +188,69 @@ registry strips the family prefix).
 | POST | `/api/reroll` | `{job, prompt?, seed?}` | persist prompt (if given), queue the job (seed omitted → random; ignored for `fx_*` — the envelope has no seed) |
 | POST | `/api/prompt` | `{job, prompt}` | persist a prompt edit without queueing (empty → revert to canonical) |
 | POST | `/api/accept` | `{job}` | mark the current result accepted in `accepted.json` |
+| GET | `/api/layout/file` | — | the committed `data/ui_layout.json` text + mtime + the last in-session commit-gate verdict (`{content: null}` 404-shape when absent) |
+| POST | `/api/layout/commit` | `{layout}` | serialize per 10-\* §4.23, gate behind a full `tools/validate_data.py` pass, write **only on validator exit 0**; answers `{ok: true, bytes}` / `{ok: false, error: <FAIL text>}` — never a 500 |
 | GET | `/thumb/<kind>/<job>.png` | — | `draft` / `raw` / `snapped` thumbnail (`raw`/`snapped` prefer the studio reroll, falling back to the canonical store); cache-busting via `?v=<mtime>` |
 | GET | `/thumb/td/<label>/<deg>.png` | — | top-down ship rotation preview (PIL NEAREST, pinned degrees) |
 | GET | `/thumb/fx/<size>/<kind>` | — | wake previews: `anim.gif` (staged API gif) / `comp.png` (staged wake under the ship) / `shipped.png` (the committed family — in game now) |
+
+## Layout tab (Phase 11 — the visual UI-layout editor, 80-* §4.8.9)
+
+The **Layout** tab swaps the card grid for a live UI-layout editor:
+screen list + element tree on the left, the game's real viewport frame
+with 32 px-tile boxes on the canvas, the override inspector on the
+right, and the commit bar underneath.
+
+- **Launch contract** — the game carries the bridge; the studio never
+  launches Godot. Start the game with
+
+  ```sh
+  godot --path . -- --layout-bridge
+  ```
+
+  then open the Layout tab and hit **Connect** (the endpoint is the
+  bridge's `ws://127.0.0.1:8765`; a hint line shows the launch command
+  whenever disconnected). Without the flag the game runs no listener.
+- **Protocol** — the browser connects DIRECTLY to the game's
+  LayoutBridge; `server.py` never proxies WebSocket. The message table
+  is frozen verbatim in `docs/90-ARCHITECTURE.md` §5.7: `hello` /
+  `screen_changed` / `tree` / `frame` / `error` game→studio,
+  `get_tree` `get_frame` `move` `resize` `reorder` `assign_sheet`
+  `revert` `reset_screen` `commit` studio→game. Every edit is sent as
+  its §5.7 message; the game replies with a fresh `tree` + `frame` and
+  the tab re-renders. The wire discriminator rides under **both** `msg`
+  and `type` keys so either reader convention works (the frozen table
+  names messages, not envelope keys); edit payloads carry the §4.23
+  override key names (`x`, `y`, `w`, `h`, `min_w`, `min_h`, `order`,
+  `sheet`), and `reorder` carries the absolute sibling index. Anchors
+  have no live message (the frozen set has none) — the anchor dropdown
+  edits the session only and is applied from the committed file at game
+  restart.
+- **Session** — the edit session accumulates browser-side as
+  `{screen: {element_id: {…overrides}}}`, STARTING from the committed
+  `data/ui_layout.json` (fetched on tab open), so edits compose over
+  what is already committed. Per-element **Revert** drops that element's
+  override (and tells the bridge); **Reset screen** drops the screen's.
+- **Single writer** — the game and its bridge never write files. The
+  studio writes `data/ui_layout.json` and NOTHING else, and only behind
+  the validator gate: Commit POSTs the full table to
+  `/api/layout/commit`, the server serializes and runs a FULL
+  `tools/validate_data.py` pass (all groups 1–14) against a staged
+  `SAILAGE_DATA_ROOT` tree holding the candidate, and writes the real
+  file ONLY on validator exit 0. A rejected commit answers
+  `{ok: false, error: <FAIL text>}` and leaves the committed file
+  byte-unchanged. Git add/commit stays with the user.
+- **Serialization rules** (10-* §4.23, deterministic bytes):
+  `json.dumps(layout, indent=2, sort_keys=True) + "\n"` — sorted keys,
+  2-space indent, trailing newline; `{}` serializes to exactly
+  `{}\n`. Tile integers only; the §8.9 group-14 rules (screen ids,
+  dotted element ids, key whitelist, grid bounds `x+w ≤ 60`,
+  `y+h ≤ 33`, `anchor` ⇒ no `y`) are enforced by the validator gate and
+  pre-clamped in the editor.
+- **Manual-suite reminder** — the studio cannot run Godot: after a
+  layout commit, run the port-screen locale layout suites (`zh` + `en`)
+  — the Commit banner under the bar says so too (the §4.8.9 both-locale
+  guard: a commit that clips either locale fails the suite).
 
 ## UI
 
