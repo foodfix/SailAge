@@ -10,19 +10,13 @@
       "h": 1,
       "w": 58,
       "x": 1,
-      "y": 28
+      "y": 21
     },
     "board.rows": {
-      "h": 1,
+      "h": 4,
       "w": 58,
       "x": 1,
-      "y": 30
-    },
-    "board.rows.empty": {
-      "h": 1,
-      "w": 58,
-      "x": 0,
-      "y": 0
+      "y": 22
     },
     "commend_dialog": {
       "h": 34,
@@ -35,12 +29,6 @@
       "w": 60,
       "x": 0,
       "y": 0
-    },
-    "footer": {
-      "h": 1,
-      "w": 58,
-      "x": 1,
-      "y": 31
     },
     "header": {
       "h": 2,
@@ -74,21 +62,15 @@
     },
     "inform.header": {
       "h": 1,
-      "w": 1,
-      "x": 1,
-      "y": 1
-    },
-    "inform.rows": {
-      "h": 1,
       "w": 58,
       "x": 1,
-      "y": 31
+      "y": 27
     },
-    "layout": {
-      "h": 32,
-      "w": 59,
+    "inform.rows": {
+      "h": 4,
+      "w": 58,
       "x": 1,
-      "y": 1
+      "y": 28
     },
     "rows": {
       "h": 25,
@@ -100,7 +82,7 @@
       "h": 2,
       "w": 58,
       "x": 0,
-      "y": 7
+      "y": 6
     },
     "rows.bounty.action": {
       "h": 2,
@@ -133,64 +115,64 @@
       "y": 1
     },
     "rows.permit_foreign": {
-      "h": 1,
-      "w": 8,
+      "h": 2,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 11
     },
     "rows.permit_foreign.buy": {
-      "h": 1,
+      "h": 2,
       "w": 7,
-      "x": 0,
+      "x": 51,
       "y": 0
     },
     "rows.permit_foreign.label": {
-      "h": 1,
-      "w": 1,
+      "h": 2,
+      "w": 36,
       "x": 0,
       "y": 0
     },
     "rows.permit_foreign.note": {
-      "h": 1,
-      "w": 1,
-      "x": 0,
+      "h": 2,
+      "w": 15,
+      "x": 36,
       "y": 0
     },
     "rows.permit_header": {
       "h": 1,
       "w": 58,
       "x": 0,
-      "y": 10
+      "y": 8
     },
     "rows.permit_home": {
-      "h": 1,
+      "h": 2,
       "w": 58,
       "x": 0,
-      "y": 11
+      "y": 9
     },
     "rows.permit_home.buy": {
-      "h": 1,
+      "h": 2,
       "w": 7,
       "x": 51,
       "y": 0
     },
     "rows.permit_home.label": {
-      "h": 1,
-      "w": 40,
+      "h": 2,
+      "w": 36,
       "x": 0,
       "y": 0
     },
     "rows.permit_home.note": {
-      "h": 1,
-      "w": 10,
-      "x": 40,
+      "h": 2,
+      "w": 15,
+      "x": 36,
       "y": 0
     },
     "rows.repair": {
       "h": 2,
       "w": 58,
       "x": 0,
-      "y": 5
+      "y": 4
     },
     "rows.repair.action": {
       "h": 2,
@@ -206,9 +188,9 @@
     },
     "rows.retire": {
       "h": 2,
-      "w": 7,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 15
     },
     "rows.retire.button": {
       "h": 2,
@@ -236,7 +218,7 @@
     },
     "rows.title.next": {
       "h": 1,
-      "w": 41,
+      "w": 42,
       "x": 9,
       "y": 1
     },
@@ -244,7 +226,7 @@
       "h": 2,
       "w": 58,
       "x": 0,
-      "y": 12
+      "y": 13
     },
     "rows.tournament.action": {
       "h": 2,
@@ -254,16 +236,41 @@
     },
     "rows.tournament.label": {
       "h": 1,
-      "w": 49,
+      "w": 50,
       "x": 0,
-      "y": 1
-    },
-    "toast": {
-      "h": 1,
-      "w": 1,
-      "x": 1,
       "y": 1
     }
   },
-  "lists": {}
+  "lists": {
+    "board": {
+      "base": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "inform": {
+      "base": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      }
+    }
+  }
 }

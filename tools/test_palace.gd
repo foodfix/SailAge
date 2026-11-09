@@ -715,8 +715,8 @@ func _test_palace_screen() -> void:
 		"a commoner does not see the Retire row (§4.7)")
 
 	# The title row shows the current rank and the next requirement.
-	var current: Label = screen.get_node("Layout/VBox/Rows/TitleRow/Current")
-	var next: Label = screen.get_node("Layout/VBox/Rows/TitleRow/Next")
+	var current: Label = screen.get_node("Rows/TitleRow/Current")
+	var next: Label = screen.get_node("Rows/TitleRow/Next")
 	_check(current.text == I18n.fmt("palace.title.current",
 		{"rank": I18n.t_key("rank.none")}),
 		"the current rank row reads Commoner (%s)" % current.text)
@@ -725,7 +725,7 @@ func _test_palace_screen() -> void:
 	}), "the next-rank row names knight (100/1) (%s)" % next.text)
 
 	# Ceremony through the button.
-	var ceremony: Button = screen.get_node("Layout/VBox/Rows/TitleRow/Ceremony")
+	var ceremony: Button = screen.get_node("Rows/TitleRow/Ceremony")
 	_check(not ceremony.disabled, "the ceremony is offered when eligible")
 	var granted := [""]
 	screen.title_granted_here.connect(func(_n: String, rank: String) -> void:
