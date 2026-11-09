@@ -1,0 +1,270 @@
+{
+  "elements": {
+    "allocation": {
+      "h": 5,
+      "w": 15,
+      "x": 0,
+      "y": 29
+    },
+    "allocation.buttons": {
+      "h": 2,
+      "w": 15,
+      "x": 0,
+      "y": 3
+    },
+    "allocation.cancel": {
+      "h": 2,
+      "w": 4,
+      "x": 4,
+      "y": 0
+    },
+    "allocation.clamp_note": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 2
+    },
+    "allocation.confirm": {
+      "h": 2,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "allocation.left": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 1
+    },
+    "allocation.pending": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    },
+    "career": {
+      "h": 2,
+      "w": 15,
+      "x": 0,
+      "y": 27
+    },
+    "career.empty": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 27
+    },
+    "career.header": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 26
+    },
+    "career.next": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 28
+    },
+    "career.record": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    },
+    "career.returning": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 1
+    },
+    "career.xp": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 27
+    },
+    "identity": {
+      "h": 3,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    },
+    "identity.flag": {
+      "h": 1,
+      "w": 1,
+      "x": 3,
+      "y": 0
+    },
+    "identity.level": {
+      "h": 1,
+      "w": 2,
+      "x": 13,
+      "y": 0
+    },
+    "identity.names": {
+      "h": 2,
+      "w": 8,
+      "x": 4,
+      "y": 0
+    },
+    "identity.names.name": {
+      "h": 1,
+      "w": 8,
+      "x": 0,
+      "y": 0
+    },
+    "identity.names.role": {
+      "h": 1,
+      "w": 8,
+      "x": 0,
+      "y": 1
+    },
+    "identity.portrait": {
+      "h": 3,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "identity.tier_badge": {
+      "h": 1,
+      "w": 1,
+      "x": 12,
+      "y": 0
+    },
+    "relations": {
+      "h": 2,
+      "w": 15,
+      "x": 0,
+      "y": 24
+    },
+    "relations.empty": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 24
+    },
+    "relations.header": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 23
+    },
+    "relations.loyalty": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 24
+    },
+    "relations.post": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 25
+    },
+    "relations.stance": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    },
+    "relations.tier": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 1
+    },
+    "stat_columns": {
+      "h": 18,
+      "w": 15,
+      "x": 0,
+      "y": 3
+    },
+    "stat_columns.attribute_column": {
+      "h": 6,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    },
+    "stat_columns.attribute_column.attributes": {
+      "h": 5,
+      "w": 15,
+      "x": 0,
+      "y": 1
+    },
+    "stat_columns.attribute_column.header": {
+      "h": 1,
+      "w": 8,
+      "x": 0,
+      "y": 0
+    },
+    "stat_columns.skill_column": {
+      "h": 12,
+      "w": 15,
+      "x": 0,
+      "y": 6
+    },
+    "stat_columns.skill_column.header": {
+      "h": 1,
+      "w": 8,
+      "x": 0,
+      "y": 6
+    },
+    "stat_columns.skill_column.skills": {
+      "h": 11,
+      "w": 15,
+      "x": 0,
+      "y": 7
+    },
+    "tags": {
+      "h": 2,
+      "w": 15,
+      "x": 0,
+      "y": 21
+    },
+    "tags.appearance": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 1
+    },
+    "tags.personality": {
+      "h": 1,
+      "w": 15,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "lists": {
+    "attributes": {
+      "base": {
+        "h": 1,
+        "w": 15,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 1,
+      "viewport": {
+        "h": 34,
+        "w": 32,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "skills": {
+      "base": {
+        "h": 1,
+        "w": 15,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 1,
+      "viewport": {
+        "h": 34,
+        "w": 32,
+        "x": 0,
+        "y": 0
+      }
+    }
+  }
+}

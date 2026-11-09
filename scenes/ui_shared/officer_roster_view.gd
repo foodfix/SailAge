@@ -43,7 +43,11 @@ const FALLBACK_STRINGS := {
 ## whole-page scroll made them scroll away. The view root's own `clip_contents`
 ## is compensated by the 1 BASE_UNIT `Body` inset (§4.6.2 amended).
 const DETAIL_PAGE_PAD := 8.0
-## Column widths (px) — the §4.8 sizing grid, 13px cell font.
+## The table's fixed cell columns (px, row-local; docs/80-* §4.8.9 — the
+## deleted line HBoxes' column floors become absolute slots). The stat
+## block's columns start after the wage column and repeat per key (the
+## skills mode clips at the table edge exactly as the flow line did — the
+## table scroll is horizontal-disabled).
 const COL_NAME_W := 200.0
 const COL_POST_W := 150.0
 const COL_LOYALTY_W := 80.0
@@ -52,6 +56,17 @@ const COL_STAT_W := 78.0
 const COL_DISMISS_W := 120.0
 const COL_ACTION_W := 120.0
 const CELL_FONT_SIZE := 13
+
+## The actions band's button slots (px, band-local): the scene-owned 返回
+## first, then the four actions + dismiss at even 128px columns.
+const ACTION_SLOT_W := 128.0
+
+## The table's authored width in tiles (the 32×12 view space's full width).
+const TABLE_W_TILES := 32
+
+## The table rows' list block (docs/10-* §4.23): one row per employed
+## officer, sorted by id (the header row occupies stack slot 0).
+const LIST_ROSTER := "roster"
 
 ## The table's stat block: the §4.12.3 attributes or the skills
 ## (8 player skills + the 3 officer-only ones).
@@ -93,7 +108,7 @@ var _rows: Array = []
 @onready var _detail_scroll: ScrollContainer = $Detail/DetailScroll
 @onready var _detail_card_host: Control = $Detail/DetailScroll/DetailPage/DetailCardHost
 @onready var _detail_line: Label = $Detail/DetailScroll/DetailPage/DetailLine
-@onready var _detail_actions: Container = $Detail/ActionsRow
+@onready var _detail_actions: Control = $Detail/ActionsRow
 @onready var _confirm: Control = $ConfirmDialog
 
 ## The detail page's card + action widgets (rebuilt per open officer).
@@ -118,8 +133,9 @@ func _ready() -> void:
 	_confirm.confirmed.connect(_on_dismiss_confirmed)
 	_confirm.cancelled.connect(_on_dismiss_cancelled)
 	# Phase 12 (docs/80-* §4.8.9): the view registers + activates at build.
-	# PARTIAL CONVERSION (W2-D budget): the fixed slots are registered; the
-	# table rows keep their internal line stacking until the follow-up pass.
+	# The fixed slots are registered; the table rows are the `roster` list
+	# members (their line cells are absolutely-placed unregistered children
+	# at the fixed column slots).
 	RegistryLib.register(SCREEN_ID, _slots, "slots")
 	RegistryLib.register(SCREEN_ID, _mode_note, "mode_note")
 	RegistryLib.register(SCREEN_ID, _result, "result")
@@ -261,6 +277,9 @@ func rebuild() -> void:
 		_detail_officer = ""
 		_build_table()
 	_rebuilding = false
+	# Phase 12: the rebuild path re-applies the data layout (docs/80-*
+	# §4.8.9 — the rows are list members; their builders own the placement).
+	RegistryLib.apply_layout(SCREEN_ID)
 
 
 ## The 属性/技能 toggle buttons: pressed states + localized labels (§4.3 lists).
@@ -295,13 +314,22 @@ func _build_table() -> void:
 	var officer_ids: Array = CharacterLib.employed_officers().duplicate()
 	# §4.6.2: "one per employed officer, sorted by `id`".
 	officer_ids.sort_custom(func(a, b) -> bool: return str(a) < str(b))
+	var width := TABLE_W_TILES * float(PaletteLib.CHROME_TILE)
+	var display_index := 0
 	for officer_id in officer_ids:
 		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
 		if officer.is_empty():
 			# A dismissed/unknown id in `player.officers` must not crash the
 			# roster; the retired S14 summary skipped it the same way (gotcha 5).
 			continue
-		_table.add_child(_build_row(str(officer_id), officer))
+		var row: Control = _build_row(str(officer_id), officer)
+		_table.add_child(row)
+		var rect := _list_row_rect(display_index + 1)
+		row.position = rect.position
+		row.size = rect.size
+		RegistryLib.register(SCREEN_ID, row, "roster.%s" % str(officer_id),
+			{"list": LIST_ROSTER, "data_ordered": true})
+		display_index += 1
 
 	var empty := _rows.is_empty()
 	_table.visible = not empty
@@ -310,46 +338,68 @@ func _build_table() -> void:
 	_table_empty.text = I18n.t_key("char.no_officers")
 	_table_empty_hint.visible = empty
 	_table_empty_hint.text = I18n.t_key("officers.empty_hint")
-	# Phase 12: the table is a plain Control — every child (the header row,
-	# then the officer rows) takes an explicit stacked position over
-	# measured minima (no flow). The rows are the `roster` list members;
-	# the content extent tracks the stack.
-	var y := 0.0
-	var width := _table.size.x
-	for node: Control in _table.get_children():
-		node.position = Vector2(0, y)
-		var height: float = node.get_combined_minimum_size().y
-		node.size = Vector2(width, height)
-		y += height
-	_table.custom_minimum_size = Vector2(width, y)
+	# Phase 12: the table is a plain Control — the header row sits at the
+	# first stack slot and the officer rows are the `roster` list members at
+	# their `list_rect` slots (the content extent tracks the stack; the
+	# rows' cells are absolutely-placed unregistered children).
+	var rows := _rows.size() + 1  # the header slot + one slot per officer
+	_table.custom_minimum_size = Vector2(width,
+		float(rows * PaletteLib.ROW_H))
+	_table.size = _table.custom_minimum_size
 
 
-## The table's header row: the fixed columns + the active stat block's names.
+## Stack slot `index`'s rect for the `roster` list block — px in the table
+## content space: the data block when managed, the same tiles authored
+## otherwise (slot 0 = the header row, the officer rows follow at the 32px
+## pitch).
+func _list_row_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, LIST_ROSTER, index)
+	if rect != Rect2():
+		return rect
+	var width := TABLE_W_TILES * float(PaletteLib.CHROME_TILE)
+	return Rect2(0.0, float(index * PaletteLib.ROW_H), width,
+		float(PaletteLib.ROW_H))
+
+
+## The table's header row: the fixed columns + the active stat block's names
+## (a plain Control at the first stack slot; the cells are absolutely-placed
+## unregistered children — docs/80-* §4.8.9).
 func _add_table_header() -> void:
-	var header := HBoxContainer.new()
+	var header := Control.new()
 	header.name = "Header"
-	_cell(header, I18n.t_key("intel.officers.name"), COL_NAME_W, PaletteLib.ACCENT)
-	header.get_child(0).name = "NameHeader"
-	_cell(header, I18n.t_key("officer.post.idle").rstrip(" ·"), COL_POST_W,
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var width := TABLE_W_TILES * float(PaletteLib.CHROME_TILE)
+	header.position = Vector2.ZERO
+	header.size = Vector2(width, float(PaletteLib.ROW_H))
+	_cell(header, I18n.t_key("intel.officers.name"), 0.0, COL_NAME_W,
 		PaletteLib.ACCENT)
+	header.get_child(0).name = "NameHeader"
+	_cell(header, I18n.t_key("officer.post.idle").rstrip(" ·"), COL_NAME_W,
+		COL_POST_W, PaletteLib.ACCENT)
 	header.get_child(1).name = "PostHeader"
 	_cell(header, I18n.fmt("char.card.loyalty", {"amount": ""}).strip_edges(),
-		COL_LOYALTY_W, PaletteLib.ACCENT)
+		COL_NAME_W + COL_POST_W, COL_LOYALTY_W, PaletteLib.ACCENT)
 	header.get_child(2).name = "LoyaltyHeader"
 	_cell(header, I18n.t_key("intel.officers.wage"),
-		COL_WAGE_W, PaletteLib.ACCENT)
+		COL_NAME_W + COL_POST_W + COL_LOYALTY_W, COL_WAGE_W, PaletteLib.ACCENT)
 	header.get_child(3).name = "WageHeader"
+	var stat_x := COL_NAME_W + COL_POST_W + COL_LOYALTY_W + COL_WAGE_W
 	var stat_keys: Array = _stat_keys()
 	for key in stat_keys:
 		_cell(header, I18n.t_key("skill.%s" % str(key))
 			if _stat_mode == MODE_SKILLS
 			else I18n.t_key("char.attr.%s" % str(key)),
-			COL_STAT_W, PaletteLib.ACCENT)
+			stat_x, COL_STAT_W, PaletteLib.ACCENT)
 		var head: Label = header.get_child(header.get_child_count() - 1)
 		head.name = "Stat_%s" % str(key)
 		head.tooltip_text = _stat_desc(str(key))
 		head.mouse_filter = Control.MOUSE_FILTER_STOP
+		stat_x += COL_STAT_W
 	_table.add_child(header)
+	# The header is the `roster` block's slot 0 (a list member — the apply
+	# walk skips it, the builder owns the placement).
+	RegistryLib.register(SCREEN_ID, header, "roster.header",
+		{"list": LIST_ROSTER, "data_ordered": true})
 
 
 ## The stat ids the table shows in the active mode.
@@ -360,55 +410,56 @@ func _stat_keys() -> Array:
 		+ Array(SkillsLib.OFFICER_KEYS, TYPE_STRING, "", "")
 
 
-## One officer table row: a flat clickable row Control (the full-width HBox of
-## cells lives inside it) — clicking (or Enter/Space on the focused row) opens
-## the detail page (§4.6.2). The row Control is named at construction and the
-## caller adds it to the table exactly once.
+## One officer table row: a flat clickable row Control whose cells sit at
+## the fixed column slots (the deleted line HBox's column floors;
+## docs/80-* §4.8.9) — clicking (or Enter/Space on the focused row) opens
+## the detail page (§4.6.2). The row Control is named at construction and
+## the caller adds it to the table exactly once.
 func _build_row(officer_id: String, officer: Dictionary) -> Control:
 	var widgets: Dictionary = {"officer_id": officer_id, "cells": {}}
 	var row := Control.new()
 	row.name = "Officer_%s" % officer_id
 	row.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	var width := TABLE_W_TILES * float(PaletteLib.CHROME_TILE)
+	row.size = Vector2(width, float(PaletteLib.ROW_H))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.focus_mode = Control.FOCUS_ALL
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var line := HBoxContainer.new()
-	line.name = "Line"
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.add_child(line)
 	row.gui_input.connect(_on_row_gui_input.bind(officer_id))
 
-	var name_cell := _cell(line, I18n.t(officer.get("name", {})),
-		COL_NAME_W, PaletteLib.TEXT)
+	var name_cell := _cell(row, I18n.t(officer.get("name", {})),
+		0.0, COL_NAME_W, PaletteLib.TEXT)
 	name_cell.name = "Name"
-	var post_cell := _cell(line, _post_text(officer_id), COL_POST_W,
-		PaletteLib.ACCENT)
+	var post_cell := _cell(row, _post_text(officer_id), COL_NAME_W,
+		COL_POST_W, PaletteLib.ACCENT)
 	post_cell.name = "Post"
 	var loyalty := SkillsLib.loyalty(officer_id)
-	var loyalty_cell := _cell(line, str(loyalty), COL_LOYALTY_W,
+	var loyalty_cell := _cell(row, str(loyalty), COL_NAME_W + COL_POST_W,
+		COL_LOYALTY_W,
 		PaletteLib.GOOD if loyalty >= 80
 		else (PaletteLib.WARN if loyalty < 30 else PaletteLib.TEXT))
 	loyalty_cell.name = "Loyalty"
 	widgets["cells"]["loyalty"] = loyalty_cell
-	var wage_cell := _cell(line, I18n.fmt("tavern.wage", {
+	var wage_cell := _cell(row, I18n.fmt("tavern.wage", {
 		"price": int(round(int(officer.get("wage_daily", 0))
 			* _wage_mult(officer_id))),
-	}), COL_WAGE_W, PaletteLib.PANEL_LINE)
+	}), COL_NAME_W + COL_POST_W + COL_LOYALTY_W, COL_WAGE_W,
+		PaletteLib.PANEL_LINE)
 	wage_cell.name = "Wage"
 	widgets["cells"]["wage"] = wage_cell
+	var stat_x := COL_NAME_W + COL_POST_W + COL_LOYALTY_W + COL_WAGE_W
 	for key in _stat_keys():
 		var value := int((officer.get("skills", {}) as Dictionary).get(str(key), 0)) \
 			if _stat_mode == MODE_SKILLS \
 			else int((officer.get("attributes", {}) as Dictionary).get(str(key), 0))
-		var cell := _cell(line, str(value), COL_STAT_W, PaletteLib.TEXT)
+		var cell := _cell(row, str(value), stat_x, COL_STAT_W, PaletteLib.TEXT)
 		cell.name = "Stat_%s" % str(key)
 		# The table is the only place these numbers appear (the detail card
 		# omits the stat blocks), so each column carries the same hover
 		# explanation the card's rows use (§4.12.1 amended).
 		cell.tooltip_text = _stat_desc(str(key))
 		widgets["cells"][str(key)] = cell
+		stat_x += COL_STAT_W
 
 	# The add lives at the CALL SITE (`_build_table`); `_build_row` only
 	# builds and returns the row — a second add here would trip the engine's
@@ -444,10 +495,11 @@ func _stat_desc(key: String) -> String:
 	return I18n.t_key(ui_key)
 
 
-## One table cell: a 13px label with a fixed width (the §4.8 sizing grid).
-## §4.9 sweep: the pinned cell size rides `LabelSettings`; a non-TEXT color
-## is a state tint via `modulate`.
-func _cell(parent: Container, text: String, width: float, color: Color) -> Label:
+## One table cell: a 13px label at an absolute column slot (`x`, `width` —
+## the §4.8 sizing grid). §4.9 sweep: the pinned cell size rides
+## `LabelSettings`; a non-TEXT color is a state tint via `modulate`.
+func _cell(parent: Control, text: String, x: float, width: float,
+		color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.custom_minimum_size.x = width
@@ -456,6 +508,8 @@ func _cell(parent: Container, text: String, width: float, color: Color) -> Label
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(label)
+	label.position = Vector2(x, 0)
+	label.size = Vector2(width, float(PaletteLib.ROW_H))
 	return label
 
 
@@ -519,38 +573,38 @@ func _build_detail(officer_id: String) -> void:
 	]
 
 	# The 返回 button is scene-owned and stays last (§4.6.2 re-amended); only
-	# the per-officer action buttons are rebuilt here.
+	# the per-officer action buttons are rebuilt here. Phase 12: the actions
+	# band is a plain Control — the buttons take their fixed slots (the
+	# deleted HBox's even columns; docs/80-* §4.8.9).
 	_clear_actions()
 	_detail_action_map = {}
 	_detail_action_map["talk"] = _action_button(_detail_actions, officer_id,
-		"talk", _talk_blocked_reason(officer_id))
+		"talk", _talk_blocked_reason(officer_id), ACTION_SLOT_W)
 	_detail_action_map["gift"] = _action_button(_detail_actions, officer_id,
-		"gift", _gift_blocked_reason(officer_id))
+		"gift", _gift_blocked_reason(officer_id), ACTION_SLOT_W * 2.0)
 	_detail_action_map["train"] = _action_button(_detail_actions, officer_id,
-		"train", _train_blocked_reason(officer_id))
+		"train", _train_blocked_reason(officer_id), ACTION_SLOT_W * 3.0)
 	_detail_action_map["appoint"] = _action_button(_detail_actions, officer_id,
-		"appoint", I18n.t_key("officers.readonly_sea") if is_read_only() else "")
+		"appoint", I18n.t_key("officers.readonly_sea") if is_read_only() else "",
+		ACTION_SLOT_W * 4.0)
 	_detail_dismiss = Button.new()
 	_detail_dismiss.name = "Dismiss_%s" % officer_id
 	_detail_dismiss.text = I18n.t_key("officers.dismiss")
-	_detail_dismiss.custom_minimum_size = Vector2(float(COL_DISMISS_W),
-		PaletteLib.BUTTON_H)
 	var reason_key := dismiss_block_reason(officer_id)
 	_detail_dismiss.disabled = not reason_key.is_empty()
 	_detail_dismiss.tooltip_text = "" if reason_key.is_empty() \
 		else I18n.t_key(reason_key)
 	_detail_dismiss.pressed.connect(_on_dismiss_pressed.bind(officer_id))
 	_detail_actions.add_child(_detail_dismiss)
-	# 返回 is the last entry (it is scene-owned, so the rebuild keeps it).
-	_detail_actions.move_child(_detail_back, _detail_actions.get_child_count() - 1)
+	_detail_dismiss.position = Vector2(ACTION_SLOT_W * 5.0, 0)
+	_detail_dismiss.size = Vector2(float(COL_DISMISS_W), PaletteLib.BUTTON_H)
 
 
-func _action_button(parent: Container, officer_id: String, action: String,
-		reason_text: String) -> Button:
+func _action_button(parent: Control, officer_id: String, action: String,
+		reason_text: String, at_x: float) -> Button:
 	var button := Button.new()
 	button.name = "%s_%s" % [action.capitalize(), officer_id]
 	button.text = I18n.t_key("char.action.%s" % action)
-	button.custom_minimum_size = Vector2(float(COL_ACTION_W), PaletteLib.BUTTON_H)
 	button.disabled = not reason_text.is_empty()
 	button.tooltip_text = reason_text
 	match action:
@@ -563,6 +617,8 @@ func _action_button(parent: Container, officer_id: String, action: String,
 		"appoint":
 			button.pressed.connect(_on_appoint_pressed.bind(officer_id))
 	parent.add_child(button)
+	button.position = Vector2(at_x, 0)
+	button.size = Vector2(float(COL_ACTION_W), PaletteLib.BUTTON_H)
 	return button
 
 

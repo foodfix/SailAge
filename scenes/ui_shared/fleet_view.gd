@@ -86,9 +86,9 @@ func _ready() -> void:
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
 	# Phase 12 (docs/80-* §4.8.9): the view registers + activates at build.
-	# PARTIAL CONVERSION (W2-D budget): the fixed slots are registered; the
-	# per-ship rows are the `ships` list members (their internals keep the
-	# authored line stacking until the follow-up pass).
+	# The fixed slots are registered; the per-ship rows are the `ships` list
+	# members (their internals are absolutely-placed unregistered children —
+	# the flat §4.5.1 line groups).
 	RegistryLib.register(SCREEN_ID, _summary, "summary")
 	RegistryLib.register(SCREEN_ID, _mode_note, "mode_note")
 	RegistryLib.register(SCREEN_ID, _ships_header, "ships_header")
@@ -221,6 +221,10 @@ func _bind_rows() -> void:
 	# The content node's stacked extent (the plain-Control scroll content).
 	_rows_box.custom_minimum_size = Vector2(_rows_box.size.x, y)
 	_bind_totals()
+	# Phase 12: the rebuild path re-applies the data layout (docs/80-*
+	# §4.8.9 — the fixed slots ride the table; the rows are list members,
+	# their builders own the placement).
+	RegistryLib.apply_layout(SCREEN_ID)
 
 
 ## Phase 12: one child placed into a plain-Control band at `y` — explicit
@@ -240,30 +244,44 @@ func _stack(child: Control, y: float) -> float:
 ## hull's own stack, while this row pools the fleet the way consumption does
 ## (`40-*` §4.2 flagship-first pooling) — and it is the fleet-level figure the
 ## provisioning prompt (`80-*` §4.6.1) shows before you sail.
+##
+## Phase 12: the two line HBoxes are deleted — plain Control lines at fixed
+## offsets inside the registered `totals` band (title + speed on line 1, the
+## pooled supplies + the total-days cell on line 2).
 func _bind_totals() -> void:
 	_clear(_totals)
-	var totals_y := 0.0
+	var totals_w := _totals.size.x if _totals.size.x > 0.0 \
+		else float(32 * PaletteLib.CHROME_TILE)
+
+	var title_row := Control.new()
+	title_row.name = "TitleRow"
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.position = Vector2(0, 0)
+	title_row.size = Vector2(totals_w, ROW_LINE_H)
+	_totals.add_child(title_row)
 	var title := _label(I18n.t_key("fleet.totals"), PaletteLib.ACCENT)
 	title.name = "Title"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var title_row := HBoxContainer.new()
-	title_row.name = "TitleRow"
-	title_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
 	title_row.add_child(title)
+	title.position = Vector2(0, 0)
+	title.size = Vector2(totals_w - ROW_CELL_W, ROW_LINE_H)
 	var speed := _label(I18n.fmt("world.speed", {
 		"speed": SailingSimLib.speed_knots_text(),
 	}), PaletteLib.PANEL_LINE)
 	speed.name = "Speed"
-	speed.custom_minimum_size.x = 180
+	speed.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	title_row.add_child(speed)
-	totals_y += _stack(title_row, totals_y)
-	_totals.add_child(title_row)
+	speed.position = Vector2(totals_w - ROW_CELL_W, 0)
+	speed.size = Vector2(ROW_CELL_W, ROW_LINE_H)
 
-	var supplies_row := HBoxContainer.new()
+	var supplies_row := Control.new()
 	supplies_row.name = "Supplies"
-	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	supplies_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	supplies_row.position = Vector2(0, ROW_LINE_H)
+	supplies_row.size = Vector2(totals_w, ROW_LINE_H)
+	_totals.add_child(supplies_row)
 	var crew := FleetLib.total_crew()
 	var days := SailingSimLib.fleet_supply_days()
+	var supply_x := 0.0
 	for kind in FleetLib.SUPPLY_KINDS:
 		var amount := FleetLib.supplies(kind)
 		var label := _label(I18n.fmt("fleet.stat.supply", {
@@ -273,14 +291,16 @@ func _bind_totals() -> void:
 		}), PaletteLib.TEXT)
 		label.name = "Total_%s" % kind
 		supplies_row.add_child(label)
+		label.position = Vector2(supply_x, 0)
+		label.size = Vector2(2.0 * ROW_CELL_W, ROW_LINE_H)
+		supply_x += 2.0 * ROW_CELL_W
 	var total_days := _label(I18n.fmt("fleet.total_days", {"days": days}),
 		_days_color(days))
 	total_days.name = "TotalDays"
-	total_days.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	total_days.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	supplies_row.add_child(total_days)
-	totals_y += _stack(supplies_row, totals_y)
-	_totals.add_child(supplies_row)
+	total_days.position = Vector2(totals_w - 2.0 * ROW_CELL_W, 0)
+	total_days.size = Vector2(2.0 * ROW_CELL_W, ROW_LINE_H)
 
 
 ## The §4.8 GOOD/WARN/BAD tier for a days-of-supply figure — the same thresholds
@@ -293,26 +313,53 @@ static func _days_color(days: int) -> Color:
 	return PaletteLib.BAD
 
 
+## The row's slot table (px, row-local; docs/80-* §4.8.9 — the deleted
+## line VBoxes/HBoxes are plain Controls at fixed offsets). The row keeps
+## the §4.5.1 line structure as plain Control groups so the section seam
+## (`Top/Name`, `Stats/DurabilityLine`, `Supplies`) is stable; the line
+## cells are absolutely-placed unregistered children.
+const ROW_TOP_H := 64.0
+const ROW_LINE_H := 32.0
+const ROW_STATS_H := 3.0 * ROW_LINE_H  # durability · crew · speed
+const ROW_SUPPLIES_Y := ROW_TOP_H + ROW_STATS_H
+const ROW_CARGO_Y := ROW_SUPPLIES_Y + ROW_LINE_H
+const ROW_NAME_W := 720.0
+const ROW_CELL_W := 190.0
+const ROW_STACK_W := 416.0
+const ROW_BUTTON_W := 96.0
+
+
 func _add_row(index: int, ship) -> Control:
 	var widgets: Dictionary = {"index": index, "promote": null, "jettison": []}
-	var box := VBoxContainer.new()
+	var row_w := _rows_box.size.x if _rows_box.size.x > 0.0 \
+		else float(32 * PaletteLib.CHROME_TILE)
+	var box := Control.new()
 	box.name = "Ship_%d" % index
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	var data: Dictionary = ship if ship is Dictionary else {}
 
 	# --- line 1: identity, flagship tag, Promote -------------------------
-	var top := HBoxContainer.new()
+	var top := Control.new()
 	top.name = "Top"
-	top.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.position = Vector2(0, 0)
+	top.size = Vector2(row_w, ROW_TOP_H)
+	box.add_child(top)
 	# §4.8.9: list/roster rows use the static-n hull token; a registry miss
 	# keeps the text-only row (§4.9 icon params).
 	var token := _hull_token_icon(data)
 	if token != null:
 		top.add_child(token)
+		token.position = Vector2(0, 0)
+		token.size = Vector2(HULL_TOKEN_PX, ROW_TOP_H)
 	var name_label := _label(_ship_title(index, data), PaletteLib.TEXT)
 	name_label.name = "Name"
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(name_label)
+	name_label.position = Vector2(HULL_TOKEN_PX if token != null else 0.0, 0)
+	name_label.size = Vector2(row_w - (HULL_TOKEN_PX if token != null else 0.0)
+		- ROW_BUTTON_W, ROW_TOP_H)
 
 	# Promote: non-flagship rows only (§4.4); disabled with a reason at sea.
 	if index > 0:
@@ -324,21 +371,34 @@ func _add_row(index: int, ship) -> Control:
 			else promote.text
 		promote.pressed.connect(_on_promote_pressed.bind(index))
 		top.add_child(promote)
+		promote.position = Vector2(row_w - ROW_BUTTON_W, 0)
+		promote.size = Vector2(ROW_BUTTON_W, ROW_TOP_H)
 		widgets["promote"] = promote
-	box.add_child(top)
 
 	# --- lines 1–3 of the §4.5.1 stat block ------------------------------
-	# `Stats` stays the block's node name (the pre-existing test hook), now a
-	# VBox of three named 32px lines: `DurabilityLine`, `CrewLine`, `SpeedLine`.
-	var stats := VBoxContainer.new()
+	# `Stats` stays the block's node name (the pre-existing test hook), now
+	# a plain Control of three named 32px lines: `DurabilityLine`,
+	# `CrewLine`, `SpeedLine`.
+	var stats := Control.new()
 	stats.name = "Stats"
-	var durability_line := HBoxContainer.new()
+	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stats.position = Vector2(0, ROW_TOP_H)
+	stats.size = Vector2(row_w, ROW_STATS_H)
+	box.add_child(stats)
+
+	var durability_line := Control.new()
 	durability_line.name = "DurabilityLine"
-	durability_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	durability_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	durability_line.position = Vector2(0, 0)
+	durability_line.size = Vector2(row_w, ROW_LINE_H)
+	stats.add_child(durability_line)
 	var max_durability := FleetLib.ship_stat(data, "durability")
 	var durability := int(data.get("durability", 0))
 	var ratio := float(durability) / float(max_durability) if max_durability > 0 else 0.0
-	durability_line.add_child(_durability_bar(ratio))
+	var durability_bar := _durability_bar(ratio)
+	durability_line.add_child(durability_bar)
+	durability_bar.position = Vector2(0, (ROW_LINE_H - BAR_H) / 2.0)
+	durability_bar.size = Vector2(BAR_W, BAR_H)
 	var durability_label := _label(
 		I18n.fmt("fleet.stat.durability", {
 			"current": durability, "max": max_durability,
@@ -346,8 +406,9 @@ func _add_row(index: int, ship) -> Control:
 		PaletteLib.TEXT
 	)
 	durability_label.name = "Durability"
-	durability_label.custom_minimum_size.x = 190
 	durability_line.add_child(durability_label)
+	durability_label.position = Vector2(BAR_W + 8.0, 0)
+	durability_label.size = Vector2(ROW_CELL_W, ROW_LINE_H)
 	var capacity := FleetLib.ship_stat(data, "capacity")
 	var used := FleetLib.used_capacity(data)
 	var free := FleetLib.free_capacity(data)
@@ -358,9 +419,11 @@ func _add_row(index: int, ship) -> Control:
 		PaletteLib.PANEL_LINE
 	)
 	cargo_label.name = "Cargo"
-	cargo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cargo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	durability_line.add_child(cargo_label)
+	cargo_label.position = Vector2(BAR_W + 8.0 + ROW_CELL_W, 0)
+	cargo_label.size = Vector2(row_w - BAR_W - 8.0 - 2.0 * ROW_CELL_W,
+		ROW_LINE_H)
 	# The pre-existing `Free` label (a test hook from T18) keeps its name and
 	# meaning: the same `free` figure the cargo cell carries.
 	var free_label := _label(
@@ -370,12 +433,16 @@ func _add_row(index: int, ship) -> Control:
 	free_label.name = "Free"
 	free_label.visible = false
 	durability_line.add_child(free_label)
-	stats.add_child(durability_line)
+	free_label.position = Vector2(row_w - ROW_CELL_W, 0)
+	free_label.size = Vector2(ROW_CELL_W, ROW_LINE_H)
 
 	# --- line 3: crew + guns (§4.5.1 line 2) -----------------------------
-	var crew_line := HBoxContainer.new()
+	var crew_line := Control.new()
 	crew_line.name = "CrewLine"
-	crew_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	crew_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crew_line.position = Vector2(0, ROW_LINE_H)
+	crew_line.size = Vector2(row_w, ROW_LINE_H)
+	stats.add_child(crew_line)
 	var crew := _label(
 		I18n.fmt("fleet.stat.crew", {
 			"crew": int(data.get("crew", 0)),
@@ -384,8 +451,9 @@ func _add_row(index: int, ship) -> Control:
 		PaletteLib.TEXT
 	)
 	crew.name = "Crew"
-	crew.custom_minimum_size.x = 190
 	crew_line.add_child(crew)
+	crew.position = Vector2(0, 0)
+	crew.size = Vector2(ROW_CELL_W, ROW_LINE_H)
 	var guns := _label(
 		I18n.fmt("fleet.stat.guns", {
 			"cannons": int(data.get("cannons", 0)),
@@ -394,14 +462,17 @@ func _add_row(index: int, ship) -> Control:
 		PaletteLib.PANEL_LINE
 	)
 	guns.name = "Guns"
-	guns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	crew_line.add_child(guns)
-	stats.add_child(crew_line)
+	guns.position = Vector2(ROW_CELL_W, 0)
+	guns.size = Vector2(row_w - ROW_CELL_W, ROW_LINE_H)
 
 	# --- line 4: current speed vs hull max, with the wind (§4.5.1 line 3) -
-	var speed_line := HBoxContainer.new()
+	var speed_line := Control.new()
 	speed_line.name = "SpeedLine"
-	speed_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	speed_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	speed_line.position = Vector2(0, 2.0 * ROW_LINE_H)
+	speed_line.size = Vector2(row_w, ROW_LINE_H)
+	stats.add_child(speed_line)
 	var speed := _label(
 		I18n.fmt("fleet.stat.speed", {
 			"speed": SailingSimLib.knots_text_for(_row_speed(index)),
@@ -413,48 +484,52 @@ func _add_row(index: int, ship) -> Control:
 		PaletteLib.TEXT
 	)
 	speed.name = "Speed"
-	speed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	speed_line.add_child(speed)
-	stats.add_child(speed_line)
-	box.add_child(stats)
+	speed.position = Vector2(0, 0)
+	speed.size = Vector2(row_w, ROW_LINE_H)
 
 	# --- line 5: supplies, each with its **own** days (§4.5.1 line 4) ----
-	var supplies_row := HBoxContainer.new()
+	var supplies_row := Control.new()
 	supplies_row.name = "Supplies"
-	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	for kind in FleetLib.SUPPLY_KINDS:
-		_add_stack(supplies_row, widgets, index, kind, str(kind), "", int(data.get(kind, 0)))
+	supplies_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	supplies_row.position = Vector2(0, ROW_SUPPLIES_Y)
+	supplies_row.size = Vector2(row_w, ROW_LINE_H)
 	box.add_child(supplies_row)
+	var supply_index := 0
+	for kind in FleetLib.SUPPLY_KINDS:
+		var pair_x := float(supply_index * int(ROW_STACK_W + ROW_BUTTON_W + 32.0))
+		_add_stack(supplies_row, widgets, index, kind, str(kind), "",
+			int(data.get(kind, 0)), pair_x)
+		supply_index += 1
 
 	# --- then one row per trade-good stack, each with its own Jettison ---
 	var cargo: Dictionary = data.get("cargo", {}) \
 		if data.get("cargo", {}) is Dictionary else {}
 	var good_ids: Array = cargo.keys()
 	good_ids.sort_custom(func(a, b) -> bool: return str(a) < str(b))
+	var cargo_y := ROW_CARGO_Y
 	if good_ids.is_empty():
 		var empty := _label(I18n.t_key("fleet.cargo_empty"), PaletteLib.PANEL_LINE)
 		empty.name = "CargoEmpty"
-		var cargo_row := HBoxContainer.new()
-		cargo_row.name = "Cargo"
-		cargo_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-		cargo_row.add_child(empty)
-		box.add_child(cargo_row)
+		empty.position = Vector2(0, cargo_y)
+		empty.size = Vector2(row_w, ROW_LINE_H)
+		box.add_child(empty)
+		cargo_y += ROW_LINE_H
 	else:
 		for good_id in good_ids:
 			var qty := int(cargo.get(good_id, 0))
 			if qty <= 0:
 				continue
-			var cargo_row := HBoxContainer.new()
-			cargo_row.name = "Cargo_%s" % str(good_id)
-			cargo_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
 			var good: Dictionary = DataLoader.get_good(str(good_id))
 			var good_name := I18n.t(good.get("name", {})) if not good.is_empty() \
 				else str(good_id)
-			_add_stack(cargo_row, widgets, index, "cargo", str(good_id), good_name, qty)
-			box.add_child(cargo_row)
+			_add_stack(box, widgets, index, "cargo", str(good_id), good_name,
+				qty, cargo_y)
+			cargo_y += ROW_LINE_H
 
 	# §4.8: 32px table row; the row group itself is at least that tall.
-	box.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	box.custom_minimum_size = Vector2(row_w, cargo_y)
+	box.size = box.custom_minimum_size
 	_rows.append(widgets)
 	return box
 
@@ -505,11 +580,14 @@ static func _wind_name() -> String:
 	))
 
 
-## One "name qty [Jettison]" stack row. `kind` is "cargo", "provisions" or
+## One "name qty [Jettison]" stack line at an absolute slot. `at` is the
+## line's y inside `parent` for cargo stacks, or the pair's x for the two
+## supplies (one 32px line, two pairs); `kind` is "cargo", "provisions" or
 ## "water"; `good_id` is the trade good id for cargo, else ""; `qty` is the
 ## stack size already read by the caller.
-func _add_stack(parent: HBoxContainer, widgets: Dictionary, ship_index: int,
-		kind: String, good_id: String, good_name: String, qty: int) -> void:
+func _add_stack(parent: Control, widgets: Dictionary, ship_index: int,
+		kind: String, good_id: String, good_name: String, qty: int,
+		at: float) -> void:
 	var text := ""
 	if kind == "cargo":
 		# `fleet.stack` is requested for the next `ui_strings.json` merge; until
@@ -530,9 +608,11 @@ func _add_stack(parent: HBoxContainer, widgets: Dictionary, ship_index: int,
 				stack, stack, _crew_sharing(ship_index)
 			),
 		})
+	var row_w: float = (parent.size.x if parent.size.x > 0.0
+		else float(32 * PaletteLib.CHROME_TILE))
+	var line_h := ROW_LINE_H
 	var label := _label(text, PaletteLib.TEXT)
 	label.name = "Stack_%s" % (good_id if kind == "cargo" else kind)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(label)
 
 	var button := _row_button(I18n.t_key("fleet.jettison"))
@@ -550,6 +630,19 @@ func _add_stack(parent: HBoxContainer, widgets: Dictionary, ship_index: int,
 	widgets["jettison"].append({
 		"kind": kind, "good_id": good_id, "button": button, "qty": qty,
 	})
+	# The absolute slot: a cargo stack owns its own 32px line (label left,
+	# button right); a supply pair shares the one supplies line (label left,
+	# button right inside the pair's column).
+	if kind == "cargo":
+		label.position = Vector2(0, at)
+		label.size = Vector2(row_w - ROW_BUTTON_W, line_h)
+		button.position = Vector2(row_w - ROW_BUTTON_W, at)
+		button.size = Vector2(ROW_BUTTON_W, line_h)
+	else:
+		label.position = Vector2(at, 0)
+		label.size = Vector2(ROW_STACK_W, line_h)
+		button.position = Vector2(at + ROW_STACK_W, 0)
+		button.size = Vector2(ROW_BUTTON_W, line_h)
 
 
 ## §4.4/§6: jettison is a port action — at sea every stack button is inert and

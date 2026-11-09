@@ -301,8 +301,7 @@ func _test_add_ship_visibility() -> void:
 	# The 5-ship fleet fits its panel with NO scrolling: the rows content
 	# stays inside the pinned panel height.
 	for side in ["player", "enemy"]:
-		var content: float = (sandbox.rows_box(side)
-			as VBoxContainer).get_combined_minimum_size().y
+		var content: float = (sandbox.rows_box(side) as Control).size.y
 		var panel: Control = sandbox.player_panel() if side == "player" \
 			else sandbox.enemy_panel()
 		_check(content <= panel.size.y + 1.0,
@@ -760,7 +759,7 @@ func _randomize_invariant_problems(sandbox) -> Array[String]:
 		if rows.size() < 1 or rows.size() > 5:
 			problems.append("%s side has %d ships (clamp 1..5)"
 				% [side, rows.size()])
-		var box: VBoxContainer = sandbox.rows_box(side)
+		var box: Control = sandbox.rows_box(side)
 		if box.get_child_count() != rows.size():
 			problems.append("%s rows_box holds %d of %d rows"
 				% [side, box.get_child_count(), rows.size()])
@@ -876,15 +875,16 @@ func _test_layout_geometry() -> void:
 				("[%s] the %s fleet +/− buttons sit on the editors row's "
 				+ "right end inside the panel") % [locale, side])
 
-		# The three §4.7.16 regions sit at their EXACT pinned 1920×1080
-		# rects (2026-11-09 full-surface re-layout; §4.7.16).
+		# The three §4.7.16 regions sit at their EXACT managed rects (the
+		# Phase-12 v2 tile grid: the fragment `sandbox.json` is the pin —
+		# 1,2,59,13 / 1,16,59,13 / 1,29,59,5 in tiles × 32px).
 		var rects := [
 			["player panel", sandbox.player_panel(),
-				Vector2(16, 72), Vector2(1888, 416)],
+				Vector2(32, 64), Vector2(1888, 416)],
 			["enemy panel", sandbox.enemy_panel(),
-				Vector2(16, 496), Vector2(1888, 416)],
+				Vector2(32, 512), Vector2(1888, 416)],
 			["conditions", sandbox.conditions_panel(),
-				Vector2(16, 912), Vector2(1888, 168)],
+				Vector2(32, 928), Vector2(1888, 160)],
 		]
 		var rects_ok := true
 		var rects_note := ""
@@ -896,9 +896,10 @@ func _test_layout_geometry() -> void:
 				rects_note += " %s at %s×%s" % [entry[0], control.position,
 					control.size]
 		_check(rects_ok,
-			("[%s] the three §4.7.16 regions sit at the pinned rects "
-			+ "(player 16,72 1888×416 / enemy 16,496 1888×416 / conditions "
-			+ "16,912 1888×168)") % locale + rects_note)
+			("[%s] the three §4.7.16 regions sit at the managed tile rects "
+			+ "(player 32,64 1888×416 / enemy 32,512 1888×416 / conditions "
+			+ "32,928 1888×160 — the v2 grid's quantized form of the pinned "
+			+ "bands)") % locale + rects_note)
 
 		sandbox.queue_free()
 		await get_tree().process_frame
@@ -925,6 +926,10 @@ func _panel_controls(root: Control) -> Array:
 ## side, OptionButton pads + arrow ≈34px).
 func _layout_problems(sandbox) -> Array[String]:
 	var problems: Array[String] = []
+	# Phase 12 (W2-D): the regions are the managed data rects now (the
+	# 32-tile grid; `data/layout_fragments/sandbox.json` is the pin) — the
+	# screen bottom carries the §4.23 sliver row (the canvas is 60×33.75
+	# tiles: a full-height 34-tile element's bottom 8px are IN bounds).
 	var regions: Array = [
 		{"name": "player panel", "panel": sandbox.player_panel(),
 			"right": 1920.0, "bottom": 1080.0},
@@ -932,7 +937,7 @@ func _layout_problems(sandbox) -> Array[String]:
 			"right": 1920.0, "bottom": 1080.0},
 		{"name": "conditions", "panel": sandbox.conditions_panel(),
 			"right": 1920.0, "bottom": 1080.0},
-		{"name": "screen", "panel": sandbox, "right": 1920.0, "bottom": 1080.0},
+		{"name": "screen", "panel": sandbox, "right": 1920.0, "bottom": 1088.0},
 	]
 	for region in regions:
 		var panel: Control = region["panel"]
@@ -964,7 +969,7 @@ func _layout_problems(sandbox) -> Array[String]:
 	for side in ["player", "enemy"]:
 		var panel: Control = sandbox.player_panel() if side == "player" \
 			else sandbox.enemy_panel()
-		var box: VBoxContainer = sandbox.rows_box(side)
+		var box: Control = sandbox.rows_box(side)
 		if box.size.x > panel.size.x + 1.0:
 			problems.append("%s ship rows are wider (%.0f) than their panel "
 				+ ("(%.0f) — horizontal clip"

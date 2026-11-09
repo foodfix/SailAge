@@ -54,8 +54,12 @@ func _ready() -> void:
 
 # --- Fixtures --------------------------------------------------------------
 
-## A docked run (`port` = null leaves the fleet at sea).
+## A docked run (`port` = null leaves the fleet at sea). The minimal run
+## skeleton rides along: the intel window refuses to open with no run in
+## progress (the §4.5 no-run guard) and every suite view reads live state.
 func _make_fleet(ship_ids: Array, port = "lisbon") -> void:
+	if GameState.player.is_empty():
+		GameState.player = {"nation_id": "portugal", "reputation": {}}
 	GameState.current_port = port
 	GameState.fleet = []
 	for ship_id in ship_ids:
@@ -471,13 +475,13 @@ func _test_panel() -> void:
 	_check(panel.is_active(),
 		"the standalone view is active (a tab child of the intel window)")
 
-	var rows: VBoxContainer = panel.get_node("Body/Scroll/Rows")
+	var rows: Control = panel.get_node("Scroll/Rows")
 	_check(rows.get_child_count() == 2,
 		"one row per hull in GameState.fleet (got %d)" % rows.get_child_count())
 
 	# Row 1: name + flagship tag, durability bar, crew, supplies, cargo stack.
 	var row0: Node = rows.get_child(0)
-	var top0: HBoxContainer = row0.get_node("Top")
+	var top0: Control = row0.get_node("Top")
 	var name0: Label = top0.get_node("Name")
 	_check(name0.text.contains(I18n.t_key("fleet.flagship")),
 		"the flagship row is marked (§4.4): %s" % name0.text)
@@ -490,8 +494,8 @@ func _test_panel() -> void:
 
 	# §4.5.1 stat block: `Stats` now holds three named lines (durability+cargo,
 	# crew+guns, speed), with one supplies line beneath.
-	var stats: VBoxContainer = row0.get_node("Stats")
-	var durability_line: HBoxContainer = stats.get_node("DurabilityLine")
+	var stats: Control = row0.get_node("Stats")
+	var durability_line: Control = stats.get_node("DurabilityLine")
 	var bar: Control = durability_line.get_child(0)
 	var fill: ColorRect = bar.get_node("BarFill")
 	_check(is_equal_approx(fill.anchor_right, 0.5),
@@ -502,7 +506,7 @@ func _test_panel() -> void:
 		"fleet.stat.crew", {"crew": 15, "max": FleetLib.ship_stat(flagship, "crew_max")}),
 		"the crew line is localised through fleet.stat.crew")
 
-	var supplies: HBoxContainer = row0.get_node("Supplies")
+	var supplies: Control = row0.get_node("Supplies")
 	_check(supplies.get_child_count() >= 4,
 		"provisions and water each render a label + Jettison button")
 	var stacks: Array = panel.jettison_buttons(0)
@@ -536,11 +540,11 @@ func _test_panel() -> void:
 	_check(str(GameState.fleet[0]["ship_type_id"]) == "latin",
 		"the panel promoted fleet[1] to fleet[0] (got %s)"
 		% str(GameState.fleet[0]["ship_type_id"]))
-	_check(panel.get_node("Body/Scroll/Rows").get_child_count() == 2,
+	_check(panel.get_node("Scroll/Rows").get_child_count() == 2,
 		"the panel rebuilt after promotion")
 
 	# Header: fleet count n/5 + fleet_free.
-	var summary: Label = panel.get_node("Body/Summary")
+	var summary: Label = panel.get_node("Summary")
 	_check(summary.text.contains("/%d" % FleetLib.FLEET_MAX),
 		"the header shows the n/5 fleet count: %s" % summary.text)
 	_check(summary.text.contains(str(FleetLib.fleet_free())),
@@ -595,7 +599,7 @@ func _test_panel() -> void:
 		"Jettison is disabled at sea")
 	_check(not sea_jettison.tooltip_text.is_empty(),
 		"a disabled Jettison states a reason tooltip (%s)" % sea_jettison.tooltip_text)
-	var mode_note: Label = panel.get_node("Body/ModeNote")
+	var mode_note: Label = panel.get_node("ModeNote")
 	_check(mode_note.visible and not mode_note.text.is_empty(),
 		"the panel explains the at-sea read-only mode (%s)" % mode_note.text)
 	# The click cannot act even if it somehow fires.
@@ -611,16 +615,21 @@ func _test_panel() -> void:
 	await get_tree().process_frame
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	var title: Label = panel.get_node("Body/Title")
-	_check(title.text == I18n.t_key("fleet.title") and title.text == "船队",
-		"the panel title rebinds on locale_changed (%s)" % title.text)
+	# Phase 12 (W2-D): the panel title is gone — the summary line (count +
+	# free capacity + the HUD day/gold/morale figures) carries the header.
+	var title: Label = panel.get_node("Summary")
+	_check(title.text.begins_with(I18n.fmt("fleet.count",
+			{"count": GameState.fleet.size(), "max": FleetLib.FLEET_MAX})),
+		"the summary header rebinds on locale_changed (%s)" % title.text)
 	var zh_promote: Button = panel.promote_button(1)
 	_check(zh_promote != null and zh_promote.text == I18n.t_key("fleet.promote"),
 		"Promote rebinds on locale_changed (%s)"
 		% ("-" if zh_promote == null else zh_promote.text))
 	I18n.set_locale("en")
 	await get_tree().process_frame
-	_check(panel.get_node("Body/Title").text == I18n.t_key("fleet.title"),
+	_check(panel.get_node("Summary").text.begins_with(I18n.fmt(
+			"fleet.count", {"count": GameState.fleet.size(),
+			"max": FleetLib.FLEET_MAX})),
 		"the panel returns to en cleanly")
 
 	# No raw "<key>" anywhere in the rendered panel (§6), and no unsubstituted
@@ -639,7 +648,7 @@ func _test_panel() -> void:
 	GameState.fleet = [{"ship_type_id": "caravel", "cargo": null}, "junk", null]
 	panel.rebuild()
 	await get_tree().process_frame
-	_check(panel.get_node("Body/Scroll/Rows").get_child_count() == 3,
+	_check(panel.get_node("Scroll/Rows").get_child_count() == 3,
 		"the panel renders a corrupted fleet without crashing (3 rows)")
 	_check(panel.row_widget(1).is_empty() == false,
 		"a non-dictionary fleet entry still gets a row widget")
@@ -650,18 +659,22 @@ func _test_panel() -> void:
 	# Closing while a jettison confirm is up must take the confirm with it —
 	# the window's close cancels the view's pending confirm (§6).
 	GameState.fleet[0]["cargo"] = {"wine": 5}
+	panel.rebuild()
 	var window: Control = IntelWindowLib.attach_to(panel.get_parent()
 		if panel.get_parent() != null else panel)
 	window.open_tab("fleet")
 	await get_tree().process_frame
-	(panel.jettison_button(0, "cargo", "wine") as Button).pressed.emit()
+	# The §6 contract rides the WINDOW's own fleet view (attach_to builds a
+	# fresh window + view; the standalone panel's dialogs are its own).
+	var window_view: Control = window.get_node("Panel/Content/FleetView")
+	(window_view.jettison_button(0, "cargo", "wine") as Button).pressed.emit()
 	await get_tree().process_frame
-	_check((panel.get_node("ConfirmDialog") as Control).is_open(),
+	_check((window_view.get_node("ConfirmDialog") as Control).is_open(),
 		"the confirm is up before the window closes")
 	_check(window.has_modal(), "the window knows a nested dialog is up")
 	window.close()
 	await get_tree().process_frame
-	_check(not (panel.get_node("ConfirmDialog") as Control).is_open(),
+	_check(not (window_view.get_node("ConfirmDialog") as Control).is_open(),
 		"closing the window dismisses the view's pending confirm")
 	_check(not window.has_modal(), "no modal is left behind by close()")
 	window.queue_free()
@@ -792,19 +805,19 @@ func _test_stat_block() -> void:
 	panel.rebuild()
 	await get_tree().process_frame
 
-	var rows: VBoxContainer = panel.get_node(
-		"Body/Scroll/Rows"
+	var rows: Control = panel.get_node(
+		"Scroll/Rows"
 	)
 	_check(rows.get_child_count() == 2,
 		"one row per hull; the totals row lives outside the list (got %d)"
 		% rows.get_child_count())
 	var ship_row: Node = rows.get_child(0)
-	var stats: VBoxContainer = ship_row.get_node("Stats")
+	var stats: Control = ship_row.get_node("Stats")
 	_check(stats.get_child_count() == 3,
 		"three stat lines per ship (§4.5.1): got %d" % stats.get_child_count())
 
 	# Line 1: durability bar + `fleet.stat.durability` + `fleet.stat.cargo`.
-	var line1: HBoxContainer = stats.get_node("DurabilityLine")
+	var line1: Control = stats.get_node("DurabilityLine")
 	var bar: Control = line1.get_node("DurabilityBar")
 	_check(bar != null, "line 1 carries the durability bar")
 	_check((line1.get_node("Durability") as Label).text == I18n.fmt(
@@ -822,7 +835,7 @@ func _test_stat_block() -> void:
 		% (line1.get_node("Cargo") as Label).text)
 
 	# Line 2: `fleet.stat.crew` + `fleet.stat.guns`.
-	var line2: HBoxContainer = stats.get_node("CrewLine")
+	var line2: Control = stats.get_node("CrewLine")
 	_check((line2.get_node("Crew") as Label).text == I18n.fmt(
 			"fleet.stat.crew", {"crew": 15, "max": 45}),
 		"line 2 uses fleet.stat.crew (%s)"
@@ -833,7 +846,7 @@ func _test_stat_block() -> void:
 		% (line2.get_node("Guns") as Label).text)
 
 	# Line 3: current effective speed for the flagship + the wind factor.
-	var line3: HBoxContainer = stats.get_node("SpeedLine")
+	var line3: Control = stats.get_node("SpeedLine")
 	var speed_text := (line3.get_node("Speed") as Label).text
 	_check(speed_text == I18n.fmt("fleet.stat.speed", {
 			"speed": SailingSimLib.knots_text_for(
@@ -847,7 +860,7 @@ func _test_stat_block() -> void:
 	_check(speed_text.contains(I18n.t_key("world.weather.fair")),
 		"the wind factor is the localised weather name (%s)" % speed_text)
 	# A non-flagship shows its hull's base speed (the fleet moves at the slowest).
-	var escort_line: HBoxContainer = rows.get_child(1).get_node("Stats/SpeedLine")
+	var escort_line: Control = rows.get_child(1).get_node("Stats/SpeedLine")
 	_check((escort_line.get_node("Speed") as Label).text == I18n.fmt(
 			"fleet.stat.speed", {
 				"speed": SailingSimLib.knots_text_for(
@@ -860,7 +873,7 @@ func _test_stat_block() -> void:
 		% (escort_line.get_node("Speed") as Label).text)
 
 	# Line 4: supplies with days, per ship (§4.10 on its own stack).
-	var supplies: HBoxContainer = ship_row.get_node("Supplies")
+	var supplies: Control = ship_row.get_node("Supplies")
 	_check(supplies.get_child_count() >= 4,
 		"provisions and water each render a stat + a Jettison button")
 	var provisions_text := (supplies.get_node("Stack_provisions") as Label).text
@@ -874,8 +887,8 @@ func _test_stat_block() -> void:
 		"the water line carries its own 15 days (%s)" % water_text)
 
 	# The fleet totals row: pooled supplies, combined days, effective speed.
-	var totals: VBoxContainer = panel.get_node(
-		"Body/Totals"
+	var totals: Control = panel.get_node(
+		"Totals"
 	)
 	_check(totals.get_child_count() == 2,
 		"the totals row renders a title line and a supplies line")
@@ -913,16 +926,16 @@ func _test_stat_block() -> void:
 	# Locale rebind covers the new lines.
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	var zh_rows: VBoxContainer = panel.get_node(
-		"Body/Scroll/Rows"
+	var zh_rows: Control = panel.get_node(
+		"Scroll/Rows"
 	)
 	_check((zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text
 		== I18n.fmt("fleet.stat.crew", {"crew": 15, "max": 45}),
 		"the crew line rebinds to zh (%s)"
 		% (zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text)
-	_check((panel.get_node("Body/Totals/TitleRow/Title")
+	_check((panel.get_node("Totals/TitleRow/Title")
 		as Label).text == "船队合计", "the totals title rebinds to zh (%s)"
-		% (panel.get_node("Body/Totals/TitleRow/Title")
+		% (panel.get_node("Totals/TitleRow/Title")
 			as Label).text)
 	I18n.set_locale("en")
 	await get_tree().process_frame
@@ -940,10 +953,10 @@ func _test_stat_block() -> void:
 	GameState.fleet = [{"ship_type_id": "caravel", "cargo": null}, "junk", null]
 	panel.rebuild()
 	await get_tree().process_frame
-	_check(panel.get_node("Body/Scroll/Rows")
+	_check(panel.get_node("Scroll/Rows")
 		.get_child_count() == 3,
 		"the stat block renders a corrupted fleet without crashing")
-	_check(panel.get_node("Body/Totals")
+	_check(panel.get_node("Totals")
 		.get_child_count() == 2,
 		"the totals row still renders for a corrupted fleet")
 
