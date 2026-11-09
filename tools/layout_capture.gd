@@ -340,3 +340,38 @@ func _rig_settings() -> void:
 
 func _open_settings(panel_screen: Control) -> void:
 	panel_screen.call("open")
+
+
+# --- rig: gameover (W2-D) ------------------------------------------------------
+
+func _rig_gameover() -> void:
+	_rig_modal_run()
+
+
+## The fixture death (a §4.9 reason, so the reason line shows). The screen
+## is live from _ready — no open call needed.
+func _open_gameover(screen: Control) -> void:
+	screen.call("open_reason", "sunk")
+
+
+# --- rig: ending (W2-D) --------------------------------------------------------
+
+func _rig_ending() -> void:
+	_rig_modal_run()
+	# A served run: fame, reported discoveries, battle count, titles, one
+	# met captain with wins + a negative stance (the nemesis/grudge rows).
+	GameState.day = 210
+	GameState.gold = 48250
+	GameState.fame = 88
+	GameState.battles_won = 14
+	GameState.discoveries_reported = ["d_amazon"]
+	GameState.titles["portugal"] = "baron"
+	GameState.captain_states = {
+		"cp_redbeard": {"wins": 3, "stance": -4, "tier_now": 2, "met": 30},
+	}
+
+
+## The fixture retirement (open_live — the fresh-retirement mode). The
+## screen builds at _ready; the open call re-reads live state.
+func _open_ending(screen: Control) -> void:
+	screen.call("open_live")

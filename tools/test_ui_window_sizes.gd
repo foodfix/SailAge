@@ -653,7 +653,9 @@ func _test_full_screens() -> void:
 	_host.add_child(ending)
 	await _settle()
 	ending.call("open_live")
-	await assert_window_size_invariant("ending screen", ending, [
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/ending.json`).
+	await assert_window_size_invariant("ending screen", ending.get_node("Panel"), [
 		func() -> void: I18n.set_locale("zh"),
 		func() -> void: I18n.set_locale("en"),
 	])
@@ -664,10 +666,13 @@ func _test_full_screens() -> void:
 	_host.add_child(gameover)
 	await _settle()
 	gameover.call("open_reason", "starved")
-	await assert_window_size_invariant("game-over screen", gameover, [
-		func() -> void: I18n.set_locale("zh"),
-		func() -> void: I18n.set_locale("en"),
-	])
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/gameover.json`).
+	await assert_window_size_invariant("game-over screen",
+		gameover.get_node("Panel"), [
+			func() -> void: I18n.set_locale("zh"),
+			func() -> void: I18n.set_locale("en"),
+		])
 	gameover.queue_free()
 	await _settle()
 
