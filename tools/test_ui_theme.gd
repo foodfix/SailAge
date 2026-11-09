@@ -393,6 +393,10 @@ func _sheet_specs() -> Dictionary:
 		"button_pressed": {"pixellab": true, "ring_distinct": true},
 		"button_focus": {"pixellab": true, "ring_distinct": true},
 		"field": {"pixellab": true},
+		# The 8th sheet row (registered 2026-11-09, the third-tileset
+		# amendment — the S1/S10/S21 decorative backdrop): the same keyed
+		# nine-patch family, the same alpha-geometry pins.
+		"backdrop": {"pixellab": true},
 	}
 
 

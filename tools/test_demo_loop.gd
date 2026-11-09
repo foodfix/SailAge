@@ -85,13 +85,13 @@ func _step1_title() -> void:
 	var title: Node = scene.instantiate()
 	add_child(title)
 	await get_tree().process_frame
-	_check(title.get_node_or_null("Center/Stack/Buttons/NewGame") != null,
+	_check(title.get_node_or_null("NewGame") != null,
 		"step 1: title offers New Game")
-	_check(title.get_node_or_null("Center/Stack/Buttons/Load") != null,
+	_check(title.get_node_or_null("Load") != null,
 		"step 1: title offers Load Game")
 	# Amended 2026-10-31: the locale lives only in S19, so S1 offers a
 	# Settings entry instead of a language toggle button.
-	_check(title.get_node_or_null("Center/Stack/Buttons/Settings") != null,
+	_check(title.get_node_or_null("Settings") != null,
 		"step 1: title offers the Settings entry (locale lives in S19)")
 	var settings_panel = title.open_settings_panel()
 	_check(settings_panel != null
@@ -112,7 +112,7 @@ func _step2_nationality() -> void:
 	var pick: Node = scene.instantiate()
 	add_child(pick)
 	await get_tree().process_frame
-	var cards = pick.get_node_or_null("Layout/Cards")
+	var cards = pick.get_node_or_null("Cards")
 	_check(cards != null and cards.get_child_count() == 6,
 		"step 2: exactly 6 nationality cards")
 	# Data-driven: each card's package matches nations.json.

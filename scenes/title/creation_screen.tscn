@@ -12,69 +12,57 @@ grow_vertical = 2
 script = ExtResource("1_creation")
 
 [node name="Background" type="Panel" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 0
+offset_right = 1920.0
+offset_bottom = 1080.0
 
-[node name="Layout" type="VBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = -16.0
-offset_bottom = -16.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 16
-alignment = 1
-
-[node name="Header" type="VBoxContainer" parent="Layout"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Layout/Header"]
-layout_mode = 2
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 192.0
+offset_right = 1888.0
+offset_bottom = 256.0
 theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
-[node name="Prompt" type="Label" parent="Layout/Header"]
-layout_mode = 2
+[node name="Prompt" type="Label" parent="."]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 256.0
+offset_right = 1888.0
+offset_bottom = 288.0
 theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 
-[node name="StepBackground" type="GridContainer" parent="Layout"]
+[node name="StepBackground" type="Control" parent="."]
 unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-columns = 3
+layout_mode = 0
+offset_left = 416.0
+offset_top = 320.0
+offset_right = 1536.0
+offset_bottom = 832.0
 
-[node name="StepPoints" type="VBoxContainer" parent="Layout"]
+[node name="StepPoints" type="Control" parent="."]
 unique_name_in_owner = true
-layout_mode = 2
+layout_mode = 0
 visible = false
-size_flags_horizontal = 4
-theme_override_constants/separation = 16
+offset_left = 640.0
+offset_top = 288.0
+offset_right = 1280.0
+offset_bottom = 768.0
 
-[node name="Spacer" type="Control" parent="Layout"]
-custom_minimum_size = Vector2(0, 8)
-layout_mode = 2
-
-[node name="Footer" type="HBoxContainer" parent="Layout"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 1
-
-[node name="Back" type="Button" parent="Layout/Footer"]
+[node name="Back" type="Button" parent="."]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
+layout_mode = 0
+offset_left = 768.0
+offset_top = 928.0
+offset_right = 928.0
+offset_bottom = 992.0
 
-[node name="Confirm" type="Button" parent="Layout/Footer"]
+[node name="Confirm" type="Button" parent="."]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 40)
-layout_mode = 2
+layout_mode = 0
+offset_left = 928.0
+offset_top = 928.0
+offset_right = 1184.0
+offset_bottom = 992.0

@@ -632,15 +632,18 @@ func _test_title_and_restore() -> void:
 	var title = TitleScene.instantiate()
 	add_child(title)
 	await get_tree().process_frame
-	var button: Button = title.get_node_or_null("Center/Stack/Buttons/Sandbox")
+	var button: Button = title.get_node_or_null("Sandbox")
 	_check(button != null,
 		"S1 carries the 海战 button between New Game and Load (§4.7.16)")
 	if button != null:
-		var stack: VBoxContainer = title.get_node("Center/Stack/Buttons")
-		var children := stack.get_children()
-		var index := children.find(button)
-		_check(index == 1,
-			"the 海战 button sits between New Game (0) and Load (%d)" % index)
+		# W2-B: the node tree IS the element tree — the flat root children
+		# keep the §4.7.16 order (NewGame → Sandbox → Load).
+		var new_game: Control = title.get_node("NewGame")
+		var load_button: Control = title.get_node("Load")
+		_check(button.get_index() == new_game.get_index() + 1
+			and load_button.get_index() == button.get_index() + 1,
+			"the 海战 button sits between New Game (%d) and Load (%d)"
+			% [new_game.get_index(), load_button.get_index()])
 		title.route_to_sandbox = false
 		_check(title.open_sandbox() and
 			title.last_route == "res://scenes/combat/battle_sandbox.tscn",
