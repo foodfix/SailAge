@@ -445,7 +445,7 @@ func _test_dossier_panel() -> void:
 		captain = _first_captain_id("trader", 1)
 	var panel_window: Control = DossierLib.open_for(captain, _host)
 	await _settle()
-	var panel: Control = panel_window.get_node("Center/Panel")
+	var panel: Control = panel_window.get_node("Panel")
 	await assert_window_size_invariant("dossier panel", panel, [
 		func() -> void:
 			panel_window.call("setup", _first_captain_id("trader", 1)),

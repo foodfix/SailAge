@@ -608,8 +608,9 @@ func _test_three_entry_card_identity() -> void:
 
 func _log_rows(dossier: Control) -> Dictionary:
 	var out: Dictionary = {}
-	var content: Container = dossier.get_node(
-		"Center/Panel/Margin/Body/Scroll/Content")
+	# Phase 12: the Margin/Body chain is deleted — the content node hangs
+	# off the registered panel.
+	var content: Control = dossier.get_node("Panel/Scroll/Content")
 	for child in content.get_children():
 		if str(child.name).begins_with("Log_"):
 			out[str(child.name)] = child
@@ -677,7 +678,7 @@ func _test_dossier_tiers() -> void:
 	# Stance ≥ +2 adds the tier + status to the header (§4.11.3).
 	CaptainsLib.adjust_stance(CAPTAIN, 2)
 	dossier = DossierLib.open_for(CAPTAIN, self)
-	var header: Label = dossier.get_node("Center/Panel/Margin/Body/Header")
+	var header: Label = dossier.get_node("Panel/Header")
 	_check(header.text.contains(I18n.fmt("dossier.header.tier", {"tier": 2})),
 		"stance ≥ +2 adds the current tier to the header (%s)" % header.text)
 	_check(header.text.contains(I18n.t_key("dossier.status.at_sea")),

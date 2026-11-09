@@ -27,6 +27,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+const CaptainsLib2 := preload("res://scripts/world/captains.gd")
 
 const TILE := PaletteLib.CHROME_TILE
 ## Settled-frame wait (nest_audit's proven 6).
@@ -80,6 +81,7 @@ const W2D_SCENES := {
 	"captain_view": "res://scenes/ui_shared/captain_view.tscn",
 	"battle": "res://scenes/combat/battle_screen.tscn",
 	"sandbox": "res://scenes/combat/battle_sandbox.tscn",
+	"dossier": "res://scenes/ui/dossier_panel.tscn",
 }
 
 
@@ -444,6 +446,18 @@ func _open_battle(screen: Control) -> void:
 
 func _rig_sandbox() -> void:
 	_rig_modal_run()
+
+
+# --- rig: dossier (W2-D) -------------------------------------------------------
+
+func _rig_dossier() -> void:
+	_rig_modal_run()
+	CaptainsLib2.ensure(CaptainsLib2.canon_list()[0].get("id", ""))
+
+
+## The fixture dossier: the captain card + career log (setup IS the open).
+func _open_dossier(panel: Control) -> void:
+	panel.call("setup", str(CaptainsLib2.canon_list()[0].get("id", "")))
 
 
 # --- rig: intel_window (W2-D) --------------------------------------------------
