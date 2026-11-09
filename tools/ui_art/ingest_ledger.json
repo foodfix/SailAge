@@ -1,6 +1,96 @@
 {
   "chrome": {
     "tiles": {
+      "backdrop_bl": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "bl",
+        "pixel_id": "4",
+        "sha256": "99759368f7a21a2b3ad924d40cbddb72738e759e077f38974c807e026146ff40",
+        "size": 32,
+        "wang": 4
+      },
+      "backdrop_bottom": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "bottom",
+        "pixel_id": "12",
+        "sha256": "8ae31bfd307604aaf124dbd2502ec443034d260f30ee234d97f45e4a4579c47a",
+        "size": 32,
+        "wang": 12
+      },
+      "backdrop_br": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "br",
+        "pixel_id": "8",
+        "sha256": "29f90717a5b1272df8781a1de1f214456eac9a5d5ea64ab21087efb07ae8c001",
+        "size": 32,
+        "wang": 8
+      },
+      "backdrop_fill": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "fill",
+        "pixel_id": "1cf37d81-050c-4331-bb7e-d8805dfc9da5",
+        "sha256": "4efce162558e8735e90654db683e2ef4b71334f7cced8b8d0ac3d4e3cc0b4c2b",
+        "size": 32,
+        "wang": 15
+      },
+      "backdrop_left": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "left",
+        "pixel_id": "5",
+        "sha256": "0796e010cbb4e4e18080b0a683345bf48b852f9ec4d473d9528bb359d4d6a786",
+        "size": 32,
+        "wang": 5
+      },
+      "backdrop_right": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "right",
+        "pixel_id": "10",
+        "sha256": "8473114948553865b21c9880e62b4d7352eab0c2d09cb845635606fd83ed57b5",
+        "size": 32,
+        "wang": 10
+      },
+      "backdrop_tl": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "tl",
+        "pixel_id": "1",
+        "sha256": "4c1654593a60b3eb4f5332fc608025263d286350c69f422281addcbabc0383e1",
+        "size": 32,
+        "wang": 1
+      },
+      "backdrop_top": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "top",
+        "pixel_id": "3",
+        "sha256": "235b107085901b9046577542a727926b64acdcd063af0a14f2252daa6a6fe9d4",
+        "size": 32,
+        "wang": 3
+      },
+      "backdrop_tr": {
+        "derivation": "base",
+        "family": "backdrop",
+        "from": "frame",
+        "part": "tr",
+        "pixel_id": "2",
+        "sha256": "4ea5fd914d980a33ad47f5e607d4664cfa6d5569f0be52c304ded7871b06d167",
+        "size": 32,
+        "wang": 2
+      },
       "button_bl": {
         "derivation": "base",
         "family": "button",
@@ -364,180 +454,180 @@
       "field_bl": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "bl",
         "pixel_id": "4",
-        "sha256": "99759368f7a21a2b3ad924d40cbddb72738e759e077f38974c807e026146ff40",
+        "sha256": "5b4b788258926fe19ccb3c3cd6fd9630c326e9f3a704b30232fa13b14aa4c117",
         "size": 32,
         "wang": 4
       },
       "field_bottom": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "bottom",
         "pixel_id": "12",
-        "sha256": "8ae31bfd307604aaf124dbd2502ec443034d260f30ee234d97f45e4a4579c47a",
+        "sha256": "957e8a71618ffc4d7f0438c2842722a0a58f4184c9b3da4d8c85ffb3343283e7",
         "size": 32,
         "wang": 12
       },
       "field_br": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "br",
         "pixel_id": "8",
-        "sha256": "29f90717a5b1272df8781a1de1f214456eac9a5d5ea64ab21087efb07ae8c001",
+        "sha256": "e39d1cd95da0474178a24041c64c3e87f7d0bba13b701f3a1052f1e21c2ff5c6",
         "size": 32,
         "wang": 8
       },
       "field_fill": {
         "derivation": "recess",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "fill",
-        "pixel_id": "1cf37d81-050c-4331-bb7e-d8805dfc9da5",
-        "sha256": "e23bfc3d9678409d37c4e57a1e7d683f4853d35bcdaf26cb6cf2cbe9c0e5ae64",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "29fbc45cf44e3454db877e617af84e2dc36e16adf622fbf1871f5524143f96c9",
         "size": 32,
         "wang": 15
       },
       "field_left": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "left",
         "pixel_id": "5",
-        "sha256": "0796e010cbb4e4e18080b0a683345bf48b852f9ec4d473d9528bb359d4d6a786",
+        "sha256": "b21773ab1bba8856ef56628ba8600eacaad6eba49bfcf466c10426b5e6cd36a9",
         "size": 32,
         "wang": 5
       },
       "field_right": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "right",
         "pixel_id": "10",
-        "sha256": "8473114948553865b21c9880e62b4d7352eab0c2d09cb845635606fd83ed57b5",
+        "sha256": "ef8478db03a7c2a9ee10d47c349a0cb3c496f8d3e87af7d56ff1e6bd095fc1a3",
         "size": 32,
         "wang": 10
       },
       "field_tl": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "tl",
         "pixel_id": "1",
-        "sha256": "4c1654593a60b3eb4f5332fc608025263d286350c69f422281addcbabc0383e1",
+        "sha256": "6d91835e27dde0c6a90e0f467804f378ae0d57f8b7b0ea8841aa796640d33e27",
         "size": 32,
         "wang": 1
       },
       "field_top": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "top",
         "pixel_id": "3",
-        "sha256": "235b107085901b9046577542a727926b64acdcd063af0a14f2252daa6a6fe9d4",
+        "sha256": "1d25f4901893704ba5273312f2887c1dd775acd9303ce948c9ca4f2c14bf8cbe",
         "size": 32,
         "wang": 3
       },
       "field_tr": {
         "derivation": "base",
         "family": "field",
-        "from": "frame",
+        "from": "click",
         "part": "tr",
         "pixel_id": "2",
-        "sha256": "4ea5fd914d980a33ad47f5e607d4664cfa6d5569f0be52c304ded7871b06d167",
+        "sha256": "cbea4f62249c3ca209185f90b1ea6adbb26d173235d5a2d7d7f3c78170edae82",
         "size": 32,
         "wang": 2
       },
       "panel_bl": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "bl",
         "pixel_id": "4",
-        "sha256": "99759368f7a21a2b3ad924d40cbddb72738e759e077f38974c807e026146ff40",
+        "sha256": "4fbbbccb741044b6ee3161acb05ad5b254c693c35d2e4bbd620922ba1ce683d4",
         "size": 32,
         "wang": 4
       },
       "panel_bottom": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "bottom",
         "pixel_id": "12",
-        "sha256": "8ae31bfd307604aaf124dbd2502ec443034d260f30ee234d97f45e4a4579c47a",
+        "sha256": "356b1c4db98dc3b8c6d0ef929b5110191c14d4e742f0f22311dc811bab6bd208",
         "size": 32,
         "wang": 12
       },
       "panel_br": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "br",
         "pixel_id": "8",
-        "sha256": "29f90717a5b1272df8781a1de1f214456eac9a5d5ea64ab21087efb07ae8c001",
+        "sha256": "6c212c88ce3816d9fc01540dae1447db862adf10c7fe95b0b8114f77f4abc9cb",
         "size": 32,
         "wang": 8
       },
       "panel_fill": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "click",
         "part": "fill",
-        "pixel_id": "1cf37d81-050c-4331-bb7e-d8805dfc9da5",
-        "sha256": "4efce162558e8735e90654db683e2ef4b71334f7cced8b8d0ac3d4e3cc0b4c2b",
+        "pixel_id": "c4418a53-653a-4bd2-be71-dc6ecbf65bd8",
+        "sha256": "233d849d2c8e53ea8419c1c3bc7c363d663466d0a3beacfcaf0c5851565ea2c5",
         "size": 32,
         "wang": 15
       },
       "panel_left": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "left",
         "pixel_id": "5",
-        "sha256": "0796e010cbb4e4e18080b0a683345bf48b852f9ec4d473d9528bb359d4d6a786",
+        "sha256": "3e328accef6a7609f8864c2b7f688c23e5359b6f92ac27d1c278ee3286de18fc",
         "size": 32,
         "wang": 5
       },
       "panel_right": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "right",
         "pixel_id": "10",
-        "sha256": "8473114948553865b21c9880e62b4d7352eab0c2d09cb845635606fd83ed57b5",
+        "sha256": "58e32cbcb133be2034674d5ebcf74c0232508ade10adf7ccd10e0907835c414e",
         "size": 32,
         "wang": 10
       },
       "panel_tl": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "tl",
         "pixel_id": "1",
-        "sha256": "4c1654593a60b3eb4f5332fc608025263d286350c69f422281addcbabc0383e1",
+        "sha256": "59ff04f417cefda0686395eb009386bd5e41c8e5f2edd39fba67eb72bf296355",
         "size": 32,
         "wang": 1
       },
       "panel_top": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "top",
         "pixel_id": "3",
-        "sha256": "235b107085901b9046577542a727926b64acdcd063af0a14f2252daa6a6fe9d4",
+        "sha256": "e01734a99b19d6759b68ba9e02842af8c0d41dfc819ba247ca87eb3a909cc844",
         "size": 32,
         "wang": 3
       },
       "panel_tr": {
         "derivation": "base",
         "family": "panel",
-        "from": "frame",
+        "from": "panel",
         "part": "tr",
         "pixel_id": "2",
-        "sha256": "4ea5fd914d980a33ad47f5e607d4664cfa6d5569f0be52c304ded7871b06d167",
+        "sha256": "89ac5fe8bd0de0b3094d95c906ec8f5a86c8ff87ee8489472a2f0dcd8786418b",
         "size": 32,
         "wang": 2
       }
@@ -548,6 +638,9 @@
       },
       "frame": {
         "tileset_id": "5e1fad83-04a7-43b8-9215-f254a6b44798"
+      },
+      "panel": {
+        "tileset_id": "f1daad76-346d-4e28-9b66-bc8e787c9eb6"
       }
     }
   },
@@ -558,7 +651,7 @@
     "accepted_base": 16,
     "accepted_derived": 0,
     "candidates": 16,
-    "chrome_ingested": 54,
+    "chrome_ingested": 63,
     "facility": {
       "accepted": 6,
       "candidates": 6,

@@ -8652,7 +8652,8 @@ G13_DIR_IDS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 # machine scope.
 G13_CHROME_STEMS_AUTHORED = ("panel", "button", "button_focus", "field")
 G13_CHROME_STEMS_PIXELLAB = ("panel", "button", "button_hover",
-                             "button_pressed", "button_focus", "field")
+                             "button_pressed", "button_focus", "field",
+                             "backdrop")
 G13_CHROME_TILES_AUTHORED = tuple(
     f"{stem}_{tile}"
     for stem in G13_CHROME_STEMS_AUTHORED

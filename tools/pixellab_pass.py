@@ -1421,6 +1421,46 @@ CHROME_TILESETS: dict[str, dict] = {
             "button edge",
         "seed": 20261115,
     },
+    # The content panel plate (80-* §4.8, 2026-11-09 third-tileset
+    # amendment, user direction — content panels vs backdrop; NO re-roll
+    # of frame/click): parchment face + carved walnut rim. The face is
+    # ONE uniform repeat-safe color (the click-face discipline) because
+    # panels sit under text; the frame carries the detail budget (carved
+    # walnut + brass pinstripe + round rosettes). Differs from the click
+    # plate by rim material (wood vs polished brass band). Seed 20261117
+    # (tileset 998d73f7) RETIRED — sparse tan dashes on the fill face;
+    # seed 20261118 (tileset 547cc545) RETIRED — the same dot-dash
+    # lattice at panel scale (both the 20261113 click precedent). The
+    # third roll reuses the click plate's VERBATIM winning face clause.
+    "panel": {
+        "upper_description":
+            "raised rectangular parchment panel plate for a 16-bit "
+            "strategy game menu: aged cream-tan parchment paper face "
+            "with ONE perfectly uniform flat cream-tan color across "
+            "the whole face, absolutely zero texture: no fiber grain, "
+            "no specks, no dots, no lines, no dashes, no rivets, no "
+            "stitches, no inner borders, no creases, no blotches, no "
+            "shading variation inside the plate, all detail strictly "
+            "in the ornate outer frame: a wide richly carved dark "
+            "walnut wood rim with visible wood grain strokes, a thin "
+            "brass inner pinstripe where the wood meets the "
+            "parchment, and a small round brass rosette pinned at "
+            "each inner corner of the wood, gentle raised bevel lit "
+            "from the top-left with a soft shadow on the bottom-right, "
+            "retro 16-bit UI in the style of classic 1990s naval "
+            "adventure games like Uncharted Waters 2 / New Horizons, "
+            "crisp deliberate pixels, flat color fills, no text, no "
+            "icons",
+        "lower_description":
+            "flat solid bright green chroma-key color, one uniform "
+            "green, no texture, no shading, no dithering",
+        "transition_description":
+            "carved dark walnut wood rim with visible grain ending in "
+            "a crisp straight edge, a thin brass pinstripe at the "
+            "wood-to-parchment boundary, Uncharted Waters 2 wood-bound "
+            "parchment panel edge",
+        "seed": 20261119,
+    },
 }
 
 

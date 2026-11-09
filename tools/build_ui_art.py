@@ -490,7 +490,7 @@ DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
 # amendment's derived state sheets — the 2026-11-04 dimming-only mapping
 # remains the missing-sheet fallback, §4.9).
 NINEPATCH_SETS = ("panel", "button", "button_hover", "button_pressed",
-                  "button_focus", "field")
+                  "button_focus", "field", "backdrop")
 BAR_PARTS = ("left", "right", "line")  # A.1 chrome ids: bar_left/bar_right/bar_line (master reconciliation)
 SHEET = 48   # authored-bar sheet: 16px margins -> one 16px middle tile (§4.8.8)
 TILE = 16    # (chrome sheets take T/S from the tiles themselves: 96/96,
@@ -529,23 +529,32 @@ CHROME_SLOTS = (
     ("top", 3), ("bottom", 12), ("left", 5), ("right", 10),
     ("fill", 15),
 )
+# 2026-11-09 third-tileset amendment (80-* §4.8): `panel` ring slots come
+# from the `panel` tileset (the carved walnut rim + rosettes) while its
+# FILL slot comes from the `click` tileset's flat cream face — the three
+# 2026-11-09 panel rolls (seeds 20261117/18/19) all speckled the face at
+# panel scale (the 20261113 click precedent: marks tile into dot
+# lattices), and click's wang_15 is the proven repeat-safe face already
+# shipping under every button. Derivation entries are per-slot
+# (source, wang, op) 3-tuples — the ledger's "from" records each slot's
+# own source.
+def _chrome_ring(source: str, op: str = "base") -> dict:
+    """All nine slots of one family from one tileset."""
+    return {slot: (source, wang, op) for slot, wang in CHROME_SLOTS}
+
+
 CHROME_DERIVATIONS = {
-    "panel": ("frame", {slot: (wang, "base")
-                        for slot, wang in CHROME_SLOTS}),
-    "field": ("frame", {slot: (wang, "recess" if slot == "fill" else "base")
-                        for slot, wang in CHROME_SLOTS}),
-    "button": ("click", {slot: (wang, "base")
-                         for slot, wang in CHROME_SLOTS}),
-    "button_hover": ("click", {slot: (wang, "base")
-                               for slot, wang in CHROME_SLOTS}),
-    "button_pressed": ("click", {slot: (wang, "base")
-                                 for slot, wang in CHROME_SLOTS}),
-    "button_focus": ("click", {slot: (wang, "base")
-                               for slot, wang in CHROME_SLOTS}),
+    "panel": {**_chrome_ring("panel"), "fill": ("click", 15, "base")},
+    "field": {**_chrome_ring("click"), "fill": ("click", 15, "recess")},
+    "button": _chrome_ring("click"),
+    "button_hover": _chrome_ring("click"),
+    "button_pressed": _chrome_ring("click"),
+    "button_focus": _chrome_ring("click"),
+    "backdrop": _chrome_ring("frame"),
 }
-# The 2026-11-09 32px amendment: both PixelLab chrome tilesets are
+# The 2026-11-09 32px amendment: every PixelLab chrome tileset is
 # 32×32 (pro Wang corner mode); the authored bar tiles stay 16px.
-CHROME_SOURCE_PX = {"frame": 32, "click": 32}
+CHROME_SOURCE_PX = {"frame": 32, "click": 32, "panel": 32}
 
 
 def fail(msg: str) -> None:
@@ -4079,7 +4088,8 @@ def run_import_chrome_mode(raw_root: Path | None = None) -> None:
     written = 0
     out_dir = ROOT / "assets" / "ui" / "chrome"
     out_dir.mkdir(parents=True, exist_ok=True)
-    for family, (source, parts) in CHROME_DERIVATIONS.items():
+
+    def _masters_for(source: str) -> tuple[dict, dict]:
         if source not in masters_by_source:
             masters_by_source[source] = _chrome_load_masters(
                 source, CHROME_SOURCE_PX[source])
@@ -4088,9 +4098,12 @@ def run_import_chrome_mode(raw_root: Path | None = None) -> None:
             tileset_ids[source] = \
                 json.loads(submit_p.read_text()).get("tileset_id", "?") \
                 if submit_p.is_file() else tid_path.stem.rsplit("_", 1)[-1]
-        masters, pixel_ids = masters_by_source[source]
-        t_px = CHROME_SOURCE_PX[source]
-        for slot, (wang, op) in parts.items():
+        return masters_by_source[source]
+
+    for family, parts in CHROME_DERIVATIONS.items():
+        for slot, (source, wang, op) in parts.items():
+            masters, pixel_ids = _masters_for(source)
+            t_px = CHROME_SOURCE_PX[source]
             sid = f"{family}_{slot}"
             px = masters[wang]
             px = _chrome_derive(px, op, t_px)
