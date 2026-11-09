@@ -130,8 +130,7 @@ func _mount_hub(host: Control):
 
 
 ## Row ids, in display order, from the actual card buttons (not the hub's own
-## cache) so the assertion is about what is on screen. The §4.8.1 fixed grid
-## pairs the cards inside HBoxContainers, so the walk is recursive.
+## cache) so the assertion is about what is on screen.
 func _row_ids(hub) -> Array:
 	var ids: Array = []
 	for button in hub.facility_buttons():
@@ -139,20 +138,33 @@ func _row_ids(hub) -> Array:
 	return ids
 
 
-## The direct children of the row container: the fixed grid's
-## HBoxContainers, each holding up to two facility cards — whatever their
-## open/closed state (docs/80-* §4.8.1).
+## The fixed §4.8.1 grid lines, derived from the cards' authored slots
+## (Phase 12: the cards hang directly off facility_grid at the CARD_SLOTS
+## rects — the pair HBoxes are gone, so the two-per-line rule is read off
+## the grid positions): group by slot row, order by slot column.
 func _row_lines(hub) -> Array:
+	var cells: Array = []
+	for button in hub.facility_buttons():
+		cells.append({
+			"x": int(button.position.x / 32.0),
+			"y": int(button.position.y / 32.0),
+			"id": str(button.get_meta("facility_id")),
+		})
+	var rows := {}
+	for cell in cells:
+		if not rows.has(cell["y"]):
+			rows[cell["y"]] = []
+		rows[cell["y"]].append(cell)
+	var ys: Array = rows.keys()
+	ys.sort()
 	var lines: Array = []
-	for child in hub.facility_container().get_children():
-		if child is Button and child.has_meta("facility_id"):
-			lines.append([str(child.get_meta("facility_id"))])
-		elif child is HBoxContainer:
-			var ids: Array = []
-			for grandchild in child.get_children():
-				if grandchild is Button and grandchild.has_meta("facility_id"):
-					ids.append(str(grandchild.get_meta("facility_id")))
-			lines.append(ids)
+	for y in ys:
+		var row_cells: Array = rows[y]
+		row_cells.sort_custom(func(a, b): return a["x"] < b["x"])
+		var ids: Array = []
+		for cell in row_cells:
+			ids.append(cell["id"])
+		lines.append(ids)
 	return lines
 
 
@@ -192,7 +204,7 @@ func _test_row_order_lisbon() -> void:
 		"facility_row_ids() reports the same order (%s)"
 		% str(hub.facility_row_ids()))
 	# Set Sail follows the rows (the wireframe's last row).
-	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = hub.get_node("footer/SetSail")
 	_check(sail != null and not sail.disabled,
 		"Set Sail is present and enabled below the rows")
 	# Fixed-card grid layout (docs/80-* §4.8.1): [Market][Shipyard] /
@@ -575,11 +587,11 @@ func _test_locale_rebind() -> void:
 				"'%s' %s line is non-empty in zh (%s)" % [id, line, text])
 
 	# The header, greeting and Set Sail rebind with the cards.
-	var greeting: Label = hub.get_node("Layout/VBox/Header/Greeting")
+	var greeting: Label = hub.get_node("header/Greeting")
 	var lisbon: Dictionary = DataLoader.get_port("lisbon")
 	_check(greeting.text == I18n.t(lisbon["flavor"]),
 		"the greeting banner rebinds to zh (%s)" % greeting.text)
-	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = hub.get_node("footer/SetSail")
 	_check(sail.text == I18n.t_key("port.set_sail"),
 		"Set Sail rebinds to zh (%s)" % sail.text)
 
@@ -610,23 +622,23 @@ func _test_shell_intact() -> void:
 
 	var lisbon: Dictionary = DataLoader.get_port("lisbon")
 	var nation: Dictionary = DataLoader.get_nation("portugal")
-	_check((hub.get_node("Layout/VBox/Header/TitleRow/PortName") as Label).text
+	_check((hub.get_node("header/PortName") as Label).text
 		== I18n.t(lisbon["name"]), "the header still shows the port name")
-	_check((hub.get_node("Layout/VBox/Header/TitleRow/NationName") as Label).text
+	_check((hub.get_node("header/NationName") as Label).text
 		== I18n.t(nation["name"]), "the header still shows the nation")
-	_check((hub.get_node("Layout/VBox/Header/Greeting") as Label).text
+	_check((hub.get_node("header/Greeting") as Label).text
 		== I18n.t(lisbon["flavor"]), "the flavor greeting banner is kept")
 	var hud = hub.get_node_or_null("HUD")
 	_check(hud != null and not hud.is_minimap_visible(),
 		"S4 keeps the shared HUD with the minimap hidden (§4.5)")
-	var heading: Label = hub.get_node("Layout/VBox/Facilities/Heading")
+	var heading: Label = hub.get_node("facility_heading")
 	_check(heading.text == I18n.t_key("port.facilities"),
 		"the facilities heading uses port.facilities (%s)" % heading.text)
 
 	# Set Sail still runs the S4 → S3 transition (routing off, state change on).
 	var sailed: Array = []
 	hub.sailed.connect(func() -> void: sailed.append(true))
-	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = hub.get_node("footer/SetSail")
 	_check(hub.set_sail(), "set_sail() succeeds while docked")
 	_check(sailed.size() == 1, "set_sail() emits sailed")
 	_check(GameState.current_port == null, "set_sail() clears current_port")
@@ -662,7 +674,7 @@ func _test_standalone() -> void:
 		"standalone: facility_row('market') is null")
 	_check(hub.open_facility("market") == false,
 		"standalone: open_facility('market') is false")
-	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = hub.get_node("footer/SetSail")
 	_check(sail.disabled, "standalone: Set Sail is disabled")
 	hub.queue_free()
 	host.queue_free()
@@ -718,7 +730,7 @@ func _test_provisions_prompt() -> void:
 		"zero crew divides into 0 days — the gate, not the formula, reports it")
 
 	# --- Set Sail opens the prompt, it does not route ---------------------
-	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var sail: Button = hub.get_node("footer/SetSail")
 	_check(not sail.disabled, "Set Sail is enabled with a crew and supplies")
 	sail.pressed.emit()
 	await get_tree().process_frame
@@ -1273,9 +1285,9 @@ func _test_officers_panel_entry() -> void:
 	# the facility column staying untouched (no "officers" row ever existed).
 	_check(not hub.has_method("officers_row"),
 		"the removed footer accessor is gone (officers_row)")
-	_check(hub.get_node_or_null("Layout/VBox/Footer/Officers") == null,
+	_check(hub.get_node_or_null("footer/Officers") == null,
 		"the port hub footer no longer carries an Officers button")
-	_check(hub.get_node_or_null("Layout/VBox/Footer/Fleet") == null,
+	_check(hub.get_node_or_null("footer/Fleet") == null,
 		"…nor a Fleet button (both live in the §4.5 intel window)")
 	_check(not hub.facility_row_ids().has("officers"),
 		"the facility column never enters an officers row (§4.1 order)")
@@ -1329,7 +1341,7 @@ func _test_chart_at_port() -> void:
 	# The §4.3 focus-steal fix (amended 2026-11-01): a footer button holds
 	# focus (as after any click) and Tab must still open the chart, not cycle
 	# focus — the toggle edge lives in ChartScreen._input, above the GUI layer.
-	var footer: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	var footer: Button = hub.get_node("footer/SetSail")
 	footer.grab_focus()
 	_check(footer.has_focus(), "fixture: a footer button holds focus")
 	var tab := InputEventKey.new()

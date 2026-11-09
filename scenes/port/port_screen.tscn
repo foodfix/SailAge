@@ -23,94 +23,51 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Layout" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = 40.0
-offset_right = -16.0
-offset_bottom = -32.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="header" type="Control" parent="."]
+layout_mode = 0
 mouse_filter = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
 
-[node name="VBox" type="VBoxContainer" parent="Layout"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 16
-
-[node name="Header" type="VBoxContainer" parent="Layout/VBox"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="TitleRow" type="HBoxContainer" parent="Layout/VBox/Header"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 16
-
-[node name="NationSwatch" type="ColorRect" parent="Layout/VBox/Header/TitleRow"]
-custom_minimum_size = Vector2(24, 24)
-layout_mode = 2
-size_flags_vertical = 4
+[node name="NationSwatch" type="ColorRect" parent="header"]
+layout_mode = 0
 mouse_filter = 2
 color = Color(1, 1, 1, 1)
 
-[node name="PortName" type="Label" parent="Layout/VBox/Header/TitleRow"]
-layout_mode = 2
+[node name="PortName" type="Label" parent="header"]
+layout_mode = 0
 theme_override_font_sizes/font_size = 32
 text = "Port"
 
-[node name="NationName" type="Label" parent="Layout/VBox/Header/TitleRow"]
-layout_mode = 2
-size_flags_vertical = 8
+[node name="NationName" type="Label" parent="header"]
+layout_mode = 0
 text = "Nation"
 
-[node name="Greeting" type="Label" parent="Layout/VBox/Header"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
+[node name="Greeting" type="Label" parent="header"]
+layout_mode = 0
 text = "-"
 autowrap_mode = 3
 
-[node name="DayGreeting" type="Label" parent="Layout/VBox/Header"]
-layout_mode = 2
+[node name="DayGreeting" type="Label" parent="header"]
+layout_mode = 0
 text = "-"
 
-[node name="Facilities" type="VBoxContainer" parent="Layout/VBox"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="Heading" type="Label" parent="Layout/VBox/Facilities"]
-layout_mode = 2
+[node name="facility_heading" type="Label" parent="."]
+layout_mode = 0
 text = "Facilities"
 
-[node name="Rows" type="VBoxContainer" parent="Layout/VBox/Facilities"]
-layout_mode = 2
+[node name="facility_grid" type="Control" parent="."]
+layout_mode = 0
 mouse_filter = 2
-theme_override_constants/separation = 8
 
-[node name="Footer" type="HBoxContainer" parent="Layout/VBox"]
-layout_mode = 2
+[node name="footer" type="Control" parent="."]
+layout_mode = 0
 mouse_filter = 2
-theme_override_constants/separation = 16
-alignment = 2
 
-[node name="SetSail" type="Button" parent="Layout/VBox/Footer"]
-custom_minimum_size = Vector2(240, 40)
-layout_mode = 2
+[node name="SetSail" type="Button" parent="footer"]
+layout_mode = 0
 text = "Set sail"
 
-[node name="Settings" type="Button" parent="Layout/VBox/Footer"]
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
+[node name="Settings" type="Button" parent="footer"]
+layout_mode = 0
 text = "Settings"
 
 [node name="HUD" parent="." instance=ExtResource("2_hud")]
