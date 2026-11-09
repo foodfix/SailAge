@@ -384,24 +384,40 @@ static func revert_element(screen_id: String, id: String) -> void:
 	var baseline: Dictionary = rec.get("baseline", {})
 	if baseline.is_empty():
 		return
-	control.position = baseline["position"]
-	control.size = baseline["size"]
-	control.custom_minimum_size = baseline["min"]
-	var parent := control.get_parent()
-	if parent != null:
-		parent.move_child(control,
-				clampi(int(baseline["index"]), 0,
-				parent.get_child_count() - 1))
-	var anchors: Array = baseline["anchors"]
-	control.anchor_left = anchors[0]
-	control.anchor_top = anchors[1]
-	control.anchor_right = anchors[2]
-	control.anchor_bottom = anchors[3]
-	var offsets: Array = baseline["offsets"]
-	control.offset_left = offsets[0]
-	control.offset_top = offsets[1]
-	control.offset_right = offsets[2]
-	control.offset_bottom = offsets[3]
+	var kind := _resolve_kind(rec, control)
+	if kind == KIND_CHILD:
+		# Container-owned geometry (the 2026-11-09 live-session fix): a
+		# container child's position/size belong to its parent's layout —
+		# the baseline captured them at `_ready`, BEFORE the first layout
+		# pass, so restoring them slammed a stale pre-layout size onto the
+		# control (the reported facility_grid 58 → 20 shrink). A child
+		# revert restores only what the code owns: the min-size floor,
+		# the sibling slot, and the sheet.
+		control.custom_minimum_size = baseline["min"]
+		var parent := control.get_parent()
+		if parent != null:
+			parent.move_child(control,
+					clampi(int(baseline["index"]), 0,
+					parent.get_child_count() - 1))
+	else:
+		control.position = baseline["position"]
+		control.size = baseline["size"]
+		control.custom_minimum_size = baseline["min"]
+		var free_parent := control.get_parent()
+		if free_parent != null:
+			free_parent.move_child(control,
+					clampi(int(baseline["index"]), 0,
+					free_parent.get_child_count() - 1))
+		var anchors: Array = baseline["anchors"]
+		control.anchor_left = anchors[0]
+		control.anchor_top = anchors[1]
+		control.anchor_right = anchors[2]
+		control.anchor_bottom = anchors[3]
+		var offsets: Array = baseline["offsets"]
+		control.offset_left = offsets[0]
+		control.offset_top = offsets[1]
+		control.offset_right = offsets[2]
+		control.offset_bottom = offsets[3]
 	if not String(rec.get("sheet", "")).is_empty():
 		UiThemeLib.clear_sheet_override(control, String(rec["role"]))
 		rec["sheet"] = ""

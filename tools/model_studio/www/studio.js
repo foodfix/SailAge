@@ -1188,14 +1188,20 @@ function layRenderInspector() {
         "width in tiles (with a left|right anchor: the span from the edge)"));
     }
   } else if (kind === "child") {
-    sec2.appendChild(layIntInput("min_w", (ovr.min_w != null ? ovr.min_w : r ? r.w : null),
+    // min_w/min_h are OVERRIDE inputs (2026-11-09 live-session fix): a
+    // container child's live rect is the PARENT's layout decision (the
+    // reported facility_grid "min_w 58" was its stretched rect, not a
+    // min), and the runtime min is not in the tree dump — so with no
+    // override the fields stay empty ("—"). The live rect is in the
+    // meta block above.
+    sec2.appendChild(layIntInput("min_w", (ovr.min_w != null ? ovr.min_w : null),
       (v) => { if (v == null) return; layPatch(e.id, { min_w: v });
                laySend("resize", { screen: LAY.screen, id: e.id, min_w: v }); },
-      "custom_minimum_size width (tiles)"));
-    sec2.appendChild(layIntInput("min_h", (ovr.min_h != null ? ovr.min_h : r ? r.h : null),
+      "custom_minimum_size width (tiles) — empty = code default"));
+    sec2.appendChild(layIntInput("min_h", (ovr.min_h != null ? ovr.min_h : null),
       (v) => { if (v == null) return; layPatch(e.id, { min_h: v });
                laySend("resize", { screen: LAY.screen, id: e.id, min_h: v }); },
-      "custom_minimum_size height (tiles)"));
+      "custom_minimum_size height (tiles) — empty = code default"));
     sec2.appendChild(layIntInput("order", ovr.order != null ? ovr.order : null,
       (v) => { if (v == null) return; layPatch(e.id, { order: v });
                laySend("reorder", { screen: LAY.screen, id: e.id, order: v }); },

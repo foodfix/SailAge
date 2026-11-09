@@ -222,9 +222,17 @@ func _test_container_child() -> void:
 			"container child: order moves the sibling index")
 	_check(c.get_index() == 2,
 			"locked control: order override IGNORED (data_ordered)")
+	var pos_before := b.position
+	var size_before := b.size
 	RegistryLib.revert_element("market", "rows.copper")
 	_check(b.custom_minimum_size == Vector2.ZERO and b.get_index() == 1,
 			"container child: revert restores min-size + index")
+	# Container-owned geometry (the 2026-11-09 live-session fix): the
+	# baseline captured position/size at _ready — BEFORE the parent's
+	# first layout pass — so a child revert must NOT restore them (the
+	# reported facility_grid 58 → 20 shrink).
+	_check(b.position == pos_before and b.size == size_before,
+			"container child: revert leaves the parent-owned geometry alone")
 	_drop_root(root)
 	await get_tree().process_frame
 

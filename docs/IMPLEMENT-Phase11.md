@@ -211,3 +211,18 @@ slot's file inventory:
   1 MiB in, both wirings — the suite now pins the floors, bridge suite
   31 checks). The headless suite never caught it because headless
   frames degrade to empty payloads — noted as the guard's blind spot.
+- **Post-acceptance fixes (2026-11-09, live-session reports, round 2):**
+  the duplicate-id guard reads tree membership (a queued wrapper frees
+  its descendants without their own deletion flag — `474e595`); the
+  studio guard reminder shows only after a successful commit
+  (`bb63c7b`); the simplified canvas selection model — the element
+  list is the only selection surface, and the canvas renders only the
+  selected element's box (`1e6c4d5`); and the child-revert geometry
+  fix — a container child's position/size are parent-owned and the
+  baseline captured them pre-layout, so a child revert restores only
+  the min-size floor + sibling slot + sheet (the reported
+  facility_grid "min_w 58 → after revert 20" was the stretched rect
+  displayed as a min, then the stale pre-layout size restored). The
+  inspector's min_w/min_h fields are now override-only (empty = code
+  default; the live rect lives in the meta block). Registry suite 38
+  checks; the bounds + port-screen suites green.
