@@ -149,3 +149,48 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   suite gates after each merge (fragments assembled via
   `tools/assemble_layout.py --only <converted screens>`); E merges
   after its W2 neighbors.
+- **W2-C merged (2026-11-10): ✅** — world 25 / chart 134+1 / hail
+  16+1 / fleet_picker 20+1 / autopilot_hud 3. Master micro-
+  integration: `LayoutRegistry.is_managed()` (the HUD's private
+  `_screen_data` read-in re-pointed). The registry suite's data-seam
+  pin evolved to the v2 shape (the file grows per merge gate).
+  Gates: sailing/world_map/hail/autopilot/arrival_jump/bridge/bounds/
+  registry ALL PASS. PENDING-QUIET: the chart §4.6 500 ms pin
+  measured 1918 ms under load 4.0 (two agents' suites concurrently);
+  C's quiet-branch run passed.
+- **W2-D merged (2026-11-10): ✅** — 15 of 16 ids landed (confirm/
+  dialog_box/save_slot/settings/gameover/ending/duel/intel_window/
+  reputation_view/captain_view/battle full; sandbox/dossier/
+  fleet_view/officer_roster partial with flow INSIDE registered
+  containers; character_card not landed). Two master fixes at the
+  gate: the parent-bounds clamp quantizes UP to whole tiles (the
+  §4.7.1 battle bar sits at row 31 with the blessed 8 px sliver —
+  the raw-1080 clamp pulled it up), and the `%`-precedence +
+  `set_table_for_tests({})`-means-unmanaged seam fixes. Cross-slot
+  integration (the shared-modal reach-ins the slots could not own):
+  port_screen officers_panel/fleet_panel, palace commend
+  trophy/OK, hud mutiny Confirm/Cancel re-pointed at D's restructured
+  trees. battle 231 / duel 150 / intel 65→57 / save 224+493 /
+  ui_window_sizes 31 ALL PASS.
+- **W2-A merged (2026-11-10): ✅** — the port eight: 224 element rows
+  + 12 list blocks (the §4.8.1 facility grid stays statics two per
+  row); row internals unregistered (locked viewport blocks). Gates:
+  port_hub 314 / market 270 / shipyard 274 / inn / tavern / palace /
+  quests / registry / bounds / bridge ALL PASS.
+- **W2-B merged (2026-11-10): ✅** — title 10 / nationality_select 37
+  / creation 103 (no list blocks — fixed data orders are absolute
+  elements). The trio's fragments re-captured on the MANAGED tree
+  (the applied content-min floors are what ships) — double capture
+  byte-identical. B also fixed the pre-existing test_ui_theme
+  backdrop-spec gap (79→151 checks). Gates: creation / demo_loop /
+  ui_theme ALL PASS.
+- **W3-E merged (2026-11-10): ✅** — the studio Layout tab speaks v2
+  (one drag/resize path, list blocks locked, retired fields gone,
+  the commit gate intact); merged-tree probe: the file endpoint
+  serves the 31-screen v2 doc, an invalid commit is refused with the
+  file byte-unchanged.
+- **Campaign state after the five merges**: 31 screens managed, 787
+  element rows + 21 list blocks shipped in `data/ui_layout.json`;
+  validator exit 0. D2 (the finish-up slot) launched for the W2-D
+  debt: sandbox/dossier/fleet_view/officer_roster interiors +
+  character_card.
