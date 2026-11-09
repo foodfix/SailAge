@@ -375,3 +375,23 @@ func _rig_ending() -> void:
 ## screen builds at _ready; the open call re-reads live state.
 func _open_ending(screen: Control) -> void:
 	screen.call("open_live")
+
+
+# --- rig: duel (W2-D) ----------------------------------------------------------
+
+func _rig_duel() -> void:
+	_rig_modal_run()
+
+
+## The fixture duel: the full best-of-5 preview against a pirate captain
+## (the round rows' longest state — the `rounds` list block derives from
+## them). The config goes through `Duel.preview` like the suites'.
+func _open_duel(modal: Control) -> void:
+	modal.call("open_duel", {
+		"player_base": 15,
+		"defender_base": 10,
+		"seed": 33,
+		"ship_name": "Sloop",
+		"attacker_name": "You",
+		"defender_name": "Pirate captain",
+	})

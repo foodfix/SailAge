@@ -351,7 +351,10 @@ func _test_duel_modal() -> void:
 	var modal: Control = DuelScene.instantiate()
 	_host.add_child(modal)
 	await _settle()
-	var panel: Control = modal.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/duel.json`; the round rows are the
+	# `rounds` list block inside it).
+	var panel: Control = modal.get_node("Panel")
 	modal.open_duel(_duel_config(33))
 	await assert_window_size_invariant("duel modal", panel, [
 		func() -> void:
