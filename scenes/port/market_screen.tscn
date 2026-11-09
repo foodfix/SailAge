@@ -65,7 +65,7 @@ horizontal_scroll_mode = 0
 layout_mode = 0
 mouse_filter = 2
 
-[node name="HeroSlot" type="TextureRect" parent="TableFrame/Table"]
+[node name="GoodHero" type="TextureRect" parent="TableFrame/Table"]
 layout_mode = 0
 visible = false
 stretch_mode = 5

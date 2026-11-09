@@ -461,7 +461,7 @@ func _place_statics() -> void:
 	_place(_table_box, Rect2i(0, 0, 58, 22))
 	_place(_column_header, Rect2i(0, 1, 58, 1))
 	_place(_goods_scroll, Rect2i(0, 2, 58, 19))
-	_place($TableFrame/Table/HeroSlot, HERO_SLOT_RECT)
+	_place($TableFrame/Table/GoodHero, HERO_SLOT_RECT)
 	_place($TableFrame/Table/InfoStrip, INFO_STRIP_RECT)
 	_place(_footer, Rect2i(1, 25, 58, 2))
 	_place(_invest_button, Rect2i(0, 0, 6, 2))
@@ -1131,7 +1131,7 @@ func tax_badge_state() -> Dictionary:
 ## the two nodes hang directly off the table group at their authored slots.
 func _build_info_strip() -> void:
 	_info_strip = $TableFrame/Table/InfoStrip
-	_hero_slot = $TableFrame/Table/HeroSlot
+	_hero_slot = $TableFrame/Table/GoodHero
 	# Phase-11 W3-B (docs/80-* §4.8.9).
 	RegistryLib.register("market", _hero_slot, "hero_slot")
 	RegistryLib.register("market", _info_strip, "info_strip")
@@ -1729,6 +1729,7 @@ func _refresh_intel() -> void:
 			_place(badge, SIGHTING_BADGE_RECT)
 			text_x = 1
 		var label := Label.new()
+		label.name = "Text"
 		label.text = line
 		# The §4.8 ACCENT tint marks the free next-lane hint (the theme's
 		# `Accent` variation); plain rows read the theme TEXT default.

@@ -349,8 +349,8 @@ func _test_captains_table() -> void:
 
 	# Viewing adds familiarity +1 (each row viewed).
 	var before := CaptainsLib.familiarity(TRADER_ID)
-	var box: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/RumorsPanel/CaptainsTable")
+	var box: Control = screen.get_node(
+		"body/RumorsPanel/CaptainsTable")
 	var row_node: Control = box.get_node("TableRow_%s" % TRADER_ID)
 	var inspect: Button = row_node.get_node("Inspect")
 	_check(inspect.text == I18n.t_key("interact.verb.inspect"),
@@ -367,10 +367,10 @@ func _test_captains_table() -> void:
 		"a second view adds familiarity again")
 
 	# The sparring row is on the same tab, with its stake stepper.
-	var spar_box: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/RumorsPanel/SparRow")
-	var down: Button = spar_box.get_node("SparControls/StakeDown")
-	var up: Button = spar_box.get_node("SparControls/StakeUp")
+	var spar_box: Control = screen.get_node(
+		"body/RumorsPanel/SparRow")
+	var down: Button = spar_box.get_node("StakeDown")
+	var up: Button = spar_box.get_node("StakeUp")
 	_check(screen.spar_stake_value() == 100, "the stake starts at 100g")
 	up.pressed.emit()
 	_check(screen.spar_stake_value() == 200, "the + stepper adds 100g")
@@ -394,8 +394,8 @@ func _test_captains_table() -> void:
 	var tav := _tavern_fleet(TRADER_ID, "coaster")
 	_check(not tav.is_empty(), "a tavern-facility fixture exists")
 	screen.refresh()
-	var rumor_rows: VBoxContainer = screen.get_node(
-		"Layout/VBox/Body/RumorsPanel/Scroll/Rows")
+	var rumor_rows: Control = screen.get_node(
+		"body/RumorsPanel/Scroll/Rows")
 	var captain_node: Control = rumor_rows.get_node("Captain_%s"
 		% str(tav["id"]))
 	var befriend: Button = captain_node.get_node("Befriend")
@@ -514,8 +514,8 @@ func _test_inform_and_dossier() -> void:
 		"the bounty board row carries its captain id")
 	_check(not CaptainsLib.dossier_seen(HUNTER_ID),
 		"the dossier flag starts unseen")
-	var board_box: VBoxContainer = palace.get_node(
-		"Layout/VBox/BountyBoardRows")
+	var board_box: Control = palace.get_node(
+		"BountyBoardRows")
 	var dossier: Button = board_box.get_node(
 		"Hunter_%s/Dossier" % str(hunter_row.get("id", "")))
 	dossier.pressed.emit()
@@ -524,7 +524,7 @@ func _test_inform_and_dossier() -> void:
 	_check(palace.dossiers_opened() == [HUNTER_ID],
 		"the seam records the opened dossier id")
 	# The revealed captain's row links to the same seam.
-	var inform_box: VBoxContainer = palace.get_node("Layout/VBox/InformRows")
+	var inform_box: Control = palace.get_node("InformRows")
 	var inform_dossier: Button = inform_box.get_node(
 		"Inform_%s/Dossier" % str(wanted["id"]))
 	inform_dossier.pressed.emit()
@@ -589,8 +589,9 @@ func _test_market_intel() -> void:
 			_check(not bool(row.get("free", true)),
 				"stance +1 still carries no free marker")
 	# And the free row's rendered line names the destination.
-	var intel_box: VBoxContainer = market.get_node("Layout/VBox/IntelRows")
-	var line: Label = intel_box.get_node("Intel_%s" % TRADER2_ID)
+	var intel_box: Control = market.get_node("IntelRows")
+	var intel_row: Control = intel_box.get_node("Intel_%s" % TRADER2_ID)
+	var line: Label = intel_row.get_node("Text")
 	_check(str(line.text).contains(str(high_row.get("dest_port_name", ""))),
 		"the free row renders the next-lane hint (%s)" % str(line.text))
 	# The intel query itself is read-only (the §4.8 "the rows are read-only
