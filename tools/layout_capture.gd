@@ -26,6 +26,7 @@ const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 
 const TILE := PaletteLib.CHROME_TILE
 ## Settled-frame wait (nest_audit's proven 6).
@@ -61,6 +62,8 @@ const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
 const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
 # --- rig: duel (W2-D) ---
 const DUEL_SCENE := "res://scenes/combat/duel_modal.tscn"
+# --- rig: intel_window (W2-D) ---
+const INTEL_WINDOW_SCENE := "res://scenes/ui_shared/intel_window.tscn"
 
 ## The W2-D shared/combat screens captured so far (extended per commit).
 ## The lookup falls back here after PORT_SCENES.
@@ -72,6 +75,7 @@ const W2D_SCENES := {
 	"gameover": GAMEOVER_SCENE,
 	"ending": ENDING_SCENE,
 	"duel": DUEL_SCENE,
+	"intel_window": "res://scenes/ui_shared/intel_window.tscn",
 }
 
 
@@ -395,3 +399,19 @@ func _open_duel(modal: Control) -> void:
 		"attacker_name": "You",
 		"defender_name": "Pirate captain",
 	})
+
+
+# --- rig: intel_window (W2-D) --------------------------------------------------
+
+func _rig_intel_window() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"  # the fleet tab's port actions live
+
+
+## The fixture window: opens on the 委托 tab so the `quests` list block
+## captures (one commission accepted at the docked port first).
+func _open_intel_window(window: Control) -> void:
+	var offers: Array = QuestGenLib.available_offers("lisbon", GameState.day)
+	if not offers.is_empty():
+		QuestGenLib.accept(offers[0], "lisbon", GameState.day)
+	window.call("open_tab", "quests")

@@ -423,7 +423,7 @@ func _test_intel_window() -> void:
 	await _settle()
 	window.call("open")
 	await _settle()
-	var panel: Control = window.get_node("Center/Panel")
+	var panel: Control = window.get_node("Panel")
 	await assert_window_size_invariant("intel window", panel, [
 		func() -> void: window.call("open_tab", "reputation"),
 		func() -> void: window.call("open_tab", "officers"),
