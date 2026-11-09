@@ -43,6 +43,11 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## id renders nothing — the flat fallback; the registry fills at W4-D), and
 ## label colors retire to the shared theme.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase-11 W3-B (docs/80-UI-UX.md §4.8.9): every named control on the hub
+## registers its stable hierarchical id at build time; the shipped
+## `ui_layout` table is `{}`, so the apply walk is a no-op and every §4.8.1
+## layout pin holds byte-identically. Styling stays in `ui_theme.gd`.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 ## The sailing gate + days-of-supply formula live in the sim (`20-*` §4.10,
 ## §4.11.2); S4 only asks.
@@ -123,6 +128,8 @@ signal rebound
 @onready var _day_greeting: Label = $Layout/VBox/Header/DayGreeting
 @onready var _facility_heading: Label = $Layout/VBox/Facilities/Heading
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
+@onready var _header_box: VBoxContainer = $Layout/VBox/Header
+@onready var _footer: HBoxContainer = $Layout/VBox/Footer
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
 @onready var _settings_button: Button = $Layout/VBox/Footer/Settings
 
@@ -178,6 +185,12 @@ func _ready() -> void:
 	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
 	# only *allowed* in port; this row is the discoverable entry point.
 
+	# Phase-11 W3-B (docs/80-* §4.8.9): the scene-built surfaces register
+	# their stable ids first; the §4.8.1 facility cards register where
+	# `_sync_facility_rows` builds them (inside `_bind`), then the screen
+	# activates once after the full build.
+	_register_static_ids()
+
 	# S4 keeps the same bars as S3, but the sea viewport (minimap + weather
 	# glyph) is replaced by the port menu (docs/80-* §4.5).
 	_hud.set_minimap_visible(false)
@@ -200,6 +213,33 @@ func _ready() -> void:
 	# `clock_changed` — the rows (whose §4.1b open state is in the rebuild
 	# signature) and the banner clock re-bind on it too.
 	EventBus.clock_changed.connect(_on_clock_changed)
+
+	# Phase-11 W3-B (docs/80-* §4.8.9): one activation after the full build —
+	# captures the registration baselines and applies the committed override
+	# table (the shipped file is `{}`, so this is a no-op walk).
+	RegistryLib.screen_active("port", self)
+
+
+## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
+## stable hierarchical ids. Roles only tag what a `sheet` override may
+## target (the styling itself stays in `ui_theme.gd`); kinds auto-derive
+## (this screen has no edge-docked bars). The shared HUD and the ui_shared
+## modals are the §4.8.9 fast-follows — not registered here.
+func _register_static_ids() -> void:
+	RegistryLib.register("port", _background, "background", {"role": "panel"})
+	RegistryLib.register("port", _header_box, "header")
+	RegistryLib.register("port", _port_name, "header.port_name")
+	RegistryLib.register("port", _nation_swatch, "header.nation_swatch")
+	RegistryLib.register("port", _nation_name, "header.nation_name")
+	RegistryLib.register("port", _greeting, "header.greeting")
+	RegistryLib.register("port", _day_greeting, "header.day_greeting")
+	RegistryLib.register("port", _facility_heading, "facility_heading")
+	RegistryLib.register("port", _facility_rows, "facility_grid")
+	RegistryLib.register("port", _footer, "footer")
+	RegistryLib.register("port", _set_sail_button, "footer.set_sail",
+		{"role": "button"})
+	RegistryLib.register("port", _settings_button, "footer.settings",
+		{"role": "button"})
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -760,6 +800,12 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			pair = HBoxContainer.new()
 			pair.name = "Pair_%d" % _facility_rows.get_child_count()
 			_facility_rows.add_child(pair)
+			# Phase-11 W3-B (docs/80-* §4.8.9): the grid's two-per-line rows
+			# are part of the §4.8.1 fixed grid — a data contract, so their
+			# sibling order is locked (`data_ordered`).
+			RegistryLib.register("port", pair,
+				"facility_grid.pair.%d" % pair.get_index(),
+				{"data_ordered": true})
 		pair.add_child(button)
 		button.set_meta("status_key", status_key)
 		if not enabled:
@@ -767,6 +813,17 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			# line already shows it on-card).
 			button.tooltip_text = _status_text(status_key, facility_id)
 		_apply_card_labels(button)
+		# Phase-11 W3-B (docs/80-* §4.8.9): one data-derived id per §4.8.1
+		# facility card (plus its two content labels) — the card order in
+		# the grid is a data contract (locked), never a layout preference.
+		RegistryLib.register("port", button, "cards.%s" % facility_id,
+			{"role": "button", "data_ordered": true})
+		RegistryLib.register("port",
+			button.get_meta("name_label") as Control,
+			"cards.%s.name" % facility_id)
+		RegistryLib.register("port",
+			button.get_meta("status_label") as Control,
+			"cards.%s.status" % facility_id)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
 

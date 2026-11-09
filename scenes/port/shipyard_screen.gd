@@ -41,6 +41,11 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## kit registry (an absent id renders nothing — the flat fallback), and the
 ## hand-built panels/buttons retire to the shared theme.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase-11 W3-B (docs/80-UI-UX.md §4.8.9): the catalog/fleet/equipment rows
+## register data-derived ids at build time (ship types, fleet indices, slot
+## enums); the shipped `ui_layout` table is `{}`, so the apply walk is a
+## no-op. Styling stays in `ui_theme.gd`.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
@@ -131,11 +136,20 @@ var _rebuilding := false
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _gold_label: Label = $Layout/VBox/Header/Gold
 @onready var _back_button: Button = $Layout/VBox/Header/Back
+@onready var _header_box: HBoxContainer = $Layout/VBox/Header
+@onready var _catalog_panel: PanelContainer = $Layout/VBox/Body/CatalogPanel
 @onready var _catalog_title: Label = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogTitle
+@onready var _catalog_scroll: ScrollContainer = \
+	$Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll
 @onready var _catalog_rows: VBoxContainer = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll/CatalogRows
+@onready var _fleet_panel: PanelContainer = $Layout/VBox/Body/FleetPanel
 @onready var _fleet_title: Label = $Layout/VBox/Body/FleetPanel/Margin/Box/FleetTitle
+@onready var _player_equip_box: VBoxContainer = \
+	$Layout/VBox/Body/FleetPanel/Margin/Box/PlayerEquip
 @onready var _player_equip_title: Label = $Layout/VBox/Body/FleetPanel/Margin/Box/PlayerEquip/PlayerEquipTitle
 @onready var _player_equip_rows: VBoxContainer = $Layout/VBox/Body/FleetPanel/Margin/Box/PlayerEquip/PlayerEquipRows
+@onready var _fleet_scroll: ScrollContainer = \
+	$Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll
 @onready var _fleet_rows: VBoxContainer = $Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll/FleetRows
 @onready var _confirm: Control = $ConfirmDialog
 
@@ -155,11 +169,48 @@ func _ready() -> void:
 	_confirm.confirmed.connect(_on_sell_confirmed)
 	_confirm.cancelled.connect(_on_sell_cancelled)
 
+	# Phase-11 W3-B (docs/80-* §4.8.9): the scene-built surfaces register
+	# first; the catalog/fleet/equipment rows register inside `rebuild()`.
+	_register_static_ids()
 	rebuild()
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_state_changed)
 	EventBus.fleet_changed.connect(_on_state_changed)
+
+	# Phase-11 W3-B (docs/80-* §4.8.9): one activation after the full build —
+	# captures the registration baselines and applies the committed override
+	# table (the shipped file is `{}`, so this is a no-op walk).
+	RegistryLib.screen_active("shipyard", self)
+
+
+## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
+## stable hierarchical ids. Roles only tag what a `sheet` override may
+## target (the styling itself stays in `ui_theme.gd`); kinds auto-derive
+## (this screen has no edge-docked bars). The shared HUD and confirm dialog
+## are §4.8.9 fast-follows — not registered here.
+func _register_static_ids() -> void:
+	RegistryLib.register("shipyard", _background, "background",
+		{"role": "panel"})
+	RegistryLib.register("shipyard", _header_box, "header")
+	RegistryLib.register("shipyard", _title, "header.title")
+	RegistryLib.register("shipyard", _gold_label, "header.gold")
+	RegistryLib.register("shipyard", _back_button, "header.back",
+		{"role": "button"})
+	RegistryLib.register("shipyard", _catalog_panel, "catalog_panel",
+		{"role": "panel"})
+	RegistryLib.register("shipyard", _catalog_title, "catalog_title")
+	RegistryLib.register("shipyard", _catalog_scroll, "catalog_scroll")
+	RegistryLib.register("shipyard", _catalog_rows, "catalog_rows")
+	RegistryLib.register("shipyard", _fleet_panel, "fleet_panel",
+		{"role": "panel"})
+	RegistryLib.register("shipyard", _fleet_title, "fleet_title")
+	RegistryLib.register("shipyard", _player_equip_box, "player_equip")
+	RegistryLib.register("shipyard", _player_equip_title,
+		"player_equip.title")
+	RegistryLib.register("shipyard", _player_equip_rows, "player_equip.rows")
+	RegistryLib.register("shipyard", _fleet_scroll, "fleet_scroll")
+	RegistryLib.register("shipyard", _fleet_rows, "fleet_rows")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -234,6 +285,11 @@ func rebuild() -> void:
 	_bind_catalog()
 	_bind_fleet()
 	_rebuilding = false
+	# Phase-11 W3-B (docs/80-* §4.8.9): rebuild() is this screen's one
+	# rebuild path (gold/fleet/locale re-render every row) — the new nodes
+	# re-registered where they build; re-apply the committed override table
+	# (a no-op on the shipped `{}`).
+	RegistryLib.apply_screen("shipyard")
 
 
 # --- Header ----------------------------------------------------------------
@@ -342,9 +398,22 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 		note.name = "Note"
 		note.visible = not note_text.is_empty()
 		card.add_child(note)
+		# Phase-11 W3-B (docs/80-* §4.8.9): the gray-state note line.
+		RegistryLib.register("shipyard", note, "rows.%s.note" % ship_type_id)
 
 	_buy_buttons[ship_type_id] = buy
 	_catalog_rows.add_child(card)
+	# Phase-11 W3-B (docs/80-* §4.8.9): one data-derived id per catalog ship
+	# row (plus its named parts); the stock-list order is the §4.3.1 data
+	# contract — locked like the market rows.
+	RegistryLib.register("shipyard", card, "rows.%s" % ship_type_id,
+		{"data_ordered": true})
+	RegistryLib.register("shipyard", name_label, "rows.%s.name" % ship_type_id)
+	RegistryLib.register("shipyard", role_label, "rows.%s.role" % ship_type_id)
+	RegistryLib.register("shipyard", price, "rows.%s.price" % ship_type_id)
+	RegistryLib.register("shipyard", buy, "rows.%s.buy" % ship_type_id,
+		{"role": "button"})
+	RegistryLib.register("shipyard", stats, "rows.%s.stats" % ship_type_id)
 
 
 ## The §4.7.12 note text of a gray row: 需发展度 {dev} for tier-gray,
@@ -450,6 +519,10 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# hidden — the identity line below is the card's real first row.
 	var panel := UiKitLib.frame("fleet.title")
 	panel.name = "Fleet_%d" % index
+	# Phase-11 W3-B (docs/80-* §4.8.9): one id per hull card; the fleet order
+	# (flagship first, §4.4) is a game-state contract — locked.
+	RegistryLib.register("shipyard", panel, "fleet.%d" % index,
+		{"role": "panel", "data_ordered": true})
 	var frame_box := panel.get_child(0) as VBoxContainer
 	var frame_header := frame_box.get_child(0) as Control
 	frame_header.visible = false
@@ -464,6 +537,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	name_label.name = "Name"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(name_label)
+	RegistryLib.register("shipyard", name_label, "fleet.%d.name" % index)
 
 	# Promote: free, port-only, non-flagship rows only (§4.4). The flagship has
 	# no Promote button at all — there is nothing to promote.
@@ -478,6 +552,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 		promote.pressed.connect(_on_promote_pressed.bind(index))
 		top.add_child(promote)
 		widgets["promote"] = promote
+		RegistryLib.register("shipyard", promote,
+			"fleet.%d.promote" % index, {"role": "button"})
 
 	# Sell: **absent** on the flagship row, always (§4.3/§6). Elsewhere it is
 	# present but disabled (with the reason) when cargo is aboard or it is the
@@ -492,6 +568,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 		sell.pressed.connect(_on_sell_pressed.bind(index))
 		top.add_child(sell)
 		widgets["sell"] = sell
+		RegistryLib.register("shipyard", sell,
+			"fleet.%d.sell" % index, {"role": "button"})
 
 	box.add_child(top)
 
@@ -501,7 +579,9 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 
 	var max_durability: int = ShipyardLib.ship_max_durability(index)
 	var durability := int(ship.get("durability", 0))
-	stats_row.add_child(_durability_bar(durability, max_durability))
+	var bar := _durability_bar(durability, max_durability)
+	stats_row.add_child(bar)
+	RegistryLib.register("shipyard", bar, "fleet.%d.durability_bar" % index)
 
 	var durability_label := _label(
 		I18n.fmt("shipyard.durability", {
@@ -511,6 +591,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	durability_label.name = "Durability"
 	durability_label.custom_minimum_size.x = 110
 	stats_row.add_child(durability_label)
+	RegistryLib.register("shipyard", durability_label,
+		"fleet.%d.durability" % index)
 
 	var crew_label := _label(
 		I18n.fmt("shipyard.crew_stat", {
@@ -521,6 +603,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	crew_label.name = "Crew"
 	crew_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stats_row.add_child(crew_label)
+	RegistryLib.register("shipyard", crew_label, "fleet.%d.crew" % index)
 
 	box.add_child(stats_row)
 
@@ -531,6 +614,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	var repair_label := _label(I18n.t_key("shipyard.repair_points"))
 	repair_label.name = "RepairLabel"
 	bottom.add_child(repair_label)
+	RegistryLib.register("shipyard", repair_label,
+		"fleet.%d.repair_label" % index)
 
 	var points := LineEdit.new()
 	points.name = "Points_%d" % index
@@ -542,6 +627,9 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	points.text_changed.connect(_on_points_changed.bind(index))
 	bottom.add_child(points)
 	widgets["points"] = points
+	# Phase-11 W3-B (docs/80-* §4.8.9): the repair picker (field role).
+	RegistryLib.register("shipyard", points, "fleet.%d.points" % index,
+		{"role": "field"})
 
 	for step in PICKER_STEPS:
 		var step_button := _row_button(str(step))
@@ -549,24 +637,31 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 		step_button.custom_minimum_size.x = 40
 		step_button.pressed.connect(_on_points_step_pressed.bind(index, step))
 		bottom.add_child(step_button)
+		RegistryLib.register("shipyard", step_button,
+			"fleet.%d.points_%d" % [index, step], {"role": "button"})
 
 	var max_button := _row_button(_fmt_or(MAX_KEY, {}, MAX_FALLBACK_KEY))
 	max_button.name = "PointsMax_%d" % index
 	max_button.custom_minimum_size.x = 56
 	max_button.pressed.connect(_on_points_step_pressed.bind(index, -1))
 	bottom.add_child(max_button)
+	RegistryLib.register("shipyard", max_button,
+		"fleet.%d.points_max" % index, {"role": "button"})
 
 	var preview := _label("", true)
 	preview.name = "Preview"
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(preview)
 	widgets["preview"] = preview
+	RegistryLib.register("shipyard", preview, "fleet.%d.preview" % index)
 
 	var repair := _row_button(I18n.t_key("shipyard.repair"))
 	repair.name = "Repair_%d" % index
 	repair.pressed.connect(_on_repair_pressed.bind(index))
 	bottom.add_child(repair)
 	widgets["repair"] = repair
+	RegistryLib.register("shipyard", repair,
+		"fleet.%d.repair" % index, {"role": "button"})
 
 	box.add_child(bottom)
 
@@ -581,6 +676,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	)
 	cannons_label.name = "CannonsLabel"
 	refit_row.add_child(cannons_label)
+	RegistryLib.register("shipyard", cannons_label,
+		"fleet.%d.cannons_label" % index)
 
 	var cannons_field := LineEdit.new()
 	cannons_field.name = "Cannons_%d" % index
@@ -592,18 +689,25 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	cannons_field.text_changed.connect(_on_cannons_changed.bind(index))
 	refit_row.add_child(cannons_field)
 	widgets["cannons"] = cannons_field
+	# Phase-11 W3-B (docs/80-* §4.8.9): the cannons picker (field role).
+	RegistryLib.register("shipyard", cannons_field,
+		"fleet.%d.cannons" % index, {"role": "field"})
 
 	var cannons_max := _row_button(_fmt_or(MAX_KEY, {}, MAX_FALLBACK_KEY))
 	cannons_max.name = "CannonsMax_%d" % index
 	cannons_max.custom_minimum_size.x = 56
 	cannons_max.pressed.connect(_on_cannons_max_pressed.bind(index))
 	refit_row.add_child(cannons_max)
+	RegistryLib.register("shipyard", cannons_max,
+		"fleet.%d.cannons_max" % index, {"role": "button"})
 
 	var refit := _row_button(I18n.t_key("shipyard.refit"))
 	refit.name = "Refit_%d" % index
 	refit.pressed.connect(_on_refit_pressed.bind(index))
 	refit_row.add_child(refit)
 	widgets["refit"] = refit
+	RegistryLib.register("shipyard", refit,
+		"fleet.%d.refit" % index, {"role": "button"})
 
 	# Two notes: live cost preview (left, expands) and the sell-back of the
 	# cannons already aboard (right, fixed), as §4.7.2 asks.
@@ -612,11 +716,15 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	refit_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	refit_row.add_child(refit_note)
 	widgets["refit_note"] = refit_note
+	RegistryLib.register("shipyard", refit_note,
+		"fleet.%d.refit_note" % index)
 
 	var sellback_note := _label("", true)
 	sellback_note.name = "RefitSellback_%d" % index
 	refit_row.add_child(sellback_note)
 	widgets["refit_sellback"] = sellback_note
+	RegistryLib.register("shipyard", sellback_note,
+		"fleet.%d.refit_sellback" % index)
 
 	box.add_child(refit_row)
 
@@ -826,12 +934,19 @@ func _on_cannons_max_pressed(index: int) -> void:
 ## `ship_index < 0` means the player's own slots (`weapon`/`armor`).
 ## The dict is `{slot, row, heading, worn, buy (id → Button), unequip}`.
 func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictionary:
+	# Phase-11 W3-B (docs/80-* §4.8.9): the §4.7.2 slot enum derives the id
+	# prefix — the player's own `weapon`/`armor` rows vs a hull's
+	# `figurehead`/`sail` rows (both data contracts, locked).
+	var id_prefix := "equip.player" if ship_index < 0 \
+		else "fleet.%d.equip" % ship_index
 	# Two lines per row (§4.8: 32px rows, half-width panel): line 1 is the
 	# slot noun, the worn item and Unequip; line 2 is the buy list, because
 	# "<name> <price>" buttons for two items never fit beside those labels at
 	# 1920×1080.
 	var card := VBoxContainer.new()
 	card.name = "Equip_%s_%s" % [slot, "player" if ship_index < 0 else str(ship_index)]
+	RegistryLib.register("shipyard", card, "%s.%s" % [id_prefix, slot],
+		{"data_ordered": true})
 
 	var row := HBoxContainer.new()
 	row.name = "Worn"
@@ -873,6 +988,14 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 		if worn_id.is_empty() else unequip.text
 	unequip.pressed.connect(_on_unequip_pressed.bind(slot, ship_index))
 	row.add_child(unequip)
+	# Phase-11 W3-B (docs/80-* §4.8.9): the worn line's named parts.
+	RegistryLib.register("shipyard", heading, "%s.%s.slot" % [id_prefix, slot])
+	RegistryLib.register("shipyard", hero,
+		"%s.%s.worn_hero" % [id_prefix, slot])
+	RegistryLib.register("shipyard", worn,
+		"%s.%s.worn" % [id_prefix, slot])
+	RegistryLib.register("shipyard", unequip,
+		"%s.%s.unequip" % [id_prefix, slot], {"role": "button"})
 
 	card.add_child(row)
 
@@ -906,6 +1029,11 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 		buy.pressed.connect(_on_equip_pressed.bind(slot, equipment_id, ship_index))
 		buy_row.add_child(buy)
 		buttons[equipment_id] = buy
+		# Phase-11 W3-B (docs/80-* §4.8.9): the buy list order is the
+		# equipment data order — locked like the market rows.
+		RegistryLib.register("shipyard", buy,
+			"%s.%s.buy.%s" % [id_prefix, slot, equipment_id],
+			{"role": "button", "data_ordered": true})
 	card.add_child(buy_row)
 
 	parent.add_child(card)

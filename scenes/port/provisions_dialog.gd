@@ -45,6 +45,11 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## thresholds) and the destructive actions adopt the kit button atom's
 ## Danger kind; panel chrome retires to the shared theme.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase-11 W3-B (docs/80-UI-UX.md §4.8.9): the modal's named controls
+## register under the `provisions` screen id at build time; the shipped
+## `ui_layout` table is `{}`, so the apply walk is a no-op. The shared
+## confirm dialog is a §4.8.9 fast-follow — not registered here.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -108,17 +113,23 @@ var _pending: Dictionary = {}
 var _days_bar: ProgressBar = null
 
 @onready var _dim: ColorRect = $Dim
+@onready var _panel: PanelContainer = $Center/Panel
 @onready var _title: Label = $Center/Panel/Margin/Body/Title
 @onready var _header: Label = $Center/Panel/Margin/Body/Header
+@onready var _table: VBoxContainer = $Center/Panel/Margin/Body/Table
 @onready var _crew: Label = $Center/Panel/Margin/Body/Table/Crew
 @onready var _rows_box: VBoxContainer = $Center/Panel/Margin/Body/Table/Rows
 @onready var _hold: Label = $Center/Panel/Margin/Body/Table/Hold
+@onready var _days_row: HBoxContainer = $Center/Panel/Margin/Body/DaysRow
 @onready var _days: Label = $Center/Panel/Margin/Body/DaysRow/Days
 @onready var _short: Label = $Center/Panel/Margin/Body/DaysRow/Short
 @onready var _fill_button: Button = $Center/Panel/Margin/Body/DaysRow/Fill
 @onready var _hint: Label = $Center/Panel/Margin/Body/Hint
+@onready var _cargo: VBoxContainer = $Center/Panel/Margin/Body/Cargo
+@onready var _scroll: ScrollContainer = $Center/Panel/Margin/Body/Cargo/Scroll
 @onready var _cargo_box: VBoxContainer = \
 	$Center/Panel/Margin/Body/Cargo/Scroll/Stacks
+@onready var _footer: HBoxContainer = $Center/Panel/Margin/Body/Footer
 @onready var _sail_button: Button = $Center/Panel/Margin/Body/Footer/Sail
 @onready var _gate_reason: Label = $Center/Panel/Margin/Body/Footer/GateReason
 @onready var _stay_button: Button = $Center/Panel/Margin/Body/Footer/Stay
@@ -190,11 +201,50 @@ func _ready() -> void:
 	_fill_button.pressed.connect(_on_fill_pressed)
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
+	# Phase-11 W3-B (docs/80-* §4.8.9): the scene-built surfaces register
+	# first; the supply rows register where `_build_rows` builds them.
+	_register_static_ids()
 	_build_rows()
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
+
+	# Phase-11 W3-B (docs/80-* §4.8.9): one activation after the full build —
+	# captures the registration baselines and applies the committed override
+	# table (the shipped file is `{}`, so this is a no-op walk).
+	RegistryLib.screen_active("provisions", self)
+
+
+## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
+## stable hierarchical ids. Roles only tag what a `sheet` override may
+## target (the styling itself stays in `ui_theme.gd`); kinds auto-derive
+## (a centered modal has no edge-docked bars). The shared confirm dialog
+## is a §4.8.9 fast-follow — not registered here.
+func _register_static_ids() -> void:
+	RegistryLib.register("provisions", _dim, "dim")
+	RegistryLib.register("provisions", _panel, "panel", {"role": "panel"})
+	RegistryLib.register("provisions", _title, "title")
+	RegistryLib.register("provisions", _header, "header")
+	RegistryLib.register("provisions", _table, "table")
+	RegistryLib.register("provisions", _crew, "crew")
+	RegistryLib.register("provisions", _rows_box, "rows")
+	RegistryLib.register("provisions", _hold, "hold")
+	RegistryLib.register("provisions", _days_row, "days_row")
+	RegistryLib.register("provisions", _days, "days_row.days")
+	RegistryLib.register("provisions", _short, "days_row.short")
+	RegistryLib.register("provisions", _fill_button, "days_row.fill",
+		{"role": "button"})
+	RegistryLib.register("provisions", _hint, "hint")
+	RegistryLib.register("provisions", _cargo, "cargo")
+	RegistryLib.register("provisions", _scroll, "cargo.scroll")
+	RegistryLib.register("provisions", _cargo_box, "cargo.stacks")
+	RegistryLib.register("provisions", _footer, "footer")
+	RegistryLib.register("provisions", _gate_reason, "footer.gate_reason")
+	RegistryLib.register("provisions", _stay_button, "footer.stay",
+		{"role": "button"})
+	RegistryLib.register("provisions", _sail_button, "footer.sail",
+		{"role": "button"})
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -547,6 +597,11 @@ func jettison_button(ship_index: int, good_id: String) -> Button:
 func rebuild() -> void:
 	_bind_static()
 	_refresh_all()
+	# Phase-11 W3-B (docs/80-* §4.8.9): the days bar and the cargo jettison
+	# rows are this dialog's rebuild paths — their new nodes re-registered
+	# where they build; re-apply the committed override table (a no-op on
+	# the shipped `{}`).
+	RegistryLib.apply_screen("provisions")
 
 
 # --- Construction ----------------------------------------------------------
@@ -607,6 +662,20 @@ func _build_row(kind: String) -> Dictionary:
 	row.add_child(jettison)
 
 	_rows_box.add_child(row)
+	# Phase-11 W3-B (docs/80-* §4.8.9): the row and its named parts under the
+	# kind-derived id (the stepper `qty` is a Label, not a field — the staged
+	# number lives in a meta, so it is `plain`).
+	RegistryLib.register("provisions", row, "rows.%s" % kind)
+	RegistryLib.register("provisions", label, "rows.%s.label" % kind)
+	RegistryLib.register("provisions", minus, "rows.%s.minus" % kind,
+		{"role": "button"})
+	RegistryLib.register("provisions", qty, "rows.%s.qty" % kind)
+	RegistryLib.register("provisions", plus, "rows.%s.plus" % kind,
+		{"role": "button"})
+	RegistryLib.register("provisions", buy, "rows.%s.buy" % kind,
+		{"role": "button"})
+	RegistryLib.register("provisions", jettison, "rows.%s.jettison" % kind,
+		{"role": "button"})
 	return {
 		"node": row, "label": label, "minus": minus, "qty": qty,
 		"plus": plus, "buy": buy, "jettison": jettison,
@@ -753,6 +822,10 @@ func _refresh_days_bar(days: int) -> void:
 	_days_bar.size_flags_horizontal = Control.SIZE_FILL
 	body.add_child(_days_bar)
 	body.move_child(_days_bar, _days.get_parent().get_index() + 1)
+	# Phase-11 W3-B (docs/80-* §4.8.9): the atom bakes the tier at build time,
+	# so every refresh rebuilds the bar — re-register (replaces the record)
+	# and [method rebuild] re-applies the table.
+	RegistryLib.register("provisions", _days_bar, "days_bar")
 
 
 ## The readout's tier bar (tests / hosts).
@@ -818,6 +891,14 @@ func _build_cargo_row(ship_index: int, good_id: String, qty: int) -> Control:
 		"ship_index": ship_index, "kind": "cargo", "good_id": good_id,
 		"qty": qty, "button": button,
 	})
+	# Phase-11 W3-B (docs/80-* §4.8.9): the jettison list is data-derived
+	# (fleet order, then sorted good ids) — locked like the market rows.
+	RegistryLib.register("provisions", row,
+		"stacks.%s.%d" % [good_id, ship_index], {"data_ordered": true})
+	RegistryLib.register("provisions", label,
+		"stacks.%s.%d.stack" % [good_id, ship_index])
+	RegistryLib.register("provisions", button,
+		"stacks.%s.%d.jettison" % [good_id, ship_index], {"role": "button"})
 	return row
 
 
