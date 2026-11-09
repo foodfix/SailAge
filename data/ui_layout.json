@@ -23,6 +23,302 @@
       },
       "lists": {}
     },
+    "battle": {
+      "elements": {
+        "actions.board": {
+          "h": 2,
+          "w": 3,
+          "x": 38,
+          "y": 31
+        },
+        "actions.cannon": {
+          "h": 2,
+          "w": 3,
+          "x": 32,
+          "y": 31
+        },
+        "actions.hold": {
+          "h": 2,
+          "w": 3,
+          "x": 41,
+          "y": 31
+        },
+        "actions.ram": {
+          "h": 2,
+          "w": 3,
+          "x": 35,
+          "y": 31
+        },
+        "actions.target": {
+          "h": 2,
+          "w": 8,
+          "x": 22,
+          "y": 31
+        },
+        "after": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "after.dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "after.panel": {
+          "h": 13,
+          "w": 20,
+          "x": 20,
+          "y": 11
+        },
+        "after.panel.continue": {
+          "h": 2,
+          "w": 5,
+          "x": 14,
+          "y": 11
+        },
+        "after.panel.lines": {
+          "h": 8,
+          "w": 18,
+          "x": 0,
+          "y": 0
+        },
+        "after.panel.lines_viewport": {
+          "h": 8,
+          "w": 18,
+          "x": 1,
+          "y": 3
+        },
+        "after.panel.title": {
+          "h": 2,
+          "w": 18,
+          "x": 1,
+          "y": 1
+        },
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "bottom.fit": {
+          "h": 2,
+          "w": 2,
+          "x": 20,
+          "y": 31
+        },
+        "bottom.heading": {
+          "h": 1,
+          "w": 3,
+          "x": 3,
+          "y": 31
+        },
+        "bottom.reload_port": {
+          "h": 1,
+          "w": 4,
+          "x": 6,
+          "y": 31
+        },
+        "bottom.reload_starboard": {
+          "h": 1,
+          "w": 4,
+          "x": 10,
+          "y": 31
+        },
+        "bottom.speed": {
+          "h": 1,
+          "w": 3,
+          "x": 0,
+          "y": 31
+        },
+        "bottom.weather_label": {
+          "h": 1,
+          "w": 3,
+          "x": 17,
+          "y": 31
+        },
+        "bottom.wind": {
+          "h": 1,
+          "w": 3,
+          "x": 14,
+          "y": 31
+        },
+        "bottom_panel": {
+          "h": 3,
+          "w": 60,
+          "x": 0,
+          "y": 31
+        },
+        "log.0": {
+          "h": 1,
+          "w": 20,
+          "x": 0,
+          "y": 32
+        },
+        "log.1": {
+          "h": 1,
+          "w": 30,
+          "x": 0,
+          "y": 33
+        },
+        "log.2": {
+          "h": 1,
+          "w": 30,
+          "x": 30,
+          "y": 33
+        },
+        "menu": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "menu.dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "menu.panel": {
+          "h": 12,
+          "w": 15,
+          "x": 22,
+          "y": 11
+        },
+        "menu.panel.ai_animate": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 6
+        },
+        "menu.panel.ai_instant": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 8
+        },
+        "menu.panel.back": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 10
+        },
+        "menu.panel.retreat": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 2
+        },
+        "menu.panel.surrender": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 4
+        },
+        "menu.panel.title": {
+          "h": 1,
+          "w": 13,
+          "x": 1,
+          "y": 1
+        },
+        "shots.armor_piercing": {
+          "h": 2,
+          "w": 4,
+          "x": 52,
+          "y": 31
+        },
+        "shots.chain": {
+          "h": 2,
+          "w": 4,
+          "x": 48,
+          "y": 31
+        },
+        "shots.grape": {
+          "h": 2,
+          "w": 4,
+          "x": 56,
+          "y": 31
+        },
+        "shots.round": {
+          "h": 2,
+          "w": 4,
+          "x": 44,
+          "y": 31
+        },
+        "top.day": {
+          "h": 2,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "top.round": {
+          "h": 2,
+          "w": 4,
+          "x": 12,
+          "y": 0
+        },
+        "top.title": {
+          "h": 2,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "top.weather": {
+          "h": 2,
+          "w": 44,
+          "x": 16,
+          "y": 0
+        },
+        "top_bar": {
+          "h": 2,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {
+        "after_lines": {
+          "base": {
+            "h": 2,
+            "w": 18,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 8,
+            "w": 18,
+            "x": 1,
+            "y": 3
+          }
+        }
+      }
+    },
+    "captain_view": {
+      "elements": {
+        "levelup": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 1
+        },
+        "nation": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "page": {
+          "h": 10,
+          "w": 32,
+          "x": 0,
+          "y": 2
+        }
+      },
+      "lists": {}
+    },
     "chart": {
       "elements": {
         "bottom_bar": {
@@ -848,6 +1144,393 @@
         }
       }
     },
+    "confirm": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 10,
+          "w": 15,
+          "x": 22,
+          "y": 12
+        },
+        "panel.body": {
+          "h": 6,
+          "w": 13,
+          "x": 1,
+          "y": 1
+        },
+        "panel.body.message": {
+          "h": 6,
+          "w": 13,
+          "x": 0,
+          "y": 0
+        },
+        "panel.cancel": {
+          "h": 2,
+          "w": 4,
+          "x": 5,
+          "y": 7
+        },
+        "panel.confirm": {
+          "h": 2,
+          "w": 4,
+          "x": 10,
+          "y": 7
+        }
+      },
+      "lists": {}
+    },
+    "dialog_box": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 10,
+          "w": 15,
+          "x": 22,
+          "y": 12
+        },
+        "panel.body": {
+          "h": 6,
+          "w": 13,
+          "x": 1,
+          "y": 1
+        },
+        "panel.body.icon": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "panel.body.message": {
+          "h": 6,
+          "w": 11,
+          "x": 2,
+          "y": 0
+        },
+        "panel.ok": {
+          "h": 2,
+          "w": 4,
+          "x": 10,
+          "y": 7
+        }
+      },
+      "lists": {}
+    },
+    "dossier": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 24,
+          "w": 22,
+          "x": 19,
+          "y": 4
+        },
+        "panel.close": {
+          "h": 2,
+          "w": 4,
+          "x": 17,
+          "y": 22
+        },
+        "panel.content": {
+          "h": 20,
+          "w": 1,
+          "x": 1,
+          "y": 3
+        },
+        "panel.header": {
+          "h": 1,
+          "w": 20,
+          "x": 1,
+          "y": 2
+        },
+        "panel.title": {
+          "h": 1,
+          "w": 20,
+          "x": 1,
+          "y": 1
+        }
+      },
+      "lists": {}
+    },
+    "duel": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 13,
+          "w": 15,
+          "x": 22,
+          "y": 11
+        },
+        "panel.acknowledge": {
+          "h": 2,
+          "w": 4,
+          "x": 5,
+          "y": 11
+        },
+        "panel.committed": {
+          "h": 1,
+          "w": 13,
+          "x": 1,
+          "y": 10
+        },
+        "panel.header": {
+          "h": 1,
+          "w": 13,
+          "x": 1,
+          "y": 3
+        },
+        "panel.result": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 9
+        },
+        "panel.rounds_viewport": {
+          "h": 5,
+          "w": 13,
+          "x": 1,
+          "y": 4
+        },
+        "panel.title": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 1
+        },
+        "rounds.0.defender": {
+          "h": 1,
+          "w": 4,
+          "x": 5,
+          "y": 0
+        },
+        "rounds.0.number": {
+          "h": 1,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "rounds.0.player": {
+          "h": 1,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "rounds.0.verdict": {
+          "h": 1,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "rounds.1.defender": {
+          "h": 1,
+          "w": 4,
+          "x": 5,
+          "y": 0
+        },
+        "rounds.1.number": {
+          "h": 1,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "rounds.1.player": {
+          "h": 1,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "rounds.1.verdict": {
+          "h": 1,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "rounds.2.defender": {
+          "h": 1,
+          "w": 4,
+          "x": 5,
+          "y": 0
+        },
+        "rounds.2.number": {
+          "h": 1,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "rounds.2.player": {
+          "h": 1,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "rounds.2.verdict": {
+          "h": 1,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "rounds.3.defender": {
+          "h": 1,
+          "w": 4,
+          "x": 5,
+          "y": 0
+        },
+        "rounds.3.number": {
+          "h": 1,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "rounds.3.player": {
+          "h": 1,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "rounds.3.verdict": {
+          "h": 1,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        }
+      },
+      "lists": {
+        "rounds": {
+          "base": {
+            "h": 1,
+            "w": 13,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 5,
+            "w": 13,
+            "x": 1,
+            "y": 4
+          }
+        }
+      }
+    },
+    "ending": {
+      "elements": {
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 22,
+          "w": 18,
+          "x": 21,
+          "y": 6
+        },
+        "panel.continue": {
+          "h": 2,
+          "w": 8,
+          "x": 5,
+          "y": 19
+        },
+        "panel.rows": {
+          "h": 6,
+          "w": 16,
+          "x": 1,
+          "y": 4
+        },
+        "panel.rpg_viewport": {
+          "h": 9,
+          "w": 16,
+          "x": 1,
+          "y": 10
+        },
+        "panel.subtitle": {
+          "h": 1,
+          "w": 16,
+          "x": 1,
+          "y": 3
+        },
+        "panel.title": {
+          "h": 2,
+          "w": 16,
+          "x": 1,
+          "y": 1
+        },
+        "rows.battles": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 5
+        },
+        "rows.days": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 0
+        },
+        "rows.discoveries": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 4
+        },
+        "rows.fame": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 2
+        },
+        "rows.gold": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 1
+        },
+        "rows.titles": {
+          "h": 1,
+          "w": 16,
+          "x": 0,
+          "y": 3
+        }
+      },
+      "lists": {
+        "rpg": {
+          "base": {
+            "h": 1,
+            "w": 16,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 1,
+          "viewport": {
+            "h": 9,
+            "w": 16,
+            "x": 1,
+            "y": 10
+          }
+        }
+      }
+    },
     "fleet_picker": {
       "elements": {
         "dim": {
@@ -989,6 +1672,98 @@
         }
       }
     },
+    "fleet_view": {
+      "elements": {
+        "mode_note": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 1
+        },
+        "ships": {
+          "h": 13,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "ships_header": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 2
+        },
+        "ships_viewport": {
+          "h": 6,
+          "w": 32,
+          "x": 0,
+          "y": 3
+        },
+        "summary": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "totals": {
+          "h": 3,
+          "w": 32,
+          "x": 0,
+          "y": 9
+        }
+      },
+      "lists": {
+        "ships": {
+          "base": {
+            "h": 7,
+            "w": 16,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 7,
+          "viewport": {
+            "h": 6,
+            "w": 32,
+            "x": 0,
+            "y": 3
+          }
+        }
+      }
+    },
+    "gameover": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 8,
+          "w": 15,
+          "x": 22,
+          "y": 13
+        },
+        "panel.reason": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 3
+        },
+        "panel.return": {
+          "h": 2,
+          "w": 9,
+          "x": 4,
+          "y": 5
+        },
+        "panel.title": {
+          "h": 2,
+          "w": 13,
+          "x": 1,
+          "y": 1
+        }
+      },
+      "lists": {}
+    },
     "hail": {
       "elements": {
         "dim": {
@@ -1105,6 +1880,674 @@
           }
         }
       }
+    },
+    "intel_window": {
+      "elements": {
+        "content.captain": {
+          "h": 12,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "content.fleet": {
+          "h": 12,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "content.officers": {
+          "h": 12,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "content.reputation": {
+          "h": 12,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 20,
+          "w": 34,
+          "x": 13,
+          "y": 7
+        },
+        "panel.close": {
+          "h": 2,
+          "w": 4,
+          "x": 29,
+          "y": 1
+        },
+        "panel.content": {
+          "h": 12,
+          "w": 32,
+          "x": 1,
+          "y": 5
+        },
+        "panel.hint": {
+          "h": 1,
+          "w": 32,
+          "x": 1,
+          "y": 17
+        },
+        "panel.title": {
+          "h": 2,
+          "w": 27,
+          "x": 1,
+          "y": 1
+        },
+        "quests.0.abandon": {
+          "h": 1,
+          "w": 6,
+          "x": 26,
+          "y": 1
+        },
+        "quests.0.days": {
+          "h": 1,
+          "w": 5,
+          "x": 27,
+          "y": 0
+        },
+        "quests.0.destination": {
+          "h": 1,
+          "w": 26,
+          "x": 0,
+          "y": 1
+        },
+        "quests.0.objective": {
+          "h": 1,
+          "w": 23,
+          "x": 4,
+          "y": 0
+        },
+        "quests.0.tag": {
+          "h": 1,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        },
+        "quests.empty": {
+          "h": 1,
+          "w": 32,
+          "x": 1,
+          "y": 6
+        },
+        "quests.slots_line": {
+          "h": 1,
+          "w": 32,
+          "x": 1,
+          "y": 5
+        },
+        "quests.viewport": {
+          "h": 10,
+          "w": 32,
+          "x": 1,
+          "y": 6
+        },
+        "tabs.captain": {
+          "h": 2,
+          "w": 4,
+          "x": 1,
+          "y": 3
+        },
+        "tabs.chart": {
+          "h": 2,
+          "w": 4,
+          "x": 21,
+          "y": 3
+        },
+        "tabs.fleet": {
+          "h": 2,
+          "w": 4,
+          "x": 16,
+          "y": 3
+        },
+        "tabs.officers": {
+          "h": 2,
+          "w": 4,
+          "x": 11,
+          "y": 3
+        },
+        "tabs.quests": {
+          "h": 2,
+          "w": 4,
+          "x": 26,
+          "y": 3
+        },
+        "tabs.reputation": {
+          "h": 2,
+          "w": 4,
+          "x": 6,
+          "y": 3
+        }
+      },
+      "lists": {
+        "quests": {
+          "base": {
+            "h": 2,
+            "w": 32,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 10,
+            "w": 32,
+            "x": 1,
+            "y": 6
+          }
+        }
+      }
+    },
+    "officer_roster": {
+      "elements": {
+        "detail": {
+          "h": 9,
+          "w": 32,
+          "x": 0,
+          "y": 3
+        },
+        "detail.back": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 7
+        },
+        "detail.card_host": {
+          "h": 6,
+          "w": 32,
+          "x": 0,
+          "y": 1
+        },
+        "detail.line": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "mode_note": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 1
+        },
+        "result": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 2
+        },
+        "roster": {
+          "h": 2,
+          "w": 1,
+          "x": 0,
+          "y": 0
+        },
+        "slots": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        },
+        "table_empty": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 5
+        },
+        "table_empty_hint": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 6
+        },
+        "table_viewport": {
+          "h": 7,
+          "w": 32,
+          "x": 0,
+          "y": 5
+        },
+        "toggles.attributes": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 3
+        },
+        "toggles.skills": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 3
+        }
+      },
+      "lists": {}
+    },
+    "reputation_view": {
+      "elements": {
+        "hint": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 10
+        },
+        "rows": {
+          "h": 6,
+          "w": 16,
+          "x": 0,
+          "y": 2
+        },
+        "rows.england.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 2
+        },
+        "rows.england.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 2
+        },
+        "rows.holland.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 3
+        },
+        "rows.holland.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 3
+        },
+        "rows.italy.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "rows.italy.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 5
+        },
+        "rows.ottoman.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        },
+        "rows.ottoman.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 4
+        },
+        "rows.portugal.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "rows.portugal.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 0
+        },
+        "rows.spain.name": {
+          "h": 1,
+          "w": 12,
+          "x": 0,
+          "y": 1
+        },
+        "rows.spain.value": {
+          "h": 1,
+          "w": 4,
+          "x": 12,
+          "y": 1
+        },
+        "title": {
+          "h": 1,
+          "w": 32,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {}
+    },
+    "sandbox": {
+      "elements": {
+        "actions.export": {
+          "h": 2,
+          "w": 5,
+          "x": 54,
+          "y": 1
+        },
+        "actions.import": {
+          "h": 2,
+          "w": 5,
+          "x": 49,
+          "y": 1
+        },
+        "actions.random": {
+          "h": 2,
+          "w": 5,
+          "x": 44,
+          "y": 1
+        },
+        "actions.start": {
+          "h": 2,
+          "w": 5,
+          "x": 39,
+          "y": 1
+        },
+        "back_hint": {
+          "h": 1,
+          "w": 11,
+          "x": 48,
+          "y": 0
+        },
+        "background": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "conditions_panel": {
+          "h": 5,
+          "w": 59,
+          "x": 1,
+          "y": 29
+        },
+        "enemy_panel": {
+          "h": 13,
+          "w": 59,
+          "x": 1,
+          "y": 16
+        },
+        "player_panel": {
+          "h": 13,
+          "w": 59,
+          "x": 1,
+          "y": 2
+        },
+        "title": {
+          "h": 1,
+          "w": 20,
+          "x": 1,
+          "y": 0
+        },
+        "toast": {
+          "h": 1,
+          "w": 19,
+          "x": 21,
+          "y": 28
+        },
+        "zero_write": {
+          "h": 1,
+          "w": 28,
+          "x": 1,
+          "y": 1
+        }
+      },
+      "lists": {}
+    },
+    "save_slot": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 14,
+          "w": 20,
+          "x": 20,
+          "y": 10
+        },
+        "panel.cancel": {
+          "h": 2,
+          "w": 4,
+          "x": 15,
+          "y": 11
+        },
+        "panel.prompt": {
+          "h": 1,
+          "w": 18,
+          "x": 1,
+          "y": 2
+        },
+        "panel.slots": {
+          "h": 6,
+          "w": 18,
+          "x": 0,
+          "y": 0
+        },
+        "panel.slots_viewport": {
+          "h": 8,
+          "w": 18,
+          "x": 1,
+          "y": 3
+        },
+        "panel.title": {
+          "h": 1,
+          "w": 18,
+          "x": 1,
+          "y": 1
+        }
+      },
+      "lists": {
+        "slots": {
+          "base": {
+            "h": 2,
+            "w": 18,
+            "x": 0,
+            "y": 0
+          },
+          "row_h": 2,
+          "viewport": {
+            "h": 8,
+            "w": 18,
+            "x": 1,
+            "y": 3
+          }
+        }
+      }
+    },
+    "settings": {
+      "elements": {
+        "dim": {
+          "h": 34,
+          "w": 60,
+          "x": 0,
+          "y": 0
+        },
+        "panel": {
+          "h": 21,
+          "w": 22,
+          "x": 19,
+          "y": 6
+        },
+        "panel.close": {
+          "h": 2,
+          "w": 4,
+          "x": 17,
+          "y": 19
+        },
+        "panel.current": {
+          "h": 1,
+          "w": 20,
+          "x": 1,
+          "y": 6
+        },
+        "panel.current_mode_buttons": {
+          "h": 2,
+          "w": 8,
+          "x": 7,
+          "y": 11
+        },
+        "panel.current_mode_current": {
+          "h": 2,
+          "w": 5,
+          "x": 16,
+          "y": 11
+        },
+        "panel.current_mode_label": {
+          "h": 2,
+          "w": 5,
+          "x": 1,
+          "y": 11
+        },
+        "panel.debug_button": {
+          "h": 2,
+          "w": 3,
+          "x": 7,
+          "y": 13
+        },
+        "panel.debug_hint": {
+          "h": 2,
+          "w": 9,
+          "x": 11,
+          "y": 13
+        },
+        "panel.debug_label": {
+          "h": 2,
+          "w": 5,
+          "x": 1,
+          "y": 13
+        },
+        "panel.density_label": {
+          "h": 1,
+          "w": 20,
+          "x": 1,
+          "y": 3
+        },
+        "panel.hint": {
+          "h": 2,
+          "w": 20,
+          "x": 1,
+          "y": 7
+        },
+        "panel.input_buttons": {
+          "h": 2,
+          "w": 8,
+          "x": 7,
+          "y": 9
+        },
+        "panel.input_current": {
+          "h": 2,
+          "w": 5,
+          "x": 16,
+          "y": 9
+        },
+        "panel.input_label": {
+          "h": 2,
+          "w": 5,
+          "x": 1,
+          "y": 9
+        },
+        "panel.locale_button": {
+          "h": 2,
+          "w": 5,
+          "x": 7,
+          "y": 15
+        },
+        "panel.locale_label": {
+          "h": 2,
+          "w": 5,
+          "x": 1,
+          "y": 15
+        },
+        "panel.presets": {
+          "h": 2,
+          "w": 20,
+          "x": 1,
+          "y": 4
+        },
+        "panel.return_button": {
+          "h": 2,
+          "w": 8,
+          "x": 7,
+          "y": 19
+        },
+        "panel.save_button": {
+          "h": 2,
+          "w": 8,
+          "x": 7,
+          "y": 17
+        },
+        "panel.title": {
+          "h": 2,
+          "w": 20,
+          "x": 1,
+          "y": 1
+        },
+        "presets.deserted": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        },
+        "presets.extreme": {
+          "h": 2,
+          "w": 4,
+          "x": 16,
+          "y": 0
+        },
+        "presets.high": {
+          "h": 2,
+          "w": 4,
+          "x": 12,
+          "y": 0
+        },
+        "presets.low": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 0
+        },
+        "presets.normal": {
+          "h": 2,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "settings.current.drift": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 0
+        },
+        "settings.current.modifier": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        },
+        "settings.input.helm": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 0
+        },
+        "settings.input.step": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "lists": {}
     },
     "world": {
       "elements": {

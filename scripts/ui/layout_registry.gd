@@ -462,17 +462,24 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 	size.y = maxf(size.y, float(ceili(kids.y / float(TILE)) * TILE))
 	# The parent-bounds clamp (rule 1): an element cannot leave its
 	# parent's rect — the clamp runs in the DIRECT parent's local space,
-	# exact for this game's translation-only hierarchies. A parent with
-	# no measured size yet (pre-layout) has no reliable bounds — skip
-	# until it measures up (the Phase-11 zero-size guard).
+	# exact for this game's translation-only hierarchies, with the
+	# bounds QUANTIZED UP to whole tiles: the canvas is 60 × 33.75 tiles
+	# and the 34th row's bottom 8 px are the sliver, so a full-height
+	# child of the root (the §4.7.1 battle bar at row 31, 1088 px bottom
+	# edge) is IN bounds and must not be pulled up (docs/10-* §4.23
+	# bounds). A parent with no measured size yet (pre-layout) has no
+	# reliable bounds — skip until it measures up (the Phase-11
+	# zero-size guard).
 	var lp := control.get_parent()
 	if lp is Control:
 		var psize: Vector2 = (lp as Control).size
 		if psize.x > 0 and psize.y > 0:
-			size.x = minf(size.x, psize.x)
-			size.y = minf(size.y, psize.y)
-			pos.x = clampf(pos.x, 0.0, maxf(0.0, psize.x - size.x))
-			pos.y = clampf(pos.y, 0.0, maxf(0.0, psize.y - size.y))
+			var qw := float(ceili(psize.x / float(TILE)) * TILE)
+			var qh := float(ceili(psize.y / float(TILE)) * TILE)
+			size.x = minf(size.x, qw)
+			size.y = minf(size.y, qh)
+			pos.x = clampf(pos.x, 0.0, maxf(0.0, qw - size.x))
+			pos.y = clampf(pos.y, 0.0, maxf(0.0, qh - size.y))
 	control.size = size
 	control.position = pos
 
