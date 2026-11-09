@@ -1,0 +1,209 @@
+{
+  "elements": {
+    "cargo": {
+      "h": 4,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "cargo.scroll": {
+      "h": 4,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "cargo.stacks": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "crew": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "days_row": {
+      "h": 1,
+      "w": 17,
+      "x": 0,
+      "y": 0
+    },
+    "days_row.days": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "days_row.fill": {
+      "h": 1,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "days_row.short": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "dim": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "footer": {
+      "h": 1,
+      "w": 14,
+      "x": 0,
+      "y": 0
+    },
+    "footer.gate_reason": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "footer.sail": {
+      "h": 1,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "footer.stay": {
+      "h": 1,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "header": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "hint": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "hold": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "panel": {
+      "h": 21,
+      "w": 27,
+      "x": 0,
+      "y": 0
+    },
+    "rows": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.buy": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.jettison": {
+      "h": 2,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.label": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.minus": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.plus": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.provisions.qty": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.buy": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.jettison": {
+      "h": 2,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.label": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.minus": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.plus": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rows.water.qty": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "table": {
+      "h": 2,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "title": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "lists": {}
+}

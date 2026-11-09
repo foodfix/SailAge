@@ -321,9 +321,10 @@ SPECIAL_REQUIRE_VERSION.add("facility_hours.json")
 # vocabularies.
 SPECIAL_FILES.add("captain_name_parts.json")
 SPECIAL_REQUIRE_VERSION.add("captain_name_parts.json")
-# Phase 11 (§4.23, 2026-11-09): ui_layout.json is the studio layout-override
-# table — top level IS the screen map, no envelope at all; group 14 owns its
-# shape.
+# Phase 12 (§4.23, 2026-11-09): ui_layout.json is the absolute layout
+# file — `{version, screens}` with per-screen element rects + list
+# blocks; group 14 owns its shape (v2; the capture/studio are the
+# writers).
 SPECIAL_FILES.add("ui_layout.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
@@ -11522,14 +11523,22 @@ def _g13_probe_root(icons_dir: Path) -> Path:
 
 # The 8 pilot screen ids (§4.23).
 LAYOUT_SCREENS = frozenset({
+    # The Phase-11 pilot eight.
     "port", "market", "inn", "guild", "provisions", "palace",
     "tavern", "shipyard",
+    # Phase 12 §4.23: the title trio, the world family, the combat trio,
+    # and the shared modals — the full 32-screen set.
+    "title", "nationality_select", "creation",
+    "world", "chart", "hail", "fleet_picker", "autopilot_hud",
+    "battle", "sandbox", "duel",
+    "confirm", "save_slot", "settings", "intel_window", "dialog_box",
+    "dossier", "character_card", "captain_view", "fleet_view",
+    "officer_roster", "reputation_view", "gameover", "ending",
 })
 
-# The legal element-object keys (§4.23).
-LAYOUT_KEYS = frozenset({
-    "x", "y", "w", "h", "min_w", "min_h", "order", "anchor", "sheet",
-})
+# The legal element-object keys (§4.23 v2 — a rect + an optional sheet;
+# the Phase-11 min_w/min_h/order/anchor overrides are retired).
+LAYOUT_ELEMENT_KEYS = frozenset({"x", "y", "w", "h", "sheet"})
 
 # The 7 assignable nine-patch sheet ids (80-* §4.8.9 — the 48×16 value-bar
 # band is not assignable).
@@ -11538,101 +11547,159 @@ LAYOUT_SHEETS = frozenset({
     "field", "backdrop",
 })
 
-LAYOUT_ANCHORS = frozenset({"top", "bottom", "left", "right"})
-
-# The 1920×1080 design canvas = 60 × 33.75 chrome tiles (80-* §4.8.9).
+# The 1920×1080 design canvas = 60 × 33.75 chrome tiles (80-* §4.8.9);
+# 34 = the rounded canvas height — a full-height element's 1080 px
+# measures roundi(1080/32) = 34 tiles, the bottom 8 px being the sliver.
 LAYOUT_GRID_W = 60
-LAYOUT_GRID_H = 33
+LAYOUT_GRID_H = 34
 
 LAYOUT_ELEMENT_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
 
+# The file format version (§4.23 — a v1-shaped file fails item 0; there
+# is no migration, the capture regenerates the file).
+LAYOUT_VERSION = 2
+
+
+def _layout_rect(value: object, label: str, rule: str) -> dict:
+    """One {x,y,w,h} rect object check (§8.9 items 3/5): all four keys
+    required, non-negative ints (no floats/strings/bools). Returns the
+    dict when valid; raises CheckFailure otherwise."""
+    if not isinstance(value, dict):
+        fail("layout", "ui_layout.json", f"{label}: must be an object "
+             f"(§8.9 item {rule})", 14)
+    for key in ("x", "y", "w", "h"):
+        if key not in value:
+            fail("layout", "ui_layout.json", f"{label}: missing '{key}' "
+                 f"(§8.9 item {rule})", 14)
+        v = value[key]
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+            fail("layout", "ui_layout.json", f"{label}.{key}: must be a "
+                 f"non-negative integer tile count (§8.9 item {rule})", 14)
+    x, y, w, h = value["x"], value["y"], value["w"], value["h"]
+    if x + w > LAYOUT_GRID_W:
+        fail("layout", "ui_layout.json", f"{label}: x({x}) + w({w}) exceeds "
+             f"the {LAYOUT_GRID_W}-tile grid width (§8.9 item 4)", 14)
+    if y + h > LAYOUT_GRID_H:
+        fail("layout", "ui_layout.json", f"{label}: y({y}) + h({h}) exceeds "
+             f"the {LAYOUT_GRID_H}-tile canvas height (§8.9 item 4)", 14)
+    return value
+
 
 def check_group14(docs: dict[str, object], verbose: bool) -> None:
-    """Layout overrides: docs/10-DATA-SCHEMA.md section 8.9 — the
-    `data/ui_layout.json` shape, ranges, sheet ids and anchor/`y`
-    exclusivity. The file must exist but MAY be `{}` (the shipped
-    default: every override absent, every code pin intact)."""
+    """The absolute layout file: docs/10-DATA-SCHEMA.md section 8.9 —
+    the `data/ui_layout.json` v2 shape (`{version, screens}`), the
+    32-screen set, element/list rect shapes, canvas bounds and the
+    serialization byte rule. The file must exist and MUST be v2 (a
+    v1-shaped file — top level = the screen map — fails item 0; there is
+    no migration, the capture regenerates the file)."""
     path = DATA_DIR / "ui_layout.json"
     if not path.is_file():
         fail("layout", "ui_layout.json", "file is absent "
-             "(ships as {} — group 14 requires the file to exist)", 14)
+             "(group 14 requires the file)", 14)
+    raw_text = path.read_text(encoding="utf-8")
     table = docs.get("ui_layout.json")
     if not isinstance(table, dict):
         fail("layout", "ui_layout.json", "top-level value must be an object "
+             "(§8.9 item 0)", 14)
+    # -- item 0: version + the exact two-key shape ------------------------
+    version = table.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) \
+            or version != LAYOUT_VERSION:
+        fail("layout", "ui_layout.json", f"'version' must be the integer "
+             f"{LAYOUT_VERSION}, got {version!r} (§8.9 item 0 — a "
+             f"v1-shaped file is not migrated, regenerate via the capture)",
+             14)
+    extra = sorted(set(table) - {"version", "screens"})
+    if extra:
+        fail("layout", "ui_layout.json", f"unexpected top-level key(s) "
+             f"{extra} (§8.9 item 0)", 14)
+    if "screens" not in table:
+        fail("layout", "ui_layout.json", "missing 'screens' (§8.9 item 0)", 14)
+    screens = table["screens"]
+    if not isinstance(screens, dict):
+        fail("layout", "ui_layout.json", "'screens' must be an object "
              "(§8.9 item 1)", 14)
 
     elements_total = 0
-    for screen, elements in table.items():
+    for screen, data in screens.items():
         # -- item 1: known screen ids, per-screen object --------------------
         if screen not in LAYOUT_SCREENS:
             fail("layout", "ui_layout.json",
                  f"unknown screen '{screen}' (§8.9 item 1)", 14)
-        if not isinstance(elements, dict):
+        if not isinstance(data, dict):
             fail("layout", "ui_layout.json",
-                 f"'{screen}' must be an object (§8.9 item 1)", 14)
-        for element, overrides in elements.items():
+                 f"screens.{screen} must be an object (§8.9 item 1)", 14)
+        unknown = sorted(set(data) - {"elements", "lists"})
+        if unknown:
+            fail("layout", "ui_layout.json",
+                 f"screens.{screen}: unknown key(s) {unknown} "
+                 f"(§8.9 item 1)", 14)
+        elements = data.get("elements", {})
+        lists = data.get("lists", {})
+        if not isinstance(elements, dict) or not isinstance(lists, dict):
+            fail("layout", "ui_layout.json",
+                 f"screens.{screen}: 'elements'/'lists' must be objects "
+                 f"(§8.9 item 1)", 14)
+        # -- items 2/3/4: static element rects ------------------------------
+        for element, rect in elements.items():
             elements_total += 1
             label = f"{screen}.{element}"
-            # -- item 2: dotted hierarchical id format -----------------------
             if not isinstance(element, str) or not LAYOUT_ELEMENT_RE.match(element):
                 fail("layout", "ui_layout.json",
                      f"element id '{element}' does not match the dotted-id "
                      f"regex (§8.9 item 2)", 14)
-            if not isinstance(overrides, dict):
+            if not isinstance(rect, dict):
                 fail("layout", "ui_layout.json",
                      f"{label}: element value must be an object "
                      f"(§8.9 item 3)", 14)
-            # -- item 3: key whitelist + types --------------------------------
-            unknown = sorted(set(overrides) - LAYOUT_KEYS)
+            unknown = sorted(set(rect) - LAYOUT_ELEMENT_KEYS)
             if unknown:
                 fail("layout", "ui_layout.json",
-                     f"{label}: unknown key(s) {unknown} (§8.9 item 3)", 14)
-            for key in ("x", "y", "w", "h", "min_w", "min_h", "order"):
-                if key in overrides and not (
-                        isinstance(overrides[key], int)
-                        and not isinstance(overrides[key], bool)
-                        and overrides[key] >= 0):
-                    fail("layout", "ui_layout.json",
-                         f"{label}.{key}: must be a non-negative integer "
-                         f"tile count (§8.9 item 3)", 14)
-            if "anchor" in overrides and overrides["anchor"] not in LAYOUT_ANCHORS:
+                     f"{label}: unknown key(s) {unknown} — the Phase-11 "
+                     f"min_w/min_h/order/anchor overrides are retired "
+                     f"(§8.9 item 3)", 14)
+            _layout_rect(rect, label, "3")
+            if "sheet" in rect and rect["sheet"] not in LAYOUT_SHEETS:
                 fail("layout", "ui_layout.json",
-                     f"{label}.anchor: {overrides['anchor']!r} is not one of "
-                     f"{sorted(LAYOUT_ANCHORS)} (§8.9 item 3)", 14)
-            if "sheet" in overrides and overrides["sheet"] not in LAYOUT_SHEETS:
-                fail("layout", "ui_layout.json",
-                     f"{label}.sheet: {overrides['sheet']!r} is not one of "
+                     f"{label}.sheet: {rect['sheet']!r} is not one of "
                      f"the 7 assignable sheets (§8.9 item 3)", 14)
-            # -- item 4: grid bounds (60 × 33.75 tiles) -----------------------
-            x = overrides.get("x", 0)
-            w = overrides.get("w", 0)
-            y = overrides.get("y", 0)
-            h = overrides.get("h", 0)
-            if x + w > LAYOUT_GRID_W:
+        # -- item 5: list blocks ---------------------------------------------
+        for list_id, block in lists.items():
+            blabel = f"{screen}.lists.{list_id}"
+            if not isinstance(list_id, str) or not LAYOUT_ELEMENT_RE.match(list_id):
                 fail("layout", "ui_layout.json",
-                     f"{label}: x({x}) + w({w}) exceeds the {LAYOUT_GRID_W}-"
-                     f"tile grid width (§8.9 item 4)", 14)
-            if y + h > LAYOUT_GRID_H:
+                     f"list id '{list_id}' does not match the dotted-id "
+                     f"regex (§8.9 item 5)", 14)
+            if not isinstance(block, dict):
                 fail("layout", "ui_layout.json",
-                     f"{label}: y({y}) + h({h}) exceeds the {LAYOUT_GRID_H}-"
-                     f"tile grid height (§8.9 item 4)", 14)
-            if overrides.get("min_w", 0) > LAYOUT_GRID_W or \
-                    overrides.get("min_h", 0) > LAYOUT_GRID_H:
+                     f"{blabel}: must be an object (§8.9 item 5)", 14)
+            unknown = sorted(set(block) - {"base", "row_h", "viewport"})
+            if unknown:
                 fail("layout", "ui_layout.json",
-                     f"{label}: min_w/min_h exceed the grid "
-                     f"(§8.9 item 4)", 14)
-            if overrides.get("order", 0) > 64:
+                     f"{blabel}: unknown key(s) {unknown} (§8.9 item 5)", 14)
+            for key in ("base", "viewport"):
+                if key not in block:
+                    fail("layout", "ui_layout.json",
+                         f"{blabel}: missing '{key}' (§8.9 item 5)", 14)
+                _layout_rect(block[key], f"{blabel}.{key}", "5")
+            row_h = block.get("row_h")
+            if not isinstance(row_h, int) or isinstance(row_h, bool) \
+                    or row_h < 1:
                 fail("layout", "ui_layout.json",
-                     f"{label}.order exceeds 64 (§8.9 item 4)", 14)
-            # -- item 5: anchor/y exclusivity ---------------------------------
-            if "anchor" in overrides and "y" in overrides:
-                fail("layout", "ui_layout.json",
-                     f"{label}: an anchored element must not carry 'y' "
+                     f"{blabel}.row_h: must be an integer ≥ 1 "
                      f"(§8.9 item 5)", 14)
+
+    # -- item 6: serialization bytes ----------------------------------------
+    expected = json.dumps(table, sort_keys=True, indent=2,
+                          ensure_ascii=False) + "\n"
+    if raw_text != expected:
+        fail("layout", "ui_layout.json", "serialization drift: the file's "
+             "bytes are not sorted-keys/2-space-indent + one trailing "
+             "newline (§8.9 item 6 — byte-stable commits)", 14)
 
     if verbose:
         print(f"PASS group 14 layout ({elements_total} elements across "
-              f"{len(table)} screens)")
+              f"{len(screens)} screens, v{LAYOUT_VERSION})")
 
 
 # ---------------------------------------------------------------------------
@@ -11641,35 +11708,37 @@ def check_group14(docs: dict[str, object], verbose: bool) -> None:
 
 
 def run_group14_self_test() -> int:
-    """Negative harness for group 14: `{}` passes; every §8.9 rule has
-    one negative probe that must fail with exit 14 naming the rule."""
+    """Negative harness for group 14: the interim empty screens table
+    and a well-formed populated fixture pass; every §8.9 rule has one
+    negative probe that must fail with exit 14 naming the rule."""
     global DATA_DIR
     results: list[bool] = []
     saved_data_dir = DATA_DIR
 
-    def with_table(table: dict, action) -> None:
+    def with_table(table: dict, action, text: str = None) -> None:
         """Runs `action` with `table` as the docs entry and a tmp
         DATA_DIR holding the serialized fixture (the check reads the
-        file-existence path from DATA_DIR)."""
+        file bytes from DATA_DIR). `text` verbatim overrides the
+        canonical bytes (the serialization-byte probes)."""
         global DATA_DIR
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp) / "data"
             data_dir.mkdir()
-            (data_dir / "ui_layout.json").write_text(
-                json.dumps(table, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8")
+            if text is None:
+                text = json.dumps(table, indent=2, sort_keys=True) + "\n"
+            (data_dir / "ui_layout.json").write_text(text, encoding="utf-8")
             DATA_DIR = data_dir
             try:
                 action({"ui_layout.json": table})
             finally:
                 DATA_DIR = saved_data_dir
 
-    def expect_green(case: str, table: dict) -> None:
+    def expect_green(case: str, table: dict, text: str = None) -> None:
         def action(docs: dict) -> None:
             check_group14(docs, False)
         try:
-            with_table(table, action)
+            with_table(table, action, text)
         except CheckFailure as exc:
             results.append(False)
             print(f"FAIL g14-self-test {case}: fixture should pass but "
@@ -11683,11 +11752,12 @@ def run_group14_self_test() -> int:
         results.append(True)
         print(f"PASS g14 positive {case}")
 
-    def expect_failure(case: str, needle: str, table: dict) -> None:
+    def expect_failure(case: str, needle: str, table: dict,
+                       text: str = None) -> None:
         def action(docs: dict) -> None:
             check_group14(docs, False)
         try:
-            with_table(table, action)
+            with_table(table, action, text)
         except CheckFailure as exc:
             ok = (exc.code == 14
                   and needle.lower() in f"{exc.check_id} {exc.details}".lower())
@@ -11709,53 +11779,103 @@ def run_group14_self_test() -> int:
         print(f"FAIL g14-self-test {case}: group 14 stayed green; the "
               "mutation was not detected")
 
-    # Positive 1: the shipped empty table.
-    expect_green("empty", {})
-    # Positive 2: a well-formed fixture across the §4.23 key set.
+    # Positives: the interim empty-screens table; a well-formed v2
+    # fixture across the §4.23 shape (elements + a list block + sheet).
+    expect_green("empty-screens", {"version": 2, "screens": {}})
     expect_green("fixture", {
-        "market": {
-            "toolbar": {"x": 2, "y": 1},
-            "invest": {"min_w": 4, "min_h": 2, "sheet": "backdrop"},
-            "rows.copper.qty_field": {"min_w": 3, "sheet": "field"},
-        },
-        "port": {
-            "footer.set_sail": {"anchor": "bottom", "h": 2, "w": 8, "x": 26},
-            "card": {"order": 3},
+        "version": 2,
+        "screens": {
+            "market": {
+                "elements": {
+                    "background": {"x": 0, "y": 0, "w": 60, "h": 34},
+                    "header": {"x": 1, "y": 1, "w": 58, "h": 4},
+                    "header.back": {"x": 50, "y": 1, "w": 8, "h": 2,
+                                    "sheet": "button"},
+                },
+                "lists": {
+                    "rows": {"base": {"x": 1, "y": 6, "w": 58, "h": 2},
+                             "row_h": 2,
+                             "viewport": {"x": 1, "y": 6, "w": 58, "h": 24}},
+                },
+            },
         },
     })
-    # Rule 1: unknown screen id.
-    expect_failure("rule1-screen", "unknown screen", {"market_x": {}})
-    # Rule 1: per-screen value not an object.
+    # Rule 0a: a v1-shaped file (top level = the screen map — no
+    # version/screens envelope) must fail.
+    expect_failure("rule0-v1-shape", "version", {
+        "market": {"toolbar": {"x": 2, "y": 1}},
+    })
+    # Rule 0b: wrong version.
+    expect_failure("rule0-version", "'version' must be the integer 2",
+                   {"version": 1, "screens": {}})
+    # Rule 0c: an extra top-level key.
+    expect_failure("rule0-extra", "unexpected top-level key",
+                   {"version": 2, "screens": {}, "overrides": {}})
+    # Rule 1a: unknown screen id.
+    expect_failure("rule1-screen", "unknown screen",
+                   {"version": 2, "screens": {"market_x": {}}})
+    # Rule 1b: per-screen value not an object.
     expect_failure("rule1-shape", "must be an object",
-                   {"market": []})
+                   {"version": 2, "screens": {"market": []}})
+    # Rule 1c: unknown per-screen key.
+    expect_failure("rule1-keys", "unknown key(s)",
+                   {"version": 2, "screens": {"market": {"overrides": {}}}})
     # Rule 2: bad element id.
     expect_failure("rule2-id", "dotted-id regex",
-                   {"market": {"Rows.Copper..qty": {}}})
-    # Rule 3a: unknown key.
-    expect_failure("rule3-key", "unknown key",
-                   {"market": {"toolbar": {"left": 1}}})
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"Rows.Copper..qty": {
+                           "x": 0, "y": 0, "w": 1, "h": 1}}}}})
+    # Rule 3a: a retired Phase-11 key.
+    expect_failure("rule3-retired", "retired",
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"header": {
+                           "x": 1, "y": 1, "w": 58, "h": 4, "min_w": 3}}}}})
     # Rule 3b: non-integer coordinate.
     expect_failure("rule3-int", "non-negative integer",
-                   {"market": {"toolbar": {"x": 1.5}}})
-    # Rule 3c: bad anchor enum.
-    expect_failure("rule3-anchor", "anchor",
-                   {"port": {"footer": {"anchor": "middle"}}})
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"header": {
+                           "x": 1.5, "y": 1, "w": 58, "h": 4}}}}})
+    # Rule 3c: a missing rect key.
+    expect_failure("rule3-missing", "missing 'w'",
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"header": {
+                           "x": 1, "y": 1, "h": 4}}}}})
     # Rule 3d: bad sheet id (the 8th sheet — the value-bar band — is
     # not assignable, as is any invented id).
     expect_failure("rule3-sheet", "assignable sheets",
-                   {"market": {"panel": {"sheet": "bar"}}})
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"panel": {
+                           "x": 0, "y": 0, "w": 1, "h": 1,
+                           "sheet": "bar"}}}}})
     # Rule 4a: width overflow.
     expect_failure("rule4-w", "grid width",
-                   {"market": {"toolbar": {"x": 58, "w": 4}}})
-    # Rule 4b: height overflow (the 33.75 sliver).
-    expect_failure("rule4-h", "grid height",
-                   {"market": {"toolbar": {"y": 32, "h": 2}}})
-    # Rule 4c: min-size overflow.
-    expect_failure("rule4-min", "min_w/min_h",
-                   {"market": {"panel": {"min_h": 40}}})
-    # Rule 5: anchor + y contradiction.
-    expect_failure("rule5-anchor-y", "must not carry 'y'",
-                   {"port": {"footer": {"anchor": "bottom", "h": 2, "y": 1}}})
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"toolbar": {
+                           "x": 58, "y": 0, "w": 4, "h": 1}}}}})
+    # Rule 4b: height overflow past the 34-tile rounded canvas.
+    expect_failure("rule4-h", "canvas height",
+                   {"version": 2, "screens": {
+                       "market": {"elements": {"toolbar": {
+                           "x": 0, "y": 33, "w": 2, "h": 2}}}}})
+    # Rule 5a: bad row_h.
+    expect_failure("rule5-rowh", "row_h",
+                   {"version": 2, "screens": {"market": {"lists": {
+                       "rows": {"base": {"x": 1, "y": 6, "w": 58, "h": 2},
+                                "row_h": 0,
+                                "viewport": {"x": 1, "y": 6, "w": 58,
+                                             "h": 24}}}}}})
+    # Rule 5b: a missing base key.
+    expect_failure("rule5-base", "missing 'x'",
+                   {"version": 2, "screens": {"market": {"lists": {
+                       "rows": {"base": {"y": 6, "w": 58, "h": 2},
+                                "row_h": 2,
+                                "viewport": {"x": 1, "y": 6, "w": 58,
+                                             "h": 24}}}}}})
+    # Rule 6: serialization drift (valid table, indent-4 bytes).
+    expect_failure("rule6-bytes", "serialization drift",
+                   {"version": 2, "screens": {}},
+                   text=json.dumps({"version": 2, "screens": {}},
+                                   indent=4, sort_keys=True) + "\n")
 
     if not all(results):
         print(f"FAIL g14-self-test: {results.count(False)} of "

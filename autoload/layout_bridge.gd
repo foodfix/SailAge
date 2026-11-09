@@ -54,18 +54,15 @@ const TEST_PORT := 8766
 ## Loopback only: the bridge is a studio tool, never an exposed service.
 const BIND_ADDRESS := "127.0.0.1"
 ## The design canvas in chrome tiles (`80-*` §4.8.9 grid caps:
-## 1920×1080 / 32 px ⇒ 60 × 33 floor; the bottom sliver is anchored).
+## 1920×1080 / 32 px ⇒ 60 × 34 — 33.75 rounded up; the 34th row's
+## bottom 8 px are the canvas sliver).
 const GRID_W := 60
-const GRID_H := 33
-## The reply cascade delay (the 2026-11-09 resize settle fix): a
-## container re-sort cascades down ONE LEVEL PER FRAME — each container
-## queues its children's re-sort deferred — so a reply sent one frame
-## after an edit reads a MID-CASCADE rect (outer levels settled, inner
-## levels stale). The studio box then fights the still-settling layout
-## during the drag and, with no further edits after release, lands on
-## the wrong size permanently. The reply waits this many frames after
-## the LAST edit; a newer edit resets the countdown and coalesces.
-const UPDATE_SETTLE_FRAMES := 4
+const GRID_H := 34
+## The reply delay (the Phase-12 amendment of the Phase-11 settle fix):
+## with container flow DELETED there are no re-sort cascades — a single
+## deferred frame is kept as a safety margin so the reply always reads
+## post-layout rects. A newer edit resets the countdown and coalesces.
+const UPDATE_SETTLE_FRAMES := 1
 ## The WS peer buffer floors (the 2026-11-09 outbound-overflow fix): the
 ## engine's default outbound buffer is 64 KiB while a `frame` message
 ## carries a full-viewport PNG in base64 (hundreds of KiB to a few MB) —
@@ -280,6 +277,8 @@ func _msg_get_tree(msg: Dictionary) -> void:
 
 
 func _msg_move(msg: Dictionary) -> void:
+	if _reject_retired(msg):
+		return
 	var overrides := {}
 	for key in ["x", "y"]:
 		if not _add_int_field(msg, key, overrides):
@@ -288,20 +287,34 @@ func _msg_move(msg: Dictionary) -> void:
 
 
 func _msg_resize(msg: Dictionary) -> void:
+	if _reject_retired(msg):
+		return
 	var overrides := {}
-	for key in ["w", "h", "min_w", "min_h"]:
+	for key in ["w", "h"]:
 		_add_int_field(msg, key, overrides)
 	if overrides.is_empty():
-		_send_error("bad_field", "resize needs at least one of w/h/min_w/min_h")
+		_send_error("bad_field", "resize needs at least one of w/h")
 		return
 	_edit(msg, overrides)
 
 
-func _msg_reorder(msg: Dictionary) -> void:
-	var overrides := {}
-	if not _add_int_field(msg, "order", overrides):
-		return
-	_edit(msg, overrides)
+## A v1 message carrying a retired Phase-11 field is answered
+## `retired_field` and changes nothing (the registry's guard is the
+## second net).
+func _reject_retired(msg: Dictionary) -> bool:
+	for key in ["min_w", "min_h", "order", "anchor"]:
+		if msg.has(key):
+			_send_error("retired_field", ("'%s' is retired — Phase 12 "
+					+ "edits carry x/y/w/h + sheet only") % key)
+			return true
+	return false
+
+
+func _msg_reorder(_msg: Dictionary) -> void:
+	# Retired (Phase 12, 90-* §5.7): there is no flow to re-order.
+	# Tolerated without effect until the studio's W3 lands.
+	_send_error("retired_field", "reorder is retired — Phase 12 edits "
+			+ "carry x/y/w/h + sheet only")
 
 
 func _msg_assign_sheet(msg: Dictionary) -> void:
@@ -334,7 +347,9 @@ func _msg_reset_screen(msg: Dictionary) -> void:
 
 ## The shared edit path: apply through the registry immediately (the
 ## user watches the real screen move), then answer with the fresh tree
-## + a frame (`90-*` §5.7) — DEFERRED (see `_queue_update`).
+## + a frame (`90-*` §5.7) — DEFERRED one frame (see `_queue_update`).
+## (Retired fields are rejected upstream, in `_reject_retired`; the
+## registry's own guard is the second net.)
 func _edit(msg: Dictionary, overrides: Dictionary) -> void:
 	var screen := String(msg.get("screen", ""))
 	var id := String(msg.get("id", ""))

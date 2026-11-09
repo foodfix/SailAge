@@ -552,14 +552,18 @@ func _load_ui_strings() -> Dictionary:
 	return table
 
 
-## Reads `data/ui_layout.json` — the studio layout-override table
-## (docs/10-* §4.23, docs/80-* §4.8.9). Not an envelope file: the top
-## level is the screen map directly (the ui_strings pattern). Light shape
-## checks only — key whitelist, type and screen-id membership; the heavy
-## validation (bounds, sheet/anchor enums, id regex) is group 14
-## (docs/10-* §8.9). Absent file ⇒ `{}` ⇒ every default (the shipped
-## state; a missing file is NOT an error — the overrides are optional by
-## design, unlike the entity tables).
+## Reads `data/ui_layout.json` — the absolute layout file, v2
+## (docs/10-* §4.23, docs/80-* §4.8.9). Envelope `{version, screens}`;
+## per screen `elements` (rects + optional sheet) and/or `lists`
+## (computed-stacking blocks). Light shape checks only — key
+## whitelist, types and screen-id membership; the heavy validation
+## (canvas bounds, sheet enum, id regex, serialization bytes) is group
+## 14 (docs/10-* §8.9). Returns the per-screen map
+## `{screen: {elements: {}, lists: {}}}` — the registry's read shape.
+## Absent file ⇒ `{}` (a missing file is NOT an error — every screen
+## runs unmanaged/flow-free authored until the capture populates its
+## table, unlike the entity tables). A file that is not v2 records an
+## error and yields `{}` (no migration — the capture regenerates it).
 func _load_ui_layout() -> Dictionary:
 	if not FileAccess.file_exists(DATA_DIR.path_join("ui_layout.json")):
 		return {}
@@ -570,30 +574,54 @@ func _load_ui_layout() -> Dictionary:
 	if not (raw is Dictionary):
 		_record("ui_layout.json: top-level value must be an object")
 		return table
+	if raw.get("version", null) != 2:
+		_record("ui_layout.json: 'version' must be 2 (10-* §4.23)")
+		return table
 	const SCREENS := ["port", "market", "inn", "guild", "provisions",
-		"palace", "tavern", "shipyard"]
-	const KEYS := ["x", "y", "w", "h", "min_w", "min_h", "order",
-		"anchor", "sheet"]
-	for screen in raw:
+		"palace", "tavern", "shipyard",
+		"title", "nationality_select", "creation",
+		"world", "chart", "hail", "fleet_picker", "autopilot_hud",
+		"battle", "sandbox", "duel",
+		"confirm", "save_slot", "settings", "intel_window",
+		"dialog_box", "dossier", "character_card", "captain_view",
+		"fleet_view", "officer_roster", "reputation_view", "gameover",
+		"ending"]
+	const ELEMENT_KEYS := ["x", "y", "w", "h", "sheet"]
+	var screens = raw.get("screens", null)
+	if not (screens is Dictionary):
+		_record("ui_layout.json: 'screens' must be an object")
+		return table
+	for screen in screens:
 		if not (screen in SCREENS):
 			_record("ui_layout.json: unknown screen '%s'" % screen)
 			continue
-		var elements = raw[screen]
-		if not (elements is Dictionary):
-			_record("ui_layout.json: '%s' must be an object" % screen)
+		var data = screens[screen]
+		if not (data is Dictionary):
+			_record("ui_layout.json: screens.%s must be an object" % screen)
 			continue
-		var screen_table: Dictionary = {}
-		for element in elements:
-			var overrides = elements[element]
-			if not (overrides is Dictionary):
-				_record("ui_layout.json: '%s.%s' must be an object"
-						% [screen, element])
-				continue
-			for key in overrides:
-				if not (key in KEYS):
-					_record("ui_layout.json: '%s.%s': unknown key '%s'"
-							% [screen, element, key])
-			screen_table[element] = overrides
+		var screen_table: Dictionary = {"elements": {}, "lists": {}}
+		var elements = data.get("elements", {})
+		if elements is Dictionary:
+			for element in elements:
+				var rect = elements[element]
+				if not (rect is Dictionary):
+					_record("ui_layout.json: screens.%s.%s must be an "
+							+ "object" % [screen, element])
+					continue
+				for key in rect:
+					if not (key in ELEMENT_KEYS):
+						_record("ui_layout.json: screens.%s.%s: unknown "
+								+ "key '%s'" % [screen, element, key])
+				screen_table["elements"][element] = rect
+		else:
+			_record("ui_layout.json: screens.%s.elements must be an object"
+					% screen)
+		var lists = data.get("lists", {})
+		if lists is Dictionary:
+			screen_table["lists"] = lists
+		elif data.has("lists"):
+			_record("ui_layout.json: screens.%s.lists must be an object"
+					% screen)
 		table[screen] = screen_table
 	return table
 

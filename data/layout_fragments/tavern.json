@@ -1,0 +1,707 @@
+{
+  "elements": {
+    "background": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "body": {
+      "h": 24,
+      "w": 58,
+      "x": 1,
+      "y": 6
+    },
+    "captains_table": {
+      "h": 2,
+      "w": 8,
+      "x": 0,
+      "y": 0
+    },
+    "captains_table.empty": {
+      "h": 1,
+      "w": 8,
+      "x": 0,
+      "y": 0
+    },
+    "captains_table.header": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "crew": {
+      "h": 24,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "crew.count": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "crew.fire_row": {
+      "h": 2,
+      "w": 58,
+      "x": 0,
+      "y": 6
+    },
+    "crew.fire_row.down_to_min": {
+      "h": 2,
+      "w": 5,
+      "x": 11,
+      "y": 0
+    },
+    "crew.fire_row.fire_1": {
+      "h": 2,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "crew.fire_row.fire_10": {
+      "h": 2,
+      "w": 5,
+      "x": 5,
+      "y": 0
+    },
+    "crew.hire_row": {
+      "h": 2,
+      "w": 58,
+      "x": 0,
+      "y": 4
+    },
+    "crew.hire_row.fill": {
+      "h": 2,
+      "w": 5,
+      "x": 11,
+      "y": 0
+    },
+    "crew.hire_row.hire_1": {
+      "h": 2,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "crew.hire_row.hire_10": {
+      "h": 2,
+      "w": 5,
+      "x": 5,
+      "y": 0
+    },
+    "crew.min_note": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 9
+    },
+    "crew.morale": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "crew.morale_bar": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 2
+    },
+    "crew.per_head": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 3
+    },
+    "crew.reason": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "footer": {
+      "h": 1,
+      "w": 58,
+      "x": 1,
+      "y": 31
+    },
+    "header": {
+      "h": 2,
+      "w": 58,
+      "x": 1,
+      "y": 1
+    },
+    "header.back": {
+      "h": 2,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "header.gold": {
+      "h": 1,
+      "w": 2,
+      "x": 52,
+      "y": 1
+    },
+    "header.title": {
+      "h": 1,
+      "w": 51,
+      "x": 0,
+      "y": 0
+    },
+    "layout": {
+      "h": 32,
+      "w": 59,
+      "x": 1,
+      "y": 1
+    },
+    "officers": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.reason": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable": {
+      "h": 26,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.action": {
+      "h": 5,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.action.card": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.action.cost": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.action.recruit": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.info": {
+      "h": 4,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.info.bio": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.info.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.info.role": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_duarte_silveira.info.stats": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.action": {
+      "h": 5,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.action.card": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.action.cost": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.action.recruit": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.info": {
+      "h": 4,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.info.bio": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.info.name": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.info.role": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_goncalo_marinheiro.info.stats": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.action": {
+      "h": 5,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.action.card": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.action.cost": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.action.recruit": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.info": {
+      "h": 4,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.info.bio": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.info.name": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.info.role": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_tome_pires.info.stats": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.action": {
+      "h": 5,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.action.card": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.action.cost": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.action.recruit": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.info": {
+      "h": 4,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.info.bio": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.info.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.info.role": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_leg_vicente_gouveia.info.stats": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares": {
+      "h": 5,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.action": {
+      "h": 5,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.action.card": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.action.cost": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.action.recruit": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.info": {
+      "h": 4,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.info.bio": {
+      "h": 2,
+      "w": 18,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.info.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.info.role": {
+      "h": 1,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable.off_mateus_alvares.info.stats": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "officers.recruitable_scroll": {
+      "h": 1,
+      "w": 24,
+      "x": 0,
+      "y": 0
+    },
+    "officers.roster": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "officers.roster.empty": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "officers.roster_header": {
+      "h": 1,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "officers.roster_scroll": {
+      "h": 4,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "rumors": {
+      "h": 8,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.empty": {
+      "h": 1,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.price": {
+      "h": 1,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows": {
+      "h": 133,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_caribbean_reef": {
+      "h": 45,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_caribbean_reef.bottom": {
+      "h": 2,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_caribbean_reef.bottom.buy": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_caribbean_reef.bottom.name": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_caribbean_reef.hint": {
+      "h": 43,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_el_dorado": {
+      "h": 46,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_el_dorado.bottom": {
+      "h": 2,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_el_dorado.bottom.buy": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_el_dorado.bottom.name": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_el_dorado.hint": {
+      "h": 44,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_table_mountain": {
+      "h": 42,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_table_mountain.bottom": {
+      "h": 2,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_table_mountain.bottom.buy": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_table_mountain.bottom.name": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.rows.disc_table_mountain.hint": {
+      "h": 40,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.scroll": {
+      "h": 1,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "rumors.tournament": {
+      "h": 1,
+      "w": 9,
+      "x": 0,
+      "y": 0
+    },
+    "spar": {
+      "h": 4,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "spar.controls": {
+      "h": 2,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "spar.controls.bet": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 0
+    },
+    "spar.controls.stake_down": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "spar.controls.stake_up": {
+      "h": 2,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "spar.header": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "spar.terms": {
+      "h": 1,
+      "w": 7,
+      "x": 0,
+      "y": 0
+    },
+    "tabs": {
+      "h": 2,
+      "w": 58,
+      "x": 1,
+      "y": 3
+    },
+    "tabs.crew": {
+      "h": 2,
+      "w": 5,
+      "x": 0,
+      "y": 0
+    },
+    "tabs.officers": {
+      "h": 2,
+      "w": 5,
+      "x": 5,
+      "y": 0
+    },
+    "tabs.rumors": {
+      "h": 2,
+      "w": 5,
+      "x": 11,
+      "y": 0
+    },
+    "toast": {
+      "h": 1,
+      "w": 58,
+      "x": 1,
+      "y": 30
+    }
+  },
+  "lists": {}
+}

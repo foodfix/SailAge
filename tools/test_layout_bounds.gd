@@ -1,25 +1,27 @@
 extends Node
-## Layout-bounds guard (docs/80-UI-UX.md §4.8.9; IMPLEMENT-Phase11.md §5 —
+## Layout-bounds guard (docs/80-UI-UX.md §4.8.9; IMPLEMENT-Phase12.md §5 —
 ## the both-locale containment pin). Headless scene test:
 ##
 ##   godot --headless --path . res://tools/test_layout_bounds.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## WHAT IS PINNED — the one guarantee the override file must never break,
+## WHAT IS PINNED — the one guarantee the layout file must never break,
 ## asserted as one deterministic observation per locale (the no-overkill
 ## discipline: the market screen is the densest registered screen; the
-## other seven ride the same registry mechanics pinned by
+## other screens ride the same registry mechanics pinned by
 ## test_layout_registry + their behavior suites):
-##   1. CONTAINMENT — with the SHIPPED empty `data/ui_layout.json`, every
+##   1. CONTAINMENT — with the SHIPPED `data/ui_layout.json`, every
 ##      registered market row's live rect (tiles, floored) stays inside
 ##      the 60 × 33.75 design canvas (1-tile floor-rounding slack) in
-##      BOTH locales — the baseline is safe by construction.
-##   2. THE GUARD BITES — with a deliberately clipping fixture committed
-##      (a 30-tile-tall header), the containment check FAILS: the suite
-##      exits 1. This is the demonstration that the layout-override
-##      commit path has a working both-locale geometry guard (the run
-##      swaps the fixture in and restores `{}` itself; no external state).
+##      BOTH locales. Green both in the interim ({}, the flow-authored
+##      path) and once W2 lands the market's v2 table (the file is the
+##      pin).
+##   2. THE GUARD IS STRUCTURAL — with a deliberately out-of-canvas v2
+##      row committed (a background at y=40), the applied rect is
+##      CLAMPED back inside the canvas (the parent-bounds rule): a bad
+##      commit can no longer breach containment at runtime, so the
+##      containment check STAYS GREEN — the clamp itself is asserted.
 ##   3. THE LOOP CLOSES — with `{}` restored, containment is green again
 ##      in both locales.
 
@@ -34,10 +36,12 @@ const GRID_H := 33
 ## The floor-rounding slack (rect_tiles floors live px).
 const SLACK := 1
 
-const BAD_FIXTURE := {
-	"market": {"header": {"min_w": GRID_W, "min_h": 30}},
+## The escape fixture (v2 shape): a background row that tries to sit
+## 40 tiles down — outside the canvas. Rule 1 clamps it back.
+const ESCAPE_FIXTURE := {
+	"market": {"elements": {"background":
+			{"x": 0, "y": 40, "w": 60, "h": 34}}},
 }
-const CLIP_Y_MAX := GRID_H + 12  # the header pushes rows past the canvas
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -45,17 +49,21 @@ var _checks := 0
 
 func _ready() -> void:
 	var was := I18n.get_locale()
-	# 1. The shipped file: containment in both locales.
+	# 1. The shipped file: containment in both locales (the file is the
+	# pin — this leg stays green through the W2 merges).
 	RegistryLib._reset_for_tests()
-	DataLoader.ui_layout = {}
+	DataLoader.ui_layout = _shipped_table()
 	for locale in ["zh", "en"]:
 		I18n.set_locale(locale)
-		await _containment("empty/" + locale, false)
-	# 2. The guard bites on a clipping commit.
-	DataLoader.ui_layout = BAD_FIXTURE.duplicate(true)
+		await _containment("shipped/" + locale, false)
+	# 2. The guard is structural: an out-of-canvas row clamps back.
+	# (A rig-level demonstration — injecting a partial table into the
+	# real market would make it a MISmanaged screen mid-conversion; the
+	# real-table version of this leg lands with W2-A's converted
+	# market.)
 	RegistryLib._reset_for_tests()
-	I18n.set_locale("zh")
-	await _containment("fixture/zh", true)
+	DataLoader.ui_layout = ESCAPE_FIXTURE.duplicate(true)
+	await _clamp_observation()
 	# 3. Restored: green again.
 	DataLoader.ui_layout = {}
 	RegistryLib._reset_for_tests()
@@ -66,10 +74,50 @@ func _ready() -> void:
 	_report()
 
 
+## The shipped file's per-screen table (the suite reads the real file —
+## the same bytes the game loads; `{}` interim).
+func _shipped_table() -> Dictionary:
+	var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if parsed is Dictionary and parsed.get("screens", null) is Dictionary:
+		return parsed["screens"]
+	return {}
+
+
+## Rule 1's canvas-level demonstration: a background element whose data
+## row tries to sit 40 tiles down lands clamped to the canvas — an
+## out-of-canvas applied rect is structurally impossible.
+func _clamp_observation() -> void:
+	var root := Control.new()
+	root.size = Vector2(1920, 1080)
+	add_child(root)
+	var panel := Panel.new()
+	root.add_child(panel)
+	RegistryLib.register("market", panel, "background", {"role": "panel"})
+	RegistryLib.screen_active("market", root)
+	var rect: Dictionary = {}
+	for r: Dictionary in RegistryLib.tree("market"):
+		if r["id"] == "background":
+			rect = r["rect_tiles"]
+	_check(rect.get("y", 99) <= GRID_H + 1 and rect.get("h", 0) <= GRID_H + 1,
+			"escape: the out-of-canvas row lands clamped inside the "
+			+ "canvas (got %s)" % JSON.stringify(rect))
+	_check(rect.get("x", -1) == 0 and rect.get("y", -1) == 0
+			and rect.get("w", 0) == GRID_W and rect.get("h", 0) == GRID_H + 1,
+			"escape: the clamped rect is exactly the canvas "
+			+ "(0,0,60,34 — 1088 px fills the 1080 px sliver)")
+	root.queue_free()
+	await get_tree().process_frame
+
+
 ## Mounts the market screen fresh, walks the registered rows, and checks
-## containment. `expect_breach=true` inverts the check (the demonstration
-## run): at least one row must sit outside the canvas.
-func _containment(case_id: String, expect_breach: bool) -> void:
+## containment. (The Phase-11 `expect_breach` demonstration is retired:
+## rule 1 makes an out-of-canvas applied rect structurally impossible —
+## leg 2 pins the clamp instead.)
+func _containment(case_id: String, _expect_breach: bool) -> void:
 	_make_run("lisbon")
 	var screen: Control = MarketScene.instantiate()
 	add_child(screen)
@@ -92,34 +140,15 @@ func _containment(case_id: String, expect_breach: bool) -> void:
 		if x < -SLACK or y < -SLACK or x + w > GRID_W + SLACK \
 				or y + h > GRID_H + 1 + SLACK:
 			breaches.append("%s @(x%d y%d w%d h%d)" % [row["id"], x, y, w, h])
-	if expect_breach:
-		_check(not breaches.is_empty(),
-				"%s: the clipping fixture breaches containment (%s)"
-						% [case_id, breaches.front()])
-		# the strict canvas bound, reported for the acceptance record
-		var worst := _worst_y(rows)
-		_check(worst > CLIP_Y_MAX - 12,
-				"%s: content pushed past y=%d (worst y=%d)"
-						% [case_id, CLIP_Y_MAX - 12, worst])
-	else:
-		var detail: String = "" if breaches.is_empty() \
-				else " — " + ", ".join(breaches.slice(0, 3))
-		var description: String = (
-				"%s: all %d unclipped rows inside the canvas "
-				+ "(%d scroll-owned skipped)%s") % [case_id,
-				rows.size() - clipped, clipped, detail]
-		_check(breaches.is_empty(), description)
+	var detail: String = "" if breaches.is_empty() \
+			else " — " + ", ".join(breaches.slice(0, 3))
+	var description: String = (
+			"%s: all %d unclipped rows inside the canvas "
+			+ "(%d scroll-owned skipped)%s") % [case_id,
+			rows.size() - clipped, clipped, detail]
+	_check(breaches.is_empty(), description)
 	screen.queue_free()
 	await get_tree().process_frame
-
-
-## The lowest row bottom edge (the acceptance record's clipping number).
-func _worst_y(rows: Array) -> int:
-	var worst := 0
-	for row: Dictionary in rows:
-		var rect: Dictionary = row["rect_tiles"]
-		worst = maxi(worst, int(rect["y"]) + int(rect["h"]))
-	return worst
 
 
 func _make_run(port_id: String) -> void:

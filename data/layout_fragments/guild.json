@@ -1,0 +1,281 @@
+{
+  "elements": {
+    "background": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "footer": {
+      "h": 1,
+      "w": 58,
+      "x": 1,
+      "y": 31
+    },
+    "header": {
+      "h": 2,
+      "w": 58,
+      "x": 1,
+      "y": 1
+    },
+    "header.back": {
+      "h": 2,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "header.fame": {
+      "h": 1,
+      "w": 2,
+      "x": 52,
+      "y": 1
+    },
+    "header.gold": {
+      "h": 1,
+      "w": 2,
+      "x": 49,
+      "y": 1
+    },
+    "header.title": {
+      "h": 1,
+      "w": 48,
+      "x": 0,
+      "y": 0
+    },
+    "layout": {
+      "h": 32,
+      "w": 59,
+      "x": 1,
+      "y": 1
+    },
+    "offers": {
+      "h": 21,
+      "w": 58,
+      "x": 1,
+      "y": 3
+    },
+    "offers.announce": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 2
+    },
+    "offers.empty": {
+      "h": 1,
+      "w": 2,
+      "x": 0,
+      "y": 0
+    },
+    "offers.heading": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.refresh_hint": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows": {
+      "h": 9,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0": {
+      "h": 3,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0.bottom": {
+      "h": 2,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_0.bottom.accept": {
+      "h": 2,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0.bottom.reward": {
+      "h": 1,
+      "w": 54,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_0.top": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0.top.days": {
+      "h": 1,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0.top.objective": {
+      "h": 1,
+      "w": 51,
+      "x": 3,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_0.top.tag": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1": {
+      "h": 3,
+      "w": 58,
+      "x": 0,
+      "y": 3
+    },
+    "offers.rows.q_lisbon_0_1.bottom": {
+      "h": 2,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_1.bottom.accept": {
+      "h": 2,
+      "w": 4,
+      "x": 49,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1.bottom.hint": {
+      "h": 2,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1.bottom.reward": {
+      "h": 1,
+      "w": 49,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_1.top": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1.top.days": {
+      "h": 1,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1.top.objective": {
+      "h": 1,
+      "w": 51,
+      "x": 3,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_1.top.tag": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_2": {
+      "h": 3,
+      "w": 58,
+      "x": 0,
+      "y": 6
+    },
+    "offers.rows.q_lisbon_0_2.bottom": {
+      "h": 2,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_2.bottom.accept": {
+      "h": 2,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_2.bottom.reward": {
+      "h": 1,
+      "w": 54,
+      "x": 0,
+      "y": 1
+    },
+    "offers.rows.q_lisbon_0_2.top": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_2.top.days": {
+      "h": 1,
+      "w": 4,
+      "x": 54,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_2.top.objective": {
+      "h": 1,
+      "w": 51,
+      "x": 3,
+      "y": 0
+    },
+    "offers.rows.q_lisbon_0_2.top.tag": {
+      "h": 1,
+      "w": 3,
+      "x": 0,
+      "y": 0
+    },
+    "offers.scroll": {
+      "h": 18,
+      "w": 58,
+      "x": 0,
+      "y": 3
+    },
+    "reports": {
+      "h": 6,
+      "w": 58,
+      "x": 1,
+      "y": 25
+    },
+    "reports.empty": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 5
+    },
+    "reports.heading": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "reports.rows": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 0
+    },
+    "reports.scroll": {
+      "h": 4,
+      "w": 58,
+      "x": 0,
+      "y": 1
+    },
+    "toast": {
+      "h": 1,
+      "w": 1,
+      "x": 1,
+      "y": 1
+    }
+  },
+  "lists": {}
+}

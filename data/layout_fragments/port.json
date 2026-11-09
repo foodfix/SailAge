@@ -1,0 +1,185 @@
+{
+  "elements": {
+    "background": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "cards.guild": {
+      "h": 2,
+      "w": 10,
+      "x": 0,
+      "y": 5
+    },
+    "cards.guild.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.guild.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "cards.inn": {
+      "h": 2,
+      "w": 10,
+      "x": 10,
+      "y": 2
+    },
+    "cards.inn.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.inn.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "cards.market": {
+      "h": 2,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.market.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.market.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "cards.palace": {
+      "h": 2,
+      "w": 10,
+      "x": 10,
+      "y": 5
+    },
+    "cards.palace.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.palace.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "cards.shipyard": {
+      "h": 2,
+      "w": 10,
+      "x": 10,
+      "y": 0
+    },
+    "cards.shipyard.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.shipyard.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "cards.tavern": {
+      "h": 2,
+      "w": 10,
+      "x": 0,
+      "y": 2
+    },
+    "cards.tavern.name": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "cards.tavern.status": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "facility_grid": {
+      "h": 7,
+      "w": 58,
+      "x": 1,
+      "y": 7
+    },
+    "facility_heading": {
+      "h": 1,
+      "w": 58,
+      "x": 1,
+      "y": 6
+    },
+    "footer": {
+      "h": 2,
+      "w": 58,
+      "x": 1,
+      "y": 30
+    },
+    "footer.set_sail": {
+      "h": 2,
+      "w": 8,
+      "x": 45,
+      "y": 0
+    },
+    "footer.settings": {
+      "h": 2,
+      "w": 5,
+      "x": 53,
+      "y": 0
+    },
+    "header": {
+      "h": 4,
+      "w": 58,
+      "x": 1,
+      "y": 2
+    },
+    "header.day_greeting": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 3
+    },
+    "header.greeting": {
+      "h": 1,
+      "w": 58,
+      "x": 0,
+      "y": 2
+    },
+    "header.nation_name": {
+      "h": 1,
+      "w": 2,
+      "x": 5,
+      "y": 1
+    },
+    "header.nation_swatch": {
+      "h": 1,
+      "w": 1,
+      "x": 0,
+      "y": 0
+    },
+    "header.port_name": {
+      "h": 1,
+      "w": 3,
+      "x": 1,
+      "y": 0
+    }
+  },
+  "lists": {}
+}
