@@ -1,5 +1,5 @@
 class_name CharacterCard
-extends PanelContainer
+extends Panel
 ## The unified character card (docs/80-UI-UX.md §4.12.1, locked layout) — ONE
 ## scene renders any Person: player / officer / NPC captain, with an identical
 ## structure from every entry (the §4.12 acceptance pin).
@@ -31,6 +31,21 @@ extends PanelContainer
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written Godot's class cache.
+##
+## Phase 12 (docs/80-* §4.8.9, the absolute-tile layout): the flow tree is
+## DELETED — the card is a plain `Panel` whose only container is the internal
+## `ScrollContainer` (the clipped viewport of the §4.12.1 scrolling card);
+## its content node is a plain `Control` sized to the stacked extent, and
+## every section/row hangs off it at an authored tile rect. The card is its
+## own layout screen (`character_card`, docs/10-* §4.23): the persistent
+## controls register stable dotted ids (shared across the player/officer/NPC
+## variants — a variant simply leaves a variant-only id unregistered), the
+## attribute/skill rows are `attributes`/`skills` LIST members
+## (`RegistryLib.list_rect`), and the build path activates the screen
+## (`RegistryLib.screen_active`) so the data table governs wherever the card
+## is embedded — the parent-bounds clamp adapts the viewport to each host
+## (the dossier's 420 px card window, the roster's full-height page, the
+## picker's grown panel) without per-host code.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -41,8 +56,13 @@ const UiKitLib := preload("res://scripts/ui_kit.gd")
 ## Phase-10 W4-D portrait ladder (decision 10): override file wins, else the
 ## procedural 72×96 bust composed from the appearance axes.
 const PortraitComposerLib := preload("res://scripts/ui/portrait_composer.gd")
+## Phase 12 (docs/80-* §4.8.9): the card registers under its layout id.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 
 const SCENE_PATH := "res://scenes/ui/character_card.tscn"
+
+## This card's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "character_card"
 
 ## Person kinds (the [method setup_person] contract).
 const KIND_PLAYER := "player"
@@ -80,13 +100,88 @@ const PORTRAIT_COLORS: Array[Color] = [
 ## familiarity tier (0–3) → the `dossier.tier.*` name key's number.
 const TIER_NAME_NUMBERS: Array[int] = [3, 6, 10]
 
+## Phase 12 — the authored tile table (docs/80-* §4.8.9: today's captured
+## look, flattened to the 32×32 grid; the capture
+## `data/layout_fragments/character_card.json` pins the same numbers).
+## Parent-relative tiles: children of a group address the group's rect; the
+## rows live in their list blocks (below). 1 tile = Palette.CHROME_TILE.
+const CARD_TILES := 15  # the content column's width in tiles
+const CARD_TILES_TABLE := {
+	"card": Rect2i(0, 0, 32, 34),
+	"scroll": Rect2i(0, 0, 32, 34),
+	"body": Rect2i(0, 0, 15, 34),
+	"identity": Rect2i(0, 0, 15, 3),
+	"identity.portrait": Rect2i(0, 0, 3, 3),
+	"identity.flag": Rect2i(3, 0, 1, 1),
+	"identity.names": Rect2i(4, 0, 8, 2),
+	"identity.names.name": Rect2i(0, 0, 8, 1),
+	"identity.names.role": Rect2i(0, 1, 8, 1),
+	"identity.tier_badge": Rect2i(12, 0, 1, 1),
+	"identity.level": Rect2i(13, 0, 2, 1),
+	"stat_columns": Rect2i(0, 3, 15, 18),
+	"stat_columns.attribute_column": Rect2i(0, 0, 15, 6),
+	"stat_columns.attribute_column.header": Rect2i(0, 0, 8, 1),
+	"stat_columns.attribute_column.attributes": Rect2i(0, 1, 15, 5),
+	"stat_columns.skill_column": Rect2i(0, 6, 15, 12),
+	"stat_columns.skill_column.header": Rect2i(0, 6, 8, 1),
+	"stat_columns.skill_column.skills": Rect2i(0, 7, 15, 11),
+	"tags": Rect2i(0, 21, 15, 2),
+	"tags.personality": Rect2i(0, 0, 15, 1),
+	"tags.appearance": Rect2i(0, 1, 15, 1),
+	"relations.header": Rect2i(0, 23, 15, 1),
+	"relations": Rect2i(0, 24, 15, 2),
+	"relations.loyalty": Rect2i(0, 0, 15, 1),
+	"relations.post": Rect2i(0, 1, 15, 1),
+	"relations.stance": Rect2i(0, 0, 15, 1),
+	"relations.tier": Rect2i(0, 1, 15, 1),
+	"relations.empty": Rect2i(0, 0, 15, 1),
+	"career.header": Rect2i(0, 26, 15, 1),
+	"career": Rect2i(0, 27, 15, 2),
+	"career.xp": Rect2i(0, 0, 15, 1),
+	"career.next": Rect2i(0, 1, 15, 1),
+	"career.record": Rect2i(0, 0, 15, 1),
+	"career.returning": Rect2i(0, 1, 15, 1),
+	"career.empty": Rect2i(0, 0, 15, 1),
+	"allocation": Rect2i(0, 29, 15, 5),
+	"allocation.pending": Rect2i(0, 0, 15, 1),
+	"allocation.left": Rect2i(0, 1, 15, 1),
+	"allocation.clamp_note": Rect2i(0, 2, 15, 1),
+	"allocation.buttons": Rect2i(0, 3, 15, 2),
+	"allocation.confirm": Rect2i(0, 0, 4, 2),
+	"allocation.cancel": Rect2i(4, 0, 4, 2),
+}
+
+## Phase 12 — the dynamic list blocks (the attribute/skill rows): rows take
+## `RegistryLib.list_rect(SCREEN_ID, list, index)` in their stack group's
+## space (`base` is group-relative, the §4.23 block shape).
+const LIST_ATTRIBUTES := "attributes"
+const LIST_SKILLS := "skills"
+const CARD_LISTS := {
+	LIST_ATTRIBUTES: {"base": {"x": 0, "y": 0, "w": 15, "h": 1}, "row_h": 1},
+	LIST_SKILLS: {"base": {"x": 0, "y": 0, "w": 15, "h": 1}, "row_h": 1},
+}
+
+## The row-cell rects in row-local px (the rows are 1 tile tall; cells are
+## absolutely-placed unregistered children — the §4.8.9 row-internals rule).
+const CELL_NAME := Rect2(0, 0, 96, 32)
+const CELL_BAR := Rect2(96, 8, 160, 16)
+const CELL_VALUE := Rect2(256, 0, 64, 32)
+const CELL_PLUS := Rect2(320, 0, 64, 56)
+const CELL_USES := Rect2(320, 0, 96, 32)
+## The Plus stepper is a 2-tile button standing in the row's empty right
+## lane (attribute rows carry no Uses cell there), so every row keeps the
+## 1-tile pitch and one rect set serves all three variants.
+
 ## The last data dictionary this card rendered ([method card_data] shape —
 ## the acceptance pin reads this from every entry).
 var _data: Dictionary = {}
 ## The §4.12.2 allocation draft (`{attribute_key: +n}`), local to the card.
 var _draft: Dictionary = {}
 
-@onready var _body: VBoxContainer = $Margin/Scroll/Body
+## The card's own viewport (the ONLY container left — the §4.12.1 scrolling
+## card) and its plain-Control content node.
+@onready var _scroll: ScrollContainer = $Scroll
+@onready var _body: Control = $Scroll/Body
 
 
 # --- The data contract (pure builder every entry shares) --------------------
@@ -328,127 +423,164 @@ func restage_draft(draft: Dictionary) -> void:
 
 
 func _ready() -> void:
-	# §4.9 (W4-D sweep): the PanelContainer chrome is the theme's — the
-	# per-card stylebox retired with the rest of the per-screen styling.
+	# §4.9 (W4-D sweep): the Panel chrome is the theme's — the per-card
+	# stylebox retired with the rest of the per-screen styling.
 	if not _data.is_empty():
 		_rebuild()
 
 
-# --- Rendering --------------------------------------------------------------
+# --- Rendering (Phase 12: the absolute-tile card) ---------------------------
 
 func _rebuild() -> void:
-	for child in _body.get_children():
-		_body.remove_child(child)
-		child.queue_free()
-	var compact := bool(_data.get("compact", false))
+	_clear(_body)
 
-	_body.add_child(_build_identity(compact))
+	# The card's own chrome: viewport + content node. The viewport rides
+	# FULL-RECT anchors (it always fills whatever rect the host gave the
+	# card — the §4.12.1 per-host sizing); the managed apply re-derives the
+	# same fill from the data rect (the parent-bounds clamp), the authored
+	# tiles stay the unmanaged fallback. The content node is a plain Control
+	# sized to the stacked extent (the §4.8.9 viewport rule) — left
+	# UNREGISTERED, exactly like the market's `GoodsRows`.
+	_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_body.position = Vector2.ZERO
+	_body.size = Vector2(CARD_TILES, CARD_TILES_TABLE["body"].size.y) \
+		* float(PaletteLib.CHROME_TILE)
+	_body.custom_minimum_size = _body.size
+	# The §4.12.1 "Sizing" contract (the collapsed-strip fix): the card's
+	# minimum is its full content extent, so a host that does not hand the
+	# card an explicit height (the tavern dialog's scroll, the picker's
+	# `reset_size`) still shows the whole card and scrolls it in its own
+	# viewport; hosts that do hand one (the dossier's 420 px card window)
+	# clamp it right back via the managed apply or their explicit size.
+	custom_minimum_size = _body.size
+
+	var compact := bool(_data.get("compact", false))
+	_build_identity(compact)
 	if not bool(_data.get("stat_blocks", true)):
 		# The officers detail page (amended 2026-11-03): the table already
 		# shows every attribute and skill, so the detail card omits the blocks
 		# entirely rather than rendering them empty.
 		pass
-	elif compact:
-		# Compact hosts (the officers table row) keep the plain stacked form;
-		# the table itself owns the column layout.
-		_body.add_child(_section_header(_t("char.card.attributes"),
-			"AttributesHeader"))
-		_body.add_child(_build_attributes(compact))
-		_body.add_child(_section_header(_t("char.card.skills"),
-			"SkillsHeader"))
-		_body.add_child(_build_skills(compact))
 	else:
 		# Attributes on the left, skills on the right (amended 2026-11-03):
-		# one two-column block halves the card height.
-		_body.add_child(_build_stat_columns())
+		# one two-column block halves the card height. The absolute card
+		# keeps the single-column stack (the flat §4.12.1 form); the
+		# StatColumns/AttributeColumn/SkillColumn groups stay as plain
+		# Controls at their data rects so the §4.12 section seam is stable.
+		_build_stat_columns()
 	if not compact:
-		var tags := _build_tags()
-		if tags != null and tags.get_child_count() > 0:
-			_body.add_child(tags)
-	_body.add_child(_section_header(_t("char.card.relations"),
-		"RelationsHeader"))
-	_body.add_child(_build_relations())
-	_body.add_child(_section_header(_t("char.card.career"), "CareerHeader"))
-	_body.add_child(_build_career())
+		_build_tags()
+	_build_relations()
+	_build_career()
 	if str(_data.get("kind", "")) == KIND_PLAYER \
 			and bool(_data.get("alloc", false)):
 		# The standalone 生效值 block is retired (amended 2026-11-03): the
 		# skill rows now show the effective value and their tooltips carry the
 		# base / officer / total split plus each gate (§4.12.1/§4.12.3).
-		_body.add_child(_build_allocation())
+		_build_allocation()
 		# The stepper states recompute against the live pending counter
 		# and the 100 clamp once the box is in the tree.
 		_refresh_allocation()
-	_publish_content_height()
+	# Phase 12 (docs/80-* §4.8.9): the build path activates the card's own
+	# layout screen — the persistent controls' data rects apply (a managed
+	# table clamps the viewport into the host's rect; an unmanaged one
+	# leaves the authored tiles), and the bridge learns the screen.
+	RegistryLib.screen_active(SCREEN_ID, self)
 
 
-## Publishes the rendered content height as the scroll's minimum (docs/80-*
-## §4.12.1 "Sizing", 2026-11-03 amendment). The scroll's vertical axis is
-## scrollable, so without this the card's minimum height is just the
-## MarginContainer's margins and the card collapses to an empty bordered
-## strip in every host that does not hand it an explicit height (S18 rows,
-## the tavern recruit dialog, the S14 hosts — the collapsed-strip bug the
-## Phase-8 play report hit). Width needs no help: the scroll's horizontal
-## mode is disabled, so the content's minimum width already propagates.
-func _publish_content_height() -> void:
-	var scroll := _body.get_parent() as ScrollContainer
-	if scroll == null:
-		return
-	scroll.custom_minimum_size.y = _body.get_combined_minimum_size().y
+## Phase 12: one authored rect = one `position`/`size` write, in the DIRECT
+## parent's tile space (point anchors everywhere; nothing is stretched) —
+## and one registration under the matching stable dotted id (the §4.8.9 id
+## registry; re-registration replaces the record across rebuilds).
+func _place(control: Control, id: String) -> void:
+	var rect: Rect2i = CARD_TILES_TABLE.get(id, Rect2i(0, 0, 2, 2))
+	_place_rect(control, rect)
+	RegistryLib.register(SCREEN_ID, control, id)
 
 
-func _build_identity(compact: bool) -> Control:
-	var row := HBoxContainer.new()
-	row.name = "Identity"
-	# Box separations ride the theme_override_constants channel — the same
-	# scene-file pin the .tscn shells carry (the §4.9 sweep retires the
-	# per-screen theme-override API from screen code; box layout constants
-	# are not styles).
-	row.set("theme_override_constants/separation", PaletteLib.MARGIN)
-	if not compact:
-		row.add_child(_build_portrait())
-	# Flag block: the nation's color (the §4.10.1 flag rule, placeholder block).
+func _place_rect(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(PaletteLib.CHROME_TILE)
+	control.size = Vector2(rect.size) * float(PaletteLib.CHROME_TILE)
+
+
+## Row *i*'s rect for a card list block — px in the stack group's space:
+## the data block when managed, the same tiles authored otherwise.
+func _list_row_rect(list_id: String, index: int) -> Rect2:
+	var rect := RegistryLib.list_rect(SCREEN_ID, list_id, index)
+	if rect != Rect2():
+		return rect
+	var block: Dictionary = CARD_LISTS.get(list_id, {})
+	var base: Dictionary = block.get("base", {})
+	var row_h: int = int(block.get("row_h", 1))
+	return Rect2(
+		Vector2(int(base.get("x", 0)), int(base.get("y", 0))
+			+ index * row_h) * float(PaletteLib.CHROME_TILE),
+		Vector2(int(base.get("w", 15)), row_h) * float(PaletteLib.CHROME_TILE))
+
+
+func _build_identity(compact: bool) -> void:
+	var identity := _group("Identity")
+	_body.add_child(identity)
+	_place(identity, "identity")
+
+	# The portrait slot (Phase-10 decision 10, W4-D): the ladder's procedural
+	# rung — `PortraitComposer.portrait_texture` (override file wins) — at
+	# the bust size, nearest filtering per §4.8.8. When even `pp_base` is
+	# missing the placeholder color block + name initial takes over (the
+	# §4.8 placeholder rule, same node name either way — hosts and suites
+	# read `Identity/Portrait`).
+	var portrait := _build_portrait()
+	identity.add_child(portrait)
+	_place(portrait, "identity.portrait")
+
+	# Flag block: the nation's color (the §4.10.1 flag rule, placeholder
+	# block).
 	var flag := ColorRect.new()
 	flag.name = "Flag"
-	flag.custom_minimum_size = Vector2(PaletteLib.ROW_H, PaletteLib.ROW_H)
 	flag.color = _nation_color()
-	flag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(flag)
+	flag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	identity.add_child(flag)
+	_place(flag, "identity.flag")
 
-	var names := VBoxContainer.new()
-	names.name = "Names"
-	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Names block: the name line + the role line (a plain Control group —
+	# the deleted VBox's two labels at their data rects).
+	var names := _group("Names")
+	identity.add_child(names)
+	_place(names, "identity.names")
 	var name_label := _label(str(_data.get("name", "")))
 	name_label.name = "Name"
 	names.add_child(name_label)
+	_place(name_label, "identity.names.name")
 	var detail: Array[String] = []
 	var role := _t(str(_data.get("role_key", "char.none")))
 	if not role.begins_with("<"):
 		detail.append(role)
-	var detail_label := _dim_label(" · ".join(detail))
-	detail_label.name = "Role"
-	names.add_child(detail_label)
-	row.add_child(names)
+	var role_label := _dim_label(" · ".join(detail))
+	role_label.name = "Role"
+	names.add_child(role_label)
+	_place(role_label, "identity.names.role")
 
 	# Tier badge (NPC) / level (player + NPC), right-aligned.
 	var kind := str(_data.get("kind", ""))
 	if kind == KIND_NPC:
-		row.add_child(_tier_badge(int(_data.get("tier", 1))))
+		var badge := _tier_badge(int(_data.get("tier", 1)))
+		identity.add_child(badge)
+		_place(badge, "identity.tier_badge")
 	if kind == KIND_PLAYER or kind == KIND_NPC:
 		var level := _label(I18n.fmt("char.level",
 			{"level": int(_data.get("level", 1))}))
 		level.name = "Level"
-		level.custom_minimum_size.x = 96.0
 		level.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(level)
-	return row
+		identity.add_child(level)
+		_place(level, "identity.level")
 
 
 ## The portrait slot (Phase-10 decision 10, W4-D): the ladder's procedural
 ## rung — `PortraitComposer.portrait_texture` (override file wins) — at the
-## 72×96 bust size, nearest filtering per §4.8.8. When even `pp_base` is
-## missing the placeholder color block + name initial takes over (the
-## §4.8 placeholder rule, same node name either way — hosts and suites read
+## bust size, nearest filtering per §4.8.8. When even `pp_base` is missing
+## the placeholder color block + name initial takes over (the §4.8
+## placeholder rule, same node name either way — hosts and suites read
 ## `Identity/Portrait`).
 func _build_portrait() -> Control:
 	var person := {
@@ -468,12 +600,13 @@ func _build_portrait() -> Control:
 		rect.texture = bust
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		rect.custom_minimum_size = PORTRAIT_SIZE
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		return rect
 	var block := ColorRect.new()
 	block.name = "Portrait"
 	block.color = _data.get("portrait_color", PaletteLib.PANEL_LINE)
-	block.custom_minimum_size = Vector2(PORTRAIT_FALLBACK, PORTRAIT_FALLBACK)
+	block.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var initial := Label.new()
 	initial.name = "Initial"
 	initial.text = str(_data.get("name", " ")).substr(0, 1)
@@ -492,101 +625,101 @@ func _nation_color() -> Color:
 		else PaletteLib.PORT_NEUTRAL
 
 
-## The two-column stat block: attributes left, skills right (amended
-## 2026-11-03 — the stacked form ran the card to 1151px, which is what pushed
-## the intel window past the screen). Each column keeps its own section header
-## so the grouping stays obvious.
-func _build_stat_columns() -> Control:
-	var columns := HBoxContainer.new()
-	columns.name = "StatColumns"
-	columns.set("theme_override_constants/separation", PaletteLib.MARGIN)
+## The stat block: attributes then skills (the flat §4.12.1 form). The
+## StatColumns / AttributeColumn / SkillColumn groups stay as plain Controls
+## at their data rects so the §4.12 section seam (`StatColumns/
+## AttributeColumn/Attributes/Attr_<key>`) is stable; the row cells are
+## absolutely-placed unregistered children.
+func _build_stat_columns() -> void:
+	var columns := _group("StatColumns")
+	_body.add_child(columns)
+	_place(columns, "stat_columns")
 
-	var left := VBoxContainer.new()
-	left.name = "AttributeColumn"
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.set("theme_override_constants/separation", 4)
-	left.add_child(_section_header(_t("char.card.attributes"),
-		"AttributesHeader"))
-	left.add_child(_build_attributes(false))
+	var left := _group("AttributeColumn")
 	columns.add_child(left)
+	_place(left, "stat_columns.attribute_column")
+	var attributes_header := _section_header(_t("char.card.attributes"),
+		"AttributesHeader")
+	left.add_child(attributes_header)
+	_place(attributes_header, "stat_columns.attribute_column.header")
+	var attributes := _group("Attributes")
+	left.add_child(attributes)
+	_place(attributes, "stat_columns.attribute_column.attributes")
+	_build_attributes(attributes)
 
-	var right := VBoxContainer.new()
-	right.name = "SkillColumn"
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.set("theme_override_constants/separation", 4)
-	right.add_child(_section_header(_t("char.card.skills"), "SkillsHeader"))
-	right.add_child(_build_skills(false))
+	var right := _group("SkillColumn")
 	columns.add_child(right)
-	return columns
+	_place(right, "stat_columns.skill_column")
+	var skills_header := _section_header(_t("char.card.skills"),
+		"SkillsHeader")
+	right.add_child(skills_header)
+	_place(skills_header, "stat_columns.skill_column.header")
+	var skills := _group("Skills")
+	right.add_child(skills)
+	_place(skills, "stat_columns.skill_column.skills")
+	_build_skills(skills)
 
 
 ## The five attribute bars (1–100), each row `Attr_<key>` with
 ## Name / Bar / Value (+ the §4.12.2 `Plus` stepper on the player card).
 ## Every row explains what the attribute feeds on hover (amended 2026-11-03).
-func _build_attributes(compact: bool) -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Attributes"
-	box.set("theme_override_constants/separation", 4)
+## Phase 12: rows are `attributes` list members at `list_rect` slots; the
+## cells are absolutely-placed unregistered children.
+func _build_attributes(attributes: Control) -> void:
 	var kind := str(_data.get("kind", ""))
 	var with_alloc: bool = kind == KIND_PLAYER and bool(_data.get("alloc", false))
-	var attributes: Dictionary = _data.get("attributes", {})
-	var bar_w := BAR_COMPACT_W if compact else BAR_W
-	for key in CharacterLib.ATTRIBUTES:
-		var value := int(attributes.get(key, CharacterLib.BASE_ATTRIBUTE))
-		var row := HBoxContainer.new()
-		row.name = "Attr_%s" % key
-		row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
+	var values: Dictionary = _data.get("attributes", {})
+	for index in CharacterLib.ATTRIBUTES.size():
+		var key: String = CharacterLib.ATTRIBUTES[index]
+		var value := int(values.get(key, CharacterLib.BASE_ATTRIBUTE))
+		var row := _list_row("Attr_%s" % key, "attributes.%s" % key,
+			LIST_ATTRIBUTES, index, attributes)
 		# Hover explanation (`50-*` §4.2.1 verbatim, in ui_strings).
 		var tooltip := wrap_tip(_desc("char.attr.%s.desc" % key))
 		row.tooltip_text = tooltip
 		var name_label := _label(_t("char.attr.%s" % key))
 		name_label.name = "Name"
-		name_label.custom_minimum_size.x = 96.0
 		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
+		_cell(name_label, CELL_NAME)
 		row.add_child(_bar(value, CharacterLib.ATTR_MAX, "good",
-			"Bar", bar_w, tooltip))
+			"Bar", tooltip))
 		var value_label := _label(str(value))
 		value_label.name = "Value"
-		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		value_label.tooltip_text = tooltip
 		row.add_child(value_label)
+		_cell(value_label, CELL_VALUE)
 		if with_alloc:
 			var plus := Button.new()
 			plus.name = "Plus"
 			plus.text = I18n.t_key("creation.stepper.add")
-			plus.custom_minimum_size = Vector2(56.0, PaletteLib.BUTTON_H - 8)
 			plus.pressed.connect(_on_alloc_plus.bind(key))
 			row.add_child(plus)
-		box.add_child(row)
-	return box
+			_cell(plus, CELL_PLUS)
 
 
 ## The skill bars (0–100): the signature/main skill highlighted, a 0 skill
 ## grayed as unlearned; the player's three officer-only skills render
-## grayed-labelled. Each row is `Skill_<key>` with Name / Bar / Value.
+## grayed-labelled. Each row is `Skill_<key>` with Name / Bar / Value
+## (+ the §4.3.3 `Uses` counter on the player card).
 ##
-## **The player row shows the effecte value (amended 2026-11-03):**
+## **The player row shows the effective value (amended 2026-11-03):**
 ## `effective = stored + the one in-post officer's contribution`
 ## (`50-*` §4.5.3) — the same read `SkillsLib.effective_skill` performs, so
 ## the number on the row is the number the pipelines consume. The split
 ## (base · officer · effective) and every gate keyed on the skill live in the
 ## row's tooltip instead of two extra page sections (§4.12.3).
-func _build_skills(compact: bool) -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Skills"
-	box.set("theme_override_constants/separation", 4)
+func _build_skills(skills_box: Control) -> void:
 	var kind := str(_data.get("kind", ""))
 	var signature := str(_data.get("main_skill", ""))
-	var skills: Dictionary = _data.get("skills", {})
-	var bar_w := BAR_COMPACT_W if compact else BAR_W
-	for key in _data.get("skill_keys", []):
-		var key_name := str(key)
-		var stored := int(skills.get(key_name, 0))
-		var row := HBoxContainer.new()
-		row.name = "Skill_%s" % key_name
-		row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
+	var values: Dictionary = _data.get("skills", {})
+	var keys: Array = _data.get("skill_keys", [])
+	for index in keys.size():
+		var key_name := str(keys[index])
+		var stored := int(values.get(key_name, 0))
+		var row := _list_row("Skill_%s" % key_name, "skills.%s" % key_name,
+			LIST_SKILLS, index, skills_box)
 
 		# The value the row shows: the effective value on the player card
 		# (stored + in-post officer), the plain stored value elsewhere.
@@ -618,23 +751,22 @@ func _build_skills(compact: bool) -> Control:
 		var name_label := _label(_t("skill.%s" % key_name)) if learned \
 			else _dim_label(_t("skill.%s" % key_name))
 		name_label.name = "Name"
-		name_label.custom_minimum_size.x = 96.0
 		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
+		_cell(name_label, CELL_NAME)
 		# §4.9 atom tiers (W4-D sweep): the signature highlight keeps the
 		# accent hex through "warn" (WARN == ACCENT), everything else reads
 		# the kit's "good" fill (an unlearned 0-value row shows no fill).
 		var tier := "warn" if (not unlearned and key_name == signature) \
 			else "good"
-		row.add_child(_bar(value, SkillsLib.SKILL_MAX, tier, "Bar", bar_w,
-			tooltip))
+		row.add_child(_bar(value, SkillsLib.SKILL_MAX, tier, "Bar", tooltip))
 		var value_label := _label(str(value)) if not unlearned \
 			else _dim_label(str(value))
 		value_label.name = "Value"
-		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		value_label.tooltip_text = tooltip
 		row.add_child(value_label)
+		_cell(value_label, CELL_VALUE)
 		if kind == KIND_PLAYER and not grayed:
 			# §4.3.3 the usage counter beside the growth bar (the §4.12.3
 			# skills tab reuses the card's rows).
@@ -643,11 +775,37 @@ func _build_skills(compact: bool) -> Control:
 				"need": SkillsLib.growth_threshold(key_name),
 			}))
 			uses.name = "Uses"
-			uses.custom_minimum_size.x = 96.0
 			uses.tooltip_text = tooltip
 			row.add_child(uses)
-		box.add_child(row)
-	return box
+			_cell(uses, CELL_USES)
+
+
+## One list-row node at its `list_rect` slot (the §4.8.9 dynamic-row rule):
+## a plain Control registered as the block's member; the cells hang
+## unregistered.
+func _list_row(node_name: String, id: String, list_id: String, index: int,
+		parent: Control) -> Control:
+	var row := Control.new()
+	row.name = node_name
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	parent.add_child(row)
+	var rect := _list_row_rect(list_id, index)
+	row.position = rect.position
+	row.size = rect.size
+	RegistryLib.register(SCREEN_ID, row, id,
+		{"list": list_id, "data_ordered": true})
+	return row
+
+
+## One row cell: an absolutely-placed unregistered child at a row-local px
+## rect (the §4.8.9 row-internals rule). The vertical center rides the
+## control's own alignment; nothing is stretched.
+func _cell(control: Control, rect: Rect2) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = rect.position
+	control.size = rect.size
+	if control is Label:
+		(control as Label).vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 
 ## The first line of a player skill row's tooltip: the value split
@@ -751,23 +909,26 @@ static func _tip_width(text: String) -> int:
 
 
 ## Personality tags + the appearance sentence (skipped in compact mode and on
-## a card without tags — the player carries neither yet). The box is built
-## lazily so a tagless Person leaks nothing: the pre-fix code allocated the
-## "Tags" VBox unconditionally and dropped it when empty (the orphaned-VBox
-## leak in the Phase-8 exit log — one per tagless full-card render).
-func _build_tags() -> Control:
-	var box: VBoxContainer = null
+## a card without tags — the player carries neither yet). The lines sit at
+## their reserved data slots whether or not they render (the empty slots
+## stay blank — no flow collapses), so one rect set serves every variant.
+func _build_tags() -> void:
 	var personality: Array = _data.get("personality", [])
-	if not personality.is_empty():
-		var tags: Array[String] = []
-		for tag in personality:
-			tags.append(_t("char.personality.%s" % str(tag)))
-		box = _tags_box(box)
-		var line := _label(I18n.fmt("char.personality_line",
-			{"tags": " · ".join(tags)}))
-		line.name = "Personality"
-		box.add_child(line)
 	var appearance: Dictionary = _data.get("appearance", {})
+	if personality.is_empty() and appearance.is_empty():
+		return  # a tagless Person leaks nothing (the Phase-8 lazy-box rule)
+	var tags := _group("Tags")
+	_body.add_child(tags)
+	_place(tags, "tags")
+	if not personality.is_empty():
+		var tags_text: Array[String] = []
+		for tag in personality:
+			tags_text.append(_t("char.personality.%s" % str(tag)))
+		var line := _label(I18n.fmt("char.personality_line",
+			{"tags": " · ".join(tags_text)}))
+		line.name = "Personality"
+		tags.add_child(line)
+		_place(line, "tags.personality")
 	if not appearance.is_empty():
 		var parts: Array[String] = []
 		for axis in ["face", "beard", "eyes", "hair"]:
@@ -776,34 +937,31 @@ func _build_tags() -> Control:
 				continue
 			parts.append(_t("char.appearance.%s.%s" % [axis, value]))
 		if not parts.is_empty():
-			box = _tags_box(box)
 			var line := _dim_label(I18n.fmt("char.appearance.sentence",
 				{"parts": " · ".join(parts)}))
 			line.name = "Appearance"
-			box.add_child(line)
-	return box
-
-
-## The lazily-created "Tags" box (null stays null until a line needs it).
-func _tags_box(existing: VBoxContainer) -> VBoxContainer:
-	if existing != null:
-		return existing
-	var box := VBoxContainer.new()
-	box.name = "Tags"
-	return box
+			tags.add_child(line)
+			_place(line, "tags.appearance")
 
 
 ## Relation block: officer → loyalty + native role + current post (or idle);
-## NPC captain → stance + familiarity (+ the familiarity tier name).
-func _build_relations() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Relations"
+## NPC captain → stance + familiarity (+ the familiarity tier name); player
+## → the dim "-" line. Each variant's lines sit at the same two slots.
+func _build_relations() -> void:
+	var header := _section_header(_t("char.card.relations"),
+		"RelationsHeader")
+	_body.add_child(header)
+	_place(header, "relations.header")
+	var box := _group("Relations")
+	_body.add_child(box)
+	_place(box, "relations")
 	var kind := str(_data.get("kind", ""))
 	if kind == KIND_OFFICER:
 		var loyalty := _label(_fmt("char.card.loyalty",
 			{"amount": int(_data.get("loyalty", 0))}))
 		loyalty.name = "Loyalty"
 		box.add_child(loyalty)
+		_place(loyalty, "relations.loyalty")
 		var post_id := str(_data.get("post_id", ""))
 		var post_line := _label("%s · %s" % [
 			_t(str(_data.get("role_key", "char.none"))),
@@ -812,6 +970,7 @@ func _build_relations() -> Control:
 		])
 		post_line.name = "Post"
 		box.add_child(post_line)
+		_place(post_line, "relations.post")
 	elif kind == KIND_NPC:
 		var relations := _label("%s: %+d · %s: %d" % [
 			_t("char.card.relations"),
@@ -821,33 +980,46 @@ func _build_relations() -> Control:
 		])
 		relations.name = "Stance"
 		box.add_child(relations)
+		_place(relations, "relations.stance")
 		var tier := CaptainsLib.familiarity_tier(str(_data.get("person_id", "")))
 		if tier > 0:
 			var tier_label := _dim_label(I18n.t_key(
 				"dossier.tier.%d" % TIER_NAME_NUMBERS[tier - 1]))
 			tier_label.name = "FamiliarityTier"
 			box.add_child(tier_label)
+			_place(tier_label, "relations.tier")
 	else:
-		box.add_child(_dim_label("-"))
-	return box
+		var empty := _dim_label("-")
+		empty.name = "-"
+		box.add_child(empty)
+		_place(empty, "relations.empty")
 
 
 ## Career block: player → XP / level / next-level XP; NPC → wins / defeats /
-## return day (a returning captain shows the `dossier.status.returning` state).
-func _build_career() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Career"
+## return day (a returning captain shows the `dossier.status.returning`
+## state); officer → the dim "-" line. Each variant's lines sit at the same
+## two slots.
+func _build_career() -> void:
+	var header := _section_header(_t("char.card.career"),
+		"CareerHeader")
+	_body.add_child(header)
+	_place(header, "career.header")
+	var box := _group("Career")
+	_body.add_child(box)
+	_place(box, "career")
 	var kind := str(_data.get("kind", ""))
 	if kind == KIND_PLAYER:
 		var xp := _label(I18n.fmt("char.xp", {"xp": int(_data.get("xp", 0))}))
 		xp.name = "Xp"
 		box.add_child(xp)
+		_place(xp, "career.xp")
 		var next_xp := int(_data.get("next_xp", -1))
 		if next_xp >= 0:
 			var next_label := _dim_label(I18n.fmt("char.next_level",
 				{"xp": next_xp}))
 			next_label.name = "Next"
 			box.add_child(next_label)
+			_place(next_label, "career.next")
 	elif kind == KIND_NPC:
 		var record := _label("%s · %s" % [
 			_fmt("char.card.wins", {"amount": int(_data.get("wins", 0))}),
@@ -855,6 +1027,7 @@ func _build_career() -> Control:
 		])
 		record.name = "Record"
 		box.add_child(record)
+		_place(record, "career.record")
 		if str(_data.get("status", "")) == CaptainsLib.STATUS_RETURNING:
 			var returning := _dim_label("%s · %s" % [
 				I18n.t_key("dossier.status.returning"),
@@ -863,47 +1036,51 @@ func _build_career() -> Control:
 			])
 			returning.name = "Returning"
 			box.add_child(returning)
+			_place(returning, "career.returning")
 	else:
-		box.add_child(_dim_label("-"))
-	return box
+		var empty := _dim_label("-")
+		empty.name = "-"
+		box.add_child(empty)
+		_place(empty, "career.empty")
 
 
 ## The §4.12.2 allocation footer: the pending-points line, the remaining
 ## count and the confirm/cancel pair. The per-attribute `Plus` steppers sit
 ## on the attribute rows; the draft is local to the card and commits through
 ## `Character.allocate` (no second confirm).
-func _build_allocation() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Allocation"
-	box.set("theme_override_constants/separation", 4)
+func _build_allocation() -> void:
+	var box := _group("Allocation")
+	_body.add_child(box)
+	_place(box, "allocation")
 	var pending := _label("%s: %d" % [I18n.t_key("char.points_pending"),
 		CharacterLib.alloc_pending()])
 	pending.name = "Pending"
 	box.add_child(pending)
+	_place(pending, "allocation.pending")
 	var left := _label(I18n.fmt("creation.points.left", {"count": _left()}))
 	left.name = "Left"
 	box.add_child(left)
+	_place(left, "allocation.left")
 	var clamp_note := _dim_label("")
 	clamp_note.name = "ClampNote"
 	clamp_note.visible = false
 	box.add_child(clamp_note)
-	var buttons := HBoxContainer.new()
-	buttons.name = "Buttons"
-	buttons.set("theme_override_constants/separation", PaletteLib.MARGIN)
+	_place(clamp_note, "allocation.clamp_note")
+	var buttons := _group("Buttons")
+	box.add_child(buttons)
+	_place(buttons, "allocation.buttons")
 	var confirm := Button.new()
 	confirm.name = "Confirm"
 	confirm.text = I18n.t_key("ui.confirm")
-	confirm.custom_minimum_size = Vector2(120.0, PaletteLib.BUTTON_H)
 	confirm.pressed.connect(_on_alloc_confirm)
 	buttons.add_child(confirm)
+	_place(confirm, "allocation.confirm")
 	var cancel := Button.new()
 	cancel.name = "Cancel"
 	cancel.text = I18n.t_key("ui.cancel")
-	cancel.custom_minimum_size = Vector2(120.0, PaletteLib.BUTTON_H)
 	cancel.pressed.connect(_on_alloc_cancel)
 	buttons.add_child(cancel)
-	box.add_child(buttons)
-	return box
+	_place(cancel, "allocation.cancel")
 
 
 # --- Allocation flow (§4.12.2, locked) --------------------------------------
@@ -1000,10 +1177,18 @@ func _refresh_allocation() -> void:
 
 # --- Widget helpers ---------------------------------------------------------
 
-## The attribute row node, wherever the layout puts it (amended 2026-11-03:
-## the full card nests it under `StatColumns/AttributeColumn`, the compact card
-## keeps it at the top level). Null when the card has no attribute block
-## (the officers detail page).
+## One plain-Control group node (the deleted containers' replacement — the
+## §4.8.9 group parents are plain Controls at their data rects).
+func _group(node_name: String) -> Control:
+	var group := Control.new()
+	group.name = node_name
+	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return group
+
+
+## The attribute row node, wherever the layout puts it (the flat card keeps
+## the §4.12 section seam: `StatColumns/AttributeColumn/Attributes/Attr_<key>`).
+## Null when the card has no attribute block (the officers detail page).
 func _attribute_row(key: String) -> Node:
 	for path in ["StatColumns/AttributeColumn/Attributes/Attr_%s" % key,
 			"Attributes/Attr_%s" % key]:
@@ -1042,10 +1227,9 @@ func _tier_badge(tier: int) -> Control:
 	# a placeholder color block (W4-D sweep: no per-screen stylebox).
 	var badge := ColorRect.new()
 	badge.name = "TierBadge"
-	badge.custom_minimum_size = Vector2(PaletteLib.ROW_H, PaletteLib.ROW_H)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.color = PaletteLib.PANEL_LINE if tier <= 1 \
 		else (PaletteLib.WARN if tier == 2 else PaletteLib.BAD)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var label := Label.new()
 	label.text = str(tier)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1063,11 +1247,9 @@ func _tier_badge(tier: int) -> Control:
 ## the whole row's hover, so the row's tooltip only appeared over the one-
 ## word label).
 func _bar(value: int, max_value: int, tier: String, bar_name: String,
-		width: float, tip: String = "") -> Control:
+		tip: String = "") -> Control:
 	var bar := UiKitLib.value_bar(value, max_value, tier)
 	bar.name = bar_name
-	bar.custom_minimum_size.x = width
-	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.tooltip_text = tip
 	return bar
@@ -1091,3 +1273,9 @@ func _dim_label(text: String) -> Label:
 	var label := _label(text)
 	label.theme_type_variation = "Dim"
 	return label
+
+
+func _clear(node: Node) -> void:
+	for child in node.get_children():
+		node.remove_child(child)
+		child.queue_free()

@@ -474,7 +474,7 @@ func _test_character_card() -> void:
 	# identical; the player card renders the §4.12.2 allocation block the
 	# NPC card lacks (by-design taller content — every host is a pinned
 	# window or the picker's by-design card mode), so only the width pins.
-	var body: Control = card.get_node("Margin/Scroll/Body")
+	var body: Control = card.get_node("Scroll/Body")
 	await assert_window_size_invariant("character card (npc)", body, [
 		func() -> void:
 			card.setup_person("npc", CardLib.card_data("npc",

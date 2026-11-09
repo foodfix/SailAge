@@ -260,7 +260,7 @@ func _test_identify_is_full_reveal() -> void:
 	CaptainsLib.ensure(CAPTAIN)
 	# An UNMET-tier captain (familiarity 0): every card number renders anyway.
 	var npc := _mount_card(CardLib.KIND_NPC, CAPTAIN)
-	var skills_box: Container = npc.section("StatColumns/SkillColumn/Skills")
+	var skills_box: Control = npc.section("StatColumns/SkillColumn/Skills")
 	for child in skills_box.get_children():
 		var value: String = (child.get_node("Value") as Label).text
 		_check(not value.begins_with("<") and not value.contains("??"),
@@ -385,7 +385,9 @@ func _test_officer_actions_and_posts() -> void:
 	# Click the row → the detail page (the table itself is card-free now).
 	panel.open_detail(MATEUS)
 	var card: Control = panel.get_node(
-		"Body/Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
+	# Phase 12 (W2-D): the roster's Body VBox is gone — Detail hangs off the
+	# view root at its data rect.
+		"Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
 	_check(card != null and (card.rendered_data() as Dictionary).has("skills"),
 		"the detail page renders the §4.12 officer card (full)")
 	# Talk: +1 loyalty, then the cooldown grays the row's button.
@@ -587,7 +589,9 @@ func _test_three_entry_card_identity() -> void:
 	panel.rebuild()
 	panel.open_detail(MATEUS)
 	var row_card: Control = panel.get_node(
-		"Body/Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
+	# Phase 12 (W2-D): the roster's Body VBox is gone — Detail hangs off the
+	# view root at its data rect.
+		"Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
 	_check(str(row_card.rendered_data()["person_id"]) == MATEUS,
 		"the S18 detail renders the same officer card data")
 	# The data stays identical; the S18 detail page renders with
@@ -755,8 +759,10 @@ func _test_s14_tabs() -> void:
 	_check(roster.officer_ids() == [MATEUS],
 		"the roster lists the employed officer")
 	var officer_row: Control = roster.get_node(
-		"Body/TableScroll/Table/Officer_%s" % MATEUS)
-	officer_row.call("_on_row_pressed", MATEUS)
+		"TableScroll/Table/Officer_%s" % MATEUS)
+	# Phase 12 (W2-D): the row is a plain Control — the detail opens through
+	# the view's public seam (the row click funnels into the same call).
+	roster.open_detail(MATEUS)
 	_check(officer_row != null
 		and (officer_row.get_node("Line/Post") as Label).text
 			== I18n.t_key("officer.post.pilot"),

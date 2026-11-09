@@ -113,16 +113,18 @@ func setup(captain_id: String) -> void:
 	_open = true
 	visible = true
 	add_to_group(MODAL_GROUP)
-	# Phase 12: register at the first OPEN, activate at every open. PARTIAL
-	# CONVERSION (W2-D budget): the plate + its fixed slots are registered
-	# (the deleted Margin/Body/Footer chain is gone); the career-log rows
-	# inside the content node keep their authored flow until the follow-up.
+	# Phase 12: register at the first OPEN, activate at every open. The
+	# plate + its fixed slots are registered; the scroll's CONTENT node
+	# stays UNREGISTERED (the market `GoodsRows` precedent — a viewport's
+	# content node is scroll math, and registering it would feed the
+	# children-extent floor an edge that legitimately overflows the panel:
+	# the content scrolls). The career-log rows inside are `content_lines`/
+	# `log` list members.
 	if not _ids_registered:
 		RegistryLib.register(SCREEN_ID, _dim, "dim")
 		RegistryLib.register(SCREEN_ID, _panel, "panel", {"role": "panel"})
 		RegistryLib.register(SCREEN_ID, _title, "panel.title")
 		RegistryLib.register(SCREEN_ID, _header, "panel.header")
-		RegistryLib.register(SCREEN_ID, _content, "panel.content")
 		RegistryLib.register(SCREEN_ID, _close_button, "panel.close",
 			{"role": "button"})
 		_ids_registered = true
@@ -185,54 +187,111 @@ func _refresh() -> void:
 	_clear(_content)
 
 	# Phase 12 (docs/80-* §4.8.9): the content node is a plain Control —
-	# the card and the career-log rows take explicit positions (a running
-	# y cursor over measured heights; no flow). The card fills the content
-	# width; its own internal scroll owns its overflow exactly as before.
-	var y := 0.0
-	var width := _content.size.x
+	# the card and the career-log rows take FIXED tile slots (the slot
+	# table below; no flow). The card fills the content width in its own
+	# 420px window (its internal scroll owns its overflow exactly as
+	# before). The inner width is the panel's authored constant (640 px =
+	# 20 tiles): the content node's live size is scroll-managed and reads
+	# 0 during the same-frame build.
+	var width := CONTENT_W_PX
 
 	# The full §4.12 card (identify = full reveal — no gating here).
 	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
 	_card = card_scene.instantiate()
 	_card.name = "Card"
 	_content.add_child(_card)
+	# Phase 12: the embedded card hangs off the registered content node at
+	# its authored slot; the card self-registers under its own layout
+	# screen (`character_card`), so no dossier id is spent here.
 	var card_height := 420.0
-	_card.position = Vector2(0, y)
+	_card.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_card.position = Vector2(0, 0)
 	_card.size = Vector2(width, card_height)
-	y += card_height
 	_card.setup_person(CardLib.KIND_NPC, CardLib.card_data(
 		CardLib.KIND_NPC, _captain_id))
 
-	# The familiarity line (the gate's number, always visible).
+	# The familiarity line (the gate's number, always visible) and the tier
+	# name (the tier's slot is RESERVED on every render — an empty slot is
+	# blank, never collapsed — so the rows below keep one rect set across
+	# tiers; docs/80-* §4.8.9). Both are `content_lines` list members.
 	var familiarity := CaptainsLib.familiarity(_captain_id)
 	var tier := CaptainsLib.familiarity_tier(_captain_id)
 	var familiarity_line := _label("%s: %d" % [
 		I18n.t_key("dossier.familiarity"), familiarity])
 	familiarity_line.name = "Familiarity"
-	familiarity_line.position = Vector2(0, y)
-	y += 32.0
-	familiarity_line.size = Vector2(width, 32.0)
-	_content.add_child(familiarity_line)
-	if tier > 0:
-		var tier_name := _dim_label(I18n.t_key("dossier.tier.%d"
-			% CardLib.TIER_NAME_NUMBERS[tier - 1]))
-		tier_name.name = "TierName"
-		tier_name.position = Vector2(0, y)
-		tier_name.size = Vector2(width, 32.0)
-		y += 32.0
-		_content.add_child(tier_name)
+	_place_row(familiarity_line, LIST_LINES, 0, width)
+	var tier_name := _dim_label(I18n.t_key("dossier.tier.%d"
+		% CardLib.TIER_NAME_NUMBERS[tier - 1]) if tier > 0 else "")
+	tier_name.name = "TierName"
+	tier_name.visible = tier > 0
+	_place_row(tier_name, LIST_LINES, 1, width)
 
 	# The career log, gated section by section (§4.11.3, locked). A section
-	# is a 2-line row (its label + its data/locked line — the tiny
-	# section VBox stays the section's internal stacking).
-	for section in LOG_SECTIONS:
-		var section_row: Control = _log_section(section, tier)
-		section_row.position = Vector2(0, y)
-		y += 64.0
-		section_row.size = Vector2(width, 64.0)
+	# is a flat 2-tile `log` list row at its block slot (its label + its
+	# data/locked line — the section VBox is deleted; docs/80-* §4.8.9).
+	for index in LOG_SECTIONS.size():
+		var section: Dictionary = LOG_SECTIONS[index]
+		var section_row: Control = _log_section(section, tier, width)
+		section_row.name = "Log_%d" % int(section["gate"])
+		var rect := RegistryLib.list_rect(SCREEN_ID, LIST_LOG, index)
+		if rect == Rect2():
+			rect = Rect2(0.0, _slot_y(LOG_FIRST_SLOT + index * LOG_SECTION_H),
+				width, _slot_y(LOG_SECTION_H))
+		section_row.position = rect.position
+		section_row.size = rect.size
 		_content.add_child(section_row)
+		RegistryLib.register(SCREEN_ID, section_row,
+			"content.log%d" % (index + 1), {"list": LIST_LOG,
+			"data_ordered": true})
 	# The content node's stacked extent (the plain-Control scroll content).
-	_content.custom_minimum_size = Vector2(width, y)
+	_content.custom_minimum_size = Vector2(width, _slot_y(LOG_FIRST_SLOT
+		+ LOG_SECTIONS.size() * LOG_SECTION_H))
+	# Phase 12: the rebuild path re-applies the data layout (the plate's
+	# static slots; the content rows are list members — their builders own
+	# the placement; docs/80-* §4.8.9).
+	RegistryLib.apply_layout(SCREEN_ID)
+
+
+## Phase 12 — the content-node slot table (tiles, content space): the card
+## window is 14 tiles (420 px ≈ the §4.11.3 pinned card height), each line
+## row 1 tile; the tier name and the three log sections keep reserved slots
+## on every render.
+const CONTENT_CARD_TILES := 14
+const LOG_FIRST_SLOT := 16
+const LOG_SECTION_H := 2  # tiles — one section = label + data line
+
+## The content column's authored width: the panel's 22-tile plate minus its
+## 1-tile side insets (640 px — the scroll viewport's authored width).
+const CONTENT_W_PX := 640.0
+
+## The content's list blocks (docs/10-* §4.23): the two familiarity lines
+## (1-tile rows after the card window) and the three career-log sections
+## (2-tile rows). The blocks' authored fallback mirrors these numbers while
+## the screen is unshipped.
+const LIST_LINES := "content_lines"
+const LIST_LOG := "log"
+
+
+func _slot_y(tiles: int) -> float:
+	return float(tiles * PaletteLib.CHROME_TILE)
+
+
+## One content line at its `content_lines` block slot: `index` counts 1-tile
+## rows after the card window. The row is a list member — `apply_layout`
+## skips it; the builder owns the placement (the authored tiles while the
+## screen is unshipped, the data block once master assembles it).
+func _place_row(control: Control, list_id: String, index: int,
+		width: float) -> void:
+	var rect := RegistryLib.list_rect(SCREEN_ID, list_id, index)
+	if rect == Rect2():
+		rect = Rect2(0.0,
+			_slot_y(CONTENT_CARD_TILES + index), width, _slot_y(1))
+	control.position = rect.position
+	control.size = rect.size
+	_content.add_child(control)
+	RegistryLib.register(SCREEN_ID, control,
+		"content.familiarity" if index == 0 else "content.tier_name",
+		{"list": list_id, "data_ordered": true})
 
 
 ## The header's second line: role · tier · level, and — stance ≥ +2 — the
@@ -259,24 +318,32 @@ func _header_parts(canon: Dictionary) -> Array[String]:
 
 
 ## One career-log row: unlocked → the section label + its data line;
-## locked → the grayed label + the `dossier.locked.tier` reason.
-func _log_section(section: Dictionary, tier: int) -> Control:
-	var row := VBoxContainer.new()
-	row.name = "Log_%d" % int(section["gate"])
-	row.set("theme_override_constants/separation", 2)
+## locked → the grayed label + the `dossier.locked.tier` reason. Phase 12:
+## a flat plain-Control row — the two lines at fixed offsets (the section
+## VBox is deleted; docs/80-* §4.8.9). The line cells are unregistered
+## children (the section row is the registered element).
+func _log_section(section: Dictionary, tier: int, width: float) -> Control:
+	var row := Control.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var unlocked: bool = tier >= int(section["gate"])
 	var label := _label(I18n.t_key(str(section["key"]))) if unlocked \
 		else _dim_label(I18n.t_key(str(section["key"])))
 	label.name = "Label"
+	label.position = Vector2(0, 0)
+	label.size = Vector2(width, float(PaletteLib.CHROME_TILE))
 	row.add_child(label)
 	if unlocked:
 		var data_line := _label(_log_data(str(section["key"])))
 		data_line.name = "Data"
+		data_line.position = Vector2(0, float(PaletteLib.CHROME_TILE))
+		data_line.size = Vector2(width, float(PaletteLib.CHROME_TILE))
 		row.add_child(data_line)
 	else:
 		var locked := _dim_label(I18n.fmt("dossier.locked.tier",
 			{"tier": int(section["threshold"])}))
 		locked.name = "Locked"
+		locked.position = Vector2(0, float(PaletteLib.CHROME_TILE))
+		locked.size = Vector2(width, float(PaletteLib.CHROME_TILE))
 		row.add_child(locked)
 	return row
 

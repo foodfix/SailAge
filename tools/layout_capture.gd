@@ -84,6 +84,7 @@ const W2D_SCENES := {
 	"dossier": "res://scenes/ui/dossier_panel.tscn",
 	"fleet_view": "res://scenes/ui_shared/fleet_view.tscn",
 	"officer_roster": "res://scenes/ui_shared/officer_roster_view.tscn",
+	"character_card": "res://scenes/ui/character_card.tscn",
 }
 
 
@@ -914,6 +915,71 @@ func _open_intel_window(window: Control) -> void:
 	if not offers.is_empty():
 		QuestGenLib.accept(offers[0], "lisbon", GameState.day)
 	window.call("open_tab", "quests")
+
+
+# --- rig: character_card (W2-D) -------------------------------------------------
+
+const CardLib := preload("res://scenes/ui/character_card.gd")
+
+## The card rig's fixture: a player run with pending allocation points, one
+## employed officer (MATEUS carries personality + appearance — the Tags
+## slots), and one met captain at familiarity 6 (tier 2 — the Relations tier
+## line) whose status is `returning` (the Career returning line). Every
+## variant-only id the card can register renders once here, so the fragment
+## carries a rect row for each of them.
+func _rig_character_card() -> void:
+	_rig_modal_run()
+	GameState.player["alloc_pending"] = 2
+	preload("res://scripts/player/character.gd").recruit("off_mateus_alvares")
+	var captain := CaptainsLib2.ensure(
+		CaptainsLib2.canon_list()[0].get("id", ""))
+	captain["familiarity"] = 6
+	captain["status"] = CaptainsLib2.STATUS_RETURNING
+	captain["return_day"] = 100
+
+
+## The fixture renders ALL THREE §4.12.1 variants (player / officer / NPC) so
+## one fragment carries every variant's ids — one card instance per variant,
+## mounted into its own sized host at a side-by-side slot, then DETACHED
+## (kept alive) before the dump: the detached cards' globals collapse to
+## their authored local rects, so every record — the shared ids from the
+## last render, the variant-only ids from the kept-alive earlier renders —
+## dumps the same tile table the code authors.
+func _open_character_card(card: Control) -> void:
+	var variants: Array = [
+		[CardLib.KIND_PLAYER, "", {"alloc": true}],
+		[CardLib.KIND_OFFICER, "off_mateus_alvares", {}],
+		[CardLib.KIND_NPC, str(CaptainsLib2.canon_list()[0].get("id", "")), {}],
+	]
+	var extra: Array[Control] = []
+	for index in variants.size():
+		var spec: Array = variants[index]
+		var host := Control.new()
+		host.name = "CardHost%d" % index
+		add_child(host)
+		var instance: Control = card if index == 0 \
+			else (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
+		# The tool mounts the rig's screen root itself — re-seat it into the
+		# variant host first.
+		if instance.get_parent() != null:
+			instance.get_parent().remove_child(instance)
+		host.add_child(instance)
+		instance.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		instance.position = Vector2.ZERO
+		instance.size = Vector2(32.0, 34.0) * float(PaletteLib.CHROME_TILE)
+		instance.setup_person(str(spec[0]), CardLib.card_data(
+			str(spec[0]), str(spec[1]), spec[2]))
+		if index > 0:
+			extra.append(instance)
+		# The previous variant's nodes must leave the tree before the next
+		# registration (the duplicate-id guard reads tree membership) —
+		# detaching keeps the instances alive for the dump.
+		host.remove_child(instance)
+		if index > 0:
+			host.queue_free()
+	# Keep the two extra variants alive until after the dump (the records
+	# must resolve); the tool's exit reclaims them.
+	set_meta("character_card_extra_variants", extra)
 
 
 # --- rig: reputation_view (W2-D) -----------------------------------------------
