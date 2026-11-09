@@ -23,106 +23,75 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.4)
 
-[node name="Center" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 0
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(864, 672)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="Body" type="VBoxContainer" parent="Center/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Title" type="Label" parent="Panel"]
+layout_mode = 0
 theme_override_font_sizes/font_size = 32
 
-[node name="Header" type="Label" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Header" type="Label" parent="Panel"]
+layout_mode = 0
 theme_override_font_sizes/font_size = 16
 
-[node name="Table" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 4
+[node name="Table" type="Control" parent="Panel"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="Crew" type="Label" parent="Center/Panel/Margin/Body/Table"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
+[node name="Crew" type="Label" parent="Panel/Table"]
+layout_mode = 0
 
-[node name="Rows" type="VBoxContainer" parent="Center/Panel/Margin/Body/Table"]
-layout_mode = 2
-theme_override_constants/separation = 4
+[node name="Rows" type="Control" parent="Panel/Table"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="Hold" type="Label" parent="Center/Panel/Margin/Body/Table"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
+[node name="Hold" type="Label" parent="Panel/Table"]
+layout_mode = 0
 
-[node name="DaysRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 16
+[node name="DaysRow" type="Control" parent="Panel"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="Days" type="Label" parent="Center/Panel/Margin/Body/DaysRow"]
-custom_minimum_size = Vector2(320, 40)
-layout_mode = 2
+[node name="Days" type="Label" parent="Panel/DaysRow"]
+layout_mode = 0
 theme_override_font_sizes/font_size = 24
 vertical_alignment = 1
 
-[node name="Short" type="Label" parent="Center/Panel/Margin/Body/DaysRow"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Short" type="Label" parent="Panel/DaysRow"]
+layout_mode = 0
 vertical_alignment = 1
 
-[node name="Fill" type="Button" parent="Center/Panel/Margin/Body/DaysRow"]
-custom_minimum_size = Vector2(200, 40)
-layout_mode = 2
+[node name="Fill" type="Button" parent="Panel/DaysRow"]
+layout_mode = 0
 
-[node name="Hint" type="Label" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
+[node name="Hint" type="Label" parent="Panel"]
+layout_mode = 0
 
-[node name="Cargo" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 4
+[node name="Cargo" type="Control" parent="Panel"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="Scroll" type="ScrollContainer" parent="Center/Panel/Margin/Body/Cargo"]
-custom_minimum_size = Vector2(0, 128)
-layout_mode = 2
+[node name="Scroll" type="ScrollContainer" parent="Panel/Cargo"]
+layout_mode = 0
 horizontal_scroll_mode = 0
 
-[node name="Stacks" type="VBoxContainer" parent="Center/Panel/Margin/Body/Cargo/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 4
+[node name="Stacks" type="Control" parent="Panel/Cargo/Scroll"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 2
+[node name="Footer" type="Control" parent="Panel"]
+layout_mode = 0
+mouse_filter = 2
 
-[node name="GateReason" type="Label" parent="Center/Panel/Margin/Body/Footer"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="GateReason" type="Label" parent="Panel/Footer"]
+layout_mode = 0
 vertical_alignment = 1
 
-[node name="Stay" type="Button" parent="Center/Panel/Margin/Body/Footer"]
-custom_minimum_size = Vector2(200, 40)
-layout_mode = 2
+[node name="Stay" type="Button" parent="Panel/Footer"]
+layout_mode = 0
 
-[node name="Sail" type="Button" parent="Center/Panel/Margin/Body/Footer"]
-custom_minimum_size = Vector2(200, 40)
-layout_mode = 2
+[node name="Sail" type="Button" parent="Panel/Footer"]
+layout_mode = 0
 
 [node name="ConfirmDialog" parent="." instance=ExtResource("2_confirm")]
 layout_mode = 3

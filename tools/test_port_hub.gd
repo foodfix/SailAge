@@ -743,7 +743,7 @@ func _test_provisions_prompt() -> void:
 
 	# --- the readout, tier bar (§4.8 GOOD ≥ 10; §4.9 kit value_bar) -------
 	var days_label: Label = prompt.get_node(
-		"Center/Panel/Margin/Body/DaysRow/Days"
+		"Panel/DaysRow/Days"
 	)
 	_check(days_label.text == I18n.fmt("port.sail.days", {"days": 15}),
 		"the readout uses port.sail.days with {days} (%s)" % days_label.text)
@@ -803,7 +803,7 @@ func _test_provisions_prompt() -> void:
 			"the freed hold takes 30 units back")
 		_check(FleetLib.supplies("provisions") == 45,
 			"back at the starter 45 after the round trip")
-	var title: Label = prompt.get_node("Center/Panel/Margin/Body/Title")
+	var title: Label = prompt.get_node("Panel/Title")
 	_check(title.text == I18n.t_key("port.sail.prepare"),
 		"the prompt title uses port.sail.prepare (%s)" % title.text)
 
@@ -867,7 +867,7 @@ func _test_provisions_prompt() -> void:
 	_check(full_buy.disabled, "Buy is disabled with a full hold (§4.6.1)")
 	_check(full_buy.tooltip_text == I18n.t_key("market.hold_full"),
 		"the full-hold reason is market.hold_full (%s)" % full_buy.tooltip_text)
-	var hint: Label = prompt.get_node("Center/Panel/Margin/Body/Hint")
+	var hint: Label = prompt.get_node("Panel/Hint")
 	_check(hint.visible and hint.text == I18n.t_key("port.sail.jettison_hint"),
 		"a full hold shows the jettison hint (%s)" % hint.text)
 	var stacks: Array = prompt.jettison_buttons()
@@ -914,7 +914,7 @@ func _test_provisions_prompt() -> void:
 	prompt.rebuild()
 	GameState.gold = 5000
 	await get_tree().process_frame
-	var stay: Button = prompt.get_node("Center/Panel/Margin/Body/Footer/Stay")
+	var stay: Button = prompt.get_node("Panel/Footer/Stay")
 	_check(stay.text == I18n.t_key("port.sail.stay"),
 		"Stay in port uses port.sail.stay (%s)" % stay.text)
 	stay.pressed.emit()
@@ -943,7 +943,7 @@ func _test_provisions_prompt() -> void:
 	await get_tree().process_frame
 	var sailed: Array = []
 	hub.sailed.connect(func() -> void: sailed.append(true))
-	prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").pressed.emit()
+	prompt.get_node("Panel/Footer/Sail").pressed.emit()
 	await get_tree().process_frame
 	_check(sailed.size() == 1,
 		"the prompt's Set Sail calls PortScreen.set_sail() (one sailed signal)")
@@ -961,9 +961,9 @@ func _test_provisions_prompt() -> void:
 	await get_tree().process_frame
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	_check((prompt.get_node("Center/Panel/Margin/Body/Title") as Label).text
+	_check((prompt.get_node("Panel/Title") as Label).text
 		== "出航准备", "the prompt rebinds on locale_changed (%s)"
-		% (prompt.get_node("Center/Panel/Margin/Body/Title") as Label).text)
+		% (prompt.get_node("Panel/Title") as Label).text)
 	var zh_buy: Button = prompt.buy_button("provisions")
 	_check(zh_buy.text == I18n.fmt("port.sail.buy",
 			{"qty": prompt.pending_qty("provisions"), "gold": 0}),
@@ -1154,15 +1154,15 @@ func _test_provisions_gate() -> void:
 		% SailingSimLib.supply_block_reason())
 	prompt.open()
 	await get_tree().process_frame
-	var sail: Button = prompt.get_node("Center/Panel/Margin/Body/Footer/Sail")
+	var sail: Button = prompt.get_node("Panel/Footer/Sail")
 	_check(sail.disabled, "Set Sail is disabled with no crew")
 	var reason: Label = prompt.get_node(
-		"Center/Panel/Margin/Body/Footer/GateReason"
+		"Panel/Footer/GateReason"
 	)
 	_check(reason.visible and reason.text == I18n.t_key("port.sail.no_crew"),
 		"the reason is visible and uses port.sail.no_crew (%s)" % reason.text)
 	var days_label: Label = prompt.get_node(
-		"Center/Panel/Margin/Body/DaysRow/Days"
+		"Panel/DaysRow/Days"
 	)
 	_check(days_label.text == I18n.t_key("port.sail.days_zero"),
 		"days == 0 shows port.sail.days_zero (%s)" % days_label.text)
@@ -1214,7 +1214,7 @@ func _test_provisions_gate() -> void:
 	prompt.rebuild()
 	await get_tree().process_frame
 	var short: Label = prompt.get_node(
-		"Center/Panel/Margin/Body/DaysRow/Short"
+		"Panel/DaysRow/Short"
 	)
 	_check(prompt.days_of_supply() == 5, "15 / 3 = 5 days (got %d)"
 		% prompt.days_of_supply())

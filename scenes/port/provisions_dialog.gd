@@ -38,6 +38,17 @@ extends Control
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
+##
+## **Absolute tile layout (Phase 12 W2-A, docs/80-* §4.8.9; 10-* §4.23).** The
+## node tree IS the element tree: the centered 27×21-tile panel is a plain
+## Panel at its authored rect, its sections are plain Controls and every leaf
+## hangs directly off its registered parent — the CenterContainer →
+## PanelContainer → Margin → VBox flow chain is deleted. The two supply rows
+## are FIXED statics (the §4.10 kinds, both always present) with their parts
+## absolutely-placed children of the row; the cargo jettison list is the
+## screen's one dynamic list block (`stacks`, row_h 1, inside the cargo
+## scroll viewport). Authored rects equal the data rows, so `apply_layout`
+## is idempotent once managed.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-10 sweep (§4.9): the days-of-supply readout gains the kit's
@@ -86,6 +97,24 @@ const COL_STEP_W := 40
 const COL_BUY_W := 200
 const COL_JETTISON_W := 160
 
+## --- The authored tile table (parent-relative 32-px tiles; Phase 12) ---------
+## One tile = `Palette.CHROME_TILE`. The dialog root is the canvas; the
+## centered panel carries its own rect and its children address the panel's
+## space.
+const TILE := PaletteLib.CHROME_TILE
+## The centered 864×672 prompt panel (27 × 21 tiles).
+const PANEL_RECT := Rect2i(16, 6, 27, 21)
+## The cargo jettison list block (content-node tiles): row *i* at
+## `(0, i·row_h)` — a 1-tile row inside the cargo scroll viewport (the
+## scroll's rect in the cargo group's space).
+const STACKS_LIST := "stacks"
+const STACKS_W := 23
+const STACKS_ROW_H := 1
+## Cargo-stack row internals (row-local tiles): the stack caption and the
+## jettison verb.
+const STACK_LABEL_RECT := Rect2i(0, 0, 14, 1)
+const STACK_JETTISON_RECT := Rect2i(14, 0, 5, 1)
+
 ## Emitted after a successful purchase or jettison (tests / hosts).
 signal supplies_changed(kind: String, qty: int)
 ## Emitted right before the prompt asks the host to sail (the host owns the
@@ -113,26 +142,25 @@ var _pending: Dictionary = {}
 var _days_bar: ProgressBar = null
 
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _header: Label = $Center/Panel/Margin/Body/Header
-@onready var _table: VBoxContainer = $Center/Panel/Margin/Body/Table
-@onready var _crew: Label = $Center/Panel/Margin/Body/Table/Crew
-@onready var _rows_box: VBoxContainer = $Center/Panel/Margin/Body/Table/Rows
-@onready var _hold: Label = $Center/Panel/Margin/Body/Table/Hold
-@onready var _days_row: HBoxContainer = $Center/Panel/Margin/Body/DaysRow
-@onready var _days: Label = $Center/Panel/Margin/Body/DaysRow/Days
-@onready var _short: Label = $Center/Panel/Margin/Body/DaysRow/Short
-@onready var _fill_button: Button = $Center/Panel/Margin/Body/DaysRow/Fill
-@onready var _hint: Label = $Center/Panel/Margin/Body/Hint
-@onready var _cargo: VBoxContainer = $Center/Panel/Margin/Body/Cargo
-@onready var _scroll: ScrollContainer = $Center/Panel/Margin/Body/Cargo/Scroll
-@onready var _cargo_box: VBoxContainer = \
-	$Center/Panel/Margin/Body/Cargo/Scroll/Stacks
-@onready var _footer: HBoxContainer = $Center/Panel/Margin/Body/Footer
-@onready var _sail_button: Button = $Center/Panel/Margin/Body/Footer/Sail
-@onready var _gate_reason: Label = $Center/Panel/Margin/Body/Footer/GateReason
-@onready var _stay_button: Button = $Center/Panel/Margin/Body/Footer/Stay
+@onready var _panel: Panel = $Panel
+@onready var _title: Label = $Panel/Title
+@onready var _header: Label = $Panel/Header
+@onready var _table: Control = $Panel/Table
+@onready var _crew: Label = $Panel/Table/Crew
+@onready var _rows_box: Control = $Panel/Table/Rows
+@onready var _hold: Label = $Panel/Table/Hold
+@onready var _days_row: Control = $Panel/DaysRow
+@onready var _days: Label = $Panel/DaysRow/Days
+@onready var _short: Label = $Panel/DaysRow/Short
+@onready var _fill_button: Button = $Panel/DaysRow/Fill
+@onready var _hint: Label = $Panel/Hint
+@onready var _cargo: Control = $Panel/Cargo
+@onready var _scroll: ScrollContainer = $Panel/Cargo/Scroll
+@onready var _cargo_box: Control = $Panel/Cargo/Scroll/Stacks
+@onready var _footer: Control = $Panel/Footer
+@onready var _sail_button: Button = $Panel/Footer/Sail
+@onready var _gate_reason: Label = $Panel/Footer/GateReason
+@onready var _stay_button: Button = $Panel/Footer/Stay
 @onready var _confirm: Control = $ConfirmDialog
 
 
@@ -201,6 +229,9 @@ func _ready() -> void:
 	_fill_button.pressed.connect(_on_fill_pressed)
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
+	# Phase 12 (§4.8.9): the authored tile rects — every static at its data
+	# rect, the panel centered, before anything registers.
+	_place_statics()
 	# Phase-11 W3-B (docs/80-* §4.8.9): the scene-built surfaces register
 	# first; the supply rows register where `_build_rows` builds them.
 	_register_static_ids()
@@ -214,6 +245,39 @@ func _ready() -> void:
 	# captures the registration baselines and applies the committed override
 	# table (the shipped file is `{}`, so this is a no-op walk).
 	RegistryLib.screen_active("provisions", self)
+
+
+## Phase 12 (§4.8.9): one authored rect = one `position`/`size` write, in
+## the DIRECT parent's tile space (point anchors everywhere; nothing is
+## stretched).
+func _place(control: Control, rect: Rect2i) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = Vector2(rect.position) * float(TILE)
+	control.size = Vector2(rect.size) * float(TILE)
+
+
+## The authored tile table — the centered prompt, flattened to the grid
+## (see the fragment this screen's capture emits: `data/layout_fragments/
+## provisions.json`).
+func _place_statics() -> void:
+	_place(_panel, PANEL_RECT)
+	_place(_title, Rect2i(1, 1, 25, 1))
+	_place(_header, Rect2i(1, 2, 25, 1))
+	_place(_table, Rect2i(1, 4, 23, 6))
+	_place(_crew, Rect2i(0, 0, 23, 1))
+	_place(_rows_box, Rect2i(0, 1, 23, 4))
+	_place(_hold, Rect2i(0, 5, 23, 1))
+	_place(_days_row, Rect2i(1, 11, 23, 2))
+	_place(_days, Rect2i(0, 0, 10, 2))
+	_place(_short, Rect2i(10, 0, 5, 2))
+	_place(_fill_button, Rect2i(15, 0, 7, 2))
+	_place(_hint, Rect2i(1, 14, 23, 1))
+	_place(_cargo, Rect2i(1, 15, 23, 4))
+	_place(_scroll, Rect2i(0, 0, 23, 4))
+	_place(_footer, Rect2i(1, 19, 23, 2))
+	_place(_gate_reason, Rect2i(0, 0, 10, 2))
+	_place(_stay_button, Rect2i(11, 0, 6, 2))
+	_place(_sail_button, Rect2i(17, 0, 6, 2))
 
 
 ## Phase-11 W3-B (docs/80-* §4.8.9): the scene-built controls under their
@@ -238,7 +302,6 @@ func _register_static_ids() -> void:
 	RegistryLib.register("provisions", _hint, "hint")
 	RegistryLib.register("provisions", _cargo, "cargo")
 	RegistryLib.register("provisions", _scroll, "cargo.scroll")
-	RegistryLib.register("provisions", _cargo_box, "cargo.stacks")
 	RegistryLib.register("provisions", _footer, "footer")
 	RegistryLib.register("provisions", _gate_reason, "footer.gate_reason")
 	RegistryLib.register("provisions", _stay_button, "footer.stay",
@@ -599,9 +662,8 @@ func rebuild() -> void:
 	_refresh_all()
 	# Phase-11 W3-B (docs/80-* §4.8.9): the days bar and the cargo jettison
 	# rows are this dialog's rebuild paths — their new nodes re-registered
-	# where they build; re-apply the committed override table (a no-op on
-	# the shipped `{}`).
-	RegistryLib.apply_screen("provisions")
+	# where they build; re-apply the committed table.
+	RegistryLib.apply_layout("provisions")
 
 
 # --- Construction ----------------------------------------------------------
@@ -611,48 +673,57 @@ func _build_rows() -> void:
 		_rows_box.remove_child(child)
 		child.queue_free()
 	_rows.clear()
-	_crew.name = "Crew"
-	_crew.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
 	_crew.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# The §4.10 kinds' authored row slots inside the rows group (fixed
+	# statics — both kinds always render).
+	var kind_index := 0
 	for kind in TradeEngineLib.SUPPLY_KINDS:
-		_rows[kind] = _build_row(kind)
+		_rows[kind] = _build_row(kind, kind_index)
+		kind_index += 1
 
 
 ## One supply row: `Provisions 45 (15 days) | [- 10 +] | [Buy 10 (20g)]` — the
 ## kind/amount/days cell is exactly the §4.5.1 `fleet.stat.supply` line, so the
-## prompt and the fleet panel word the same number the same way. Every widget is
-## filled by [_refresh_row].
-func _build_row(kind: String) -> Dictionary:
-	var row := HBoxContainer.new()
+## prompt and the fleet panel word the same number the same way. The row is a
+## plain Control at its authored slot in the rows group and every widget is an
+## absolutely-placed child of the row (no per-row flow containers); every
+## widget is filled by [_refresh_row].
+func _build_row(kind: String, index: int) -> Dictionary:
+	var row := Control.new()
 	row.name = "Supply_%s" % kind
-	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rows_box.add_child(row)
+	_place(row, Rect2i(0, index * 2, 23, 2))
+	RegistryLib.register("provisions", row, "rows.%s" % kind)
 
 	var label := _label("")
 	label.name = "Stat"
-	label.custom_minimum_size.x = float(COL_KIND_W)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
+	_place(label, Rect2i(0, 0, 6, 2))
 
 	var minus := _step_button("Minus", "-")
 	minus.pressed.connect(step.bind(kind, -1))
 	row.add_child(minus)
+	_place(minus, Rect2i(6, 0, 2, 1))
 
 	var qty := _label("")
 	qty.name = "Qty"
-	qty.custom_minimum_size = Vector2(float(COL_STEP_W), float(PaletteLib.ROW_H))
 	qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	qty.set_meta("qty", 0)
 	row.add_child(qty)
+	_place(qty, Rect2i(8, 0, 2, 1))
 
 	var plus := _step_button("Plus", "+")
 	plus.pressed.connect(step.bind(kind, 1))
 	row.add_child(plus)
+	_place(plus, Rect2i(10, 0, 2, 1))
 
 	var buy := Button.new()
 	buy.name = "Buy_%s" % kind
 	buy.custom_minimum_size = Vector2(float(COL_BUY_W), float(PaletteLib.BUTTON_H))
 	buy.pressed.connect(_on_buy_pressed.bind(kind))
 	row.add_child(buy)
+	_place(buy, Rect2i(12, 0, 7, 2))
 
 	var jettison := UiKitLib.button(JETTISON_KEY, "danger")
 	jettison.name = "Jettison_%s" % kind
@@ -660,12 +731,11 @@ func _build_row(kind: String) -> Dictionary:
 		float(PaletteLib.BUTTON_H))
 	jettison.pressed.connect(_on_supply_jettison_pressed.bind(kind))
 	row.add_child(jettison)
+	_place(jettison, Rect2i(19, 0, 3, 2))
 
-	_rows_box.add_child(row)
-	# Phase-11 W3-B (docs/80-* §4.8.9): the row and its named parts under the
-	# kind-derived id (the stepper `qty` is a Label, not a field — the staged
-	# number lives in a meta, so it is `plain`).
-	RegistryLib.register("provisions", row, "rows.%s" % kind)
+	# Phase 12 (§4.8.9): the row's named parts under the kind-derived id
+	# (the stepper `qty` is a Label, not a field — the staged number lives
+	# in a meta, so it is `plain`).
 	RegistryLib.register("provisions", label, "rows.%s.label" % kind)
 	RegistryLib.register("provisions", minus, "rows.%s.minus" % kind,
 		{"role": "button"})
@@ -812,19 +882,18 @@ func _refresh_days() -> void:
 
 ## The kit atom bakes the tier into its fill at build time, so a changed
 ## readout rebuilds the bar (the same discipline the inn's morale bar uses).
+## The bar is a registered static (`days_bar`) at its authored slot under
+## the days row — the rebuild re-places it there.
 func _refresh_days_bar(days: int) -> void:
-	var body := _days.get_parent().get_parent()
 	if _days_bar != null and is_instance_valid(_days_bar):
-		body.remove_child(_days_bar)
+		_panel.remove_child(_days_bar)
 		_days_bar.queue_free()
 	var tier := UiKitLib.auto_tier(days, DAYS_GOOD_MIN, DAYS_WARN_MIN)
 	_days_bar = UiKitLib.value_bar(mini(days, DAYS_BAR_MAX), DAYS_BAR_MAX, tier)
-	_days_bar.size_flags_horizontal = Control.SIZE_FILL
-	body.add_child(_days_bar)
-	body.move_child(_days_bar, _days.get_parent().get_index() + 1)
+	_panel.add_child(_days_bar)
+	_place(_days_bar, Rect2i(1, 13, 23, 1))
 	# Phase-11 W3-B (docs/80-* §4.8.9): the atom bakes the tier at build time,
-	# so every refresh rebuilds the bar — re-register (replaces the record)
-	# and [method rebuild] re-applies the table.
+	# so every refresh rebuilds the bar — re-register (replaces the record).
 	RegistryLib.register("provisions", _days_bar, "days_bar")
 
 
@@ -845,14 +914,16 @@ func _refresh_gate() -> void:
 
 ## One Jettison row per trade-good stack (provisions/water are bought, not
 ## dropped, from this prompt — §4.6.1 offers jettison "per trade-good stack").
+## The rows are the cargo list block's members (`stacks`): row *i* takes its
+## `list_rect` position inside the scroll's plain content node.
 func _refresh_cargo() -> void:
 	for child in _cargo_box.get_children():
 		_cargo_box.remove_child(child)
 		child.queue_free()
 	var any := false
+	var index := 0
 	var fleet: Array = GameState.fleet if GameState.fleet is Array else []
-	for index in fleet.size():
-		var ship = fleet[index]
+	for ship in fleet:
 		if not (ship is Dictionary):
 			continue
 		var cargo = (ship as Dictionary).get("cargo", {})
@@ -865,20 +936,47 @@ func _refresh_cargo() -> void:
 			if qty <= 0:
 				continue
 			any = true
-			_cargo_box.add_child(_build_cargo_row(index, str(good_id), qty))
+			_build_cargo_row(index, ship_index_of(fleet, ship),
+				str(good_id), qty)
+			index += 1
 	_cargo_box.visible = any
+	# The scroll's stacked extent: the plain content Control sized to the
+	# rows' total pitch (viewport math, not flow).
+	_cargo_box.custom_minimum_size = Vector2(
+		STACKS_W * float(TILE), index * STACKS_ROW_H * float(TILE))
 
 
-func _build_cargo_row(ship_index: int, good_id: String, qty: int) -> Control:
-	var row := HBoxContainer.new()
+## The fleet index of `ship` (the jettison path's second key).
+func ship_index_of(fleet: Array, ship: Dictionary) -> int:
+	return fleet.find(ship)
+
+
+## Row *i*'s rect for the cargo list block — px in the content node's space:
+## the data block when managed, the same tiles authored otherwise.
+func _stack_row_rect(index: int) -> Rect2:
+	var rect := RegistryLib.list_rect("provisions", STACKS_LIST, index)
+	if rect != Rect2():
+		return rect
+	return Rect2(
+		Vector2(0, index * STACKS_ROW_H) * float(TILE),
+		Vector2(STACKS_W, STACKS_ROW_H) * float(TILE))
+
+
+func _build_cargo_row(row_index: int, ship_index: int, good_id: String,
+		qty: int) -> void:
+	var row := Control.new()
 	row.name = "Cargo_%s_%d" % [good_id, ship_index]
-	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cargo_box.add_child(row)
+	var rect := _stack_row_rect(row_index)
+	row.position = rect.position
+	row.size = rect.size
 	var good: Dictionary = DataLoader.get_good(good_id)
 	var good_name := I18n.t(good.get("name", {})) if not good.is_empty() else good_id
 	var label := _label(I18n.fmt("fleet.stack", {"name": good_name, "qty": qty}))
 	label.name = "Stack"
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
+	_place(label, STACK_LABEL_RECT)
 	var button := UiKitLib.button("fleet.jettison", "danger")
 	button.name = "Jettison_%s_%d" % [good_id, ship_index]
 	button.custom_minimum_size = Vector2(float(COL_JETTISON_W), float(PaletteLib.ROW_H))
@@ -887,19 +985,18 @@ func _build_cargo_row(ship_index: int, good_id: String, qty: int) -> Control:
 	button.tooltip_text = reason if not reason.is_empty() else label.text
 	button.pressed.connect(_on_jettison_pressed.bind(ship_index, good_id, qty))
 	row.add_child(button)
+	_place(button, STACK_JETTISON_RECT)
 	row.set_meta("jettison_entry", {
 		"ship_index": ship_index, "kind": "cargo", "good_id": good_id,
 		"qty": qty, "button": button,
 	})
-	# Phase-11 W3-B (docs/80-* §4.8.9): the jettison list is data-derived
-	# (fleet order, then sorted good ids) — locked like the market rows.
+	# Phase 12 (§4.8.9): the jettison list is data-derived (fleet order, then
+	# sorted good ids) — locked like the market rows. The row is a list
+	# member; its parts are unregistered (locked viewport blocks in the
+	# studio).
 	RegistryLib.register("provisions", row,
-		"stacks.%s.%d" % [good_id, ship_index], {"data_ordered": true})
-	RegistryLib.register("provisions", label,
-		"stacks.%s.%d.stack" % [good_id, ship_index])
-	RegistryLib.register("provisions", button,
-		"stacks.%s.%d.jettison" % [good_id, ship_index], {"role": "button"})
-	return row
+		"stacks.%s.%d" % [good_id, ship_index],
+		{"data_ordered": true, "list": STACKS_LIST})
 
 
 # --- Actions ---------------------------------------------------------------

@@ -82,6 +82,11 @@ func _capture_screen(screen_id: String) -> bool:
 	var scene: PackedScene = load(PORT_SCENES[screen_id])
 	var screen_root: Control = scene.instantiate()
 	add_child(screen_root)
+	# Phase 12 W2-A: the provisions prompt is a hidden modal — its lists and
+	# its real look exist only open, so the rig opens it (a no-op for every
+	# other screen: the guard is has_method-based).
+	if screen_root.has_method("open_on"):
+		screen_root.open_on(null)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
 	var fragment := _dump_fragment(screen_id)
@@ -118,6 +123,10 @@ func _rig_port() -> void:
 			"italy"]:
 		GameState.player["reputation"][nation] = 0
 	GameState.fleet = [FleetLib.new_ship("caravel", 0)]
+	# Phase 12 W2-A (the list blocks must derive): the caravel carries a
+	# trade-good stack so the provisions dialog's cargo jettison list has a
+	# member (fleet order, then sorted good ids — the locked order).
+	GameState.fleet[0]["cargo"] = {"wine": 20}
 	GameState.day = 1
 	GameState.gold = 10000
 	GameState.morale = 70
