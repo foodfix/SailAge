@@ -166,6 +166,21 @@ func _test_hello() -> void:
 	_check(not hello.is_empty(), "hello arrives on connect")
 	if hello.is_empty():
 		return
+	# The outbound-overflow fix (2026-11-09): the ACCEPTED server peer
+	# carries the raised buffer floors BEFORE the first frame push — the
+	# engine default (64 KiB) cannot hold a viewport PNG in base64 and
+	# every `frame` failed with ERR_OUT_OF_MEMORY.
+	var accepted = _bridge()
+	_check(accepted != null and accepted._client != null
+			and accepted._client.outbound_buffer_size \
+					== BridgeLib.PEER_OUTBOUND_BUFFER,
+			"the accepted peer's outbound buffer is raised (%d)"
+					% BridgeLib.PEER_OUTBOUND_BUFFER)
+	_check(accepted != null and accepted._client != null
+			and accepted._client.inbound_buffer_size \
+					== BridgeLib.PEER_INBOUND_BUFFER,
+			"the accepted peer's inbound buffer is raised (%d)"
+					% BridgeLib.PEER_INBOUND_BUFFER)
 	var screens: Array[String] = [
 		"port", "market", "inn", "guild", "provisions", "palace",
 		"tavern", "shipyard",

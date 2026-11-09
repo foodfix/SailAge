@@ -203,3 +203,11 @@ slot's file inventory:
   `test_layout_registry` 34 + `test_layout_bridge` 29 +
   `test_layout_bounds` 5), `validate_data.py` exit 0 (groups 1–14),
   `data/ui_layout.json` shipped `{}`, worktrees merged and removable.
+- **Post-acceptance fix (2026-11-09, user-reported): the WS outbound
+  overflow** — a live studio session hit `ERR_OUT_OF_MEMORY` on the
+  first frame push: the engine's default WS outbound buffer is 64 KiB
+  while a `frame` carries a full-viewport PNG in base64. The fix raises
+  every accepted peer's buffers (`_configure_peer`, 16 MiB out /
+  1 MiB in, both wirings — the suite now pins the floors, bridge suite
+  31 checks). The headless suite never caught it because headless
+  frames degrade to empty payloads — noted as the guard's blind spot.

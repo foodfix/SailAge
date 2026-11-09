@@ -57,6 +57,15 @@ const BIND_ADDRESS := "127.0.0.1"
 ## 1920×1080 / 32 px ⇒ 60 × 33 floor; the bottom sliver is anchored).
 const GRID_W := 60
 const GRID_H := 33
+## The WS peer buffer floors (the 2026-11-09 outbound-overflow fix): the
+## engine's default outbound buffer is 64 KiB while a `frame` message
+## carries a full-viewport PNG in base64 (hundreds of KiB to a few MB) —
+## every frame push failed with ERR_OUT_OF_MEMORY (the wslay outbound
+## bound) until the accepted peer's buffers are raised. 16 MiB outbound
+## covers the largest frame; studio edits inbound are tiny but get a
+## modest raise too. Applied on EVERY accepted peer, both wirings.
+const PEER_OUTBOUND_BUFFER := 16 * 1024 * 1024
+const PEER_INBOUND_BUFFER := 1024 * 1024
 
 # --- State -------------------------------------------------------------------
 
@@ -119,6 +128,7 @@ func _start_server(port: int) -> bool:
 			_legacy_server = null
 			set_process(false)
 			return false
+		_configure_peer(_legacy_server)
 	else:
 		# 4.5+: plain TCP listener; each accepted stream becomes one
 		# WebSocketPeer via `accept_stream`.
@@ -170,8 +180,16 @@ func _replace_client(fresh) -> void:
 			_retiring.close()  # dropped mid-handshake; best-effort politeness
 		_retiring = _client
 		_retiring.close()
+	_configure_peer(fresh)
 	_client = fresh
 	_greeted = false
+
+
+## One peer configuration, both wirings (the buffer floors live in the
+## constants block above).
+func _configure_peer(peer) -> void:
+	peer.outbound_buffer_size = PEER_OUTBOUND_BUFFER
+	peer.inbound_buffer_size = PEER_INBOUND_BUFFER
 
 
 # --- Pumping (4.0–4.4 wiring) ------------------------------------------------
