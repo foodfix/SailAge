@@ -104,6 +104,15 @@ const PLAYER_PANEL_RECT := Rect2(16, 72, 1888, 416)
 const ENEMY_PANEL_RECT := Rect2(16, 496, 1888, 416)
 const CONDITIONS_RECT := Rect2(16, 912, 1888, 168)
 
+## Phase 12 (docs/80-* §4.8.9): the flat interior slots — the panel inset,
+## the 64px row pitch (one editors row + five one-line ship rows per
+## panel), the rows region's height, and the cell gap (the deleted
+## HBoxes' separation).
+const PANEL_PAD := 16.0
+const ROW_PITCH := 64.0
+const ROWS_REGION_H := 5.0 * ROW_PITCH
+const CELL_GAP := 8.0
+
 ## The nine battle kinds (`10-*` §4.10 `ai_profiles` key set / `60-*` §4.9a):
 ## the 7 pass-through kinds + `navy` (hunter battles) + `tournament`.
 const KINDS: Array[String] = [
@@ -182,13 +191,16 @@ var _player_panel: Control
 var _enemy_panel: Control
 var _player_header: Label
 var _enemy_header: Label
-var _player_box: VBoxContainer
-var _enemy_box: VBoxContainer
-var _conditions_panel: PanelContainer
-var _player_rows_box: VBoxContainer
-var _enemy_rows_box: VBoxContainer
-var _player_stats_row_h: HBoxContainer
-var _enemy_profile_row_h: HBoxContainer
+## Phase 12 (docs/80-* §4.8.9): the deleted flow containers are plain
+## Controls — the content columns, the editors rows and the ship-rows
+## regions are absolutely-placed plain Controls at their data rects.
+var _player_box: Control
+var _enemy_box: Control
+var _conditions_panel: Panel
+var _player_rows_box: Control
+var _enemy_rows_box: Control
+var _player_stats_row_h: Control
+var _enemy_profile_row_h: Control
 var _player_add: Button
 var _player_remove: Button
 var _enemy_add: Button
@@ -228,10 +240,11 @@ func _ready() -> void:
 	_build_panels()
 	_build_conditions_row()
 	# Phase 12 (docs/80-* §4.8.9): the S21 chrome's persistent controls
-	# register their stable ids and activate at build. PARTIAL CONVERSION
-	# (W2-D budget): the region panels and the fixed static widgets are
-	# registered and captured; the editor rows inside the panels keep their
-	# authored flow until the follow-up pass deletes them.
+	# register their stable ids and activate at build. The flow containers
+	# are DELETED — the region panels are plain Panels, every editors row /
+	# ship line / conditions cell an absolutely-placed plain child at its
+	# authored tile rect (the interior rows are unregistered children; the
+	# registered plate above them is the layout contract).
 	_register_chrome_ids()
 	RegistryLib.screen_active(SCREEN_ID, self)
 	# The S10 round-trip restore (§4.7.16 "configuration kept on return");
@@ -329,11 +342,11 @@ func _build_static_widgets() -> void:
 
 func _build_panels() -> void:
 	# The §4.7.16 regions: top = the player panel, middle = the enemy
-	# panel — kit frames at fixed geometry (§4.9 sweep), each carrying a
-	# container column (row 1 = the shared editors row with the side's
-	# compact +/− fleet buttons, then the one-line ship rows; the frame's
-	# header Label stays in the tree hidden — the band rows carry no
-	# title line, the title rides the panel tooltip).
+	# panel — plain Panels at the pinned geometry (§4.9 sweep; the kit
+	# frame's PanelContainer chrome retired with the flow tree), each
+	# carrying a hidden header Label (the band rows carry no title line,
+	# the title rides the panel tooltip) and a plain-Control content column
+	# at the panel's 16px inset.
 	var player := _panel_column("PlayerPanel", "sandbox.player",
 		PLAYER_PANEL_RECT.position, PLAYER_PANEL_RECT.size)
 	_player_panel = player["panel"]
@@ -361,55 +374,64 @@ func _build_panels() -> void:
 	_player_remove = _fleet_button("sandbox.ship.remove")
 	_player_add.pressed.connect(func() -> void: add_ship_row("player"))
 	_player_remove.pressed.connect(func() -> void: remove_ship_row("player"))
-	_player_stats_row().add_child(_player_add)
-	_player_stats_row().add_child(_player_remove)
+	_editor_row_cell(_player_stats_row_h, _player_add, 0)
+	_editor_row_cell(_player_stats_row_h, _player_remove, 1)
 	_enemy_add = _fleet_button("sandbox.ship.add")
 	_enemy_remove = _fleet_button("sandbox.ship.remove")
 	_enemy_add.pressed.connect(func() -> void: add_ship_row("enemy"))
 	_enemy_remove.pressed.connect(func() -> void: remove_ship_row("enemy"))
-	_enemy_profile_row().add_child(_enemy_add)
-	_enemy_profile_row().add_child(_enemy_remove)
+	_editor_row_cell(_enemy_profile_row_h, _enemy_add, 0)
+	_editor_row_cell(_enemy_profile_row_h, _enemy_remove, 1)
 	_refresh_fleet_buttons()
 
 
-## One side panel: the kit `frame` atom (§4.9 — titled PanelContainer; the
-## sheet's PANEL_PAD content margins provide the 16px inset in texture
-## mode, the atom's flat fallback margins in flat mode) at `at` ×
-## `panel_size`. The frame's header Label stays in the tree HIDDEN — the
-## horizontal-bands rows carry no title line, and the panel title rides
-## `tooltip_text` (the `sandbox.player`/`sandbox.enemy` keys stay
-## referenced). The frame's MarginContainer EXPANDS vertically so the
-## body column receives the panel's leftover height. Returns
-## `{panel, box, header}` (`box` = the kit body column,
-## `frame.meta["body"]`).
+## One side panel: a plain Panel at `at` × `panel_size` (the deleted kit
+## frame's chrome is the theme's Panel stylebox, §4.9) carrying the hidden
+## header Label and a plain-Control content column at the panel's 16px
+## inset (the deleted MarginContainer/VBox's rect). Returns
+## `{panel, box, header}`.
 func _panel_column(panel_name: String, title_key: String, at: Vector2,
 		panel_size: Vector2) -> Dictionary:
-	var panel := UiKitLib.frame(title_key)
+	var panel := Panel.new()
 	panel.name = panel_name
 	panel.position = at
 	panel.size = panel_size
 	panel.tooltip_text = _t(title_key)
 	add_child(panel)
-	var header: Label = (panel.get_child(0) as Container).get_child(0) as Label
+	var header := Label.new()
 	header.name = "Header"
+	header.text = _t(title_key)
 	header.theme_type_variation = "Accent"
 	header.visible = false
-	var margin: Container = (panel.get_child(0) as Container).get_child(1)
-	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var box: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
+	header.position = Vector2(PANEL_PAD, PANEL_PAD)
+	header.size = Vector2(panel_size.x - 2.0 * PANEL_PAD,
+		float(PaletteLib.ROW_H))
+	panel.add_child(header)
+	var box := Control.new()
 	box.name = "Box"
-	box.add_theme_constant_override("separation", 0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.position = Vector2(PANEL_PAD, PANEL_PAD)
+	box.size = panel_size - Vector2(2.0 * PANEL_PAD, 2.0 * PANEL_PAD)
+	panel.add_child(box)
 	return {"panel": panel, "box": box, "header": header}
 
 
-## The ship-rows column of a side panel: width tracks the panel body,
-## height sizes to the rows (five one-line rows fit the pinned panel —
-## the horizontal-bands layout needs no scroll).
-func _rows_box() -> VBoxContainer:
-	var box := VBoxContainer.new()
+## The ship-rows column of a side panel: a plain Control under the editors
+## row (five 64px lines fit the pinned panel — the horizontal-bands layout
+## needs no scroll). The rows stack at the fixed 64px pitch.
+func _rows_box() -> Control:
+	var box := Control.new()
 	box.name = "Rows"
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.position = Vector2(0, ROW_PITCH)
+	box.size = Vector2(_panel_box_w(), ROWS_REGION_H)
 	return box
+
+
+## The content column's width (the panel's pinned rect minus the 16px
+## insets) — the row cells' layout width.
+func _panel_box_w() -> float:
+	return PLAYER_PANEL_RECT.size.x - 2.0 * PANEL_PAD
 
 
 ## The compact per-side fleet button: a 2-tile-wide `+`/`-` glyph button
@@ -426,19 +448,15 @@ func _fleet_button(key: String) -> Button:
 
 ## A field label on the band rows (TEXT is the theme's Label default,
 ## §4.9). Labels are NEVER clipped (`clip_text` stays off — the text grows
-## the label), so `min_width` is a column floor that lines the field column
+## the label), so `width` is a column floor that lines the field column
 ## up; pick it ≥ the longest localized string (the `LABEL_W*` constants).
-## `SIZE_FILL` + vertical center: the sheeted controls in the row measure
-## 2 tiles tall (the §4.8 tile grid pass), so the 1-tile label centers on
-## the control line.
-func _field_label(text: String, min_width := 0) -> Label:
+## Phase 12: the label takes its absolute cell rect in the row (1 tile
+## tall, vertically centered against the 2-tile sheeted controls on the
+## line — the compose-beside contract).
+func _field_label(text: String, width := 0) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.custom_minimum_size = Vector2(min_width, float(PaletteLib.ROW_H))
-	# Fill the row's cross axis: sheeted controls in the row measure 2
-	# tiles (the §4.8 tile grid pass), so a 1-tile label stretches to share
-	# the row's top edge with them (the compose-beside contract).
-	label.size_flags_vertical = Control.SIZE_FILL
+	label.custom_minimum_size = Vector2(width, float(PaletteLib.ROW_H))
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
 
@@ -457,6 +475,38 @@ func _option(width := 150) -> OptionButton:
 	var option := OptionButton.new()
 	option.custom_minimum_size = Vector2(width, float(PaletteLib.ROW_H))
 	return option
+
+
+## Phase 12 — one absolutely-placed cell: adds `control` to `row` at the
+## running cursor `x`, vertically centered in the 64px band, and returns
+## the next cursor (`x + width + CELL_GAP`). The cell's rect is the whole
+## contract: nothing is stretched, nothing re-flows.
+func _row_cell(row: Control, control: Control, x: float, width: float,
+		cell_h: float) -> float:
+	row.add_child(control)
+	control.position = Vector2(x, (ROW_PITCH - cell_h) / 2.0)
+	control.size = Vector2(width, cell_h)
+	return x + width + CELL_GAP
+
+
+## Phase 12 — a label+control pair at the cursor: the label at its column
+## floor width, the control beside it (the deleted HBox's compose-beside
+## contract, cursor-computed). Returns the next cursor.
+func _row_pair(row: Control, label: Label, control: Control, x: float,
+		label_w: float, control_w: float) -> float:
+	x = _row_cell(row, label, x, label_w, float(PaletteLib.ROW_H))
+	return _row_cell(row, control, x, control_w, ROW_PITCH)
+
+
+## Phase 12 — the +/− fleet buttons ride the editors row's right end (the
+## 2026-11-09 horizontal-bands contract): `slot` 0 is the left button of
+## the pair, slot 1 the right one (64px buttons, one gap apart).
+func _editor_row_cell(row: Control, button: Button, slot: int) -> void:
+	var row_w: float = (row.size.x if row.size.x > 0.0 else _panel_box_w())
+	var x := row_w - 2.0 * (64.0 + CELL_GAP) + float(slot) * (64.0 + CELL_GAP)
+	row.add_child(button)
+	button.position = Vector2(x, (ROW_PITCH - float(PaletteLib.BUTTON_H)) / 2.0)
+	button.size = Vector2(64.0, float(PaletteLib.BUTTON_H))
 
 
 ## Fills `option` with `ids`, one item per id, labelled `key_prefix.<id>`
@@ -535,49 +585,69 @@ func _hull_row(hull_id: String) -> Dictionary:
 ## ONE-LINE re-layout): `Ship {index}` header + hull + cannons / crew /
 ## durability + escort captain (expanding) + the figurehead + sail slots —
 ## all seven fields on ONE 64px line, so the 5-ship fleet is fully visible
-## with no scrolling (the panel's 1888 px width fits the line's column
-## floors — the longest localized EN forms included). Every field is one
-## unclipped label + one control sized inside the panel.
+## with no scrolling. Every field is one unclipped label + one control.
+## Phase 12: the line HBox is deleted — the row is a plain Control at its
+## 64px slot; the cells take cursor-computed absolute slots, the four
+## expanding cells (hull, captain, figurehead, sail) splitting the
+## leftover width evenly (an authored computation, not a stretch flag).
 func _make_ship_row(side: String) -> Dictionary:
-	var line := HBoxContainer.new()
+	var row_w := _panel_box_w()
+	var line := Control.new()
 	line.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
+	line.mouse_filter = Control.MOUSE_FILTER_PASS
 
+	var x := 0.0
 	var header := _field_label("", ROW_HEADER_W)
-	line.add_child(header)
+	x = _row_cell(line, header, x, ROW_HEADER_W, float(PaletteLib.ROW_H))
 	var type := _option(160)
-	type.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for hull in DataLoader.ship_types_list:
 		if not (hull is Dictionary) or str(hull.get("id", "")).is_empty():
 			continue
 		type.add_item(str(hull["id"]))
 		type.set_item_metadata(type.item_count - 1, str(hull["id"]))
-	line.add_child(type)
-	line.add_child(_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD))
+	var cannons_label := _field_label(_t("sandbox.ship.cannons"), LABEL_W_STD)
 	var cannons := _spin(0, 0, 0, 96)
-	line.add_child(cannons)
-	line.add_child(_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT))
+	var crew_label := _field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT)
 	var crew := _spin(0, 0, 0, 96)
-	line.add_child(crew)
-	line.add_child(
-		_field_label(_t("sandbox.ship.durability"), LABEL_W_DURABILITY))
+	var durability_label := _field_label(_t("sandbox.ship.durability"),
+		LABEL_W_DURABILITY)
 	var durability := _spin(1, 1, 1, 96)
-	line.add_child(durability)
-	line.add_child(_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
+	var captain_label := _field_label(_t("sandbox.ship.captain"), LABEL_W_STD)
 	var captain := LineEdit.new()
 	captain.placeholder_text = ""
-	captain.custom_minimum_size = Vector2(128, float(PaletteLib.ROW_H))
-	captain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.add_child(captain)
+	var figurehead_label := _field_label(_t("shipyard.slot.figurehead"),
+		LABEL_W_MID)
 	var figurehead := _option(160)
 	_fill_equipment_option(figurehead, "figurehead")
-	line.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
-	figurehead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.add_child(figurehead)
+	var sail_label := _field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT)
 	var sail := _option(160)
 	_fill_equipment_option(sail, "sail")
-	line.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
-	sail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.add_child(sail)
+
+	# The fixed cells' total cursor width (x already carries the header +
+	# its gap), then the four expanding cells split exactly what remains
+	# (the deleted EXPAND_FILL distribution, authored).
+	var fixed := x + (LABEL_W_STD + CELL_GAP + 96.0 + CELL_GAP) \
+		+ (LABEL_W_SHORT + CELL_GAP + 96.0 + CELL_GAP) \
+		+ (LABEL_W_DURABILITY + CELL_GAP + 96.0 + CELL_GAP) \
+		+ (LABEL_W_STD + CELL_GAP) + (LABEL_W_MID + CELL_GAP) \
+		+ (LABEL_W_SHORT + CELL_GAP)
+	# The three gaps BETWEEN the four expanding cells come off the leftover
+	# too (the last cell ends flush with the row's right edge).
+	var expand_w: float = maxf(120.0,
+		(row_w - fixed - 3.0 * CELL_GAP) / 4.0)
+	x = _row_cell(line, type, x, expand_w, ROW_PITCH)
+	x = _row_pair(line, cannons_label, cannons, x, LABEL_W_STD, 96)
+	x = _row_pair(line, crew_label, crew, x, LABEL_W_SHORT, 96)
+	x = _row_pair(line, durability_label, durability, x,
+		LABEL_W_DURABILITY, 96)
+	x = _row_cell(line, captain_label, x, LABEL_W_STD,
+		float(PaletteLib.ROW_H))
+	x = _row_cell(line, captain, x, expand_w, ROW_PITCH)
+	x = _row_cell(line, figurehead_label, x, LABEL_W_MID,
+		float(PaletteLib.ROW_H))
+	x = _row_cell(line, figurehead, x, expand_w, ROW_PITCH)
+	x = _row_cell(line, sail_label, x, LABEL_W_SHORT, float(PaletteLib.ROW_H))
+	x = _row_cell(line, sail, x, expand_w, ROW_PITCH)
 
 	var row := {
 		"root": line, "header": header, "type": type, "cannons": cannons,
@@ -590,6 +660,9 @@ func _make_ship_row(side: String) -> Dictionary:
 		if side == "enemy":
 			_sync_enemy_captain(true))
 	var box := _player_rows_box if side == "player" else _enemy_rows_box
+	var index := ship_rows(side).size()
+	line.position = Vector2(0, float(index * int(ROW_PITCH)))
+	line.size = Vector2(row_w, ROW_PITCH)
 	box.add_child(line)
 	if side == "player":
 		_player_rows.append(row)
@@ -632,44 +705,47 @@ func _clamp_row(row: Dictionary) -> void:
 ## through the `60-*` §4.12.1 `player_stats` seam — + the initial morale
 ## (short label `sandbox.morale.short`). The per-side +/− fleet buttons
 ## join this row's right end (appended by `_build_panels`). Defaults read
-## the live run's values — reads are zero-write.
+## the live run's values — reads are zero-write. Phase 12: the row is a
+## plain Control; the cells take cursor-computed absolute slots (the
+## deleted HBox's compose-beside order, no flow).
 func _build_player_stats_row() -> void:
-	var row := HBoxContainer.new()
+	var row := Control.new()
 	row.name = "PlayerStats"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.position = Vector2.ZERO
+	row.size = Vector2(_panel_box_w(), ROW_PITCH)
 	_player_stats_row_h = row
 
+	var x := 0.0
 	for key in ATTRIBUTES:
-		row.add_child(_field_label(_t("char.attr.%s" % key), LABEL_W_ATTR))
-		var spin := _spin(ATTR_MIN, ATTR_MAX, _default_attribute(key), 96)
+		x = _row_pair(row, _field_label(_t("char.attr.%s" % key),
+			LABEL_W_ATTR), _spin(ATTR_MIN, ATTR_MAX,
+			_default_attribute(key), 96), x, LABEL_W_ATTR, 96)
+		var spin: SpinBox = row.get_child(row.get_child_count() - 1)
 		_attribute_spins[key] = spin
-		row.add_child(spin)
 
 	_weapon_option = _option(160)
 	_armor_option = _option(160)
 	_fill_equipment_option(_weapon_option, "weapon")
 	_fill_equipment_option(_armor_option, "armor")
-	row.add_child(_field_label(_t("shipyard.slot.weapon"), LABEL_W_SHORT))
-	row.add_child(_weapon_option)
-	row.add_child(_field_label(_t("shipyard.slot.armor"), LABEL_W_SHORT))
-	row.add_child(_armor_option)
-
-	row.add_child(_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE))
-	_player_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 96)
-	row.add_child(_player_morale_spin)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
+	x = _row_pair(row, _field_label(_t("shipyard.slot.weapon"),
+		LABEL_W_SHORT), _weapon_option, x, LABEL_W_SHORT, 160)
+	x = _row_pair(row, _field_label(_t("shipyard.slot.armor"),
+		LABEL_W_SHORT), _armor_option, x, LABEL_W_SHORT, 160)
+	x = _row_pair(row, _field_label(_t("sandbox.morale.short"),
+		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
+		LABEL_W_MORALE, 96)
+	_player_morale_spin = row.get_child(row.get_child_count() - 1)
 	_player_box.add_child(row)
 
 
 ## The private row holders (the +/− buttons append to these in
 ## `_build_panels`).
-func _player_stats_row() -> HBoxContainer:
+func _player_stats_row() -> Control:
 	return _player_stats_row_h
 
 
-func _enemy_profile_row() -> HBoxContainer:
+func _enemy_profile_row() -> Control:
 	return _enemy_profile_row_h
 
 
@@ -683,31 +759,49 @@ func _enemy_profile_row() -> HBoxContainer:
 ## §4.12.1); `ai_level` / `archetype` at W5-C (the true-override emission
 ## into the fixture, folded into the battle's profile row by the screen).
 ## The per-side +/− fleet buttons join the row's right end (appended by
-## `_build_panels`).
+## `_build_panels`). Phase 12: a plain Control row; the flagship edit
+## takes the leftover width between the fixed cells and the +/− pair.
 func _build_enemy_profile_row() -> void:
-	var row := HBoxContainer.new()
+	var row := Control.new()
 	row.name = "EnemyProfile"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.position = Vector2.ZERO
+	row.size = Vector2(_panel_box_w(), ROW_PITCH)
 	_enemy_profile_row_h = row
 
+	var x := 0.0
 	_kind_option = _option(160)
 	_fill_option(_kind_option, KINDS, "sandbox.kind")
 	_kind_option.item_selected.connect(func(_index: int) -> void:
 		_apply_kind_profile(str(_option_value(_kind_option))))
-	row.add_child(_field_label(_t("sandbox.enemy.kind"), LABEL_W_MID))
-	row.add_child(_kind_option)
+	x = _row_pair(row, _field_label(_t("sandbox.enemy.kind"), LABEL_W_MID),
+		_kind_option, x, LABEL_W_MID, 160)
 	_compose_check = CheckBox.new()
 	_compose_check.text = _t("sandbox.enemy.compose")
 	_compose_check.toggled.connect(_on_compose_toggled)
-	row.add_child(_compose_check)
+	x = _row_cell(row, _compose_check, x, 240.0, ROW_PITCH)
 
-	row.add_child(
-		_field_label(_t("sandbox.enemy.flagship"), LABEL_W_STD))
+	var flagship_label := _field_label(_t("sandbox.enemy.flagship"),
+		LABEL_W_STD)
+	var flagship_w := LABEL_W_STD
 	_enemy_captain_edit = LineEdit.new()
-	_enemy_captain_edit.custom_minimum_size = Vector2(128, float(PaletteLib.ROW_H))
-	_enemy_captain_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_enemy_captain_edit.placeholder_text = ""
 	_enemy_captain_edit.text_changed.connect(func(_text: String) -> void:
 		_sync_enemy_captain(false))
-	row.add_child(_enemy_captain_edit)
+	x = _row_cell(row, flagship_label, x, flagship_w,
+		float(PaletteLib.ROW_H))
+	# The flagship edit expands across the leftover width between here and
+	# the ai_level cell + the right-end button pair (an authored
+	# computation, not a stretch flag).
+	var right_reserved := 2.0 * (64.0 + CELL_GAP) + (LABEL_W_STD + CELL_GAP \
+		+ 164.0 + CELL_GAP) + (LABEL_W_MID + CELL_GAP + 136.0 + CELL_GAP) \
+		+ (LABEL_W_MID + CELL_GAP + 140.0 + CELL_GAP) + (LABEL_W_MORALE \
+		+ CELL_GAP + 96.0 + CELL_GAP)
+	var edit_w: float = maxf(128.0, row.size.x - x - flagship_w - CELL_GAP \
+		- right_reserved)
+	x = _row_cell(row, _enemy_captain_edit, x + flagship_w + CELL_GAP,
+		edit_w, ROW_PITCH)
+	x += CELL_GAP
 
 	_ai_level_option = _option(164)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t2"))
@@ -715,24 +809,21 @@ func _build_enemy_profile_row() -> void:
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t3"))
 	_ai_level_option.set_item_metadata(1, 1)
 	_ai_level_option.select(0)
-	row.add_child(_field_label(_t("sandbox.ai_level"), LABEL_W_STD))
-	row.add_child(_ai_level_option)
+	x = _row_pair(row, _field_label(_t("sandbox.ai_level"), LABEL_W_STD),
+		_ai_level_option, x, LABEL_W_STD, 164)
 	_archetype_option = _option(136)
 	_fill_option(_archetype_option, ARCHETYPES, "sandbox.archetype")
-	row.add_child(_field_label(_t("sandbox.archetype"), LABEL_W_MID))
-	row.add_child(_archetype_option)
+	x = _row_pair(row, _field_label(_t("sandbox.archetype"), LABEL_W_MID),
+		_archetype_option, x, LABEL_W_MID, 136)
 
 	_formation_option = _option(140)
 	_fill_option(_formation_option, FORMATIONS, "battle.formation")
-	row.add_child(_field_label(_t("sandbox.formation"), LABEL_W_MID))
-	row.add_child(_formation_option)
-	row.add_child(_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE))
-	_enemy_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 96)
-	row.add_child(_enemy_morale_spin)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
+	x = _row_pair(row, _field_label(_t("sandbox.formation"), LABEL_W_MID),
+		_formation_option, x, LABEL_W_MID, 140)
+	x = _row_pair(row, _field_label(_t("sandbox.morale.short"),
+		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
+		LABEL_W_MORALE, 96)
+	_enemy_morale_spin = row.get_child(row.get_child_count() - 1)
 	_enemy_box.add_child(row)
 
 
@@ -795,88 +886,90 @@ func _profile_default(kind: String) -> Dictionary:
 ## weather; `wind_dir`; the current pair (direction + the LABELED strength
 ## `sandbox.current.strength`); deployment — row 2 = the four action
 ## buttons right-aligned (`sandbox.start` 开战 / `sandbox.random_all` /
-## `sandbox.import` / `sandbox.export`). The strip's panel chrome is the
-## theme's (§4.9 PanelContainer row); its content joins the panel
-## directly (the chart-screen convention).
+## `sandbox.import` / `sandbox.export`). Phase 12: the strip's
+## PanelContainer/VBox/HBox chain is deleted — a plain Panel at the pinned
+## rect whose two rows are plain Controls with cursor-computed cell slots.
+## The seed spin keeps its slot when hidden (a blank slot, no re-flow).
 func _build_conditions_row() -> void:
-	var panel := PanelContainer.new()
+	var panel := Panel.new()
 	panel.name = "ConditionsPanel"
 	panel.position = CONDITIONS_RECT.position
 	panel.size = CONDITIONS_RECT.size
 	_conditions_panel = panel
 	add_child(panel)
-	var column := VBoxContainer.new()
-	column.name = "Strip"
-	column.add_theme_constant_override("separation", 8)
-	panel.add_child(column)
+	var strip_w: float = CONDITIONS_RECT.size.x - 2.0 * PANEL_PAD
 
 	# Row 1: the encounter conditions on one 64px line.
-	var grid := HBoxContainer.new()
+	var grid := Control.new()
 	grid.name = "Conditions"
-	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid.position = Vector2(PANEL_PAD, PANEL_PAD)
+	grid.size = Vector2(strip_w, ROW_PITCH)
+	panel.add_child(grid)
 
+	var x := 0.0
 	_day_spin = _spin(DAY_MIN, 9999, 1, 96)
-	grid.add_child(_field_label(_t("sandbox.day"), LABEL_W_SHORT))
-	grid.add_child(_day_spin)
+	x = _row_pair(grid, _field_label(_t("sandbox.day"), LABEL_W_SHORT),
+		_day_spin, x, LABEL_W_SHORT, 96)
 	# The seed pair: the value spin rides beside its mode option (it shows
 	# only for `seed_mode = fixed` — the §4.7.16 resolution rules).
 	_seed_mode_option = _option(190)
 	_fill_option(_seed_mode_option, SEED_MODES, "sandbox.seed")
-	grid.add_child(_field_label(_t("sandbox.seed"), LABEL_W_SHORT))
 	_seed_spin = _spin(0, SEED_MAX, 1, 128)
 	_seed_mode_option.item_selected.connect(func(_index: int) -> void:
 		_seed_spin.visible = str(_option_value(_seed_mode_option)) == "fixed")
-	var seed_box := HBoxContainer.new()
-	seed_box.add_child(_seed_mode_option)
-	seed_box.add_child(_seed_spin)
-	grid.add_child(seed_box)
+	x = _row_pair(grid, _field_label(_t("sandbox.seed"), LABEL_W_SHORT),
+		_seed_mode_option, x, LABEL_W_SHORT, 190)
+	x = _row_cell(grid, _seed_spin, x, 128, ROW_PITCH)
 	_weather_option = _option(112)
 	_fill_option(_weather_option, WEATHERS, "world.weather")
-	grid.add_child(_field_label(_t("sandbox.weather"), LABEL_W_STD))
-	grid.add_child(_weather_option)
+	x = _row_pair(grid, _field_label(_t("sandbox.weather"), LABEL_W_STD),
+		_weather_option, x, LABEL_W_STD, 112)
 
 	_wind_option = _option(88)
 	_fill_option(_wind_option, WIND_DIRS, "sandbox.dir")
-	grid.add_child(_field_label(_t("sandbox.wind_dir"), LABEL_W_LONG))
-	grid.add_child(_wind_option)
+	x = _row_pair(grid, _field_label(_t("sandbox.wind_dir"), LABEL_W_LONG),
+		_wind_option, x, LABEL_W_LONG, 88)
 	# The current pair: the direction option + the LABELED 0..3 strength
 	# spin (the strength was an unlabeled mystery box before 2026-11-09).
 	_current_dir_option = _option(84)
 	_fill_option(_current_dir_option, CURRENT_DIRS, "sandbox.dir")
 	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 96)
-	grid.add_child(_field_label(_t("sandbox.current"), LABEL_W_STD))
-	grid.add_child(_current_dir_option)
-	grid.add_child(_field_label(_t("sandbox.current.strength"),
-		LABEL_W_STRENGTH))
-	grid.add_child(_current_strength_spin)
+	x = _row_pair(grid, _field_label(_t("sandbox.current"), LABEL_W_STD),
+		_current_dir_option, x, LABEL_W_STD, 84)
+	x = _row_pair(grid, _field_label(_t("sandbox.current.strength"),
+		LABEL_W_STRENGTH), _current_strength_spin, x, LABEL_W_STRENGTH, 96)
 	_deployment_option = _option(150)
 	_fill_option(_deployment_option, DEPLOYMENTS, "sandbox.deployment")
-	grid.add_child(_field_label(_t("sandbox.deployment"), LABEL_W_LONG))
-	grid.add_child(_deployment_option)
-	column.add_child(grid)
+	x = _row_pair(grid, _field_label(_t("sandbox.deployment"), LABEL_W_LONG),
+		_deployment_option, x, LABEL_W_LONG, 150)
 
 	# Row 2: the four actions, right-aligned (a single 4-across row fits
-	# the 1888 px strip now that the conditions carry their own row).
-	var actions := HBoxContainer.new()
+	# the 1888px strip now that the conditions carry their own row).
+	var actions := Control.new()
 	actions.name = "Actions"
-	actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	actions.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	actions.position = Vector2(PANEL_PAD, PANEL_PAD + ROW_PITCH)
+	actions.size = Vector2(strip_w, ROW_PITCH)
+	panel.add_child(actions)
 	_start_button = UiKitLib.button("sandbox.start")
 	_random_all_button = UiKitLib.button("sandbox.random_all")
 	_import_button = UiKitLib.button("sandbox.import")
 	_export_button = UiKitLib.button("sandbox.export")
+	var action_w := 160.0
+	var actions_x: float = strip_w - 4.0 * (action_w + CELL_GAP)
+	var slot := 0
 	for button in [_start_button, _random_all_button, _import_button,
 			_export_button]:
-		button.custom_minimum_size = Vector2(160, float(PaletteLib.BUTTON_H))
 		actions.add_child(button)
+		button.position = Vector2(actions_x + float(slot * int(action_w
+			+ CELL_GAP)), (ROW_PITCH - float(PaletteLib.BUTTON_H)) / 2.0)
+		button.size = Vector2(action_w, float(PaletteLib.BUTTON_H))
+		slot += 1
 	_start_button.pressed.connect(start_battle)
 	_random_all_button.pressed.connect(randomize_all)
 	_import_button.pressed.connect(_on_import_pressed)
 	_export_button.pressed.connect(_on_export_pressed)
-	var push := Control.new()
-	push.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	actions.add_child(push)
-	actions.move_child(push, 0)
-	column.add_child(actions)
 
 
 # --- Editors & clamps (§4.7.16: the clamp table is IMMEDIATE) ---------------
@@ -1523,7 +1616,7 @@ func enemy_panel() -> Control:
 	return _enemy_panel
 
 
-func conditions_panel() -> PanelContainer:
+func conditions_panel() -> Panel:
 	return _conditions_panel
 
 
@@ -1537,7 +1630,7 @@ func enemy_header() -> Label:
 
 ## The rows column of `side` (the one-line ship-row region; the enemy
 ## column is what the compose toggle hides).
-func rows_box(side: String) -> VBoxContainer:
+func rows_box(side: String) -> Control:
 	return _player_rows_box if side == "player" else _enemy_rows_box
 
 
