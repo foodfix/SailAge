@@ -82,6 +82,7 @@ const W2D_SCENES := {
 	"battle": "res://scenes/combat/battle_screen.tscn",
 	"sandbox": "res://scenes/combat/battle_sandbox.tscn",
 	"dossier": "res://scenes/ui/dossier_panel.tscn",
+	"fleet_view": "res://scenes/ui_shared/fleet_view.tscn",
 }
 
 
@@ -458,6 +459,20 @@ func _rig_dossier() -> void:
 ## The fixture dossier: the captain card + career log (setup IS the open).
 func _open_dossier(panel: Control) -> void:
 	panel.call("setup", str(CaptainsLib2.canon_list()[0].get("id", "")))
+
+
+# --- rig: fleet_view (W2-D) ----------------------------------------------------
+
+func _rig_fleet_view() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"
+	GameState.fleet = [FleetLib.new_ship("caravel", 0),
+		FleetLib.new_ship("sloop", 1)]
+
+
+## The fixture view: a two-ship fleet at port (rebuild IS the open).
+func _open_fleet_view(view: Control) -> void:
+	view.call("rebuild")
 
 
 # --- rig: intel_window (W2-D) --------------------------------------------------

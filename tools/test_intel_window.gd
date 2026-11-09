@@ -225,10 +225,12 @@ func _test_fleet_tab() -> void:
 	_check(view.visible, "the 船队 tab shows the fleet view")
 	_check(view.is_read_only(),
 		"the fixture run (at sea) renders the view read-only")
-	var rows: Container = view.get_node("Body/Scroll/Rows")
+	# Phase 12: the Body chain is deleted — the ships viewport hangs off
+	# the view root.
+	var rows: Control = view.get_node("Scroll/Rows")
 	_check(rows.get_child_count() == GameState.fleet.size(),
 		"one ship row per hull (%d)" % rows.get_child_count())
-	var totals: Container = view.get_node("Body/Totals")
+	var totals: Control = view.get_node("Totals")
 	_check(totals.get_child_count() >= 2,
 		"the totals block renders (title row + supplies row)")
 	_check(view.row_widget(0).get("promote", null) == null,

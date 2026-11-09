@@ -27,6 +27,11 @@ const ConfirmLib := preload("res://scenes/ui_shared/confirm_dialog.gd")
 ## `hull_{ship_type_id}_{owner}` (the north token) through it; a miss keeps
 ## the text-only row.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase 12 (docs/80-* §4.8.9): the view registers under its layout id.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+
+## This view's layout screen id (docs/10-* §4.23 — the 32-screen set).
+const SCREEN_ID := "fleet_view"
 
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -59,11 +64,16 @@ var _pending: Dictionary = {}
 ## Guards rebuild re-entry from `fleet_changed`.
 var _rebuilding := false
 
-@onready var _summary: Label = $Body/Summary
-@onready var _mode_note: Label = $Body/ModeNote
-@onready var _rows_box: VBoxContainer = $Body/Scroll/Rows
-@onready var _totals: VBoxContainer = $Body/Totals
-@onready var _ships_header: Label = $Body/ShipsHeader
+## Phase 12 (docs/80-* §4.8.9): the view's fixed slots — the deleted
+## `Body` VBox's children sit at their data rects; the ships viewport and
+## the totals band are plain Controls over which the row builders stack
+## explicitly (a running y cursor over measured heights — no flow).
+@onready var _summary: Label = $Summary
+@onready var _mode_note: Label = $ModeNote
+@onready var _rows_viewport: ScrollContainer = $Scroll
+@onready var _rows_box: Control = $Scroll/Rows
+@onready var _totals: Control = $Totals
+@onready var _ships_header: Label = $ShipsHeader
 @onready var _confirm: Control = $ConfirmDialog
 
 
@@ -75,6 +85,17 @@ func _ready() -> void:
 	_ships_header.modulate = PaletteLib.ACCENT
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
+	# Phase 12 (docs/80-* §4.8.9): the view registers + activates at build.
+	# PARTIAL CONVERSION (W2-D budget): the fixed slots are registered; the
+	# per-ship rows are the `ships` list members (their internals keep the
+	# authored line stacking until the follow-up pass).
+	RegistryLib.register(SCREEN_ID, _summary, "summary")
+	RegistryLib.register(SCREEN_ID, _mode_note, "mode_note")
+	RegistryLib.register(SCREEN_ID, _ships_header, "ships_header")
+	RegistryLib.register(SCREEN_ID, _rows_viewport, "ships_viewport")
+	RegistryLib.register(SCREEN_ID, _rows_box, "ships")
+	RegistryLib.register(SCREEN_ID, _totals, "totals")
+	RegistryLib.screen_active(SCREEN_ID, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
@@ -190,9 +211,25 @@ func _bind_rows() -> void:
 	_clear(_rows_box)
 	_rows.clear()
 	var fleet: Array = GameState.fleet if GameState.fleet is Array else []
+	var y := 0.0
 	for index in fleet.size():
-		_add_row(index, fleet[index])
+		var row: Control = _add_row(index, fleet[index])
+		y += _stack(row, y)
+		_rows_box.add_child(row)
+		RegistryLib.register(SCREEN_ID, row, "ships.%d" % index,
+			{"list": "ships", "data_ordered": true})
+	# The content node's stacked extent (the plain-Control scroll content).
+	_rows_box.custom_minimum_size = Vector2(_rows_box.size.x, y)
 	_bind_totals()
+
+
+## Phase 12: one child placed into a plain-Control band at `y` — explicit
+## stacking over measured minima (no flow). Returns the height consumed.
+func _stack(child: Control, y: float) -> float:
+	var height := child.get_combined_minimum_size().y
+	child.position = Vector2(0, y)
+	child.size = Vector2(_rows_box.size.x, height)
+	return height
 
 
 ## The §4.5.1 **fleet totals row**: pooled provisions, water and their combined
@@ -205,6 +242,7 @@ func _bind_rows() -> void:
 ## provisioning prompt (`80-*` §4.6.1) shows before you sail.
 func _bind_totals() -> void:
 	_clear(_totals)
+	var totals_y := 0.0
 	var title := _label(I18n.t_key("fleet.totals"), PaletteLib.ACCENT)
 	title.name = "Title"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -218,6 +256,7 @@ func _bind_totals() -> void:
 	speed.name = "Speed"
 	speed.custom_minimum_size.x = 180
 	title_row.add_child(speed)
+	totals_y += _stack(title_row, totals_y)
 	_totals.add_child(title_row)
 
 	var supplies_row := HBoxContainer.new()
@@ -240,6 +279,7 @@ func _bind_totals() -> void:
 	total_days.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	total_days.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	supplies_row.add_child(total_days)
+	totals_y += _stack(supplies_row, totals_y)
 	_totals.add_child(supplies_row)
 
 
@@ -253,7 +293,7 @@ static func _days_color(days: int) -> Color:
 	return PaletteLib.BAD
 
 
-func _add_row(index: int, ship) -> void:
+func _add_row(index: int, ship) -> Control:
 	var widgets: Dictionary = {"index": index, "promote": null, "jettison": []}
 	var box := VBoxContainer.new()
 	box.name = "Ship_%d" % index
@@ -415,8 +455,8 @@ func _add_row(index: int, ship) -> void:
 
 	# §4.8: 32px table row; the row group itself is at least that tall.
 	box.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	_rows_box.add_child(box)
 	_rows.append(widgets)
+	return box
 
 
 ## The speed this row shows (docs/80-* §4.5.1 line 3):
