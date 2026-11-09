@@ -129,3 +129,31 @@ slot's file inventory:
   pass), D `phase11/studio` (the Layout tab + commit endpoints).
   Merge order A → B → C → D with the validator + suite gates after
   each merge.
+- **Merge A (W2-A, `e586c239` → merged): ✅** — `LayoutBridge` (the
+  dual-wiring WS server: 4.5+ `TCPServer` + `accept_stream`, 4.0–4.4
+  legacy `create_server` dispatch — the 4.7 binary REMOVED
+  `WebSocketPeer.create_server`; plain JSON text frames, browser-WS
+  interop probed), the flag gate (live smoke: listens on :8765 only
+  with `-- --layout-bridge`), the single-writer commit reply, headless
+  frame degradation, keep-newest. `test_layout_bridge` 29 checks ALL
+  PASS; `project.godot` diff one line. Slot deviations adjudicated: no
+  `class_name` on the autoload (the parser refuses it — repo
+  convention), `.uid` sidecars swept to master.
+- **Merge B (W3-B, `940c4889` → merged): ✅** — the port/market/
+  provisions/shipyard id pass: 33/413/35/107 registered controls
+  (dynamic ids `rows.<good_id>`(+16 parts), `cards.<facility_id>`,
+  `fleet.<index>`, `equip.*`; locked: facility grid + data-ordered
+  rows), rebuild paths wired (`_refresh`/`rebuild` → re-register +
+  `apply_screen`). Gates: validator exit 0; market/port_hub/shipyard/
+  registry suites ALL PASS; UI sweep 5/5. Master micro-integration at
+  the gate: the rebuild-window duplicate-id guard (`queue_free`
+  replacement is the designed flow — `8776293`).
+- **Merge D (W5-D, `85d75b07` → merged): ✅** — the studio Layout tab
+  (WS client to :8765, frame canvas + 32px grid + drag/resize/reorder/
+  sheet picker, session commit) + `GET /api/layout/file` +
+  `POST /api/layout/commit` (the §4.23 serialization behind a FULL
+  validator pass on a staged `SAILAGE_DATA_ROOT` candidate — write
+  only on exit 0). Live endpoint verification on the merged tree:
+  GET `{}`, valid commit `ok:true` + the file written in the §4.23
+  shape (sorted keys, 2-space indent), invalid commit (x=200) → the
+  file byte-unchanged; restored to `{}` after.
