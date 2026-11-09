@@ -13,20 +13,14 @@
       "y": 6
     },
     "captains_table": {
-      "h": 2,
-      "w": 8,
+      "h": 3,
+      "w": 58,
       "x": 0,
-      "y": 0
-    },
-    "captains_table.empty": {
-      "h": 1,
-      "w": 8,
-      "x": 0,
-      "y": 0
+      "y": 17
     },
     "captains_table.header": {
       "h": 1,
-      "w": 5,
+      "w": 58,
       "x": 0,
       "y": 0
     },
@@ -116,15 +110,9 @@
     },
     "crew.reason": {
       "h": 1,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "footer": {
-      "h": 1,
       "w": 58,
-      "x": 1,
-      "y": 31
+      "x": 0,
+      "y": 8
     },
     "header": {
       "h": 2,
@@ -150,527 +138,107 @@
       "x": 0,
       "y": 0
     },
-    "layout": {
-      "h": 32,
-      "w": 59,
-      "x": 1,
-      "y": 1
-    },
     "officers": {
-      "h": 5,
-      "w": 24,
+      "h": 24,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "officers.reason": {
       "h": 1,
-      "w": 1,
+      "w": 58,
       "x": 0,
-      "y": 0
-    },
-    "officers.recruitable": {
-      "h": 26,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira": {
-      "h": 5,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.action": {
-      "h": 5,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.action.card": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.action.cost": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.action.recruit": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.info": {
-      "h": 4,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.info.bio": {
-      "h": 2,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.info.name": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.info.role": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_duarte_silveira.info.stats": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro": {
-      "h": 5,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.action": {
-      "h": 5,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.action.card": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.action.cost": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.action.recruit": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.info": {
-      "h": 4,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.info.bio": {
-      "h": 2,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.info.name": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.info.role": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_goncalo_marinheiro.info.stats": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires": {
-      "h": 5,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.action": {
-      "h": 5,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.action.card": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.action.cost": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.action.recruit": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.info": {
-      "h": 4,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.info.bio": {
-      "h": 2,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.info.name": {
-      "h": 1,
-      "w": 3,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.info.role": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_tome_pires.info.stats": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia": {
-      "h": 5,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.action": {
-      "h": 5,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.action.card": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.action.cost": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.action.recruit": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.info": {
-      "h": 4,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.info.bio": {
-      "h": 2,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.info.name": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.info.role": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_leg_vicente_gouveia.info.stats": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares": {
-      "h": 5,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.action": {
-      "h": 5,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.action.card": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.action.cost": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.action.recruit": {
-      "h": 2,
-      "w": 2,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.info": {
-      "h": 4,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.info.bio": {
-      "h": 2,
-      "w": 18,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.info.name": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.info.role": {
-      "h": 1,
-      "w": 5,
-      "x": 0,
-      "y": 0
-    },
-    "officers.recruitable.off_mateus_alvares.info.stats": {
-      "h": 1,
-      "w": 4,
-      "x": 0,
-      "y": 0
+      "y": 23
     },
     "officers.recruitable_scroll": {
-      "h": 1,
-      "w": 24,
-      "x": 0,
-      "y": 0
-    },
-    "officers.roster": {
-      "h": 1,
-      "w": 3,
+      "h": 16,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "officers.roster.empty": {
       "h": 1,
-      "w": 3,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "officers.roster_header": {
       "h": 1,
-      "w": 2,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 17
     },
     "officers.roster_scroll": {
-      "h": 4,
-      "w": 3,
+      "h": 5,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 18
     },
     "rumors": {
-      "h": 8,
-      "w": 10,
+      "h": 24,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "rumors.empty": {
       "h": 1,
-      "w": 7,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 2
     },
     "rumors.price": {
       "h": 1,
-      "w": 6,
+      "w": 58,
       "x": 0,
-      "y": 0
-    },
-    "rumors.rows": {
-      "h": 133,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_caribbean_reef": {
-      "h": 45,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_caribbean_reef.bottom": {
-      "h": 2,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_caribbean_reef.bottom.buy": {
-      "h": 2,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_caribbean_reef.bottom.name": {
-      "h": 1,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_caribbean_reef.hint": {
-      "h": 43,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_el_dorado": {
-      "h": 46,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_el_dorado.bottom": {
-      "h": 2,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_el_dorado.bottom.buy": {
-      "h": 2,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_el_dorado.bottom.name": {
-      "h": 1,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_el_dorado.hint": {
-      "h": 44,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_table_mountain": {
-      "h": 42,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_table_mountain.bottom": {
-      "h": 2,
-      "w": 7,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_table_mountain.bottom.buy": {
-      "h": 2,
-      "w": 6,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_table_mountain.bottom.name": {
-      "h": 1,
-      "w": 1,
-      "x": 0,
-      "y": 0
-    },
-    "rumors.rows.disc_table_mountain.hint": {
-      "h": 40,
-      "w": 1,
-      "x": 0,
-      "y": 0
+      "y": 1
     },
     "rumors.scroll": {
-      "h": 1,
-      "w": 7,
+      "h": 15,
+      "w": 58,
       "x": 0,
-      "y": 0
+      "y": 2
     },
     "rumors.tournament": {
       "h": 1,
-      "w": 9,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "spar": {
       "h": 4,
-      "w": 10,
+      "w": 58,
       "x": 0,
-      "y": 0
-    },
-    "spar.controls": {
-      "h": 2,
-      "w": 10,
-      "x": 0,
-      "y": 0
+      "y": 20
     },
     "spar.controls.bet": {
       "h": 2,
-      "w": 6,
-      "x": 0,
-      "y": 0
+      "w": 7,
+      "x": 5,
+      "y": 2
     },
     "spar.controls.stake_down": {
       "h": 2,
       "w": 2,
       "x": 0,
-      "y": 0
+      "y": 2
     },
     "spar.controls.stake_up": {
       "h": 2,
       "w": 2,
-      "x": 0,
-      "y": 0
+      "x": 2,
+      "y": 2
     },
     "spar.header": {
       "h": 1,
-      "w": 3,
+      "w": 58,
       "x": 0,
       "y": 0
     },
     "spar.terms": {
       "h": 1,
-      "w": 7,
+      "w": 29,
       "x": 0,
-      "y": 0
+      "y": 1
     },
     "tabs": {
       "h": 2,
@@ -695,13 +263,53 @@
       "w": 5,
       "x": 11,
       "y": 0
-    },
-    "toast": {
-      "h": 1,
-      "w": 58,
-      "x": 1,
-      "y": 30
     }
   },
-  "lists": {}
+  "lists": {
+    "recruitable": {
+      "base": {
+        "h": 4,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 4,
+      "viewport": {
+        "h": 16,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "rumors": {
+      "base": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 0
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 15,
+        "w": 58,
+        "x": 0,
+        "y": 2
+      }
+    },
+    "table": {
+      "base": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 1
+      },
+      "row_h": 2,
+      "viewport": {
+        "h": 2,
+        "w": 58,
+        "x": 0,
+        "y": 1
+      }
+    }
+  }
 }
