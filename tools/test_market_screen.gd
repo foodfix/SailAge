@@ -377,9 +377,11 @@ func _test_specialty_badge_and_header() -> void:
 	var demand_badge: Label = screen.row("wheat")["badge"]
 	_check(demand_badge.visible and demand_badge.text == "",
 		"a demand-only row keeps the reserved empty badge slot")
-	_check(int(demand_badge.custom_minimum_size.x) == 56
-		and int((screen.row("wine")["badge"] as Label).custom_minimum_size.x) == 56,
-		"the badge slot is 56px on every row")
+	# Phase 12: the reserved slot is the authored tile rect (2 tiles wide,
+	# the capture's data row) — placement owns the width, no min-size pin.
+	_check(int(demand_badge.size.x) == 64
+		and int((screen.row("wine")["badge"] as Label).size.x) == 64,
+		"the badge slot is the 2-tile reserved rect on every row")
 	var expected := I18n.fmt("market.specialty.header", {"names": ", ".join([
 		I18n.t(DataLoader.get_good("wine").get("name", {})),
 		I18n.t(DataLoader.get_good("salt").get("name", {})),
@@ -444,7 +446,7 @@ func _test_alignment_and_order() -> void:
 	_make_run("lisbon")
 	var screen := _instantiate_market()
 	var header := screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/ColumnHeader")
+		"TableFrame/Table/ColumnHeader")
 	var col_good: Label = header.get_node("Col_good")
 	_check(int(col_good.custom_minimum_size.x)
 			== 56 + 4 + 64 + 4 + 124,
@@ -456,8 +458,8 @@ func _test_alignment_and_order() -> void:
 			% int(col_qty.custom_minimum_size.x))
 	# The thin divider between the produces group and the rest sits exactly
 	# after the produce rows (lisbon produces 2: wine, salt).
-	var rows_box: VBoxContainer = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows")
+	var rows_box: Control = screen.get_node(
+		"TableFrame/Table/GoodsScroll/GoodsRows")
 	_check(rows_box.get_child(2).name == "SpecialtyDivider",
 		"the divider sits between the specialty group and the rest (%s)"
 			% str(rows_box.get_child(2).name))
@@ -531,14 +533,14 @@ func _test_info_strip_interactions() -> void:
 	var screen2 := _instantiate_market()
 	screen2.type_qty("wine", "10")
 	_check(screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
+		"TableFrame/Table/InfoStrip").visible,
 		"typing a quantity selects the row and shows the strip")
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	(screen2.row("salt")["node"] as Control).gui_input.emit(click)
 	_check(not screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
+		"TableFrame/Table/InfoStrip").visible,
 		"clicking another row moves the selection; its empty qty hides the strip")
 	screen2.select_good("wine")
 	_check(screen2.info_strip_text().contains(I18n.t(
@@ -793,7 +795,7 @@ func _test_tax_lines() -> void:
 	_check(screen.tax_line_texts("wine").is_empty(),
 		"no tax lines without payload tax fields (pre-L)")
 	var strip: Label = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip")
+		"TableFrame/Table/InfoStrip")
 	_check(strip.visible and screen.info_strip_text()
 		== I18n.fmt("market.total.buy", {
 			"qty": 10,
@@ -820,7 +822,7 @@ func _test_tax_lines() -> void:
 		{"rate": 5, "gold": "24"}), "sell line (%s)" % str(texts[1]))
 	screen2.type_qty("wine", "10")
 	_check(screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/InfoStripRow/InfoStrip").visible,
+		"TableFrame/Table/InfoStrip").visible,
 		"the strip shows once a taxed row is selected")
 	_check(screen2.info_strip_text().contains(str(texts[0])),
 		"the tax lines render beneath the totals (%s)"
@@ -844,7 +846,7 @@ func _test_invest_states() -> void:
 	# (a) available — the guard default block reason is "".
 	_make_run("lisbon", 6000)
 	var screen := _instantiate_market()
-	var button: Button = screen.get_node("Layout/VBox/Footer/Invest")
+	var button: Button = screen.get_node("footer/Invest")
 	_check(not button.disabled,
 		"Invest is available (merged module answers \"\" at the protected capital)")
 	_check(screen.press_invest(), "press_invest works in the available state")
@@ -855,7 +857,7 @@ func _test_invest_states() -> void:
 	# Still available-state: the standing engine gates — broke, then capped.
 	_make_run("lisbon", 499)
 	var screen2 := _instantiate_market()
-	var button2: Button = screen2.get_node("Layout/VBox/Footer/Invest")
+	var button2: Button = screen2.get_node("footer/Invest")
 	_check(button2.disabled and screen2.press_invest() == false,
 		"499g cannot invest (chunk afford gate)")
 	_drop(screen2)
@@ -865,7 +867,7 @@ func _test_invest_states() -> void:
 		GameState.world["clock_fraction"] = 0.5
 		TradeEngineLib.invest("lisbon")
 	var screen3 := _instantiate_market()
-	var button3: Button = screen3.get_node("Layout/VBox/Footer/Invest")
+	var button3: Button = screen3.get_node("footer/Invest")
 	_check(button3.disabled, "the §4.3 discount cap still disables Invest")
 	_check(button3.tooltip_text == I18n.fmt("market.invest_cap", {"max": 10}),
 		"the cap tooltip is unchanged (%s)" % button3.tooltip_text)
@@ -877,7 +879,7 @@ func _test_invest_states() -> void:
 	fake.block_value = "market.invest_gate.exhausted"
 	MarketScreenLib.allegiance_override = fake
 	var screen4 := _instantiate_market()
-	var button4: Button = screen4.get_node("Layout/VBox/Footer/Invest")
+	var button4: Button = screen4.get_node("footer/Invest")
 	_check(button4.disabled and not screen4.press_invest(),
 		"the exhausted state disables Invest")
 	var hint := I18n.fmt("market.invest_gate.allowance",
@@ -892,7 +894,7 @@ func _test_invest_states() -> void:
 	fake.block_value = "market.invest_gate.blocked"
 	fake.alignment_value = "england"
 	var screen5 := _instantiate_market()
-	var button5: Button = screen5.get_node("Layout/VBox/Footer/Invest")
+	var button5: Button = screen5.get_node("footer/Invest")
 	_check(button5.disabled and not screen5.press_invest(),
 		"the blocked state disables Invest")
 	_check(button5.tooltip_text == I18n.fmt("market.invest_gate.blocked",
@@ -903,7 +905,7 @@ func _test_invest_states() -> void:
 	# Any other block key renders through its ui_strings key (defensive).
 	fake.block_value = "market.no_gold"
 	var screen6 := _instantiate_market()
-	_check((screen6.get_node("Layout/VBox/Footer/Invest") as Button).tooltip_text
+	_check((screen6.get_node("footer/Invest") as Button).tooltip_text
 		== I18n.t_key("market.no_gold"),
 		"an unknown block key renders as its ui_strings key")
 	_drop(screen6)
@@ -1013,7 +1015,7 @@ func _test_tavern_renders_investment() -> void:
 	})
 	_check(screen.rumor_texts().has(expected),
 		"the row text is tavern.invest.row (%s)" % expected)
-	_check(screen.get_node("Layout/VBox/Body/RumorsPanel/Scroll/Rows")
+	_check(screen.get_node("body/RumorsPanel/Scroll/Rows")
 		.get_node_or_null("InvestHeader") != null,
 		"the tavern.invest.header section header renders")
 	_drop(screen)
@@ -1027,7 +1029,7 @@ func _test_tavern_renders_investment() -> void:
 	screen2.select_tab("rumors")
 	_check(screen2.invest_rows().is_empty(),
 		"an out-of-band tavern renders no investment rows")
-	_check(screen2.get_node("Layout/VBox/Body/RumorsPanel/Scroll/Rows")
+	_check(screen2.get_node("body/RumorsPanel/Scroll/Rows")
 		.get_node_or_null("InvestHeader") == null,
 		"no section header without rows")
 	_drop(screen2)
