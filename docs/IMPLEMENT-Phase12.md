@@ -116,3 +116,36 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   1-frame deferred reply), §4 tree lines updated; `80-*` §4.8.9
   rewritten (the absolute model, the two kept rules, the deletions);
   this file created from the locked plan.
+- **W1 (2026-11-09): ✅ complete** — master direct. The registry v2
+  (`apply_layout` parents-first rect walk with the content-min +
+  children-extent floors and the parent clamp; `list_rect` content-
+  space rows; the coverage fallback (0,0,2,2) + push_error; rect edits
+  `{x,y,w,h}` + `sheet` with retired-key rejection; revert = the data
+  rect, with `applied` vs `data_rect` tracked separately so
+  move→resize composes; `capture_rows` for the tool; the Phase-11
+  machinery deleted — break-out, flow_parent/flow_bounds, the co-flow
+  freeze, flag pins, the anchored kind, the 4-frame settle), the
+  bridge (settle 1 frame, hello 60×34, `reorder`/retired fields
+  answered `retired_field` without effect), the DataLoader v2 shape
+  check, `check_group14` v2 + the self-test (18 cases),
+  `tools/layout_capture.gd` + the 8 port rigs (double capture
+  byte-identical 8/8), `tools/assemble_layout.py` (`--only` scopes
+  each merge gate to the converted screens), the v2 interim
+  `data/ui_layout.json`. A bounds-rule discovery: `y + h ≤ 34` (the
+  33.75 canvas rounds up; a full-height element's 1080 px measures
+  34 tiles — the plan's own 60×34 example; the doc owns the
+  resolution). One registry fix found by the bridge suite: `%`
+  operator precedence in the retired-key error string. Gates:
+  validator exit 0 (1–14); test_layout_registry 52, test_layout_bridge
+  33, test_layout_bounds 5 ALL PASS; market/port_hub/shipyard/inn/
+  tavern/palace/quests + the UI sweep green.
+- **W2+W3 launched (2026-11-09)** — five background slots, one
+  worktree + branch each off the W1 commit: A `phase12-port-a` (the
+  port eight), B `phase12-title-b` (title/nationality_select/
+  creation), C `phase12-world-c` (world HUD/chart/hail/fleet_picker/
+  autopilot_hud), D `phase12-combat-d` (battle/sandbox/duel + the 13
+  ui_shared screens), E `phase12-studio-e` (the Layout tab v2,
+  file-disjoint). Merge order A → B → C → D with the validator +
+  suite gates after each merge (fragments assembled via
+  `tools/assemble_layout.py --only <converted screens>`); E merges
+  after its W2 neighbors.
