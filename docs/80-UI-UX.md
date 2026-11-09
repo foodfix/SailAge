@@ -1599,35 +1599,51 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
 
 - **Entry.** S1 gains the 海战 button (`sandbox.title`) in its button
   stack, between New Game and Load. `Esc` returns to S1 (§4.2).
-- **Layout (1920×1080 — pinned 2026-11-09, the full-surface re-layout).**
-  left = the player panel `(16, 72)` 944×848, right = the enemy panel
-  `(960, 72)` 944×848, bottom = the conditions strip `(16, 936)` 1888×128
-  carrying the six condition pairs on ONE grid row plus the
-  `[开战] [随机全部] [导入] [导出]` buttons as a 2×2 block at its right
-  end. Every label comes from the `sandbox.*` family inventoried in `10-*`
-  §7.12. Each ship editor renders as a COMPACT 2-line block so all five
-  ship rows fit their panel's rows area without scrolling: line 1 =
-  `Ship {index}` + ship type + cannons + crew + durability, line 2 =
-  captain (expanding) + figurehead + sail (full-width pair columns).
-  Dropdown widths follow the longest localized item text (+ arrow
-  ≈22 px + padding ≈12 px) per column — an OptionButton never clips its
-  selected text over a neighbor.
-- **Player panel.** 1–5 ships, one editable row per ship: ship type (the
-  16 hulls), cannons (0 … `armament_slots`), crew (`crew_min` …
-  `crew_max`), durability (1 … max), the figurehead + sail equipment
-  slots, and the escort captain's canon id (empty = legacy). Beside the
-  ships: the five player attributes (each 0–100; labels reuse
-  `char.attr.*`) and the weapon/armor equipment slots — injected into
-  the battle through the `60-*` §4.12.1 `player_stats` seam — plus the
-  initial morale (0–100).
-- **Enemy panel.** the kind (9 kinds), a one-click `compose_enemy`
-  generation toggle **or** per-ship rows in the same shape as the
-  player's, the captain id (canon / legacy), `ai_level` ∈ {0,1},
-  `archetype`, `formation` and the initial morale. The `ai_level` /
-  `archetype` / `formation` overrides ride the forward-compatible schema
-  below and take effect as their waves land (9C/9D).
-- **Conditions row.** day; seed (`seed_mode` ∈ `fixed|random|auto` —
-  `auto` = the `60-*` §4.11.1 formula); weather
+- **Layout (1920×1080 — re-pinned 2026-11-09, the fleet/editor split
+  re-layout).** Four regions, each field one unclipped label + one
+  sheeted control (controls ride the §4.8.8 2-tile floor — 64 px tall;
+  every region rect and column floor is pinned by the layout regression
+  test for BOTH locales):
+  the **player fleet panel** `(16, 72)` 710×848 and the **enemy fleet
+  panel** `(734, 72)` 710×848 carry ONLY their per-ship rows plus the
+  Add/Remove buttons — each ship editor renders as the COMPACT 2-line
+  block (line 1 = `Ship {index}` + ship type + cannons + crew +
+  durability, line 2 = captain (expanding) + figurehead + sail), so the
+  5-ship fleet fits its rows area with NO scrolling;
+  the **editors panel** `(1452, 72)` 452×848 carries the three shared
+  sections in labeled rows — captain stats (the five attributes 0–100,
+  labels `char.attr.*`; the weapon/armor slots — injected through the
+  `60-*` §4.12.1 `player_stats` seam; the initial morale), the enemy
+  profile (kind, compose toggle, the FLAGSHIP captain id — synced with
+  enemy row 0 —, `ai_level`, `archetype`, `formation`, enemy morale),
+  and the encounter conditions (day, seed mode + value, weather,
+  `wind_dir`, current dir + strength, deployment); wide pairs
+  (`ai_level`/`archetype`, enemy `morale`/`formation`, the current
+  pair, `deployment`) render as label-above blocks so every
+  localized string fits the 452 px column unclipped;
+  the **actions strip** `(16, 928)` 1888×136 carries the four buttons
+  `[开战] [随机全部] [导入] [导出]` as one right-aligned row.
+  The fullscreen background rides the `Backdrop` panel variation
+  (§4.9 — the `frame` tileset's ocean-chart water, the flat `PANEL_BLUE`
+  fallback). Every label comes from the `sandbox.*` family inventoried
+  in `10-*` §7.12; the strength spinbox and the flagship captain get
+  their own labels (`sandbox.current.strength`,
+  `sandbox.enemy.flagship`), and the short morale label is
+  `sandbox.morale.short`. Dropdown widths follow the longest localized
+  item text (+ arrow + the sheet padding) per column — an OptionButton
+  never clips its selected text over a neighbor, and no row exceeds its
+  panel's inner width (the EN longest forms are the binding case).
+- **Fleet fields.** 1–5 ships per side, one editable row per ship: ship
+  type (the 16 hulls), cannons (0 … `armament_slots`), crew
+  (`crew_min` … `crew_max`), durability (1 … max), the figurehead +
+  sail equipment slots, and the escort captain's canon id (empty =
+  legacy). Editors-panel fields: the five player attributes (each
+  0–100), the initial morales (0–100), enemy `ai_level` ∈ {0,1};
+  the `ai_level` / `archetype` / `formation` overrides ride the
+  forward-compatible schema below and take effect as their waves land
+  (9C/9D).
+- **Encounter conditions.** day; seed (`seed_mode` ∈
+  `fixed|random|auto` — `auto` = the `60-*` §4.11.1 formula); weather
   (`calm`/`fair`/`strong`/`storm`); `wind_dir` (8 tokens); the current
   `{dir, strength 0..3}`; the deployment variant (`standard` /
   `tournament`).
@@ -2029,7 +2045,9 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    reads as inset paper), every other family ships the raw keyed
    tiles (the retired ops: inverted bevel, the 1px `ACCENT` ring,
    the rim-weighted lift, the press darken). The sheet inventory
-   grows to SEVEN (§4.8.8): `ninepatch_{panel,button,button_hover,
+   grows to SEVEN (§4.8.8; EIGHT since the 2026-11-09 third-tileset
+   amendment, which appends `ninepatch_backdrop.png`):
+   `ninepatch_{panel,button,button_hover,
    button_pressed,button_focus,field,bar}.png` — the chrome sheets
    are 96×96 (32px margins), the authored `bar` stays 48×48 (16px
    tiles); the chrome singles inventory is 54 (nine slot-suffixed
@@ -2217,6 +2235,44 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    flat panel fill; `surface_fill()` re-points, ink `INK_WARM` ≈ 8.6:1
    on it); `PARCH` stays pinned (the parchment-plate constant).
    Seeds frame 20261112 / click 20261111.
+
+   **The third tileset + family re-mapping (2026-11-09, user direction
+   — content panels vs backdrop; NO re-roll of the existing two):**
+   THREE live chrome tilesets. The new **`panel`** tileset joins
+   `frame` + `click` (same envelope verbatim: pro mode, 32×32,
+   `transition_size 0`, roundness/raggedness/boundary/step 0, highly
+   detailed, basic shading; green chroma-key lower) — seed
+   **20261117**, generated by `pixellab_pass.py --chrome run panel`
+   and vendored as the `tileset_chrome_panel_*` trio; studio gains the
+   `chrome_panel` card (the `chrome_frame`/`chrome_click` pattern).
+   Material: "raised rectangular panel plate … aged cream-vellum
+   parchment face, ONE perfectly uniform flat warm-cream color across
+   the whole face, absolutely zero texture (the 2026-11-09 click-face
+   discipline — repeat-safe: no grain, no specks, no marks), all
+   detail strictly in the ornate outer frame: a richly carved dark
+   walnut wood rim with visible grain, a thin brass inner pinstripe at
+   the wood-to-parchment line, and a small round brass rosette pinned
+   at each inner corner, gentle raised bevel lit from the top-left
+   with a soft shadow on the bottom-right, retro 16-bit UI in the
+   style of classic 1990s naval adventure games like Uncharted Waters
+   2 / New Horizons, crisp deliberate pixels, flat color fills, no
+   text, no icons" (pinned verbatim in
+   `pixellab_pass.CHROME_TILESETS`; differs from the `click` plate by
+   rim material — carved wood + rosettes vs polished brass band).
+   **Derivations re-pinned:** `panel` family ← the `panel` tileset
+   (raw plates, native nine slots — it stops sourcing `frame`);
+   `field` ← **`click`** (fill recess ×0.62 retained — input boxes are
+   recessed parchment plates, NOT recessed water); NEW **`backdrop`**
+   family ← `frame` (raw plates) — the busy ocean-chart water becomes
+   the DECORATIVE backdrop surface for the S21 fullscreen background,
+   the S10 battle viewport frame and the S1 title panels (consumed via
+   the theme's `Backdrop` Panel variation, §4.9). Sheet inventory
+   grows to EIGHT (`ninepatch_backdrop.png` joins; §4.8.8), chrome
+   singles 54 → 63; `CHROME_SOURCE_PX` gains `panel: 32`. Half-tile
+   sheet margins were evaluated and REJECTED by the 2026-11-09 margin
+   mock: the Wang plates sit mid-tile (~12–13 px keyed inset per
+   side), so a 1-tile control at 16 px margins renders rim only —
+   the §4.8.8 2-tile floor and the 32 px sheet margins stay.
 
    **NPC world-fleet tokens (amended 2026-11-05, user direction —
    UW2 ships-in-sight):** world-map NPC fleets render the same 8-dir
@@ -3460,10 +3516,13 @@ per the §4.8 sizing grid — 1 tile = `Palette.CHROME_TILE`, 32px today):
 
 | Control | Pins |
 |---|---|
-| Button | normal bg `PANEL_BG` + 2px border `PANEL_LINE`; hover border `ACCENT`; pressed bg `PANEL_LINE`; disabled text `PANEL_LINE`; keyboard focus = extra 2px `ACCENT` ring; **min 2×2 tiles** (`Palette.BUTTON_H`, the tile grid pass enforces the floor) |
+| Button | normal bg `PANEL_BG` + 2px border `PANEL_LINE`; hover border `ACCENT`; pressed bg `PANEL_LINE`; disabled text `PANEL_LINE`; keyboard focus = extra 2px `ACCENT` ring; **min 2×2 tiles** (`Palette.BUTTON_H`, the tile grid pass enforces the floor); content pad **16 px** (½ tile — `CONTENT_PAD`: text starts on the plate FACE, never on the carved rim; re-pinned 2026-11-09 — 8 px let glyphs ride the rim art) |
 | V/HScrollBar | trough transparent; 8px grabber `PANEL_LINE`, hover/pressed `ACCENT`; min grabber 24px |
-| Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px (nine-patch sheets layered at W3; flat StyleBoxFlat remains the fallback when a texture id is absent) |
-| LineEdit / TextEdit | bg `PANEL_BG`, border `PANEL_LINE`, focus border `ACCENT` |
+| Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px (nine-patch sheets layered at W3; flat StyleBoxFlat remains the fallback when a texture id is absent); texture mode: the sheet carries **content margins 16 px** (½ tile, 2026-11-09 — content clears the carved rim; the kit `frame()` atom's inner margin override drops to 0, the sheet provides the inset) |
+| Panel · `Backdrop` variation | the `ninepatch_backdrop` sheet (the `frame` tileset's ocean-chart water — DECORATIVE surfaces only: the S21 fullscreen background, the S10 battle viewport frame, the S1 title panels; §4.8); flat fallback = `PANEL_BG` navy. Registered 2026-11-09 |
+| LineEdit / TextEdit | content pad **16 px** (`FIELD_PAD`, re-pinned 2026-11-09 — same rim rule as Button); texture mode = the `field` sheet (the `click` plate recessed ×0.62); flat mode bg `PANEL_BG`, border `PANEL_LINE` |
+| LineEdit / TextEdit focus | transparent-center 2px `ACCENT` ring drawn OVER the untouched plate (`draw_center` off — the plate never swaps, so the box cannot change size on focus; re-pinned 2026-11-09, the flat-fill focus box is retired) |
+| PopupMenu | the parchment face (texture mode: the `field` sheet; flat: `PANEL_BG` + `PANEL_LINE`), hover cell `ACCENT_LO`-tinted, text `INK_WARM` — the dropdown LIST is themed with the fields (2026-11-09; engine-default white before) |
 | Slider (S19) | grabber `ACCENT`, groove `PANEL_LINE` |
 | Tooltip | bg `PANEL_BG`, text `TEXT`, radius 4px, 8px padding |
 | Label | `TEXT`; `Dim` variation `PANEL_LINE` for secondary row text |
@@ -3479,7 +3538,8 @@ defines nothing for it):
 | Button · Quiet | transparent bg, no border | Button hover/pressed cells | bg `PANEL_LINE` | text `PANEL_LINE` | 2px `ACCENT` ring |
 | ScrollBar (V/H) | trough transparent / grabber `PANEL_LINE` | grabber `ACCENT` | grabber `ACCENT` | grabber `PANEL_LINE` | grabber `ACCENT` |
 | Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px | — | — | — | — |
-| LineEdit / TextEdit | bg `PANEL_BG` / border `PANEL_LINE` | border `PANEL_LINE` | — | text `PANEL_LINE` | border `ACCENT` |
+| Panel · `Backdrop` | `ninepatch_backdrop` (flat: `PANEL_BG`) | — | — | — | — |
+| LineEdit / TextEdit | `field` sheet ×0.62 recess (flat: bg `PANEL_BG` / border `PANEL_LINE`) | border `PANEL_LINE` | — | text `PANEL_LINE` | transparent-center 2px `ACCENT` ring over the untouched plate |
 | Slider | grabber `ACCENT` / groove `PANEL_LINE` | grabber `ACCENT` | grabber `ACCENT` | grabber `PANEL_LINE` | grabber `ACCENT` |
 | Tooltip | bg `PANEL_BG` / text `TEXT`, radius 4px, 8px pad | — | — | — | — |
 | Label | `TEXT` | — | — | `Dim` (`PANEL_LINE`) | — |
@@ -3490,7 +3550,7 @@ the toast atom):
 | Atom | Contract |
 |---|---|
 | `button(text_key, kind, icon_id = "")` | `kind` ∈ default/primary/danger; min height 2 tiles (`Palette.BUTTON_H`); optional icon id; press flash per §4.7.17 |
-| `frame(title_key)` | titled PanelContainer: header + 16px-margin (½ tile) VBox |
+| `frame(title_key)` | titled PanelContainer: header + body VBox; the inset comes from the panel sheet's 16px content margins — the inner MarginContainer carries 0 overrides (re-pinned 2026-11-09; body still via `frame.meta["body"]`) |
 | `row(cols, height = 32)` | horizontal row of `cols` cells (height = 1 tile) |
 | `footer(buttons)` | right-aligned button row |
 | `value_bar(value, max, tier)` | GOOD/WARN/BAD colors by tier |

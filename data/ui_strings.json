@@ -3824,6 +3824,18 @@
     "zh": "一键生成",
     "en": "Compose fleet"
   },
+  "sandbox.enemy.flagship": {
+    "zh": "旗舰舰长",
+    "en": "Flagship captain"
+  },
+  "sandbox.morale.short": {
+    "zh": "士气",
+    "en": "Morale"
+  },
+  "sandbox.current.strength": {
+    "zh": "强度",
+    "en": "Strength"
+  },
   "sandbox.day": {
     "zh": "天数",
     "en": "Day"
