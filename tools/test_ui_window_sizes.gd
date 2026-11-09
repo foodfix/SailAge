@@ -392,7 +392,9 @@ func _test_settings_panel() -> void:
 	await _settle()
 	panel_screen.call("open")
 	await _settle()
-	var panel: Control = panel_screen.get_node("Center/Panel")
+	# Phase 12: the plate IS the registered `panel` element (a fixed tile
+	# rect, `data/layout_fragments/settings.json`).
+	var panel: Control = panel_screen.get_node("Panel")
 	var checkbox: Button = null
 	for node in panel_screen.find_children("Check", "", true, false):
 		if node is Button:

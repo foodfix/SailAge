@@ -329,3 +329,14 @@ func _rig_save_slot() -> void:
 ## The fixture dialog: SAVE mode (all three §4.6 row states on screen).
 func _open_save_slot(dialog: Control) -> void:
 	dialog.call("open", 0)
+
+
+# --- rig: settings (W2-D) ------------------------------------------------------
+
+func _rig_settings() -> void:
+	_rig_modal_run()
+	GameState.current_port = "lisbon"  # the S4 mount: Save/Return rows show
+
+
+func _open_settings(panel_screen: Control) -> void:
+	panel_screen.call("open")
