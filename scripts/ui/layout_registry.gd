@@ -571,6 +571,28 @@ static func _record(screen_id: String, id: String) -> Dictionary:
 	return rec
 
 
+## The live edit-state of one element for the bridge's debug log (the
+## 2026-11-09 resize-repro instrumentation): `{baseline, rect_px,
+## position_px, custom_min_px, content_min_px, flags}` — `{}` when the
+## element is unknown. Read-only; production logging only.
+static func debug_state(screen_id: String, id: String) -> Dictionary:
+	var rec := _record(screen_id, id)
+	if rec.is_empty():
+		return {}
+	var control := _live(rec)
+	if control == null:
+		return {}
+	var content := control.get_minimum_size()
+	return {
+		"baseline": rec.get("baseline", {}),
+		"rect_px": control.size,
+		"position_px": control.position,
+		"custom_min_px": control.custom_minimum_size,
+		"content_min_px": content,
+		"flags": [control.size_flags_horizontal, control.size_flags_vertical],
+	}
+
+
 ## Test seam: forget every screen's records, roots and fixture table
 ## (production never calls this).
 static func _reset_for_tests() -> void:

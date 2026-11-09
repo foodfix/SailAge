@@ -330,7 +330,13 @@ func _edit(msg: Dictionary, overrides: Dictionary) -> void:
 	if id.is_empty():
 		_send_error("bad_field", "missing 'id'")
 		return
+	var before := RegistryLib.debug_state(screen, id)
+	_debug_log("EDIT screen=%s id=%s req=%s | BEFORE %s" % [screen, id,
+			JSON.stringify(overrides), _fmt_state(before)])
 	RegistryLib.apply_overrides(screen, id, overrides)
+	var after := RegistryLib.debug_state(screen, id)
+	_debug_log("AFTER-APPLY screen=%s id=%s | %s" % [screen, id,
+			_fmt_state(after)])
 	_queue_update(screen)
 
 
@@ -458,6 +464,51 @@ func _deferred_update() -> void:
 		return
 	_send_tree(screen)
 	_send_frame()
+	# The settled read (post container sort) — the debug trail's third
+	# beat: what the control ACTUALLY measures after the layout pass.
+	var rows := RegistryLib.tree(screen)
+	for row: Dictionary in rows:
+		var state := RegistryLib.debug_state(screen, String(row["id"]))
+		_debug_log("SETTLED screen=%s id=%s rect_tiles=%s | %s"
+				% [screen, String(row["id"]),
+				JSON.stringify(row["rect_tiles"]), _fmt_state(state)])
+
+
+## Appends one line to `user://layout_debug.log` (and stdout) — the
+## resize-repro trail: LOAD baselines, EDIT before/after, SETTLED
+## post-layout. Debug tooling only; the single-writer data rule covers
+## canonical files, not the game's own user:// debug space.
+func _debug_log(line: String) -> void:
+	var stamped := "[%s] %s" % [Time.get_time_string_from_system(), line]
+	print("[LayoutBridge] ", stamped)
+	var path := "user://layout_debug.log"
+	var f := FileAccess.open(path, FileAccess.READ_WRITE)
+	if f == null:
+		f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return
+	f.seek_end()
+	f.store_line(stamped)
+	f.close()
+
+
+## One compact state record for the trail.
+func _fmt_state(state: Dictionary) -> String:
+	if state.is_empty():
+		return "<unknown>"
+	var base: Dictionary = state.get("baseline", {})
+	var base_size: Vector2 = base.get("size", Vector2.ZERO)
+	var base_min: Vector2 = base.get("min", Vector2.ZERO)
+	var rect: Vector2 = state.get("rect_px", Vector2.ZERO)
+	var cmin: Vector2 = state.get("custom_min_px", Vector2.ZERO)
+	var smin: Vector2 = state.get("content_min_px", Vector2.ZERO)
+	var flags: Array = state.get("flags", [0, 0])
+	var pos: Vector2 = state.get("position_px", Vector2.ZERO)
+	return ("rect=%sx%spx pos=(%s,%s) custom_min=%sx%s "
+		+ "content_min=%sx%s flags=(%d,%d) baseline_size=%sx%s "
+		+ "baseline_min=%sx%s") % [rect.x, rect.y, pos.x, pos.y,
+		cmin.x, cmin.y, smin.x, smin.y, flags[0], flags[1],
+		base_size.x, base_size.y, base_min.x, base_min.y]
 
 
 # --- Test seams (the suite only; production never calls these) -------------------
