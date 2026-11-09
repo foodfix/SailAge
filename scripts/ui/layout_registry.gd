@@ -562,7 +562,7 @@ static func reset_screen(screen_id: String) -> void:
 # --- Bridge tree dump ----------------------------------------------------------
 
 ## The per-screen element dump for the bridge's `tree` message: one row
-## per live record — `{id, kind, role, rect_tiles, sheet, locked,
+## per live record — `{id, kind, role, list, rect_tiles, sheet, locked,
 ## parent, clipped, min_tiles, kids_tiles?}` — in registration order.
 ## `rect_tiles` is the control's rect relative to the screen root,
 ## floored/rounded to tiles; `parent` is the nearest registered
@@ -592,6 +592,10 @@ static func tree(screen_id: String) -> Array:
 					if (root != null and control.get_parent() == root)
 					else KIND_CHILD),
 			"role": String(rec.get("role", ROLE_PLAIN)),
+			# The list-block membership (docs/10-* §4.23) — the studio
+			# renders list members as a locked viewport block, not
+			# draggable rows.
+			"list": String(rec.get("list", "")),
 			"rect_tiles": {
 				"x": floori(rel.x / float(TILE)),
 				"y": floori(rel.y / float(TILE)),
