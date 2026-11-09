@@ -30,11 +30,63 @@
   <button class="tab" data-f="chrome">Chrome</button>
   <button class="tab" data-f="icons">Icons</button>
   <button class="tab" data-f="glyphs">Glyphs</button>
+  <button class="tab" data-f="layout" title="live UI-layout editor (§4.8.9 — needs the game's --layout-bridge)">Layout</button>
   <button class="tab" data-f="flagged">Flagged (<span id="flagged-n2">0</span>)</button>
   <button class="tab" data-f="ingame" title="accepted and ingested into the game build">In game (<span id="ingame-n">0</span>)</button>
 </nav>
 
 <main id="grid"></main>
+
+<section id="layout" hidden>
+  <div class="lay-bar">
+    <input id="lay-url" class="seed" value="ws://127.0.0.1:8765" spellcheck="false"
+           title="the game's LayoutBridge endpoint (90-* §5.7)">
+    <button id="lay-connect" class="small">Connect</button>
+    <span id="lay-status" class="chip">bridge: disconnected</span>
+    <span id="lay-hint" class="lay-hint">launch the game: <code>godot --path . -- --layout-bridge</code></span>
+    <span class="spacer"></span>
+    <span id="lay-msg" class="status"></span>
+  </div>
+  <div class="lay-cols">
+    <div class="lay-col-left">
+      <div class="lay-pan-title">screens</div>
+      <div id="lay-screens" class="lay-screens"></div>
+      <div class="lay-pan-title">elements <span id="lay-els-count" class="lbl"></span></div>
+      <div id="lay-tree" class="lay-tree"></div>
+    </div>
+    <div class="lay-col-mid">
+      <div id="lay-canvas" class="lay-canvas">
+        <img id="lay-frame" alt="viewport frame" hidden>
+        <div class="lay-gridlines"></div>
+        <div id="lay-boxes"></div>
+        <div id="lay-canvas-note" class="lay-canvas-note">no frame — connect the bridge and pick a screen</div>
+      </div>
+      <div class="lay-canvas-foot">
+        <span id="lay-screen-name" class="lbl">no screen</span>
+        <span class="spacer"></span>
+        <span class="lbl" id="lay-sel-name"></span>
+        <button id="lay-revert" class="small" title="drop this element's override (back to the code-pinned default) and tell the bridge">Revert element</button>
+        <button id="lay-reset" class="small danger" title="drop every override of this screen and tell the bridge">Reset screen</button>
+      </div>
+    </div>
+    <div class="lay-col-right">
+      <div class="lay-pan-title">inspector</div>
+      <div id="lay-insp" class="lay-insp"><span class="lbl">select an element</span></div>
+    </div>
+  </div>
+  <div class="lay-commit">
+    <button id="lay-commit-btn" class="small">Commit session</button>
+    <span id="lay-session-info" class="lbl"></span>
+    <span id="lay-valid" class="badge" title="the last in-session commit-gate verdict">validator: —</span>
+    <span class="spacer"></span>
+    <details class="lay-file-wrap">
+      <summary class="lbl">committed data/ui_layout.json</summary>
+      <textarea id="lay-file" readonly spellcheck="false"></textarea>
+    </details>
+    <span id="lay-verdict" class="status"></span>
+  </div>
+  <div class="lay-remind">⚠ run the locale layout suites after layout commits — the studio cannot run Godot (80-* §4.8.9 both-locale guard)</div>
+</section>
 
 <footer>
   <span>ships: top-down north tokens + 8-rotation previews · wakes: one sheet per size under the hull · icons: draft | raw | snapped · coast/chrome tilesets: strip + mock previews, staged in <code>model_raw/studio/{coast,chrome}/</code> (gitignored) · ship store: <code>model_raw/pixellab_topdown/</code>, wake staging: <code>model_raw/studio/fx/</code> (gitignored)</span>
