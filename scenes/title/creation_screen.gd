@@ -13,6 +13,17 @@ extends Control
 ##      must-spend-all gate (confirm disabled while points remain) and the
 ##      live derived preview (sighting / fleet speed / duel value).
 ##
+## **Phase-12 W2-B absolute layout** (docs/80-UI-UX.md §4.8.9): the node tree
+## IS the element tree — the `Layout`/`Header`/`Footer` flow containers, the
+## per-card `Content` boxes and the step-② `Columns`/`SpreadRow`/`Preview`
+## boxes are deleted. The two step groups (`StepBackground` / `StepPoints`)
+## are plain Controls at their data rects; cards and stepper rows are
+## absolute elements placed inside them from the data order on the 32×32
+## chrome-tile grid. The step visibility swap and the toggle-pressed card
+## semantics (the `Toggle` theme variation) are untouched — only the layout
+## changed. (The 2026-11-04 `SPEND_HINT_MIN_W` stepper-pixel pin was a flow
+## workaround — the re-centering it guarded is deleted with the flow.)
+##
 ## The preview never re-derives a formula: sighting and speed come from the
 ## `Character` pure statics (`sighting_radius_for`, `speed_bonus_for`) and the
 ## duel value is `BattleSimLib.player_duel_base()` — §4.11.6's single duel
@@ -28,29 +39,35 @@ extends Control
 ## that `new_game` reads BEFORE its reset (docs/80-* §4.6.3); this screen
 ## never touches them, so the handoff preserves them by construction.
 ##
-## Palette is preloaded rather than referenced through its global class name
-## so the scene also runs before the editor has written Godot's class cache.
+## The creation screen never references Palette constants directly: its
+## rects are whole chrome tiles (docs/80-* §4.8.9), and the theme variation
+## carries the colors.
 
-const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-12 W2-B (docs/80-UI-UX.md §4.8.9): the absolute-tile layout registry —
+## every persistent control registers under a stable hierarchical id and the
+## step builds re-apply the committed table after re-registering.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 
 const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
 const BACKGROUNDS_PER_ROW := 3
-const CARD_SIZE := Vector2(360, 208)
-const STEPPER_BUTTON_SIZE := Vector2(44, 28)
-## The must-spend hint's reserved cell width (the en string's measured width,
-## rounded up). The StepPoints column is size-flag SHRINK_CENTER — its rect
-## is its own minimum width, re-centered inside the layout on every change —
-## so ANY state-dependent width inside it re-centers the whole block on the
-## points-remaining ↔ all-spent flip, steppers included. The hint is the only
-## such width (it empties when points run out; zh measured 192px, en 335px,
-## masked by the 616px Columns width only by a 65–208px margin). `clip_text`
-## drops the label's intrinsic minimum width to 1px in this release, so the
-## cell — and the block — stay constant under any locale, string edit or font
-## metric. Production fix, 2026-11-04 playthrough report.
-const SPEND_HINT_MIN_W := 344.0
+## One card: 11×8 chrome tiles, on a 12×8-tile pitch inside the `cards`
+## block (docs/80-* §4.8.9 — 1 tile = Palette.CHROME_TILE = 32 px).
+const CARD_SIZE := Vector2(352, 256)
+const CARD_PITCH := Vector2(384, 256)
+## The step-② tile geometry (points-relative): the attribute column at tile
+## x=0, the skill column at tile x=10, stepper rows stacked from tile y=1
+## under their headers; the spread shortcut + hint cell and the preview
+## lines sit below the columns (docs/80-* §4.8.9).
+const STEPPER_COL_W := 10
+## The spread shortcut's rect and the must-spend hint's fixed cell
+## (points-relative px — tiles (7,10,11,1) for the hint).
+const SPREAD_POS := Vector2(0, 320)
+const SPREAD_SIZE := Vector2(192, 64)
+const SPEND_HINT_POS := Vector2(224, 320)
+const SPEND_HINT_SIZE := Vector2(352, 32)
 ## The creation extremes are the closed §4.1 step-4 forms; the constants live
 ## on the model (`50-*`), and this UI only clamps the steppers against them.
 
@@ -101,12 +118,12 @@ var _spend_hint: Label = null
 var _preview_labels: Dictionary = {}
 
 @onready var _background: Panel = $Background
-@onready var _title: Label = $Layout/Header/Title
-@onready var _prompt: Label = $Layout/Header/Prompt
-@onready var _step_background: GridContainer = $Layout/StepBackground
-@onready var _step_points: VBoxContainer = $Layout/StepPoints
-@onready var _back_button: Button = $Layout/Footer/Back
-@onready var _confirm_button: Button = $Layout/Footer/Confirm
+@onready var _title: Label = $Title
+@onready var _prompt: Label = $Prompt
+@onready var _step_background: Control = $StepBackground
+@onready var _step_points: Control = $StepPoints
+@onready var _back_button: Button = $Back
+@onready var _confirm_button: Button = $Confirm
 
 
 func _ready() -> void:
@@ -115,14 +132,6 @@ func _ready() -> void:
 	_prompt.theme_type_variation = "Dim"
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_prompt.custom_minimum_size = Vector2(0, 24)
-	_step_background.columns = BACKGROUNDS_PER_ROW
-	_step_background.set("theme_override_constants/h_separation",
-		PaletteLib.MARGIN)
-	_step_background.set("theme_override_constants/v_separation",
-		PaletteLib.MARGIN)
-	for button in [_back_button, _confirm_button]:
-		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 
 	_back_button.pressed.connect(_go_back)
 	_confirm_button.pressed.connect(confirm_selection)
@@ -138,6 +147,26 @@ func _ready() -> void:
 	_step = 1
 	_build_background_step()
 	_show_step()
+	# Phase-12 W2-B: one activation after the full build — pins the root,
+	# captures the baselines and applies the committed v2 table (a no-op
+	# walk until master assembles the fragments at the merge gate).
+	_register_static_ids()
+	RegistryLib.screen_active("creation", self)
+
+
+## The static chrome's element ids (docs/80-* §4.8.9). The step-① cards and
+## step-② point elements register where they build.
+func _register_static_ids() -> void:
+	RegistryLib.register("creation", _background, "background",
+		{"role": RegistryLib.ROLE_PANEL})
+	RegistryLib.register("creation", _title, "title")
+	RegistryLib.register("creation", _prompt, "prompt")
+	RegistryLib.register("creation", _step_background, "cards")
+	RegistryLib.register("creation", _step_points, "points")
+	RegistryLib.register("creation", _back_button, "back",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("creation", _confirm_button, "confirm",
+		{"role": RegistryLib.ROLE_BUTTON})
 
 
 func _exit_tree() -> void:
@@ -177,19 +206,26 @@ func _build_background_step() -> void:
 	_cards.clear()
 	# The first card is selected until the player picks one (the S2 rule).
 	_background_id = ""
+	var index := 0
 	for background in DataLoader.backgrounds_list:
 		var background_id := str(background.get("id", ""))
 		if _background_id.is_empty():
 			_background_id = background_id
-		var card := _build_card(background)
+		var card := _build_card(background, index)
 		_step_background.add_child(card)
 		_cards.append(card)
+		index += 1
 	_refresh_selection()
+	# The rebuilt cards re-registered where they built — re-apply the
+	# committed table (a no-op on the interim `{}`).
+	RegistryLib.apply_layout("creation")
 
 
 ## One background card: name, bio and the composed bonus line — all read from
-## the Background record; nothing about a background is hardcoded here.
-func _build_card(background: Dictionary) -> Button:
+## the Background record; nothing about a background is hardcoded here. The
+## parts are absolutely placed inside the card rect; the column/row come
+## from the data order via [param index].
+func _build_card(background: Dictionary, index: int) -> Button:
 	var background_id := str(background.get("id", ""))
 	var card := Button.new()
 	card.name = "Card_%s" % background_id
@@ -198,40 +234,45 @@ func _build_card(background: Dictionary) -> Button:
 	# `Toggle` variation's pressed cell (the focus sheet ×TOGGLE_MODULATE —
 	# the persistent ACCENT ring), not the momentary press dimming.
 	card.theme_type_variation = "Toggle"
-	card.custom_minimum_size = CARD_SIZE
+	card.position = Vector2(
+		(index % BACKGROUNDS_PER_ROW) * CARD_PITCH.x,
+		floori(index / float(BACKGROUNDS_PER_ROW)) * CARD_PITCH.y)
+	card.size = CARD_SIZE
 	card.pressed.connect(_on_card_pressed.bind(background_id))
-
-	var box := VBoxContainer.new()
-	box.name = "Content"
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = PaletteLib.MARGIN
-	box.offset_top = PaletteLib.MARGIN
-	box.offset_right = -PaletteLib.MARGIN
-	box.offset_bottom = -PaletteLib.MARGIN
-	box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
-	card.add_child(box)
 
 	var name_label := Label.new()
 	name_label.name = "BackgroundName"
 	name_label.text = I18n.t(background.get("name", {}))
+	name_label.position = Vector2(32, 32)
+	name_label.size = Vector2(288, 32)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(name_label)
+	card.add_child(name_label)
 
 	var bio := Label.new()
 	bio.name = "Bio"
 	bio.text = I18n.t(background.get("bio", {}))
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	bio.custom_minimum_size = Vector2(CARD_SIZE.x - 2 * PaletteLib.MARGIN, 56)
+	bio.position = Vector2(32, 64)
+	bio.size = Vector2(288, 96)
 	bio.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(bio)
+	card.add_child(bio)
 
 	var bonus := Label.new()
 	bonus.name = "Bonus"
 	bonus.text = _bonus_line(background)
 	bonus.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bonus.position = Vector2(32, 160)
+	bonus.size = Vector2(288, 32)
 	bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(bonus)
+	card.add_child(bonus)
+
+	# Phase-12 W2-B: one data-derived id per card (the backgrounds.json order
+	# is the locked data contract) + its persistent parts.
+	RegistryLib.register("creation", card, "cards.%s" % background_id,
+		{"role": RegistryLib.ROLE_BUTTON, "data_ordered": true})
+	RegistryLib.register("creation", name_label, "cards.%s.name" % background_id)
+	RegistryLib.register("creation", bio, "cards.%s.bio" % background_id)
+	RegistryLib.register("creation", bonus, "cards.%s.bonus" % background_id)
 
 	return card
 
@@ -273,98 +314,124 @@ func _build_points_step() -> void:
 	_skill_steppers = {}
 	_preview_labels = {}
 
-	var columns := HBoxContainer.new()
-	columns.name = "Columns"
-	columns.set("theme_override_constants/separation", PaletteLib.MARGIN)
-	_step_points.add_child(columns)
-
-	var attr_box := VBoxContainer.new()
-	attr_box.name = "Attributes"
-	attr_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
-	columns.add_child(attr_box)
+	# Phase-12 W2-B: the two stepper columns are absolute element blocks —
+	# the attribute column at tile x=0, the skill column at tile x=10,
+	# stepper rows stacked from tile y=1 under their headers (docs/80-*
+	# §4.8.9); the rows are plain Controls, their parts absolutely placed.
 	_attr_header = Label.new()
 	_attr_header.name = "AttrHeader"
-	attr_box.add_child(_attr_header)
+	_attr_header.position = Vector2(0, 0)
+	_attr_header.size = Vector2(STEPPER_COL_W * 32, 32)
+	_step_points.add_child(_attr_header)
+	var attr_index := 0
 	for key in CharacterLib.ATTRIBUTES:
-		_build_stepper_row(attr_box, key, true)
+		_build_stepper_row(0, attr_index, key, true)
+		attr_index += 1
 
-	var skill_box := VBoxContainer.new()
-	skill_box.name = "Skills"
-	skill_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
-	columns.add_child(skill_box)
 	_skill_header = Label.new()
 	_skill_header.name = "SkillHeader"
-	skill_box.add_child(_skill_header)
+	_skill_header.position = Vector2(STEPPER_COL_W * 32, 0)
+	_skill_header.size = Vector2(STEPPER_COL_W * 32, 32)
+	_step_points.add_child(_skill_header)
+	var skill_index := 0
 	for key in SkillsLib.KEYS:
-		_build_stepper_row(skill_box, key, false)
+		_build_stepper_row(STEPPER_COL_W, skill_index, key, false)
+		skill_index += 1
 
-	var spread_row := HBoxContainer.new()
-	spread_row.name = "SpreadRow"
-	spread_row.set("theme_override_constants/separation", PaletteLib.MARGIN)
-	_step_points.add_child(spread_row)
 	var spread := Button.new()
 	spread.name = "Spread"
 	spread.text = I18n.t_key("creation.spread")
-	spread.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
+	spread.position = SPREAD_POS
+	spread.size = SPREAD_SIZE
 	spread.pressed.connect(_on_spread)
-	spread_row.add_child(spread)
+	_step_points.add_child(spread)
 	_spend_hint = Label.new()
 	_spend_hint.name = "SpendHint"
 	_spend_hint.theme_type_variation = "Dim"
-	# The pinned cell (see SPEND_HINT_MIN_W): the hint's width can never feed
-	# the block's minimum width, so the stepper rows stay pixel-stable across
-	# the points-remaining ↔ all-spent flip.
-	_spend_hint.clip_text = true
-	_spend_hint.custom_minimum_size = Vector2(SPEND_HINT_MIN_W, 0)
-	spread_row.add_child(_spend_hint)
+	_spend_hint.position = SPEND_HINT_POS
+	_spend_hint.size = SPEND_HINT_SIZE
+	_step_points.add_child(_spend_hint)
 
-	var preview_box := VBoxContainer.new()
-	preview_box.name = "Preview"
-	preview_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
-	_step_points.add_child(preview_box)
-	for line_key in ["sighting", "speed", "duel"]:
+	for preview_index in range(3):
+		var line_key: String = ["sighting", "speed", "duel"][preview_index]
 		var label := Label.new()
 		label.name = "Preview_%s" % line_key
 		label.theme_type_variation = "Dim"
-		preview_box.add_child(label)
+		label.position = Vector2(0, (12 + preview_index) * 32)
+		label.size = Vector2(608, 32)
+		_step_points.add_child(label)
 		_preview_labels[line_key] = label
 
+	# Phase-12 W2-B: the rebuilt points elements re-registered where they
+	# built — re-apply the committed table (a no-op on the interim `{}`).
+	RegistryLib.register("creation", spread, "points.spread",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("creation", _spend_hint, "points.spend_hint")
+	RegistryLib.register("creation", _attr_header, "points.attr_header")
+	RegistryLib.register("creation", _skill_header, "points.skill_header")
+	for line_key in ["sighting", "speed", "duel"]:
+		RegistryLib.register("creation", _preview_labels[line_key],
+			"points.preview.%s" % line_key)
+	RegistryLib.apply_layout("creation")
 
-func _build_stepper_row(parent: Control, key: String, is_attr: bool) -> void:
-	var row := HBoxContainer.new()
+
+## One stepper row: an absolute element of the `points` block — the column's
+## tile x ([param col_tile_x]) and the stack index place it; the name, the
+## live value and the ± buttons are absolutely placed inside the row rect.
+func _build_stepper_row(col_tile_x: int, index: int, key: String,
+		is_attr: bool) -> void:
+	var row := Control.new()
 	row.name = "Row_%s" % key
-	row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
-	parent.add_child(row)
+	row.position = Vector2(col_tile_x * 32, (1 + index) * 32)
+	row.size = Vector2(STEPPER_COL_W * 32, 32)
+	_step_points.add_child(row)
 
 	var name_label := Label.new()
 	name_label.name = "StatName"
 	name_label.text = _stat_name(key)
-	name_label.custom_minimum_size = Vector2(140, 0)
+	name_label.position = Vector2(0, 0)
+	name_label.size = Vector2(128, 32)
 	row.add_child(name_label)
 
 	var value_label := Label.new()
 	value_label.name = "StatValue"
-	value_label.custom_minimum_size = Vector2(48, 0)
+	value_label.position = Vector2(128, 0)
+	value_label.size = Vector2(32, 32)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
 
 	var sub := Button.new()
 	sub.name = "Sub"
 	sub.text = I18n.t_key("creation.stepper.sub")
-	sub.custom_minimum_size = STEPPER_BUTTON_SIZE
+	sub.position = Vector2(192, 0)
+	sub.size = Vector2(64, 32)
 	sub.pressed.connect(_on_step.bind(key, is_attr, -1))
 	row.add_child(sub)
 
 	var add := Button.new()
 	add.name = "Add"
 	add.text = I18n.t_key("creation.stepper.add")
-	add.custom_minimum_size = STEPPER_BUTTON_SIZE
+	add.position = Vector2(256, 0)
+	add.size = Vector2(64, 32)
 	add.pressed.connect(_on_step.bind(key, is_attr, 1))
 	row.add_child(add)
 
 	(_attr_steppers if is_attr else _skill_steppers)[key] = {
 		"value": value_label, "add": add, "sub": sub,
 	}
+	# Phase-12 W2-B: one data-derived id per stepper row (the §4.1 attribute
+	# / skill orders are the locked data contracts) + its persistent parts.
+	var group := "attrs" if is_attr else "skills"
+	RegistryLib.register("creation", row, "points.%s.%s" % [group, key],
+		{"data_ordered": true})
+	RegistryLib.register("creation", name_label,
+		"points.%s.%s.name" % [group, key])
+	RegistryLib.register("creation", value_label,
+		"points.%s.%s.value" % [group, key])
+	RegistryLib.register("creation", sub, "points.%s.%s.sub" % [group, key],
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("creation", add, "points.%s.%s.add" % [group, key],
+		{"role": RegistryLib.ROLE_BUTTON})
 
 
 ## One stepper click. The + arm refuses beyond the §4.1 per-item cap +3 or

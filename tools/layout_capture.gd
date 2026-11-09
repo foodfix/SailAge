@@ -60,6 +60,11 @@ func _ready() -> void:
 		for rig_screen in PORT_SCENES:
 			if not await _capture_screen(rig_screen):
 				ok = false
+		# --- rig: title (W2-B) ---
+		for rig_screen in W2B_SCENES:
+			if not await _capture_screen(rig_screen):
+				ok = false
+		# --- end rig: title (W2-B) ---
 		get_tree().quit(0 if ok else 1)
 	elif screen != "":
 		var ok := await _capture_screen(screen)
@@ -74,16 +79,28 @@ func _capture_screen(screen_id: String) -> bool:
 	if not (screen_id in RegistryLib.SCREENS):
 		push_error("layout_capture: unknown screen '%s'" % screen_id)
 		return false
-	if not PORT_SCENES.has(screen_id):
+	# --- rig: nationality_select (W2-B) ---
+	if not PORT_SCENES.has(screen_id) and not W2B_SCENES.has(screen_id):
+	# --- end rig: nationality_select (W2-B) ---
 		push_error("layout_capture: no rig for '%s' yet (its W2 wave "
 				+ "adds one)" % screen_id)
 		return false
-	_rig_port()
-	var scene: PackedScene = load(PORT_SCENES[screen_id])
+	# --- rig: creation (W2-B) ---
+	var scene_path: String = PORT_SCENES.get(screen_id, "")
+	if W2B_SCENES.has(screen_id):
+		scene_path = W2B_SCENES[screen_id]
+		_rig_w2b(screen_id)
+	else:
+		_rig_port()
+	var scene: PackedScene = load(scene_path)
+	# --- end rig: creation (W2-B) ---
 	var screen_root: Control = scene.instantiate()
 	add_child(screen_root)
 	for i in range(SETTLE_FRAMES):
 		await get_tree().process_frame
+	# --- rig: creation (W2-B) ---
+	await _post_mount_w2b(screen_id, screen_root)
+	# --- end rig: creation (W2-B) ---
 	var fragment := _dump_fragment(screen_id)
 	screen_root.queue_free()
 	RegistryLib._reset_for_tests()
@@ -137,13 +154,71 @@ func _rig_port() -> void:
 	}
 
 
+# --- rig: title (W2-B) ---------------------------------------------------------
+# --- rig: nationality_select (W2-B) --------------------------------------------
+# --- rig: creation (W2-B) ------------------------------------------------------
+## The W2-B rigs: the title trio (docs/IMPLEMENT-Phase12.md §3 W2-B).
+## `title` needs no game state (the S1 screen reads only ui_strings + the
+## load/save dirs); `nationality_select` / `creation` mount the minimal
+## `GameState.player` skeleton the suites use (the test_creation fixture
+## shape — the creation preview's duel read brackets its own draft in and
+## out, so the skeleton only has to be a Dictionary).
+const CreationCaptureLib := preload("res://scenes/title/creation_screen.gd")
+
+const W2B_SCENES := {
+	"title": "res://scenes/title/title_screen.tscn",
+	"nationality_select": "res://scenes/title/nationality_select.tscn",
+	"creation": "res://scenes/title/creation_screen.tscn",
+}
+
+
+## The W2-B fixture dispatch (no-op for `title`).
+func _rig_w2b(screen_id: String) -> void:
+	match screen_id:
+		"nationality_select":
+			_rig_w2b_player()
+		"creation":
+			_rig_w2b_player()
+			CreationCaptureLib.pending_nation_id = "portugal"
+		_:
+			pass  # title — no game state
+
+
+## The minimal `GameState.player` skeleton (the suites' fixture shape).
+func _rig_w2b_player() -> void:
+	GameState.player = {
+		"nation_id": "portugal",
+		"stats": {"leadership": 10, "seamanship": 10, "combat": 10,
+			"navigation": 10, "luck": 10},
+		"xp": 0, "level": 1, "officers": [], "reputation": {},
+	}
+	for nation in ["portugal", "spain", "england", "holland", "ottoman",
+			"italy"]:
+		GameState.player["reputation"][nation] = 0
+
+
+## The post-mount drive. The creation rig walks the fresh screen into step
+## ② (the free points) so the fragment carries BOTH steps' elements: the
+## step-① cards stay registered (hidden) with their rects, the step-② point
+## elements build and register on entry.
+func _post_mount_w2b(screen_id: String, screen_root: Control) -> void:
+	if screen_id != "creation":
+		return
+	(screen_root as Node).call("confirm_selection")  # step ① → ②
+	for i in range(SETTLE_FRAMES):
+		await get_tree().process_frame
+
+
+# --- end rig: W2-B -------------------------------------------------------------
+
+
 ## The v2 fragment for one captured screen: parent-relative element
 ## rects + list blocks derived from the list-member registrations.
 func _dump_fragment(screen_id: String) -> Dictionary:
 	var rows: Array = RegistryLib.capture_rows(screen_id)
 	if rows.is_empty():
-		push_error("layout_capture: %s has no registered rows — run it "
-				+ "after the id pass" % screen_id)
+		push_error(("layout_capture: %s has no registered rows — run it "
+				+ "after the id pass") % screen_id)
 		return {}
 	var elements := {}
 	var list_members := {}

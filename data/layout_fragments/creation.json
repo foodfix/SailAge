@@ -1,0 +1,623 @@
+{
+  "elements": {
+    "back": {
+      "h": 2,
+      "w": 5,
+      "x": 24,
+      "y": 29
+    },
+    "background": {
+      "h": 34,
+      "w": 60,
+      "x": 0,
+      "y": 0
+    },
+    "cards": {
+      "h": 16,
+      "w": 35,
+      "x": 13,
+      "y": 10
+    },
+    "cards.background_cartographer_apprentice": {
+      "h": 8,
+      "w": 11,
+      "x": 0,
+      "y": 8
+    },
+    "cards.background_cartographer_apprentice.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_cartographer_apprentice.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_cartographer_apprentice.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "cards.background_deckhand": {
+      "h": 8,
+      "w": 11,
+      "x": 0,
+      "y": 0
+    },
+    "cards.background_deckhand.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_deckhand.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_deckhand.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "cards.background_fencing_student": {
+      "h": 8,
+      "w": 11,
+      "x": 24,
+      "y": 8
+    },
+    "cards.background_fencing_student.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_fencing_student.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_fencing_student.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "cards.background_merchant_apprentice": {
+      "h": 8,
+      "w": 11,
+      "x": 24,
+      "y": 0
+    },
+    "cards.background_merchant_apprentice.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_merchant_apprentice.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_merchant_apprentice.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "cards.background_navy_cadet": {
+      "h": 8,
+      "w": 11,
+      "x": 12,
+      "y": 0
+    },
+    "cards.background_navy_cadet.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_navy_cadet.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_navy_cadet.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "cards.background_tavern_errand": {
+      "h": 8,
+      "w": 11,
+      "x": 12,
+      "y": 8
+    },
+    "cards.background_tavern_errand.bio": {
+      "h": 3,
+      "w": 9,
+      "x": 1,
+      "y": 2
+    },
+    "cards.background_tavern_errand.bonus": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 5
+    },
+    "cards.background_tavern_errand.name": {
+      "h": 1,
+      "w": 9,
+      "x": 1,
+      "y": 1
+    },
+    "confirm": {
+      "h": 2,
+      "w": 8,
+      "x": 29,
+      "y": 29
+    },
+    "points": {
+      "h": 15,
+      "w": 20,
+      "x": 20,
+      "y": 9
+    },
+    "points.attr_header": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.charisma": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 3
+    },
+    "points.attrs.charisma.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.attrs.charisma.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.charisma.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.attrs.charisma.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.attrs.constitution": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 1
+    },
+    "points.attrs.constitution.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.attrs.constitution.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.constitution.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.attrs.constitution.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.attrs.courage": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 4
+    },
+    "points.attrs.courage.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.attrs.courage.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.courage.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.attrs.courage.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.attrs.intellect": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 2
+    },
+    "points.attrs.intellect.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.attrs.intellect.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.intellect.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.attrs.intellect.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.attrs.luck": {
+      "h": 1,
+      "w": 10,
+      "x": 0,
+      "y": 5
+    },
+    "points.attrs.luck.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.attrs.luck.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.attrs.luck.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.attrs.luck.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.preview.duel": {
+      "h": 1,
+      "w": 19,
+      "x": 0,
+      "y": 14
+    },
+    "points.preview.sighting": {
+      "h": 1,
+      "w": 19,
+      "x": 0,
+      "y": 12
+    },
+    "points.preview.speed": {
+      "h": 1,
+      "w": 19,
+      "x": 0,
+      "y": 13
+    },
+    "points.skill_header": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 0
+    },
+    "points.skills.appraisal": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 5
+    },
+    "points.skills.appraisal.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.appraisal.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.appraisal.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.appraisal.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.cartography": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 7
+    },
+    "points.skills.cartography.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.cartography.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.cartography.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.cartography.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.gunnery": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 4
+    },
+    "points.skills.gunnery.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.gunnery.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.gunnery.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.gunnery.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.navigation": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 2
+    },
+    "points.skills.navigation.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.navigation.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.navigation.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.navigation.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.negotiation": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 6
+    },
+    "points.skills.negotiation.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.negotiation.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.negotiation.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.negotiation.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.rumour": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 8
+    },
+    "points.skills.rumour.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.rumour.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.rumour.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.rumour.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.seamanship": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 1
+    },
+    "points.skills.seamanship.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.seamanship.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.seamanship.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.seamanship.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.skills.swordplay": {
+      "h": 1,
+      "w": 10,
+      "x": 10,
+      "y": 3
+    },
+    "points.skills.swordplay.add": {
+      "h": 1,
+      "w": 2,
+      "x": 8,
+      "y": 0
+    },
+    "points.skills.swordplay.name": {
+      "h": 1,
+      "w": 4,
+      "x": 0,
+      "y": 0
+    },
+    "points.skills.swordplay.sub": {
+      "h": 1,
+      "w": 2,
+      "x": 6,
+      "y": 0
+    },
+    "points.skills.swordplay.value": {
+      "h": 1,
+      "w": 1,
+      "x": 4,
+      "y": 0
+    },
+    "points.spend_hint": {
+      "h": 1,
+      "w": 11,
+      "x": 7,
+      "y": 10
+    },
+    "points.spread": {
+      "h": 2,
+      "w": 6,
+      "x": 0,
+      "y": 10
+    },
+    "prompt": {
+      "h": 1,
+      "w": 58,
+      "x": 1,
+      "y": 8
+    },
+    "title": {
+      "h": 2,
+      "w": 58,
+      "x": 1,
+      "y": 6
+    }
+  },
+  "lists": {}
+}

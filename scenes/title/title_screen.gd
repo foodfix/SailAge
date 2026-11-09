@@ -6,6 +6,13 @@ extends Control
 ## and grid spacing come from Palette (docs/80-UI-UX.md §4.8) so the scene
 ## cannot drift from the locked values.
 ##
+## **Phase-12 W2-B absolute layout** (docs/80-UI-UX.md §4.8.9): the node tree
+## IS the element tree — every control is a direct child of the screen root,
+## absolutely placed on the 32×32 chrome-tile grid (the `Center`/`Stack`/
+## `Buttons` flow containers are deleted; the committed v2 table in
+## `data/ui_layout.json` is the layout, applied by `LayoutRegistry` at the
+## end of `_ready`; the authored offsets mirror the data rows).
+##
 ## **Load** (T17, docs/80-* §4.6): the button opens `SaveSystem`'s 3-slot dialog
 ## in Load mode; the load itself (validate → restore → route to S4 when the save
 ## was taken in port, else S3) is owned by `SaveSystem`, so this screen only
@@ -17,6 +24,10 @@ extends Control
 ## the scene also runs before the editor has written Godot's global-class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-12 W2-B (docs/80-UI-UX.md §4.8.9): the absolute-tile layout registry.
+## Every persistent control registers under a stable flat id (`title.new_game`)
+## and `screen_active` applies the committed v2 table at the end of `_ready`.
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 ## Phase-10 shared theme (docs/80-UI-UX.md §4.9). Preloaded like PaletteLib so
 ## the scene also runs before Godot's global-class cache exists.
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
@@ -35,17 +46,15 @@ const SANDBOX_SCENE := "res://scenes/combat/battle_sandbox.tscn"
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 
 @onready var _background: Panel = $Background
-@onready var _stack: VBoxContainer = $Center/Stack
-@onready var _title: Label = $Center/Stack/GameTitle
-@onready var _subtitle: Label = $Center/Stack/Subtitle
-@onready var _phase_tag: Label = $Center/Stack/PhaseTag
-@onready var _buttons: VBoxContainer = $Center/Stack/Buttons
-@onready var _new_game_button: Button = $Center/Stack/Buttons/NewGame
-@onready var _sandbox_button: Button = $Center/Stack/Buttons/Sandbox
-@onready var _load_button: Button = $Center/Stack/Buttons/Load
-@onready var _settings_button: Button = $Center/Stack/Buttons/Settings
-@onready var _quit_button: Button = $Center/Stack/Buttons/Quit
-@onready var _data_error: Label = $Center/Stack/DataError
+@onready var _title: Label = $GameTitle
+@onready var _subtitle: Label = $Subtitle
+@onready var _phase_tag: Label = $PhaseTag
+@onready var _new_game_button: Button = $NewGame
+@onready var _sandbox_button: Button = $Sandbox
+@onready var _load_button: Button = $Load
+@onready var _settings_button: Button = $Settings
+@onready var _quit_button: Button = $Quit
+@onready var _data_error: Label = $DataError
 
 ## Routing switch for the New-game edge (the `GameState.new_game(route)` and
 ## `PortScreen.route_to_world` convention): with `false` the intent is still
@@ -93,6 +102,33 @@ func _ready() -> void:
 	EventBus.locale_changed.connect(_on_locale_changed)
 	SettingsPanelLib.attach_to(self)
 	_bind()
+	# Phase-12 W2-B: the id registry — every persistent control under its
+	# stable id, then one activation that applies the committed layout
+	# (a no-op walk until master assembles the v2 table at the merge gate).
+	_register_ids()
+	RegistryLib.screen_active("title", self)
+
+
+## The title screen's element ids (docs/80-* §4.8.9): flat, meaningful,
+## screen-prefixed. The settings modal is NOT registered here — it is the
+## `settings` screen's concern (its own W2 slot).
+func _register_ids() -> void:
+	RegistryLib.register("title", _background, "background",
+		{"role": RegistryLib.ROLE_PANEL})
+	RegistryLib.register("title", _title, "game_title")
+	RegistryLib.register("title", _subtitle, "subtitle")
+	RegistryLib.register("title", _phase_tag, "phase_tag")
+	RegistryLib.register("title", _new_game_button, "new_game",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("title", _sandbox_button, "sandbox",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("title", _load_button, "load",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("title", _settings_button, "settings",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("title", _quit_button, "quit",
+		{"role": RegistryLib.ROLE_BUTTON})
+	RegistryLib.register("title", _data_error, "data_error")
 
 
 ## Opens the New-game edge (S1 → S2, docs/80-* §4.2).
@@ -175,6 +211,9 @@ func _bind() -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	_bind()
+	# The text min may cross a tile boundary in the other locale — re-apply
+	# so the committed rects stay authoritative (idempotent).
+	RegistryLib.apply_layout("title")
 
 
 func _on_quit() -> void:
