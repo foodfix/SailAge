@@ -641,10 +641,21 @@ func _bind_officers() -> void:
 			I18n.t_key("tavern.no_officers"), "Empty"
 		)
 		_recruitable.add_child(empty)
-		_place(empty, Rect2i(0, 0, RECRUITABLE_W, 1))
+		# The empty marker is a `recruitable` LIST MEMBER placed at the
+		# block's row 0 (the coverage check exempts list members — the
+		# seeded capture never sees the empty state; docs/80-* §4.8.9).
+		var rect := RegistryLib.list_rect(LAYOUT_SCREEN, RECRUITABLE_LIST,
+				0)
+		if rect == Rect2():
+			rect = Rect2(Vector2.ZERO,
+					Vector2(RECRUITABLE_W, RECRUITABLE_ROW_H) * float(TILE))
+		empty.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		empty.position = rect.position
+		empty.size = rect.size
 		recruit_entries.append({
 			"control": empty, "id": "officers.recruitable.empty",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
+			"opts": {"role": RegistryLib.ROLE_PLAIN,
+				"list": RECRUITABLE_LIST},
 		})
 	for officer_id in available:
 		_build_recruitable_row(str(officer_id), recruit_index,
@@ -1141,7 +1152,8 @@ func _bind_investment_row(row: Dictionary, entries: Array,
 		index += 1
 		entries.append({
 			"control": header, "id": "rumors.rows.invest_header",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
+			"opts": {"role": RegistryLib.ROLE_PLAIN,
+				"list": RUMORS_LIST},
 		})
 	var text := I18n.fmt("tavern.invest.row", {
 		"nation": str(row.get("nation_name", "-")),
@@ -1456,11 +1468,11 @@ func place_spar_bet() -> Dictionary:
 	return last_spar
 
 
-## Appends the bout's result line (the win/lose `tavern.spar.*` texts with the
-## gold amount composed in) at the spar section's result slot — right of the
-## terms line. [method _bind_spar] re-appends it after every rebuild, so the
-## line survives the `gold_changed` refresh. Returns the line (the spar
-## registration's read).
+## Appends the bout's result line (the win/lose `tavern.spar.*` texts with
+## the gold amount composed in) into the persistent `spar.result` slot —
+## right of the terms line. `_bind_spar` re-fills it after every rebuild,
+## so the line survives the `gold_changed` refresh. Returns the line (the
+## spar registration's read).
 func _append_spar_result(result: Dictionary) -> Control:
 	if _spar_box == null:
 		return null
@@ -1468,14 +1480,32 @@ func _append_spar_result(result: Dictionary) -> Control:
 		else "tavern.spar.lose"
 	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
 		if bool(result.get("won", false)) else int(result.get("stake", 0))
-	var line := _make_label(_fmt(key, {"gold": gold}), "SparResult")
+	var line := _spar_box.get_node_or_null("SparResult")
+	if line == null:
+		# No bind yet (the bout precedes the first bind): build the
+		# persistent slot now; the next rebuild re-uses it.
+		line = _make_label("", "SparResult")
+		_spar_box.add_child(line)
+		_place(line, SPAR_RESULT_RECT)
+		RegistryLib.register(LAYOUT_SCREEN, line, "spar.result",
+			{"role": RegistryLib.ROLE_PLAIN})
+	_fill_spar_result(line, result)
+	line.visible = true
+	return line
+
+
+## One result line's text + §4.8 tier tint (the theme's `Good`/`Warn`
+## variations).
+func _fill_spar_result(line: Control, result: Dictionary) -> void:
+	var key := "tavern.spar.win" if bool(result.get("won", false)) \
+		else "tavern.spar.lose"
+	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
+		if bool(result.get("won", false)) else int(result.get("stake", 0))
+	line.text = _fmt(key, {"gold": gold})
 	# The bout outcome's §4.8 tier tint rides the theme's `Good` / `Warn`
 	# variations.
 	line.theme_type_variation = "Good" if bool(result.get("won", false)) \
 		else "Warn"
-	_spar_box.add_child(line)
-	_place(line, SPAR_RESULT_RECT)
-	return line
 
 
 ## Rebinds the sparring row from state: the title, the stake + win-chance
@@ -1543,14 +1573,26 @@ func _bind_spar() -> void:
 			"opts": {"role": RegistryLib.ROLE_BUTTON}},
 	])
 
-	# The latest bout's result line survives every rebuild (the reveal-text
+	# The result slot is a PERSISTENT registered static (the guild's
+	# `offers.empty` pattern): the label exists every rebuild, hidden
+	# until a bout has run — the seeded capture never sees a bout, so a
+	# conditionally-registered id would carry no rect row and fire the
+	# coverage fallback after every real bout (the empty-marker class).
+	var result := _make_label("", "SparResult")
+	result.theme_type_variation = "Good"
+	result.visible = false
+	_spar_box.add_child(result)
+	_place(result, SPAR_RESULT_RECT)
+	entries.append({
+		"control": result, "id": "spar.result",
+		"opts": {"role": RegistryLib.ROLE_PLAIN},
+	})
+
+	# The latest bout's result survives every rebuild (the reveal-text
 	# discipline: the answer stays after the refresh).
 	if not last_spar.is_empty():
-		var line := _append_spar_result(last_spar)
-		entries.append({
-			"control": line, "id": "spar.result",
-			"opts": {"role": RegistryLib.ROLE_PLAIN},
-		})
+		_fill_spar_result(result, last_spar)
+		result.visible = true
 	_register_dynamic("spar", entries)
 
 

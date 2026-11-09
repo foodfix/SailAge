@@ -366,8 +366,12 @@ func _rebuild_port() -> void:
 		close()
 		port_action.emit("dock", _port_id))
 	dock_row.add_child(dock)
+	# A `fleet_rows` list-member part (the coverage check exempts list
+	# members — the picker's dock/appoint variant only builds on a
+	# docked fleet; docs/80-* §4.8.9).
 	RegistryLib.register("fleet_picker", dock,
-		"fleet_rows.dock.button", {"role": "button"})
+		"fleet_rows.dock.button",
+		{"role": "button", "list": LIST_FLEET_ROWS})
 	# 委任航行 appoint voyage (§4.10.3/§4.10.4): grayed with the
 	# `sail.autopilot` gate reason when the gate fails.
 	var appoint_row := _new_list_row("appoint")
@@ -381,7 +385,8 @@ func _rebuild_port() -> void:
 		port_action.emit("appoint", _port_id))
 	appoint_row.add_child(appoint)
 	RegistryLib.register("fleet_picker", appoint,
-		"fleet_rows.appoint.button", {"role": "button"})
+		"fleet_rows.appoint.button",
+		{"role": "button", "list": LIST_FLEET_ROWS})
 	_port_buttons = {"dock": dock, "appoint": appoint}
 	_set_status("" if _appoint_enabled else _appoint_reason)
 

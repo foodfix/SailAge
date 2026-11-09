@@ -117,3 +117,4 @@ func _probe(screen_id: String) -> void:
 						str(expected.position)])
 	screen_root.queue_free()
 	await get_tree().process_frame
+
