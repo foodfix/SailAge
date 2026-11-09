@@ -106,5 +106,26 @@ slot's file inventory:
 
 ## 6. Status log
 
-- **W0+W1 (2026-11-09): launched** — master direct (no parallelism;
-  the seam defines every contract the parallel wave codes against).
+- **W0+W1 (2026-11-09): ✅ complete** — master direct, one commit
+  (`d771c26` on the integration branch). W0: `80-*` §4.8.9, `90-*`
+  §5.7 + §4 tree + the autoload table (7th, flag-gated), `10-*`
+  §4.23 + §8.9 + the §8 exit table row, this file. W1:
+  `DataLoader.ui_layout` (light shape check; ships `{}`),
+  `scripts/ui/layout_registry.gd` (register/screen_active/apply/
+  apply_overrides/revert/reset_screen/tree; baselines, self-pruning,
+  the `data_ordered` lock), `UiTheme.sheet_override` +
+  `clear_sheet_override` (all stylebox construction stays in
+  `ui_theme.gd`), `data/ui_layout.json` (`{}`),
+  `check_group14` + `--self-test-g14` (13 cases green), and
+  `tools/test_layout_registry.gd` (34 checks, ALL PASS).
+  Gates at the commit: `validate_data.py` exit 0 (groups 1–14);
+  the full suite sweep 64/64 green (388 s, zombie/hang 0, the new
+  registry suite included) and `run_tests.py --only test_ui_` 5/5
+  green incl. the styling audit (allowlist still empty).
+- **Parallel wave launched (2026-11-09)** — four background slots, one
+  worktree + branch each off the W1 commit: A `phase11/bridge`
+  (LayoutBridge + suite), B `phase11/port-a` (port/market/provisions/
+  shipyard id pass), C `phase11/port-b` (inn/guild/palace/tavern id
+  pass), D `phase11/studio` (the Layout tab + commit endpoints).
+  Merge order A → B → C → D with the validator + suite gates after
+  each merge.
