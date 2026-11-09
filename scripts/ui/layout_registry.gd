@@ -316,14 +316,20 @@ static func _apply(rec: Dictionary, control: Control,
 	if overrides.has("anchor"):
 		_apply_anchor(control, overrides)
 	elif kind == KIND_FREE:
+		# Capture BEFORE the anchor reset (the 2026-11-09 resize fix):
+		# `set_anchors_preset` rewrites the offsets for the new point
+		# anchors, so a `size` read after it is the reset's artifact —
+		# a resize-only override collapsed every non-overridden axis of
+		# a non-point-anchored control (full-rect panels) to its content
+		# floor (the "a bit wider or taller" report).
 		var pos := control.position
+		var size := control.size
 		if overrides.has("x"):
 			pos.x = float(int(overrides["x"]) * TILE)
 		if overrides.has("y"):
 			pos.y = float(int(overrides["y"]) * TILE)
 		control.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		control.position = pos
-		var size := control.size
 		if overrides.has("w"):
 			size.x = float(int(overrides["w"]) * TILE)
 		if overrides.has("h"):

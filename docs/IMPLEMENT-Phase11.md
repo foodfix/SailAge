@@ -248,3 +248,13 @@ slot's file inventory:
   so replies carry settled rects; tree rows carry `min_tiles` (the
   content drag floor) and the studio clamps drags to it. Registry suite
   42 checks; bridge 31 (deferred replies green); port_hub 327.
+- **The anchor-reset capture fix (2026-11-09, resize round 5):** the
+  free branch read the control's `size` AFTER `set_anchors_preset` —
+  for non-point-anchored controls (full-rect background panels) that
+  read is the reset's collapse artifact, so a resize-only override
+  collapsed the non-overridden axes to the content floor. Position and
+  size are now captured BEFORE the reset and the overrides apply to
+  the captured values; the settled rect is exactly the dragged tile
+  multiple at the authored position. Registry suite 45 checks (the
+  resize-only full-rect scenario pinned); bridge/port_hub/market
+  suites green.

@@ -151,6 +151,36 @@ func _test_free_child() -> void:
 			"free child: revert restores the baseline position")
 	_drop_root(root)
 	await get_tree().process_frame
+	await _test_free_resize_only_no_collapse()
+
+
+## The 2026-11-09 resize report: a resize-only override (w/h, NO x/y) on
+## a control whose authored anchors are NOT point-shaped (a full-rect
+## background Panel) must not collapse its rect — the anchor reset
+## happens with position/size captured BEFORE it, so the non-overridden
+## axes keep their authored extents and the settled rect is exactly the
+## dragged tile multiple.
+func _test_free_resize_only_no_collapse() -> void:
+	var root := _rig()
+	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(panel)  # 1920×1080 authored rect (60×33 tiles)
+	RegistryLib.register("market", panel, "background",
+			{"kind": "free", "role": "panel"})
+	RegistryLib.screen_active("market", root)
+	RegistryLib.set_table_for_tests({
+		"market": {"background": {"w": 8, "h": 2}},
+	})
+	RegistryLib.apply_screen("market")
+	var tile := float(RegistryLib.TILE)
+	_check(panel.size == Vector2(8 * tile, 2 * tile),
+			"resize-only free: the settled size is the dragged tiles")
+	_check(panel.position == Vector2.ZERO,
+			"resize-only free: the authored position is preserved")
+	_check(panel.anchor_right == 0.0 and panel.anchor_bottom == 0.0,
+			"resize-only free: the anchors are point-shaped for edits")
+	_drop_root(root)
+	await get_tree().process_frame
 
 
 # --- 3. Anchored --------------------------------------------------------------
