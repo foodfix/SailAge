@@ -218,6 +218,14 @@ func _test_container_child() -> void:
 	var tile := float(RegistryLib.TILE)
 	_check(b.custom_minimum_size == Vector2(4 * tile, 2 * tile),
 			"container child: min_w/min_h → custom_minimum_size")
+	# The min-authoritative flag pin (the drag-resize fix): a min
+	# override on a container child stops the parent's stretch — the
+	# control measures exactly the dragged min (the user-reported
+	# "after release the box width goes to max" was the parent's FILL
+	# stretch re-winning over the min).
+	_check(b.size_flags_horizontal == Control.SIZE_SHRINK_BEGIN
+			and b.size_flags_vertical == Control.SIZE_SHRINK_BEGIN,
+			"container child: the min override pins shrink-begin flags")
 	_check(b.get_index() == 0,
 			"container child: order moves the sibling index")
 	_check(c.get_index() == 2,
@@ -227,6 +235,10 @@ func _test_container_child() -> void:
 	RegistryLib.revert_element("market", "rows.copper")
 	_check(b.custom_minimum_size == Vector2.ZERO and b.get_index() == 1,
 			"container child: revert restores min-size + index")
+	_check(b.size_flags_horizontal != Control.SIZE_SHRINK_BEGIN
+			or b.size_flags_vertical != Control.SIZE_SHRINK_BEGIN,
+			"container child: revert un-pins the shrink flags (the "
+			+ "parent's stretch is the default again)")
 	# Container-owned geometry (the 2026-11-09 live-session fix): the
 	# baseline captured position/size at _ready — BEFORE the parent's
 	# first layout pass — so a child revert must NOT restore them (the

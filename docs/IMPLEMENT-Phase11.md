@@ -226,3 +226,13 @@ slot's file inventory:
   inspector's min_w/min_h fields are now override-only (empty = code
   default; the live rect lives in the meta block). Registry suite 38
   checks; the bounds + port-screen suites green.
+- **The min-authoritative flag pin (2026-11-09, drag-resize round 3):**
+  the user's "after release the box width goes to max" — the stored
+  min_w was correct; the DRAWING rendered the control's actual rect,
+  and with the default FILL flags the parent re-stretched it to max
+  the moment the min applied. A min override on a container child now
+  also pins BOTH size flags to shrink-begin — the control measures
+  exactly the dragged min (the drag is authoritative on both axes) —
+  and child revert restores the captured flags. Registry suite 40
+  checks; port_hub/market suites green. The 80-* §4.8.9 child-resize
+  cell gains the flag-pin note.

@@ -197,6 +197,8 @@ static func _capture(control: Control) -> Dictionary:
 			control.anchor_right, control.anchor_bottom],
 		"offsets": [control.offset_left, control.offset_top,
 			control.offset_right, control.offset_bottom],
+		"flags": [control.size_flags_horizontal,
+			control.size_flags_vertical],
 	}
 
 
@@ -284,6 +286,19 @@ static func _apply(rec: Dictionary, control: Control,
 	if overrides.has("min_h"):
 		min_size.y = float(int(overrides["min_h"]) * TILE)
 	control.custom_minimum_size = min_size
+	# The min-authoritative flag pin (the 2026-11-09 drag-resize fix):
+	# with the default FILL flags the parent's allotted size always won —
+	# a min override could only ever GROW a stretched child, and the
+	# studio's dragged box snapped back to max width on release. A min
+	# override on a container child therefore pins BOTH size flags to
+	# shrink-begin: the control measures exactly its custom min (the
+	# dragged size), aligned to the flow origin. Revert restores the
+	# captured flags; with no override the parent's stretch is untouched.
+	if kind == KIND_CHILD and (overrides.has("min_w")
+			or overrides.has("min_h")) \
+			and control.get_parent() is Container:
+		control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		control.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	# 3. Geometry.
 	if overrides.has("anchor"):
 		_apply_anchor(control, overrides)
@@ -392,8 +407,14 @@ static func revert_element(screen_id: String, id: String) -> void:
 		# pass, so restoring them slammed a stale pre-layout size onto the
 		# control (the reported facility_grid 58 → 20 shrink). A child
 		# revert restores only what the code owns: the min-size floor,
-		# the sibling slot, and the sheet.
+		# the sibling slot, the sheet, and the size flags (the min-
+		# override flag pin — a stretched child with a min override runs
+		# shrink-begin, and reverting the override must un-pin it).
 		control.custom_minimum_size = baseline["min"]
+		var flags: Array = baseline.get("flags", [])
+		if flags.size() == 2:
+			control.size_flags_horizontal = flags[0]
+			control.size_flags_vertical = flags[1]
 		var parent := control.get_parent()
 		if parent != null:
 			parent.move_child(control,
