@@ -259,6 +259,17 @@ slot's file inventory:
   the tree. The element list indents by parent-chain depth (└ prefix +
   18 px per level) so the hierarchy reads at a glance. Registry suite
   55 checks (the parent-bounds clamp pinned).
+- **The facility-grid re-parent (2026-11-09, user direction — "cards
+  belong to facility_grid; why do we need pair.0?"):** the §4.8.1
+  two-per-line pair HBoxes are the grid's PLUMBING, not meaningful
+  elements — they are no longer registered (the nodes stay; the layout
+  needs them), so `cards.<facility_id>` (+ `.name`/`.status`) now
+  report `facility_grid` as their registered parent directly. A
+  headless nest audit (`tools/nest_audit.gd/.tscn`, a kept diagnostic)
+  boots the REAL port screen and verifies every registered row nests
+  inside its registered parent: 30/30 rows OK. W3-B's registered-id
+  count for port drops by the 3 pair rows (33 → 30); order on the grid
+  stays locked via the cards' own `data_ordered` registration.
 - **The grid guarantee (2026-11-09, drag-resize round 4, user
   direction — "make ALL elements on the 32×32 grid"):** the resize
   fight's root cause — content minimums are font-metric and off-grid,

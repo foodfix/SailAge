@@ -800,12 +800,10 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			pair = HBoxContainer.new()
 			pair.name = "Pair_%d" % _facility_rows.get_child_count()
 			_facility_rows.add_child(pair)
-			# Phase-11 W3-B (docs/80-* §4.8.9): the grid's two-per-line rows
-			# are part of the §4.8.1 fixed grid — a data contract, so their
-			# sibling order is locked (`data_ordered`).
-			RegistryLib.register("port", pair,
-				"facility_grid.pair.%d" % pair.get_index(),
-				{"data_ordered": true})
+		# The pair HBox itself is the grid's two-per-line PLUMBING, not a
+		# meaningful element (2026-11-09 user direction — cards belong to
+		# facility_grid): it is deliberately NOT registered, so the cards'
+		# registered parent chain skips straight to facility_grid.
 		pair.add_child(button)
 		button.set_meta("status_key", status_key)
 		if not enabled:
