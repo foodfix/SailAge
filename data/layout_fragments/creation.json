@@ -97,7 +97,7 @@
       "y": 0
     },
     "cards.background_merchant_apprentice.bio": {
-      "h": 3,
+      "h": 4,
       "w": 9,
       "x": 1,
       "y": 2
@@ -121,7 +121,7 @@
       "y": 0
     },
     "cards.background_navy_cadet.bio": {
-      "h": 3,
+      "h": 4,
       "w": 9,
       "x": 1,
       "y": 2
@@ -145,7 +145,7 @@
       "y": 8
     },
     "cards.background_tavern_errand.bio": {
-      "h": 3,
+      "h": 4,
       "w": 9,
       "x": 1,
       "y": 2
