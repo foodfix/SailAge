@@ -4903,62 +4903,62 @@
         },
         "player_panel": {
           "h": 13,
-          "w": 59,
+          "w": 58,
           "x": 1,
           "y": 2
         },
         "player_panel.rows": {
-          "h": 10,
+          "h": 7,
           "w": 56,
           "x": 1,
-          "y": 3
+          "y": 5
         },
         "player_panel.stats_row": {
-          "h": 2,
-          "w": 58,
+          "h": 4,
+          "w": 56,
           "x": 1,
           "y": 1
         },
         "player_panel.stats_row.add": {
           "h": 2,
           "w": 2,
-          "x": 54,
-          "y": 0
+          "x": 7,
+          "y": 2
         },
         "player_panel.stats_row.armor": {
           "h": 2,
-          "w": 7,
-          "x": 42,
+          "w": 11,
+          "x": 39,
           "y": 0
         },
         "player_panel.stats_row.armor.field": {
           "h": 2,
           "w": 7,
-          "x": 0,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.armor.label": {
           "h": 2,
           "w": 2,
-          "x": 5,
+          "x": 0,
           "y": 0
         },
         "player_panel.stats_row.charisma": {
           "h": 2,
           "w": 7,
-          "x": 14,
+          "x": 13,
           "y": 0
         },
         "player_panel.stats_row.charisma.field": {
           "h": 2,
           "w": 3,
-          "x": 4,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.charisma.label": {
           "h": 2,
           "w": 4,
-          "x": 3,
+          "x": 0,
           "y": 0
         },
         "player_panel.stats_row.constitution": {
@@ -4970,7 +4970,7 @@
         "player_panel.stats_row.constitution.field": {
           "h": 2,
           "w": 3,
-          "x": 4,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.constitution.label": {
@@ -4982,19 +4982,19 @@
         "player_panel.stats_row.courage": {
           "h": 2,
           "w": 7,
-          "x": 21,
+          "x": 19,
           "y": 0
         },
         "player_panel.stats_row.courage.field": {
           "h": 2,
           "w": 3,
-          "x": 4,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.courage.label": {
           "h": 2,
           "w": 4,
-          "x": 3,
+          "x": 0,
           "y": 0
         },
         "player_panel.stats_row.intellect": {
@@ -5006,73 +5006,73 @@
         "player_panel.stats_row.intellect.field": {
           "h": 2,
           "w": 3,
-          "x": 4,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.intellect.label": {
           "h": 2,
           "w": 4,
-          "x": 3,
+          "x": 0,
           "y": 0
         },
         "player_panel.stats_row.luck": {
           "h": 2,
           "w": 7,
-          "x": 28,
+          "x": 24,
           "y": 0
         },
         "player_panel.stats_row.luck.field": {
           "h": 2,
           "w": 3,
-          "x": 4,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.luck.label": {
           "h": 2,
           "w": 4,
-          "x": 3,
+          "x": 1,
           "y": 0
         },
         "player_panel.stats_row.morale": {
           "h": 2,
-          "w": 5,
-          "x": 49,
-          "y": 0
+          "w": 7,
+          "x": 0,
+          "y": 2
         },
         "player_panel.stats_row.morale.field": {
           "h": 2,
           "w": 3,
-          "x": 2,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.morale.label": {
           "h": 2,
           "w": 2,
-          "x": 3,
+          "x": 0,
           "y": 0
         },
         "player_panel.stats_row.remove": {
           "h": 2,
           "w": 2,
-          "x": 56,
-          "y": 0
+          "x": 9,
+          "y": 2
         },
         "player_panel.stats_row.weapon": {
           "h": 2,
-          "w": 7,
-          "x": 35,
+          "w": 12,
+          "x": 30,
           "y": 0
         },
         "player_panel.stats_row.weapon.field": {
           "h": 2,
           "w": 6,
-          "x": 1,
+          "x": 2,
           "y": 0
         },
         "player_panel.stats_row.weapon.label": {
           "h": 2,
           "w": 2,
-          "x": 5,
+          "x": 0,
           "y": 0
         },
         "title": {
