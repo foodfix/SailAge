@@ -3534,7 +3534,9 @@ data.
   apply paths (the `tree()` dump still reports a kind for the
   inspector's wording); the 4-frame settle-delay reply (one deferred
   frame remains); the min-tiles content-floor override dance (the
-  content min stays as a clamp against text clipping, not a flow).
+  content min stays as a clamp against text clipping, not a flow);
+  the resize-repro debug trail (removed 2026-11-10, user direction —
+  the per-element `[LayoutBridge]` log spam on every screen change).
 - **Live bridge (debug-gated):** the game launched with
   `godot --path . -- --layout-bridge` runs `LayoutBridge` (autoload #7,
   `90-*` §5.7) — a one-client `WebSocketPeer` server on

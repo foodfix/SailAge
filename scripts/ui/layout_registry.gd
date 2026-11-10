@@ -107,10 +107,9 @@ const FALLBACK_TILES := Rect2i(0, 0, 2, 2)
 # --- State -------------------------------------------------------------------
 
 ## screen_id → {id → record}. Records: `{control: WeakRef, role: String,
-## list: String, data_ordered: bool, baseline: Dictionary (trail only),
-## sheet: String, applied: Dictionary (the last applied rect — the edit
-## base), data_rect: Dictionary (the data row at activation — the
-## revert target)}`.
+## list: String, data_ordered: bool, sheet: String, applied: Dictionary
+## (the last applied rect — the edit base), data_rect: Dictionary (the
+## data row at activation — the revert target)}`.
 static var _screens: Dictionary = {}
 ## screen_id → WeakRef of the root Control (the kind-wording reference).
 static var _roots: Dictionary = {}
@@ -158,7 +157,6 @@ static func register(screen_id: String, control: Control, id: String,
 		"role": role,
 		"list": String(opts.get("list", "")),
 		"data_ordered": bool(opts.get("data_ordered", false)),
-		"baseline": {},
 		"sheet": "",
 		"applied": {},
 	}
@@ -178,20 +176,14 @@ static func register(screen_id: String, control: Control, id: String,
 	per_screen[id] = rec
 
 
-## The screen's `_ready` hook: pins the active screen + root, captures
-## the trail baselines, applies the data layout, and notifies the
-## bridge (a plain has_method-guarded call — no hard autoload
-## dependency).
+## The screen's `_ready` hook: pins the active screen + root, applies
+## the data layout, and notifies the bridge (a plain has_method-guarded
+## call — no hard autoload dependency).
 static func screen_active(screen_id: String, root: Control) -> void:
 	if not (screen_id in SCREENS) or root == null:
 		return
 	_current = screen_id
 	_roots[screen_id] = weakref(root)
-	for id in _screens.get(screen_id, {}):
-		var rec: Dictionary = _screens[screen_id][id]
-		var control := _live(rec)
-		if control != null and rec["baseline"].is_empty():
-			rec["baseline"] = _capture(control)
 	apply_layout(screen_id)
 	var bridge: Node = Engine.get_main_loop().root.get_node_or_null(
 			"LayoutBridge")
@@ -211,19 +203,6 @@ static func _live(rec: Dictionary) -> Control:
 		return null
 	var obj = ref.get_ref()
 	return obj as Control
-
-
-## One baseline snapshot — the debug trail's BEFORE state only (the
-## Phase-12 revert re-applies the DATA rect; geometry baselines are no
-## longer authoritative).
-static func _capture(control: Control) -> Dictionary:
-	return {
-		"position": control.position,
-		"size": control.size,
-		"min": control.custom_minimum_size,
-		"index": control.get_index(),
-		"parent": weakref(control.get_parent()),
-	}
 
 
 # --- Data reads --------------------------------------------------------------
@@ -554,10 +533,9 @@ static func _registered_ancestor(screen_id: String, control: Control) -> String:
 
 # --- Live revert -------------------------------------------------------------
 
-## Re-applies one element's DATA rect (the Phase-12 revert — geometry
-## baselines are no longer authoritative) and removes its sheet
-## override. An element never applied (an unmanaged screen) is a no-op.
-## The bridge's `revert` message lands here.
+## Re-applies one element's DATA rect (the Phase-12 revert) and removes
+## its sheet override. An element never applied (an unmanaged screen)
+## is a no-op. The bridge's `revert` message lands here.
 static func revert_element(screen_id: String, id: String) -> void:
 	var rec := _record(screen_id, id)
 	if rec.is_empty():
@@ -744,29 +722,6 @@ static func _record(screen_id: String, id: String) -> Dictionary:
 	if rec.is_empty():
 		push_error("LayoutRegistry: %s has no '%s'" % [screen_id, id])
 	return rec
-
-
-## One compact state record for the bridge's debug log (the trail):
-## `{baseline, rect_px, position_px, custom_min_px, content_min_px,
-## flags}` — `{}` when the element is unknown. Read-only; production
-## logging only. (The size flags are reported for trail continuity;
-## the Phase-12 apply path never edits them.)
-static func debug_state(screen_id: String, id: String) -> Dictionary:
-	var rec := _record(screen_id, id)
-	if rec.is_empty():
-		return {}
-	var control := _live(rec)
-	if control == null:
-		return {}
-	var content := control.get_minimum_size()
-	return {
-		"baseline": rec.get("baseline", {}),
-		"rect_px": control.size,
-		"position_px": control.position,
-		"custom_min_px": control.custom_minimum_size,
-		"content_min_px": content,
-		"flags": [control.size_flags_horizontal, control.size_flags_vertical],
-	}
 
 
 ## Test seam: forget every screen's records, roots and fixture table

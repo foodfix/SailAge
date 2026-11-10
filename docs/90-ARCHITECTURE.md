@@ -442,7 +442,11 @@ The studio layout editor's game-side endpoint (`80-*` §4.8.9). Registered
   `LayoutRegistry` (the user watches the real screen move); the reply
   is DEFERRED ONE FRAME (no container cascades remain — the single
   deferred frame is a safety margin, replacing the Phase-11 4-frame
-  settle wait) and carries the fresh `tree` + a `frame`.
+  settle wait) and carries the fresh `tree` + a `frame`. The Phase-11
+  resize-repro debug trail (`[LayoutBridge]` stdout/`user://
+  layout_debug.log` lines) was REMOVED 2026-11-10 (user direction —
+  per-element spam on every screen change); the reply mechanism and
+  the single-writer rule are unchanged.
 - **Single-writer rule:** the studio serializes its session, runs
   `tools/validate_data.py` in-process and writes `data/ui_layout.json`
   on validator pass. The bridge never touches the filesystem.
