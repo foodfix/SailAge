@@ -1231,6 +1231,21 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: the content minimum is the stacked extent "
 			+ "(got %s)" % str(content.custom_minimum_size
 			if content != null else "absent"))
+
+	# The ship-line CELLS register under the member (the 2026-11-11
+	# report: the cells inside player_rows.0 were unmodifiable) and a
+	# cell edit STICKS — the file is the pin for the committed rect.
+	RegistryLib.apply_overrides("sandbox", "player_rows.0.type",
+			{"x": 3, "y": 0, "w": 6, "h": 2})
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var type_cell: Control = live.call("player_rows.0.type")
+	_check(type_cell != null and type_cell.position == Vector2(3, 0) * tile
+			and type_cell.size == Vector2(6, 2) * tile,
+			"cells: a ship-row type-cell edit STICKS (got %s / %s)"
+					% [str(type_cell.position if type_cell != null
+					else "absent"), str(type_cell.size if type_cell != null
+					else "absent")])
 	sandbox.queue_free()
 	await get_tree().process_frame
 

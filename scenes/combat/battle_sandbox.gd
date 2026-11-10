@@ -727,58 +727,56 @@ func _make_ship_row(side: String) -> Dictionary:
 	line.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
 	line.mouse_filter = Control.MOUSE_FILTER_PASS
 
-	var x := 0.0
+	var index := ship_rows(side).size()
+	var member_id := "%s.%d" % [list_id, index]
+	# The line's cells register under the member id (the 2026-11-11 user
+	# report: the cells inside a ship line were unmodifiable) — the same
+	# tile-packed structure as the editors rows, data-driven from the
+	# committed rows. Packing: header 2 + type 7 + cannons 6 + crew 5 +
+	# durability 6 + captain 10 + figurehead 11 + sail 9 = the 56-tile
+	# block width.
+	var cx := 0
 	var header := _field_label("", ROW_HEADER_W)
-	x = _row_cell(line, header, x, ROW_HEADER_W, float(PaletteLib.ROW_H))
+	header.position = Vector2.ZERO
+	header.size = Vector2(2.0 * float(PaletteLib.CHROME_TILE), ROW_PITCH)
+	line.add_child(header)
+	RegistryLib.register(SCREEN_ID, header, "%s.header" % member_id,
+			{"role": "plain"})
+	cx = 2
 	var type := _option(160)
 	for hull in DataLoader.ship_types_list:
 		if not (hull is Dictionary) or str(hull.get("id", "")).is_empty():
 			continue
 		type.add_item(str(hull["id"]))
 		type.set_item_metadata(type.item_count - 1, str(hull["id"]))
-	var cannons_label := _field_label(_t("sandbox.ship.cannons"), LABEL_W_STD)
+	cx = _row_field_bare(line, "%s.type" % member_id, type, cx, 7)
 	var cannons := _spin(0, 0, 0, 96)
-	var crew_label := _field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT)
+	cx = _row_field(line, "%s.cannons" % member_id,
+			_field_label(_t("sandbox.ship.cannons"), LABEL_W_STD),
+			cannons, cx, 3, 3)
 	var crew := _spin(0, 0, 0, 96)
-	var durability_label := _field_label(_t("sandbox.ship.durability"),
-		LABEL_W_DURABILITY)
+	cx = _row_field(line, "%s.crew" % member_id,
+			_field_label(_t("sandbox.ship.crew"), LABEL_W_SHORT),
+			crew, cx, 2, 3)
 	var durability := _spin(1, 1, 1, 96)
-	var captain_label := _field_label(_t("sandbox.ship.captain"), LABEL_W_STD)
+	cx = _row_field(line, "%s.durability" % member_id,
+			_field_label(_t("sandbox.ship.durability"), LABEL_W_DURABILITY),
+			durability, cx, 3, 3)
 	var captain := LineEdit.new()
 	captain.placeholder_text = ""
-	var figurehead_label := _field_label(_t("shipyard.slot.figurehead"),
-		LABEL_W_MID)
+	cx = _row_field(line, "%s.captain" % member_id,
+			_field_label(_t("sandbox.ship.captain"), LABEL_W_STD),
+			captain, cx, 3, 7)
 	var figurehead := _option(160)
 	_fill_equipment_option(figurehead, "figurehead")
-	var sail_label := _field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT)
+	cx = _row_field(line, "%s.figurehead" % member_id,
+			_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID),
+			figurehead, cx, 4, 7)
 	var sail := _option(160)
 	_fill_equipment_option(sail, "sail")
-
-	# The fixed cells' total cursor width (x already carries the header +
-	# its gap), then the four expanding cells split exactly what remains
-	# (the deleted EXPAND_FILL distribution, authored).
-	var fixed := x + (LABEL_W_STD + CELL_GAP + 96.0 + CELL_GAP) \
-		+ (LABEL_W_SHORT + CELL_GAP + 96.0 + CELL_GAP) \
-		+ (LABEL_W_DURABILITY + CELL_GAP + 96.0 + CELL_GAP) \
-		+ (LABEL_W_STD + CELL_GAP) + (LABEL_W_MID + CELL_GAP) \
-		+ (LABEL_W_SHORT + CELL_GAP)
-	# The three gaps BETWEEN the four expanding cells come off the leftover
-	# too (the last cell ends flush with the row's right edge).
-	var expand_w: float = maxf(120.0,
-		(row_w - fixed - 3.0 * CELL_GAP) / 4.0)
-	x = _row_cell(line, type, x, expand_w, ROW_PITCH)
-	x = _row_pair(line, cannons_label, cannons, x, LABEL_W_STD, 96)
-	x = _row_pair(line, crew_label, crew, x, LABEL_W_SHORT, 96)
-	x = _row_pair(line, durability_label, durability, x,
-		LABEL_W_DURABILITY, 96)
-	x = _row_cell(line, captain_label, x, LABEL_W_STD,
-		float(PaletteLib.ROW_H))
-	x = _row_cell(line, captain, x, expand_w, ROW_PITCH)
-	x = _row_cell(line, figurehead_label, x, LABEL_W_MID,
-		float(PaletteLib.ROW_H))
-	x = _row_cell(line, figurehead, x, expand_w, ROW_PITCH)
-	x = _row_cell(line, sail_label, x, LABEL_W_SHORT, float(PaletteLib.ROW_H))
-	x = _row_cell(line, sail, x, expand_w, ROW_PITCH)
+	cx = _row_field(line, "%s.sail" % member_id,
+			_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT),
+			sail, cx, 2, 7)
 
 	var row := {
 		"root": line, "header": header, "type": type, "cannons": cannons,
@@ -791,7 +789,6 @@ func _make_ship_row(side: String) -> Dictionary:
 		if side == "enemy":
 			_sync_enemy_captain(true))
 	var box := _player_rows_box if side == "player" else _enemy_rows_box
-	var index := ship_rows(side).size()
 	# The v2 list block drives the row rect (docs/80-* §4.8.9 — the same
 	# pattern as the market's goods rows); the authored pitch is the
 	# fallback when the block is absent (a suite table without lists).
@@ -1436,6 +1433,11 @@ func _load_config(data: Dictionary) -> void:
 	apply_clamps()
 	_on_compose_toggled(_compose_check.button_pressed)
 	_refresh_fleet_buttons()
+	# The ship-line cells registered AFTER the activation apply (the
+	# fleet builds here) — re-apply so their committed rows place them
+	# (the port facility-cards rebuild pattern). A no-op for every
+	# element already at its committed rect.
+	RegistryLib.apply_layout(SCREEN_ID)
 
 
 # --- Export / import (forward-compatible §4.7.16 schema) --------------------

@@ -311,6 +311,25 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   pin derives its width from the file. Gates: sandbox 174, the layout
   quartet, double capture byte-identical, assemble --check, validator
   exit 0, full sweep 67/67.
+- **Follow-up (2026-11-11, user report — the ship-line cells):** the
+  cells INSIDE a ship line register now too: `<member id>.header`
+  (the "ship N" label, role plain), `.type` (bare cell + `.field`),
+  and `.cannons` / `.crew` / `.durability` / `.captain` /
+  `.figurehead` / `.sail` (cells + `.label`/`.field` halves) — 210
+  committed rows for all ten lines (both sides × 5 indices; ids only
+  register while the line exists, so a 1-ship fleet never
+  coverage-fires the other four). The line composes fully in tiles
+  (header 2 + type 7 + cannons 6 + crew 5 + durability 6 + captain
+  10 + figurehead 11 + sail 9 = the 56-tile block), and because the
+  fleet builds AFTER the activation apply, `_load_config` re-applies
+  the layout at its end (the port facility-cards rebuild pattern) —
+  the committed cell rows place the cells at boot. Data-only change
+  to `data/ui_layout.json` (the retired fragment pipeline's first
+  test: the rows went straight into the file). Pin: a ship-row
+  type-cell edit STICKS. Gates: sandbox 179, the layout quartet +
+  creation/duel/ui_window_sizes, validator exit 0, full sweep 67/67
+  (the captain_lifecycle RED was the known transient; rerun ALL PASS
+  83).
 - **Pipeline retirement (2026-11-11, user direction — "DELETE the
   default layout value"):** the fragment files
   (`data/layout_fragments/`) and the assembler

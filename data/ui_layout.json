@@ -4901,6 +4901,636 @@
           "x": 1,
           "y": 3
         },
+        "enemy_rows.0.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.0.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "enemy_rows.0.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.0.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.0.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "enemy_rows.0.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.0.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.0.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "enemy_rows.0.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.0.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.0.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "enemy_rows.0.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.0.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.0.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "enemy_rows.0.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.0.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_rows.0.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.0.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "enemy_rows.0.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.0.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.0.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.1.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.1.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "enemy_rows.1.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.1.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.1.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "enemy_rows.1.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.1.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.1.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "enemy_rows.1.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.1.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.1.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "enemy_rows.1.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.1.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.1.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "enemy_rows.1.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.1.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_rows.1.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.1.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "enemy_rows.1.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.1.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.1.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.2.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.2.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "enemy_rows.2.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.2.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.2.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "enemy_rows.2.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.2.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.2.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "enemy_rows.2.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.2.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.2.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "enemy_rows.2.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.2.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.2.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "enemy_rows.2.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.2.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_rows.2.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.2.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "enemy_rows.2.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.2.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.2.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.3.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.3.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "enemy_rows.3.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.3.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.3.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "enemy_rows.3.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.3.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.3.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "enemy_rows.3.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.3.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.3.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "enemy_rows.3.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.3.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.3.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "enemy_rows.3.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.3.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_rows.3.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.3.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "enemy_rows.3.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.3.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.3.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.4.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.4.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "enemy_rows.4.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "enemy_rows.4.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.4.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "enemy_rows.4.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "enemy_rows.4.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.4.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "enemy_rows.4.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "enemy_rows.4.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.4.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "enemy_rows.4.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "enemy_rows.4.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.4.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "enemy_rows.4.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "enemy_rows.4.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_rows.4.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.4.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "enemy_rows.4.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "enemy_rows.4.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_rows.4.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
         "player_panel": {
           "h": 13,
           "w": 58,
@@ -5073,6 +5703,636 @@
           "h": 2,
           "w": 2,
           "x": 0,
+          "y": 0
+        },
+        "player_rows.0.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.0.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "player_rows.0.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.0.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.0.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "player_rows.0.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.0.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.0.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "player_rows.0.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.0.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.0.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "player_rows.0.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.0.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.0.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "player_rows.0.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.0.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "player_rows.0.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.0.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "player_rows.0.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.0.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.0.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.1.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.1.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "player_rows.1.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.1.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.1.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "player_rows.1.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.1.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.1.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "player_rows.1.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.1.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.1.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "player_rows.1.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.1.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.1.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "player_rows.1.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.1.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "player_rows.1.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.1.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "player_rows.1.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.1.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.1.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.2.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.2.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "player_rows.2.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.2.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.2.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "player_rows.2.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.2.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.2.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "player_rows.2.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.2.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.2.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "player_rows.2.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.2.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.2.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "player_rows.2.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.2.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "player_rows.2.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.2.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "player_rows.2.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.2.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.2.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.3.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.3.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "player_rows.3.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.3.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.3.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "player_rows.3.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.3.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.3.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "player_rows.3.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.3.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.3.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "player_rows.3.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.3.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.3.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "player_rows.3.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.3.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "player_rows.3.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.3.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "player_rows.3.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.3.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.3.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.4.cannons": {
+          "h": 2,
+          "w": 6,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.4.cannons.field": {
+          "h": 2,
+          "w": 3,
+          "x": 12,
+          "y": 0
+        },
+        "player_rows.4.cannons.label": {
+          "h": 2,
+          "w": 3,
+          "x": 9,
+          "y": 0
+        },
+        "player_rows.4.captain": {
+          "h": 2,
+          "w": 10,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.4.captain.field": {
+          "h": 2,
+          "w": 7,
+          "x": 29,
+          "y": 0
+        },
+        "player_rows.4.captain.label": {
+          "h": 2,
+          "w": 3,
+          "x": 26,
+          "y": 0
+        },
+        "player_rows.4.crew": {
+          "h": 2,
+          "w": 5,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.4.crew.field": {
+          "h": 2,
+          "w": 3,
+          "x": 17,
+          "y": 0
+        },
+        "player_rows.4.crew.label": {
+          "h": 2,
+          "w": 2,
+          "x": 15,
+          "y": 0
+        },
+        "player_rows.4.durability": {
+          "h": 2,
+          "w": 6,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.4.durability.field": {
+          "h": 2,
+          "w": 3,
+          "x": 23,
+          "y": 0
+        },
+        "player_rows.4.durability.label": {
+          "h": 2,
+          "w": 3,
+          "x": 20,
+          "y": 0
+        },
+        "player_rows.4.figurehead": {
+          "h": 2,
+          "w": 11,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.4.figurehead.field": {
+          "h": 2,
+          "w": 7,
+          "x": 40,
+          "y": 0
+        },
+        "player_rows.4.figurehead.label": {
+          "h": 2,
+          "w": 4,
+          "x": 36,
+          "y": 0
+        },
+        "player_rows.4.header": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
+        "player_rows.4.sail": {
+          "h": 2,
+          "w": 9,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.4.sail.field": {
+          "h": 2,
+          "w": 7,
+          "x": 49,
+          "y": 0
+        },
+        "player_rows.4.sail.label": {
+          "h": 2,
+          "w": 2,
+          "x": 47,
+          "y": 0
+        },
+        "player_rows.4.type": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
+          "y": 0
+        },
+        "player_rows.4.type.field": {
+          "h": 2,
+          "w": 7,
+          "x": 2,
           "y": 0
         },
         "title": {
