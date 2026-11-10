@@ -4615,14 +4615,38 @@
         },
         "conditions_panel.grid.current": {
           "h": 2,
-          "w": 4,
-          "x": 32,
+          "w": 6,
+          "x": 31,
+          "y": 0
+        },
+        "conditions_panel.grid.current.field": {
+          "h": 2,
+          "w": 3,
+          "x": 3,
+          "y": 0
+        },
+        "conditions_panel.grid.current.label": {
+          "h": 2,
+          "w": 3,
+          "x": 3,
           "y": 0
         },
         "conditions_panel.grid.current_strength": {
           "h": 2,
-          "w": 5,
+          "w": 6,
           "x": 37,
+          "y": 0
+        },
+        "conditions_panel.grid.current_strength.field": {
+          "h": 2,
+          "w": 3,
+          "x": 3,
+          "y": 0
+        },
+        "conditions_panel.grid.current_strength.label": {
+          "h": 2,
+          "w": 3,
+          "x": 3,
           "y": 0
         },
         "conditions_panel.grid.day": {
@@ -4631,34 +4655,100 @@
           "x": 0,
           "y": 0
         },
+        "conditions_panel.grid.day.field": {
+          "h": 2,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "conditions_panel.grid.day.label": {
+          "h": 2,
+          "w": 2,
+          "x": 0,
+          "y": 0
+        },
         "conditions_panel.grid.deployment": {
           "h": 2,
-          "w": 8,
+          "w": 9,
           "x": 43,
+          "y": 0
+        },
+        "conditions_panel.grid.deployment.field": {
+          "h": 2,
+          "w": 5,
+          "x": 4,
+          "y": 0
+        },
+        "conditions_panel.grid.deployment.label": {
+          "h": 2,
+          "w": 4,
+          "x": 5,
           "y": 0
         },
         "conditions_panel.grid.seed_mode": {
           "h": 2,
-          "w": 7,
-          "x": 6,
+          "w": 8,
+          "x": 5,
+          "y": 0
+        },
+        "conditions_panel.grid.seed_mode.field": {
+          "h": 2,
+          "w": 6,
+          "x": 2,
+          "y": 0
+        },
+        "conditions_panel.grid.seed_mode.label": {
+          "h": 2,
+          "w": 2,
+          "x": 5,
           "y": 0
         },
         "conditions_panel.grid.seed_value": {
           "h": 2,
-          "w": 3,
-          "x": 14,
+          "w": 4,
+          "x": 13,
+          "y": 0
+        },
+        "conditions_panel.grid.seed_value.field": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
           "y": 0
         },
         "conditions_panel.grid.weather": {
           "h": 2,
-          "w": 5,
-          "x": 18,
+          "w": 7,
+          "x": 17,
+          "y": 0
+        },
+        "conditions_panel.grid.weather.field": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
+          "y": 0
+        },
+        "conditions_panel.grid.weather.label": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
           "y": 0
         },
         "conditions_panel.grid.wind_dir": {
           "h": 2,
-          "w": 6,
+          "w": 7,
           "x": 24,
+          "y": 0
+        },
+        "conditions_panel.grid.wind_dir.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "conditions_panel.grid.wind_dir.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "enemy_panel": {
@@ -4676,55 +4766,133 @@
         "enemy_panel.profile_row.add": {
           "h": 2,
           "w": 2,
-          "x": 54,
+          "x": 53,
           "y": 0
         },
         "enemy_panel.profile_row.ai_level": {
           "h": 2,
-          "w": 7,
-          "x": 25,
+          "w": 9,
+          "x": 21,
+          "y": 0
+        },
+        "enemy_panel.profile_row.ai_level.field": {
+          "h": 2,
+          "w": 6,
+          "x": 3,
+          "y": 0
+        },
+        "enemy_panel.profile_row.ai_level.label": {
+          "h": 2,
+          "w": 3,
+          "x": 6,
           "y": 0
         },
         "enemy_panel.profile_row.archetype": {
           "h": 2,
-          "w": 7,
-          "x": 33,
+          "w": 9,
+          "x": 30,
+          "y": 0
+        },
+        "enemy_panel.profile_row.archetype.field": {
+          "h": 2,
+          "w": 5,
+          "x": 4,
+          "y": 0
+        },
+        "enemy_panel.profile_row.archetype.label": {
+          "h": 2,
+          "w": 4,
+          "x": 5,
           "y": 0
         },
         "enemy_panel.profile_row.compose": {
           "h": 2,
-          "w": 7,
+          "w": 5,
           "x": 9,
+          "y": 0
+        },
+        "enemy_panel.profile_row.compose.field": {
+          "h": 2,
+          "w": 5,
+          "x": 0,
           "y": 0
         },
         "enemy_panel.profile_row.flagship": {
           "h": 2,
           "w": 7,
-          "x": 17,
+          "x": 14,
+          "y": 0
+        },
+        "enemy_panel.profile_row.flagship.field": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
+          "y": 0
+        },
+        "enemy_panel.profile_row.flagship.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "enemy_panel.profile_row.formation": {
           "h": 2,
-          "w": 7,
-          "x": 41,
+          "w": 9,
+          "x": 39,
+          "y": 0
+        },
+        "enemy_panel.profile_row.formation.field": {
+          "h": 2,
+          "w": 5,
+          "x": 4,
+          "y": 0
+        },
+        "enemy_panel.profile_row.formation.label": {
+          "h": 2,
+          "w": 4,
+          "x": 5,
           "y": 0
         },
         "enemy_panel.profile_row.kind": {
           "h": 2,
-          "w": 8,
+          "w": 9,
+          "x": 0,
+          "y": 0
+        },
+        "enemy_panel.profile_row.kind.field": {
+          "h": 2,
+          "w": 5,
+          "x": 4,
+          "y": 0
+        },
+        "enemy_panel.profile_row.kind.label": {
+          "h": 2,
+          "w": 4,
           "x": 0,
           "y": 0
         },
         "enemy_panel.profile_row.morale": {
           "h": 2,
-          "w": 4,
-          "x": 49,
+          "w": 5,
+          "x": 48,
+          "y": 0
+        },
+        "enemy_panel.profile_row.morale.field": {
+          "h": 2,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "enemy_panel.profile_row.morale.label": {
+          "h": 2,
+          "w": 2,
+          "x": 3,
           "y": 0
         },
         "enemy_panel.profile_row.remove": {
           "h": 2,
           "w": 2,
-          "x": 56,
+          "x": 55,
           "y": 0
         },
         "enemy_panel.rows": {
@@ -4740,75 +4908,171 @@
           "y": 2
         },
         "player_panel.rows": {
-          "h": 7,
-          "w": 57,
+          "h": 10,
+          "w": 56,
           "x": 1,
-          "y": 5
+          "y": 3
         },
         "player_panel.stats_row": {
-          "h": 4,
-          "w": 56,
+          "h": 2,
+          "w": 58,
           "x": 1,
           "y": 1
         },
         "player_panel.stats_row.add": {
           "h": 2,
           "w": 2,
-          "x": 0,
-          "y": 2
+          "x": 54,
+          "y": 0
         },
         "player_panel.stats_row.armor": {
           "h": 2,
           "w": 7,
-          "x": 43,
+          "x": 42,
+          "y": 0
+        },
+        "player_panel.stats_row.armor.field": {
+          "h": 2,
+          "w": 7,
+          "x": 0,
+          "y": 0
+        },
+        "player_panel.stats_row.armor.label": {
+          "h": 2,
+          "w": 2,
+          "x": 5,
           "y": 0
         },
         "player_panel.stats_row.charisma": {
           "h": 2,
-          "w": 6,
+          "w": 7,
           "x": 14,
+          "y": 0
+        },
+        "player_panel.stats_row.charisma.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "player_panel.stats_row.charisma.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.constitution": {
           "h": 2,
-          "w": 6,
+          "w": 7,
+          "x": 0,
+          "y": 0
+        },
+        "player_panel.stats_row.constitution.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "player_panel.stats_row.constitution.label": {
+          "h": 2,
+          "w": 4,
           "x": 0,
           "y": 0
         },
         "player_panel.stats_row.courage": {
           "h": 2,
-          "w": 5,
+          "w": 7,
           "x": 21,
+          "y": 0
+        },
+        "player_panel.stats_row.courage.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "player_panel.stats_row.courage.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.intellect": {
           "h": 2,
-          "w": 6,
+          "w": 7,
           "x": 7,
+          "y": 0
+        },
+        "player_panel.stats_row.intellect.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "player_panel.stats_row.intellect.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.luck": {
           "h": 2,
-          "w": 6,
-          "x": 27,
+          "w": 7,
+          "x": 28,
+          "y": 0
+        },
+        "player_panel.stats_row.luck.field": {
+          "h": 2,
+          "w": 3,
+          "x": 4,
+          "y": 0
+        },
+        "player_panel.stats_row.luck.label": {
+          "h": 2,
+          "w": 4,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.morale": {
           "h": 2,
-          "w": 4,
-          "x": 52,
+          "w": 5,
+          "x": 49,
+          "y": 0
+        },
+        "player_panel.stats_row.morale.field": {
+          "h": 2,
+          "w": 3,
+          "x": 2,
+          "y": 0
+        },
+        "player_panel.stats_row.morale.label": {
+          "h": 2,
+          "w": 2,
+          "x": 3,
           "y": 0
         },
         "player_panel.stats_row.remove": {
           "h": 2,
           "w": 2,
-          "x": 2,
-          "y": 2
+          "x": 56,
+          "y": 0
         },
         "player_panel.stats_row.weapon": {
           "h": 2,
           "w": 7,
-          "x": 34,
+          "x": 35,
+          "y": 0
+        },
+        "player_panel.stats_row.weapon.field": {
+          "h": 2,
+          "w": 6,
+          "x": 1,
+          "y": 0
+        },
+        "player_panel.stats_row.weapon.label": {
+          "h": 2,
+          "w": 2,
+          "x": 5,
           "y": 0
         },
         "title": {

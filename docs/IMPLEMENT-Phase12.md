@@ -294,6 +294,23 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   derived — plus a constitution edit STICKS and the morale clamp).
   Gates: sandbox 174, the layout quartet, double capture
   byte-identical, assemble --check, validator exit 0.
+- **Post-acceptance fix (2026-11-10, follow-up — the cells' halves):**
+  the user drilled into `stats_row.charisma` — the label and the spin
+  INSIDE the cell were still builder-owned. Every cell's two halves
+  now register too: `<cell id>.label` (role plain) and
+  `<cell id>.field` (role field) — 48 new rows, the whole sandbox
+  editor surface is addressable down to the last label and spin. The
+  three rows compose fully in TILES now (label at its column-floor
+  tile width, full cell height — the text vertically centers, the
+  §4.8 look; the field at its floor width beside it) so the build,
+  the committed rows and the capture agree exactly — the build-cursor
+  px flow and its ceil/floor rounding are retired. Fields never clip
+  their text: a shrink below the control's content minimum floors at
+  it (the WS probe pins the weapon option's floor). Pin: the sandbox
+  suite's cells leg covers all 71 file-derived rows; the morale-clamp
+  pin derives its width from the file. Gates: sandbox 174, the layout
+  quartet, double capture byte-identical, assemble --check, validator
+  exit 0, full sweep 67/67.
 - **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
   drag pins):** goods_scroll could not be moved or resized (the
   disabled horizontal axis made Godot enforce the content's 1856 px

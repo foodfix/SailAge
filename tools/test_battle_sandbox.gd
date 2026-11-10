@@ -1153,7 +1153,10 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: a stats_row studio edit STICKS (got %s / %s)"
 					% [str(stats.position), str(stats.size)])
 	var morale: Control = live.call("player_panel.stats_row.morale")
-	_check(morale != null and morale.position.x == (40 - 4) * tile,
+	var morale_w := float(int(rows.get("player_panel.stats_row.morale",
+			{}).get("w", -1)))
+	_check(morale != null and morale_w > 0 and morale.position.x
+			== (40 - morale_w) * tile,
 			"cells: the morale cell clamped into the shrunken row "
 			+ "(got %s)" % str(morale.position if morale != null
 					else "absent"))
