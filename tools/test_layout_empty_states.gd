@@ -36,12 +36,81 @@ var _checks := 0
 func _ready() -> void:
 	for screen_id: String in SCENES:
 		await _probe(screen_id)
+	await _test_commit_lands_on_reopen()
 	if _failures == 0:
 		print("ALL PASS (%d checks)" % _checks)
 		get_tree().quit(0)
 	else:
 		print("%d of %d checks FAILED" % [_failures, _checks])
 		get_tree().quit(1)
+
+
+## The user-reported live loop (2026-11-10): a studio commit that lands
+## while the game runs must apply on the NEXT screen activation — no
+## restart. Writes a drifted `table_frame` row (simulating the commit),
+## re-mounts the market, asserts the drift applies, and restores the
+## shipped bytes exactly.
+func _test_commit_lands_on_reopen() -> void:
+	var path := "res://data/ui_layout.json"
+	var original := FileAccess.get_file_as_string(path)
+	# A distinctive committed rect for table_frame (inside its root).
+	var doc: Dictionary = JSON.parse_string(original)
+	var shipped: Dictionary = doc.get("screens", {}).get("market", {}) \
+			.get("elements", {}).get("table_frame", {}).duplicate()
+	_check(not shipped.is_empty(),
+			"commit-reopen: the shipped file carries market.table_frame")
+	doc["screens"]["market"]["elements"]["table_frame"] = {
+		"x": 4, "y": 6, "w": 50, "h": 20,
+	}
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(doc, "  ", true) + "\n")
+	f.close()
+	# The studio's single writer just "committed" — the game is still
+	# running on the boot-time bytes.
+	var screen_root: Control = null
+	var frame: Control = null
+	if not shipped.is_empty():
+		_rig_empty_port()
+		var scene: PackedScene = load(SCENES["market"])
+		screen_root = scene.instantiate()
+		add_child(screen_root)
+		for i in range(6):
+			await get_tree().process_frame
+		frame = screen_root.get_node_or_null("TableFrame")
+		var tile := float(RegistryLib.TILE)
+		if frame != null:
+			print("DRIFTDBG content_min=", RegistryLib._resize_min(frame),
+					" kids=", RegistryLib._children_extent("market",
+					"table_frame", frame),
+					" frame_min=", frame.get_minimum_size(),
+					" child_table=", frame.get_node_or_null("Table"))
+		_check(frame != null and frame.position == Vector2(4 * tile,
+					6 * tile) and frame.size == Vector2(50 * tile, 20 * tile),
+			"commit-reopen: the committed table_frame applies on the "
+			+ "next screen activation (got %s / %s)"
+					% [str(frame.position) if frame != null else "?",
+					str(frame.size) if frame != null else "?"])
+		screen_root.queue_free()
+		await get_tree().process_frame
+	# RESTORE the shipped bytes exactly (the file is the user's data).
+	var r := FileAccess.open(path, FileAccess.WRITE)
+	r.store_string(original)
+	r.close()
+	# The loop closes: the restored file applies again.
+	if not shipped.is_empty():
+		_rig_empty_port()
+		var scene2: PackedScene = load(SCENES["market"])
+		screen_root = scene2.instantiate()
+		add_child(screen_root)
+		for i in range(6):
+			await get_tree().process_frame
+		frame = screen_root.get_node_or_null("TableFrame")
+		_check(frame != null and frame.position == Vector2(
+					shipped["x"], shipped["y"]) * float(RegistryLib.TILE),
+			"commit-reopen: the restored bytes apply again (got %s)"
+					% str(frame.position if frame != null else "?"))
+		screen_root.queue_free()
+		await get_tree().process_frame
 
 
 func _check(condition: bool, description: String) -> void:

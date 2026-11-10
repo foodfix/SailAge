@@ -3491,11 +3491,22 @@ data.
   containers (`MarginContainer → VBox → …` chains) are DELETED from the
   `.tscn` scenes and build code; group parents are plain
   `Control`/`Panel` nodes placed at their data rects.
-- **The only layout rules** (both kept from Phase 11):
+- **The only layout rules** (rule 2 amended 2026-11-10, user report —
+  a committed parent shrink snapped back to the child's extent):
   1. a child cannot leave its parent's rect (clamp on move/resize);
-  2. a parent cannot shrink below its registered children's extent
-     (children-extent floor).
+  2. a parent applies its committed rect EXACTLY — a shrink SUCCEEDS
+     and the registered children clamp into the new rect immediately
+     (list members and scroll-owned children are exempt: they are
+     data-driven/clip-managed content and never floor or clamp).
   Everything else is a rect.
+- **The live loop:** a studio commit lands on the **next screen
+  activation** — no restart. The game re-reads `ui_layout.json` when
+  its bytes drift on disk (`DataLoader.reload_ui_layout_if_changed`,
+  called by `screen_active`; a byte-identical file is a no-op, so
+  suite injections of `ui_layout` are never clobbered). There is NO
+  code default underneath a managed screen: the file is the whole
+  truth (a registered static with no row is a loud `push_error` + the
+  `(0,0,2,2)` fallback, docs/80-* §4.8.9).
 - **Dynamic lists** (market goods rows, officer rosters, rumor lists
   …): the screen declares a list block —
   `{base: {x,y,w,h}, row_h, viewport}` in the data — and places row *i*

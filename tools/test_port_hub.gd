@@ -1486,11 +1486,18 @@ func _test_rebuild_reapplies_layout() -> void:
 	_make_run("lisbon", LISBON_TILE)
 	GameState.world["clock_fraction"] = 8.0 / 24.0
 	# A committed layout that differs from the authored CARD_SLOTS slot
-	# (inside facility_grid's 7-tile rect — rule 1 clamps to the parent).
-	DataLoader.ui_layout = {
-		"port": {"elements": {"cards.market":
-				{"x": 3, "y": 3, "w": 10, "h": 2}}},
-	}
+	# (inside facility_grid's committed rect — rule 1 clamps to the
+	# parent). The fixture carries the FULL committed port table (a
+	# partial table would coverage-fallback the other statics to
+	# (0,0,2,2) and cascade-clamp the card) with the one override.
+	var port_table: Dictionary = (DataLoader.ui_layout.get("port",
+			{}) as Dictionary).duplicate(true)
+	if port_table.is_empty() or not (port_table.get("elements",
+			null) is Dictionary):
+		port_table = {"elements": {}, "lists": {}}
+	port_table["elements"]["cards.market"] = {"x": 3, "y": 3, "w": 10,
+		"h": 2}
+	DataLoader.ui_layout = {"port": port_table}
 	RegistryLib._reset_for_tests()
 	var hub = _mount_hub(host)
 	await get_tree().process_frame
@@ -1498,7 +1505,7 @@ func _test_rebuild_reapplies_layout() -> void:
 	var market: Control = hub._row_buttons.get("market", null)
 	_check(market != null, "rebuild-reapply: the market card is live")
 	if market == null:
-		DataLoader.ui_layout = {}
+		DataLoader.ui_layout = _shipped_loader_layout()
 		RegistryLib._reset_for_tests()
 		host.queue_free()
 		await get_tree().process_frame
@@ -1521,10 +1528,24 @@ func _test_rebuild_reapplies_layout() -> void:
 			("rebuild-reapply: the committed rect SURVIVES the hour "
 				+ "crossing (got %s — the pre-fix bug snapped it to "
 				+ "CARD_SLOTS)") % str(market_after.position))
-	DataLoader.ui_layout = {}
+	DataLoader.ui_layout = _shipped_loader_layout()
 	RegistryLib._reset_for_tests()
 	host.queue_free()
 	await get_tree().process_frame
+
+
+## Restores the loader's shipped table after a fixture leg (the bytes
+## the boot load read — the same table `reload_ui_layout_if_changed`
+## would produce; a byte-identical disk file never clobbers it).
+func _shipped_loader_layout() -> Dictionary:
+	var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if parsed is Dictionary and parsed.get("screens", null) is Dictionary:
+		return parsed["screens"]
+	return {}
 
 
 func _report() -> void:

@@ -121,6 +121,10 @@ var map_index: Array = []
 ## Ships `{}` — every absent override means the code-pinned default. Light
 ## shape checks here; the heavy validation is group 14 (docs/10-* §8.9).
 var ui_layout: Dictionary = {}
+## The raw bytes of `ui_layout.json` as of the last read — the drift
+## check behind `reload_ui_layout_if_changed` (the studio's commit
+## lands on the next screen activation, no restart).
+var _ui_layout_bytes: String = ""
 
 ## MapLoader instance over `data/maps/world.png` (docs/90-* §9). Null until the
 ## world scene (or [method ensure_map]) loads it.
@@ -567,10 +571,37 @@ func _load_ui_strings() -> Dictionary:
 func _load_ui_layout() -> Dictionary:
 	if not FileAccess.file_exists(DATA_DIR.path_join("ui_layout.json")):
 		return {}
-	var raw = _read_json("ui_layout.json")
+	var text := FileAccess.get_file_as_string(
+			DATA_DIR.path_join("ui_layout.json"))
+	_ui_layout_bytes = text
+	return _parse_ui_layout(text)
+
+
+## Re-reads `ui_layout.json` when its bytes changed on disk (docs/80-*
+## §4.8.9): the studio's commit lands on the next screen activation —
+## no restart. A byte-identical file is a no-op, so a suite injecting
+## `ui_layout` directly is never clobbered. The registry's
+## `screen_active` calls this before applying.
+func reload_ui_layout_if_changed() -> void:
+	var path := DATA_DIR.path_join("ui_layout.json")
+	if not FileAccess.file_exists(path):
+		return
+	var text := FileAccess.get_file_as_string(path)
+	if text == _ui_layout_bytes:
+		return
+	_ui_layout_bytes = text
+	ui_layout = _parse_ui_layout(text)
+
+
+## The v2 shape walk shared by the boot load and the drift reload.
+func _parse_ui_layout(text: String) -> Dictionary:
 	var table: Dictionary = {}
-	if raw == null:
+	var parser := JSON.new()
+	if parser.parse(text) != OK:
+		_record("ui_layout.json: invalid JSON (%s)"
+				% parser.get_error_message())
 		return table
+	var raw: Variant = parser.data
 	if not (raw is Dictionary):
 		_record("ui_layout.json: top-level value must be an object")
 		return table

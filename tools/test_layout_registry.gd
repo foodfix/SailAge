@@ -196,25 +196,30 @@ func _test_parent_bounds_clamp() -> void:
 			"parent bounds: the resize clamps to the parent's size")
 	_check(child.position == Vector2.ZERO,
 			"parent bounds: the move clamps to the parent's origin")
-	# Rule 2: the parent cannot shrink so its child ends up outside — a
-	# w=3-tile data row on the host clamps UP to the child's extent. The
-	# floor reads the child's CURRENT rect, so a simultaneous shrink
-	# converges over two passes: pass 1 sees the child's old extent
-	# (10 tiles), pass 2 sees the new one — the settled state honors
-	# the guarantee (the registry's apply is the activation + edit path;
-	# the settled fixpoint is the contract).
+	# The Phase-12 amendment of rule 2 (user report — a committed
+	# table_frame shrink snapped back to the child's extent): the parent
+	# applies its committed rect EXACTLY, and the child clamps inside it
+	# (rule 1). A committed w=3-tile host STAYS 3 tiles; the child's
+	# w=8-tile row clamps into it at its own apply pass.
 	RegistryLib.set_table_for_tests({
 		"market": {"elements": {"toolbar": {"x": 0, "y": 0, "w": 3, "h": 2},
 			"toolbar.child": {"x": 0, "y": 0, "w": 8, "h": 2}}},
 	})
 	RegistryLib.apply_layout("market")
-	_check(host.size.x >= 8 * RegistryLib.TILE,
-			"children-extent floor: pass 1 never shrinks below ANY "
-			+ "child rect (got %s)" % str(host.size))
-	RegistryLib.apply_layout("market")
-	_check(host.size.x == 8 * RegistryLib.TILE,
-			"children-extent floor: the settled fixpoint holds (got %s)"
-					% str(host.size))
+	_check(host.size == Vector2(3 * RegistryLib.TILE,
+				2 * RegistryLib.TILE),
+			"rule 2 amended: the parent applies its committed rect "
+			+ "exactly (got %s)" % str(host.size))
+	_check(child.size.x == 3 * RegistryLib.TILE and child.position.x == 0,
+			"rule 2 amended: the child clamps inside the shrunken host "
+			+ "(got %s)" % str(child.size))
+	# The live-edit half: shrinking the host via a studio edit clamps
+	# the child IMMEDIATELY (never outside — the 2026-11-09 direction).
+	RegistryLib.apply_overrides("market", "toolbar", {"w": 2})
+	_check(child.size.x == 2 * RegistryLib.TILE
+			and child.position.x == 0,
+			"rule 2 amended: a live host shrink clamps the child at "
+			+ "once (got %s @ %s)" % [str(child.size), str(child.position)])
 	_drop_root(root)
 	await get_tree().process_frame
 

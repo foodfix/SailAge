@@ -1445,9 +1445,13 @@ screen's settled look).
   horizontal 60 is exact). Parent-relative bounds beyond the flat check
   are enforced at runtime (the registry clamps every applied rect
   inside the parent), not statically.
-- **The only layout rules** (kept from Phase 11): a child cannot leave
-  its parent's rect (clamp on move/resize); a parent cannot shrink
-  below its registered children's extent (children-extent floor).
+- **The only layout rules** (rule 2 amended 2026-11-10, user report —
+  a committed parent shrink snapped back to the child's extent):
+  1. a child cannot leave its parent's rect (clamp on move/resize);
+  2. a parent applies its committed rect EXACTLY — a shrink SUCCEEDS
+     and the registered children clamp into the new rect immediately
+     (list members and scroll-owned children are exempt: they are
+     data-driven/clip-managed content and never floor or clamp).
   Everything else is a rect — no flow, no stretch, no separation math.
 - **No strings at all** — no i18n rule applies (group 2 skips it).
 - **Serialization byte rule:** sorted keys, 2-space indent, trailing

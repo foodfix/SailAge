@@ -128,8 +128,11 @@ func _containment(case_id: String, _expect_breach: bool) -> void:
 	var clipped := 0
 	for row: Dictionary in rows:
 		# Scroll-owned rows may legitimately exceed the canvas (the market
-		# rows scroll) — the containment contract covers visible chrome.
-		if bool(row.get("clipped")):
+		# rows scroll) — and list members are data-driven content placed
+		# by their list block (the captains strip's rows sit right of the
+		# strip's origin by design). The containment contract covers the
+		# visible chrome: skip both.
+		if bool(row.get("clipped")) or not String(row.get("list", "")).is_empty():
 			clipped += 1
 			continue
 		var rect: Dictionary = row["rect_tiles"]

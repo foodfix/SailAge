@@ -176,14 +176,19 @@ static func register(screen_id: String, control: Control, id: String,
 	per_screen[id] = rec
 
 
-## The screen's `_ready` hook: pins the active screen + root, applies
-## the data layout, and notifies the bridge (a plain has_method-guarded
-## call — no hard autoload dependency).
+## The screen's `_ready` hook: pins the active screen + root, picks up
+## a studio commit that landed since boot (the layout file's drift
+## reload — has_method-guarded, no hard DataLoader dependency), applies
+## the data layout, and notifies the bridge.
 static func screen_active(screen_id: String, root: Control) -> void:
 	if not (screen_id in SCREENS) or root == null:
 		return
 	_current = screen_id
 	_roots[screen_id] = weakref(root)
+	var loader: Node = Engine.get_main_loop().root.get_node_or_null(
+			"DataLoader")
+	if loader != null and loader.has_method("reload_ui_layout_if_changed"):
+		loader.call("reload_ui_layout_if_changed")
 	apply_layout(screen_id)
 	var bridge: Node = Engine.get_main_loop().root.get_node_or_null(
 			"LayoutBridge")
@@ -265,8 +270,13 @@ static func _list_block(screen_id: String, list_id: String) -> Dictionary:
 static func list_rect(screen_id: String, list_id: String, index: int) -> Rect2:
 	var block := _list_block(screen_id, list_id)
 	var base: Variant = block.get("base", null)
-	var row_h: Variant = block.get("row_h", null)
-	if not (base is Dictionary) or not (row_h is int) or row_h < 1:
+	var row_h_v: Variant = block.get("row_h", null)
+	if not (base is Dictionary) or row_h_v == null:
+		return Rect2()
+	# JSON numbers parse as floats — coerce (the validator owns the
+	# integer contract; a runtime 2.0 must still place row 0).
+	var row_h := int(row_h_v)
+	if row_h < 1:
 		return Rect2()
 	var bx := float(int(base.get("x", 0))) * TILE
 	var by := float(int(base.get("y", 0))) * TILE
@@ -411,6 +421,10 @@ static func apply_overrides(screen_id: String, id: String,
 	rec["applied"] = rect
 	# `rec["data_rect"]` (set by apply_layout) is untouched — it is the
 	# revert target; a live edit must not move it.
+	# The amended rule 2 (Phase 12): the shrink SUCCEEDS and the
+	# registered children clamp into the new rect immediately — they
+	# never end up outside (the 2026-11-09 user direction, kept).
+	_clamp_children_into(screen_id, id, control, rect)
 	if overrides.has("sheet"):
 		var sheet := String(overrides["sheet"])
 		var role := String(rec.get("role", ROLE_PLAIN))
@@ -457,19 +471,18 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 	var size := Vector2(pw, ph)
 	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	control.position = pos
-	# The content floor quantized UP to whole tiles (kept from Phase 11
-	# as a clamp, not a flow — content mins still guard against clipping
-	# text) + the children-extent floor (rule 2: a parent cannot shrink
-	# so its children end up outside). A ScrollContainer reports no
-	# content floor: a viewport's content is scroll/clip-managed — the
-	# disabled-axis child minimum (the market's goods_scroll pinned at
-	# the rows' 1856 px width) must not pin the viewport's drag.
+	# The content floor quantized UP to whole tiles (a clamp against
+	# clipping text — a ScrollContainer reports none: a viewport's
+	# content is scroll/clip-managed, the goods_scroll pin of
+	# 2026-11-10). The Phase-11 children-extent GROW is retired (the
+	# Phase-12 amendment of rule 2, user report — a committed
+	# table_frame shrink snapped back to the child's extent): a parent
+	# applies its committed rect EXACTLY, and the registered children
+	# clamp inside it (rule 1 — at their own apply pass, and
+	# immediately on a live parent edit via `_clamp_children_into`).
 	var content := _resize_min(control)
 	size.x = maxf(size.x, float(ceili(content.x / float(TILE)) * TILE))
 	size.y = maxf(size.y, float(ceili(content.y / float(TILE)) * TILE))
-	var kids := _children_extent(screen_id, id, control, parent_of)
-	size.x = maxf(size.x, float(ceili(kids.x / float(TILE)) * TILE))
-	size.y = maxf(size.y, float(ceili(kids.y / float(TILE)) * TILE))
 	# The parent-bounds clamp (rule 1): an element cannot leave its
 	# parent's rect — the clamp runs in the DIRECT parent's local space,
 	# exact for this game's translation-only hierarchies, with the
@@ -530,6 +543,38 @@ static func _children_extent(screen_id: String, parent_id: String,
 		extent.x = maxf(extent.x, edge.x)
 		extent.y = maxf(extent.y, edge.y)
 	return extent
+
+
+## The amended rule 2's live half: after a parent's rect edit, every
+## registered child clamps inside the new rect (position + size, in the
+## parent's local space). List members and scroll-owned children are
+## skipped (data-driven/clip-managed content). The child's OWN data row
+## is untouched — the clamp is the live visual state; the next apply
+## pass re-derives it (rule 1).
+static func _clamp_children_into(screen_id: String, parent_id: String,
+		parent: Control, rect: Dictionary) -> void:
+	if parent is ScrollContainer:
+		return
+	var per_screen: Dictionary = _screens.get(screen_id, {})
+	var psize: Vector2 = parent.size
+	for id in per_screen:
+		var rec: Dictionary = per_screen[id]
+		var child := _live(rec)
+		if child == null or child == parent:
+			continue
+		if not String(rec.get("list", "")).is_empty():
+			continue
+		if _inside_scroll(child):
+			continue
+		if _registered_ancestor(screen_id, child) != parent_id:
+			continue
+		var csize: Vector2 = child.size
+		csize.x = minf(csize.x, psize.x)
+		csize.y = minf(csize.y, psize.y)
+		child.size = csize
+		child.position = Vector2(
+			clampf(child.position.x, 0.0, maxf(0.0, psize.x - csize.x)),
+			clampf(child.position.y, 0.0, maxf(0.0, psize.y - csize.y)))
 
 
 ## The nearest registered ancestor's id ("" = the screen root).
