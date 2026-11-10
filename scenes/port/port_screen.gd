@@ -862,6 +862,13 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			"cards.%s.status" % facility_id)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
+	# The rebuild re-registered the cards as fresh records — re-apply the
+	# committed layout so an hour-crossing (the §4.1b signature includes
+	# each card's open state) does not snap the grid back to the authored
+	# CARD_SLOTS and lose the user's studio layout (docs/80-* §4.8.9:
+	# apply runs at activation AND after every rebuild; the file is the
+	# layout).
+	RegistryLib.apply_layout("port")
 
 
 

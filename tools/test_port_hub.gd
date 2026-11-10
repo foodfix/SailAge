@@ -32,6 +32,7 @@ extends Node
 ##     2026-11-03).
 
 const PortScene := preload("res://scenes/port/port_screen.tscn")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -82,6 +83,7 @@ func _ready() -> void:
 	await _test_officers_panel_entry()
 	await _test_chart_at_port()
 	await _test_game_over_full_scene()
+	await _test_rebuild_reapplies_layout()
 	_report()
 
 
@@ -150,6 +152,32 @@ func _row_lines(hub) -> Array:
 			"y": int(button.position.y / 32.0),
 			"id": str(button.get_meta("facility_id")),
 		})
+	return _group_lines(cells)
+
+
+## The committed `cards.*` rows grouped the same way — the file is the
+## pin (docs/80-* §4.8.9): the build must honor whatever layout the
+## studio committed, authored CARD_SLOTS or the user's restyle.
+func _expected_lines_from_layout() -> Array:
+	var cells: Array = []
+	var elements: Dictionary = (DataLoader.ui_layout.get(
+			"port", {}) as Dictionary).get("elements", {}) as Dictionary
+	for key: String in elements:
+		if not key.begins_with("cards.") \
+				or key.substr(6).contains("."):
+			continue
+		var facility_id := key.trim_prefix("cards.")
+		if facility_id in FIXED_ORDER:
+			var rect: Dictionary = elements[key]
+			cells.append({
+				"x": int(rect.get("x", 0)),
+				"y": int(rect.get("y", 0)),
+				"id": facility_id,
+			})
+	return _group_lines(cells)
+
+
+func _group_lines(cells: Array) -> Array:
 	var rows := {}
 	for cell in cells:
 		if not rows.has(cell["y"]):
@@ -209,11 +237,14 @@ func _test_row_order_lisbon() -> void:
 		"Set Sail is present and enabled below the rows")
 	# Fixed-card grid layout (docs/80-* §4.8.1): [Market][Shipyard] /
 	# [Tavern][Inn] / [Guild][Palace] — every present facility takes the same
-	# two-per-line slot whatever its open/closed state.
+	# two-per-line slot whatever its open/closed state. Phase 12: the file
+	# is the pin — the expected lines derive from the committed `cards.*`
+	# rows (the user's studio layout may differ from the authored
+	# CARD_SLOTS; the contract is that the BUILD honors the file).
 	var lines := _row_lines(hub)
-	_check(lines == [["market", "shipyard"], ["tavern", "inn"],
-			["guild", "palace"]],
-		"Lisbon lays the cards out as the fixed §4.8.1 grid (got %s)" % str(lines))
+	_check(lines == _expected_lines_from_layout(),
+		"Lisbon lays the cards out as the committed §4.8.1 grid (got %s, want %s)"
+				% [str(lines), str(_expected_lines_from_layout())])
 	# Every card uses the fixed 320×64 spec (docs/80-* §4.8.1).
 	for id in ids:
 		var row: Button = hub.facility_row(id)
@@ -1440,6 +1471,60 @@ func _test_game_over_full_scene() -> void:
 			"%s wires the shared GameOverHost (attach in script source)"
 			% path.get_file())
 	host.queue_free()
+
+
+## The user-reported regression (2026-11-10): an hour-crossing rebuilds
+## the §4.8.1 facility cards at the AUTHORED CARD_SLOTS, snapping the
+## user's committed studio layout back to default. The rebuild must
+## re-apply the committed layout (docs/80-* §4.8.9 — apply runs at
+## activation AND after every rebuild).
+func _test_rebuild_reapplies_layout() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	# 08:00: the tavern's §4.1b window (10:00–24:00) is CLOSED.
+	_make_run("lisbon", LISBON_TILE)
+	GameState.world["clock_fraction"] = 8.0 / 24.0
+	# A committed layout that differs from the authored CARD_SLOTS slot
+	# (inside facility_grid's 7-tile rect — rule 1 clamps to the parent).
+	DataLoader.ui_layout = {
+		"port": {"elements": {"cards.market":
+				{"x": 3, "y": 3, "w": 10, "h": 2}}},
+	}
+	RegistryLib._reset_for_tests()
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var market: Control = hub._row_buttons.get("market", null)
+	_check(market != null, "rebuild-reapply: the market card is live")
+	if market == null:
+		DataLoader.ui_layout = {}
+		RegistryLib._reset_for_tests()
+		host.queue_free()
+		await get_tree().process_frame
+		return
+	var tile := float(RegistryLib.TILE)
+	_check(market.position == Vector2(3 * tile, 3 * tile),
+		"rebuild-reapply: the committed rect applies on mount (got %s)"
+				% str(market.position))
+	# Cross the tavern's opening hour: 08:00 → 12:00 flips the card's
+	# open state → the §4.1b signature changes → the grid rebuilds.
+	GameState.world["clock_fraction"] = 0.5
+	EventBus.clock_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var market_after: Control = hub._row_buttons.get("market", null)
+	_check(market_after != null and market_after != market,
+		"rebuild-reapply: the hour-crossing rebuilt the card node")
+	if market_after != null:
+		_check(market_after.position == Vector2(3 * tile, 3 * tile),
+			("rebuild-reapply: the committed rect SURVIVES the hour "
+				+ "crossing (got %s — the pre-fix bug snapped it to "
+				+ "CARD_SLOTS)") % str(market_after.position))
+	DataLoader.ui_layout = {}
+	RegistryLib._reset_for_tests()
+	host.queue_free()
+	await get_tree().process_frame
 
 
 func _report() -> void:
