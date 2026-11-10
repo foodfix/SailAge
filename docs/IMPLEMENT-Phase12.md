@@ -234,6 +234,18 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   silently crashing since the partial (103 → 185 checks). Gates:
   battle_sandbox 155 / character_card 141 / fleet 185 / intel_window
   65 ALL PASS; D2's structural probe 98 records, 0 flow containers.
+- **Post-acceptance fix (2026-11-10, user-reported — the 10:00 layout
+  snap):** an hour-crossing rebuilt the §4.8.1 facility cards at the
+  AUTHORED CARD_SLOTS — the §4.8.1 rebuild signature includes each
+  card's open state, and port_screen was the only port screen whose
+  rebuild path never called `apply_layout`, so the user's committed
+  studio layout was lost the moment a facility opened (tavern 10:00,
+  palace 09:00). The rebuild now re-applies the committed layout after
+  re-registering the cards. test_port_hub gained the regression pin
+  (a fixture rect survives an 08:00→12:00 crossing) and the §4.8.1
+  grid pin now derives its expectation from the committed `cards.*`
+  rows — the file is the pin, so a user restyle passes iff the build
+  honors it.
 - **Post-acceptance fix (2026-11-10, user-reported — the empty-port
   coverage errors):** the facility screens' conditionally-BUILT empty
   markers (`market captains.empty`, `inn captains.rows.empty`,
