@@ -714,8 +714,8 @@ func _test_randomize_fuzz() -> void:
 		_check(not sandbox.compose_check().button_pressed
 				and sandbox.rows_box("enemy").visible
 				and rows >= 1 and rows <= 5
-				and sandbox.rows_box("enemy").get_child_count() == rows
-				and (sandbox.rows_box("enemy").get_child(0) as Control)
+				and sandbox.rows_content("enemy").get_child_count() == rows
+				and (sandbox.rows_content("enemy").get_child(0) as Control)
 					.is_visible_in_tree(),
 			pinned_text)
 
@@ -762,7 +762,7 @@ func _randomize_invariant_problems(sandbox) -> Array[String]:
 		if rows.size() < 1 or rows.size() > 5:
 			problems.append("%s side has %d ships (clamp 1..5)"
 				% [side, rows.size()])
-		var box: Control = sandbox.rows_box(side)
+		var box: Control = sandbox.rows_content(side)
 		if box.get_child_count() != rows.size():
 			problems.append("%s rows_box holds %d of %d rows"
 				% [side, box.get_child_count(), rows.size()])
@@ -1163,6 +1163,17 @@ func _test_panel_interiors_managed() -> void:
 	RegistryLib.apply_overrides("sandbox", "player_panel.stats_row",
 			{"x": 1, "y": 1, "w": 58, "h": 2})
 	var region: Control = live.call("player_panel.rows")
+	# The region is a scroll viewport (the 2026-11-11 user request): the
+	# ship lines live in a content node sized to the stacked extent, so
+	# resizing the region below the stack scrolls instead of clipping.
+	_check(region is ScrollContainer,
+			"interiors: the rows region is a ScrollContainer")
+	var content: Control = region.get_child(0)
+	_check(content != null and content.size.y == float(
+					content.get_child_count()) * 2.0 * tile,
+			"interiors: the scroll content is sized to the stacked "
+			+ "extent (got %s)" % str(content.size if content != null
+					else "absent"))
 	var region_before: float = row1.global_position.y
 	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
 			{"x": 1, "y": 2})

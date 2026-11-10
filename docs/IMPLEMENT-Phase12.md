@@ -311,6 +311,22 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   pin derives its width from the file. Gates: sandbox 174, the layout
   quartet, double capture byte-identical, assemble --check, validator
   exit 0, full sweep 67/67.
+- **Follow-up (2026-11-11, user request — the ship rows scroll):**
+  `player_panel.rows` / `enemy_panel.rows` are ScrollContainer
+  viewports now (the goods_scroll pattern): the five ship lines live
+  in a content node sized to the stacked extent, so resizing the
+  region below the stack scrolls instead of clipping. The members are
+  scroll-owned (never floored, never clamped, `clipped` in the tree
+  payload); the list blocks' `viewport` now derives from the scroll —
+  both (1,3,56,10). `rows_content(side)` is the new seam for tests.
+  A transient capture mangle (a clamp/capture feedback loop recording
+  squeezed rects as rows) was diagnosed with a clamp trace and
+  re-ground: the file was restored from git and the capture re-run to
+  a stable fixpoint from the clean state. Pin: the sandbox suite's
+  scroll leg (ScrollContainer + content extent + rows-follow-host);
+  the fuzz leg counts rows via `rows_content`. Gates: sandbox 176,
+  the layout quartet + market, double capture byte-identical,
+  assemble --check, validator exit 0, full sweep 67/67.
 - **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
   drag pins):** goods_scroll could not be moved or resized (the
   disabled horizontal axis made Godot enforce the content's 1856 px

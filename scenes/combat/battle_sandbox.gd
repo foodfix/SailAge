@@ -456,14 +456,38 @@ func _panel_column(panel_name: String, title_key: String, at: Vector2,
 ## row (five 64px lines fit the pinned panel — the horizontal-bands layout
 ## needs no scroll). The rows stack at the fixed 64px pitch.
 func _rows_box() -> Control:
-	var box := Control.new()
-	box.name = "Rows"
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# A ScrollContainer viewport (the 2026-11-11 user request): the five
+	# ship lines scroll when the region is resized below the stack —
+	# the same clipped-viewport pattern as the market's goods_scroll.
+	# The CONTENT node is a plain Control sized to the stacked extent;
+	# the members are scroll-owned (never floored, never clamped,
+	# `clipped` in the tree payload).
+	var scroll := ScrollContainer.new()
+	scroll.name = "Rows"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	# Panel-local 16px pad + one editors row down, pre-apply (the data
 	# row snaps this to its committed tile at activation).
-	box.position = Vector2(PANEL_PAD, PANEL_PAD + ROW_PITCH)
-	box.size = Vector2(_panel_box_w(), ROWS_REGION_H)
-	return box
+	scroll.position = Vector2(PANEL_PAD, PANEL_PAD + ROW_PITCH)
+	scroll.size = Vector2(_panel_box_w(), ROWS_REGION_H)
+	var content := Control.new()
+	content.name = "Content"
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.size = Vector2(_panel_box_w(), ROWS_REGION_H)
+	scroll.add_child(content)
+	return scroll
+
+
+## Sizes a rows scroll's content node to the stacked extent — the scroll
+## range follows the fleet count (the block width drives the row width).
+func _sync_rows_content(side: String) -> void:
+	var box := _player_rows_box if side == "player" else _enemy_rows_box
+	var content: Control = box.get_child(0)
+	var rect := RegistryLib.list_rect(SCREEN_ID,
+			"player_rows" if side == "player" else "enemy_rows", 0)
+	var w: float = rect.size.x if rect != Rect2() else _panel_box_w()
+	content.size = Vector2(w,
+			maxf(1.0, float(ship_rows(side).size())) * ROW_PITCH)
 
 
 ## The content column's width (the panel's pinned rect minus the 16px
@@ -768,13 +792,15 @@ func _make_ship_row(side: String) -> Dictionary:
 	else:
 		line.position = Vector2(0, float(index * int(ROW_PITCH)))
 		line.size = Vector2(row_w, ROW_PITCH)
-	box.add_child(line)
+	var content: Control = box.get_child(0)
+	content.add_child(line)
 	RegistryLib.register(SCREEN_ID, line, "%s.%d" % [list_id, index],
 		{"list": list_id})
 	if side == "player":
 		_player_rows.append(row)
 	else:
 		_enemy_rows.append(row)
+	_sync_rows_content(side)
 	_clamp_row(row)
 	return row
 
@@ -1142,6 +1168,7 @@ func remove_ship_row(side: String) -> bool:
 		_player_rows.remove_at(_player_rows.size() - 1)
 	else:
 		_enemy_rows.remove_at(_enemy_rows.size() - 1)
+	_sync_rows_content(side)
 	_refresh_row_headers(side)
 	_refresh_fleet_buttons()
 	if side == "enemy" and not _enemy_rows.is_empty():
@@ -1754,6 +1781,12 @@ func enemy_header() -> Label:
 ## column is what the compose toggle hides).
 func rows_box(side: String) -> Control:
 	return _player_rows_box if side == "player" else _enemy_rows_box
+
+
+## The rows scroll's content node (the stacked ship lines — the scroll
+## viewport's child; the members' parent).
+func rows_content(side: String) -> Control:
+	return rows_box(side).get_child(0) as Control
 
 
 func player_add_button() -> Button:
