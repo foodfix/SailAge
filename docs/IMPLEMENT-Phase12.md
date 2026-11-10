@@ -256,6 +256,24 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   a stats_row studio edit STICKS, the rows following their host).
   Gates: sandbox 170, the layout quartet, double capture
   byte-identical, assemble --check, validator exit 0.
+- **Post-acceptance fix (2026-11-10, follow-up — the interiors were
+  still unfree):** the registrations landed but TWO clamps fought the
+  studio. (1) The studio's resize floor still took `kids_tiles` as a
+  hard minimum — stale vs the amended rule 2; the floors are now the
+  content minimum only (the game clamps the children on the live
+  edit; `kids_tiles` stays in the tree payload as information), and
+  index.html cache-busts studio.js (`?v=12b`). (2) The interiors were
+  authored 58 tiles wide in the 59-tile panels — rule 1 clamped
+  x to {0,1} and a drag snapped straight back (proven by a WS
+  round-trip probe: the bridge processed the move, the clamp ate it).
+  The interiors are re-authored 56 wide (the editors rows/profile
+  rows, the rows regions, the conditions grid/actions; the +/− pairs
+  and the action buttons right-aligned flush at the new width), and
+  the ship-row blocks match (base/viewport w 56) with
+  `_make_ship_row` composing its cells to the COMMITTED block width.
+  The full studio message set now lands (move/shrink/move-with-rows,
+  WS probe ALL PASS). Gates: sandbox 170, the layout quartet,
+  assemble --check, validator exit 0.
 - **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
   drag pins):** goods_scroll could not be moved or resized (the
   disabled horizontal axis made Godot enforce the content's 1856 px

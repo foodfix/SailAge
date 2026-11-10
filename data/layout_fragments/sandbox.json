@@ -3,25 +3,25 @@
     "actions.export": {
       "h": 2,
       "w": 5,
-      "x": 53,
+      "x": 51,
       "y": 0
     },
     "actions.import": {
       "h": 2,
       "w": 5,
-      "x": 48,
+      "x": 46,
       "y": 0
     },
     "actions.random": {
       "h": 2,
       "w": 5,
-      "x": 43,
+      "x": 41,
       "y": 0
     },
     "actions.start": {
       "h": 2,
       "w": 5,
-      "x": 38,
+      "x": 36,
       "y": 0
     },
     "back_hint": {
@@ -44,13 +44,13 @@
     },
     "conditions_panel.actions": {
       "h": 2,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 3
     },
     "conditions_panel.grid": {
       "h": 2,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 1
     },
@@ -62,25 +62,25 @@
     },
     "enemy_panel.profile_row": {
       "h": 2,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 1
     },
     "enemy_panel.profile_row.add": {
       "h": 2,
       "w": 2,
-      "x": 54,
+      "x": 52,
       "y": 0
     },
     "enemy_panel.profile_row.remove": {
       "h": 2,
       "w": 2,
-      "x": 56,
+      "x": 54,
       "y": 0
     },
     "enemy_panel.rows": {
       "h": 10,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 3
     },
@@ -92,26 +92,26 @@
     },
     "player_panel.rows": {
       "h": 10,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 3
     },
     "player_panel.stats_row": {
       "h": 2,
-      "w": 58,
+      "w": 56,
       "x": 1,
       "y": 1
     },
     "player_panel.stats_row.add": {
       "h": 2,
       "w": 2,
-      "x": 54,
+      "x": 52,
       "y": 0
     },
     "player_panel.stats_row.remove": {
       "h": 2,
       "w": 2,
-      "x": 56,
+      "x": 54,
       "y": 0
     },
     "title": {
@@ -137,14 +137,14 @@
     "enemy_rows": {
       "base": {
         "h": 2,
-        "w": 58,
+        "w": 56,
         "x": 0,
         "y": 0
       },
       "row_h": 2,
       "viewport": {
         "h": 2,
-        "w": 58,
+        "w": 56,
         "x": 0,
         "y": 0
       }
@@ -152,14 +152,14 @@
     "player_rows": {
       "base": {
         "h": 2,
-        "w": 58,
+        "w": 56,
         "x": 0,
         "y": 0
       },
       "row_h": 2,
       "viewport": {
         "h": 2,
-        "w": 58,
+        "w": 56,
         "x": 0,
         "y": 0
       }

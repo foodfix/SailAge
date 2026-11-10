@@ -629,7 +629,14 @@ func _hull_row(hull_id: String) -> Dictionary:
 ## expanding cells (hull, captain, figurehead, sail) splitting the
 ## leftover width evenly (an authored computation, not a stretch flag).
 func _make_ship_row(side: String) -> Dictionary:
+	# The ship line composes its cells to the COMMITTED block width (the
+	# data is the truth — the authored `_panel_box_w` fallback applies
+	# only when the block is absent, e.g. a suite table without lists).
+	var list_id := "player_rows" if side == "player" else "enemy_rows"
 	var row_w := _panel_box_w()
+	var block_rect := RegistryLib.list_rect(SCREEN_ID, list_id, 0)
+	if block_rect != Rect2():
+		row_w = block_rect.size.x
 	var line := Control.new()
 	line.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
 	line.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -698,7 +705,6 @@ func _make_ship_row(side: String) -> Dictionary:
 		if side == "enemy":
 			_sync_enemy_captain(true))
 	var box := _player_rows_box if side == "player" else _enemy_rows_box
-	var list_id := "player_rows" if side == "player" else "enemy_rows"
 	var index := ship_rows(side).size()
 	# The v2 list block drives the row rect (docs/80-* §4.8.9 — the same
 	# pattern as the market's goods rows); the authored pitch is the

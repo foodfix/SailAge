@@ -555,13 +555,16 @@ function layBounds(e) {
   return { x: 0, y: 0, w: LAY.grid.w || 60, h: LAY.grid.h || 34 };
 }
 
-// The resize floors (rule 2 + the content clamp): the element's content
-// minimum plus its registered children's extent, in tiles.
+// The resize floors: the element's CONTENT minimum only, in tiles. The
+// Phase-11 children-extent floor is RETIRED client-side (the 2026-11-10
+// rule-2 amendment, the user-reported sandbox panel interiors): a parent
+// shrink SUCCEEDS and the registered children clamp into the new rect —
+// the game clamps them on the live edit, so the studio must not refuse
+// the drag. `kids_tiles` stays in the tree payload as information only.
 function layFloors(e) {
   const mt = (e && e.min_tiles) || {};
-  const kt = (e && e.kids_tiles) || {};
-  return { w: Math.max(1, mt.w || 1, kt.w || 1),
-           h: Math.max(1, mt.h || 1, kt.h || 1) };
+  return { w: Math.max(1, mt.w || 1),
+           h: Math.max(1, mt.h || 1) };
 }
 
 const layScreenData = (screen) => ((LAY.session.screens || {})[screen]) || {};
@@ -998,19 +1001,21 @@ function renderListBlocks(host) {
   const selList = selRow ? layListOf(selRow) : "";
   for (const listId of ids) {
     const block = (layScreenData(LAY.screen).lists || {})[listId] || null;
-    let rect = null, label = listId;
-    if (block && block.viewport) {
+    // The live member-union rect is the block's SCREEN-space position
+    // (the committed viewport is parent-relative tiles — its host's
+    // offset matters, the sandbox's ship-rows blocks rendered at the
+    // canvas corner until 2026-11-10). The committed viewport is the
+    // fallback for a block whose members are not mounted yet.
+    let rect = unionRects(LAY.tree.filter(x => layListOf(x) === listId)
+      .map(layRect).filter(Boolean));
+    let label = listId;
+    if (!rect && block && block.viewport) {
       const v = block.viewport;
       if ([v.x, v.y, v.w, v.h].every(n => typeof n === "number")) {
         rect = { x: v.x, y: v.y, w: v.w, h: v.h };
-        label = `${listId} · row_h ${block.row_h}`;
       }
     }
-    if (!rect) {
-      rect = unionRects(LAY.tree.filter(x => layListOf(x) === listId)
-        .map(layRect).filter(Boolean));
-      if (rect) label = `${listId} · rows (block not committed yet)`;
-    }
+    if (block && block.row_h != null) label = `${listId} · row_h ${block.row_h}`;
     if (!rect) continue;
     const div = document.createElement("div");
     div.className = "lay-listblock" + (selList === listId ? " active" : "");
@@ -1144,9 +1149,10 @@ function layDragMove(ev) {
     laySend("move", { screen: LAY.screen, id: e.id, x: d.x, y: d.y });
     layPatch(e.id, { x: d.x, y: d.y });
   } else if (mode === "resize") {
-    // the floors captured at mousedown (content minimum + registered
-    // children's extent — a parent cannot shrink so its children end up
-    // outside), clamped inside the parent's edges
+    // the floor captured at mousedown (the content minimum — the amended
+    // rule 2 lets the parent shrink freely; the game clamps the
+    // registered children into the new rect on the live edit), clamped
+    // inside the parent's edges
     const nw = Math.max(LAY.drag.floorW,
       Math.min(p.x - r.x, bounds.x + bounds.w - r.x));
     const nh = Math.max(LAY.drag.floorH,

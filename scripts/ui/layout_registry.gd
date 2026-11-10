@@ -671,9 +671,11 @@ static func tree(screen_id: String) -> Array:
 			"clipped": _inside_scroll(control),
 			"min_tiles": _content_min_tiles(control),
 		}
-		# The children-extent drag floor — only present when the element
-		# has registered children (otherwise the key is omitted and the
-		# studio falls back to min_tiles alone).
+		# The children-extent report — only present when the element has
+		# registered children (otherwise the key is omitted). INFORMATION
+		# ONLY since the 2026-11-10 rule-2 amendment: the studio no
+		# longer floors a drag on it (a parent shrink succeeds; the
+		# game clamps the children into the new rect).
 		var kids := _children_extent(screen_id, id, control, parent_of)
 		if kids.x > 0 or kids.y > 0:
 			row["kids_tiles"] = {
