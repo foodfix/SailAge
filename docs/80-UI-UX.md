@@ -3510,11 +3510,18 @@ data.
   — the sandbox's panel interiors were "unregistered for now" at the
   W2-D capture and the studio could not touch them): an editors row, a
   ship-rows region, a +/− pair, a conditions grid — if the user can see
-  it, it has an id and a committed row. Builder-composed CELLS inside a
-  row (labels/spins/options) stay builder-owned flow (the row is the
-  movable unit); dynamic rows (the sandbox's per-ship lines) register
-  as list members of their block (`player_rows.<i>`, `enemy_rows.<i>`
-  — builder-placed via `list_rect`, coverage-exempt).
+  it, it has an id and a committed row. The EDITORS' CELLS register
+  too (the follow-up report — "edit constitution, intellect, armor,
+  weapon…"): one cell per label+field pair (`<row id>.<key>` —
+  `player_panel.stats_row.constitution`, `.weapon`,
+  `enemy_panel.profile_row.kind`, `conditions_panel.grid.day`…),
+  composed inside its row by the build cursor and snapped to its
+  committed tiles at activation — the cell is the studio's movable
+  unit, the pair keeps the compose-beside contract inside it. Dynamic
+  rows (the sandbox's per-ship lines) register as list members of
+  their block (`player_rows.<i>`, `enemy_rows.<i>` — builder-placed
+  via `list_rect`, coverage-exempt); the cells INSIDE a member line
+  stay builder-owned flow.
 - **The live loop:** a studio commit lands on the **next screen
   activation** — no restart. The game re-reads `ui_layout.json` when
   its bytes drift on disk (`DataLoader.reload_ui_layout_if_changed`,

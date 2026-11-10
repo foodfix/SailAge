@@ -1104,8 +1104,45 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: an added ship row lands at the block's next row "
 			+ "(y=%s)" % str(row1.position.y if row1 != null else -1.0))
 
-	# A studio edit on the stats row STICKS (no floor snaps it back), and
-	# the ship rows follow their host region.
+	# The cells (the follow-up report — "edit constitution, intellect,
+	# armor, weapon…"): every committed cell row under the three editors
+	# rows is live at its rect, and one cell edit STICKS. The ids derive
+	# from the committed file (the file is the pin). Runs BEFORE the row
+	# shrink below — a shrunken row clamps its cells into it (the amended
+	# rule 2), which is pinned separately.
+	var cell_ids: Array[String] = []
+	for id in rows.keys():
+		var s := str(id)
+		if s.begins_with("player_panel.stats_row.") \
+				or s.begins_with("enemy_panel.profile_row.") \
+				or s.begins_with("conditions_panel.grid."):
+			cell_ids.append(s)
+	_check(cell_ids.size() >= 20,
+			"cells: %d committed cell rows (want ≥ 20)" % cell_ids.size())
+	var cells_ok := true
+	for id in cell_ids:
+		var ctl: Control = live.call(id)
+		if ctl == null or ctl.position != at.call(id):
+			cells_ok = false
+			print("  cell off: %s got %s want %s" % [id,
+					str(ctl.position if ctl != null else "absent"),
+					str(at.call(id))])
+	_check(cells_ok,
+			"cells: every committed cell is live at its rect (%d)"
+					% cell_ids.size())
+	RegistryLib.apply_overrides("sandbox",
+			"player_panel.stats_row.constitution", {"x": 2, "y": 0})
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var constitution: Control = live.call(
+			"player_panel.stats_row.constitution")
+	_check(constitution != null and constitution.position == Vector2(2, 0)
+			* tile, "cells: a constitution cell edit STICKS (got %s)"
+					% str(constitution.position if constitution != null
+					else "absent"))
+
+	# A studio edit on the stats row STICKS, and the cells clamp INTO the
+	# shrunken row (the amended rule 2 — the shrink succeeds).
 	var stats: Control = live.call("player_panel.stats_row")
 	RegistryLib.apply_overrides("sandbox", "player_panel.stats_row",
 			{"x": 2, "y": 2, "w": 40, "h": 2})
@@ -1115,6 +1152,13 @@ func _test_panel_interiors_managed() -> void:
 			and stats.size == Vector2(40, 2) * tile,
 			"interiors: a stats_row studio edit STICKS (got %s / %s)"
 					% [str(stats.position), str(stats.size)])
+	var morale: Control = live.call("player_panel.stats_row.morale")
+	_check(morale != null and morale.position.x == (40 - 4) * tile,
+			"cells: the morale cell clamped into the shrunken row "
+			+ "(got %s)" % str(morale.position if morale != null
+					else "absent"))
+	RegistryLib.apply_overrides("sandbox", "player_panel.stats_row",
+			{"x": 1, "y": 1, "w": 58, "h": 2})
 	var region: Control = live.call("player_panel.rows")
 	var region_before: float = row1.global_position.y
 	RegistryLib.apply_overrides("sandbox", "player_panel.rows",

@@ -274,6 +274,26 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   The full studio message set now lands (move/shrink/move-with-rows,
   WS probe ALL PASS). Gates: sandbox 170, the layout quartet,
   assemble --check, validator exit 0.
+- **Post-acceptance fix (2026-11-10, follow-up — the editor CELLS):**
+  the user named the cells themselves — constitution, intellect,
+  armor, weapon "and etc". One registered CELL per label+field pair
+  now exists in all three editors rows: `player_panel.stats_row.<key>`
+  (constitution/intellect/charisma/courage/luck/weapon/armor/morale),
+  `enemy_panel.profile_row.<key>` (kind/compose/flagship/ai_level/
+  archetype/formation/morale), `conditions_panel.grid.<key>` (day/
+  seed_mode/seed_value/weather/wind_dir/current/current_strength/
+  deployment) — 23 new `role: field` elements; the cell is the
+  studio's movable unit and the pair keeps the compose-beside contract
+  inside it. The build-cursor px math is unchanged (the cell rects
+  derive from it: authored ceil(start)/floor(end) so no authored
+  overlaps), the editors rows restore their 58-tile committed width
+  (the cells carry the move room), and the ship-row cells inside a
+  dynamic member line stay builder-owned. A shrunken row clamps its
+  cells into it (the amended rule 2, pinned). Pin: the sandbox suite's
+  cells leg (every committed cell live at its rect — 27 rows, file-
+  derived — plus a constitution edit STICKS and the morale clamp).
+  Gates: sandbox 174, the layout quartet, double capture
+  byte-identical, assemble --check, validator exit 0.
 - **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
   drag pins):** goods_scroll could not be moved or resized (the
   disabled horizontal axis made Godot enforce the content's 1856 px

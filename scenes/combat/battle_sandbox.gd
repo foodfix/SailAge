@@ -536,6 +536,50 @@ func _row_pair(row: Control, label: Label, control: Control, x: float,
 	return _row_cell(row, control, x, control_w, ROW_PITCH)
 
 
+## Phase 12 (the 2026-11-10 user report — "edit constitution, intellect,
+## armor, weapon…"): one REGISTERED CELL per label+field pair — the cell
+## is the studio's movable unit; the pair keeps the compose-beside
+## contract inside it (label at its column floor, the field beside it).
+## `id` is the full element id (`<row id>.<key>`); the build-cursor
+## position is the pre-apply fallback — the data row snaps the cell to
+## its committed tiles at activation. Returns the next cursor (cell
+## width + one gap).
+func _row_field(row: Control, id: String, label: Label, field: Control,
+		x: float, label_w: float, control_w: float) -> float:
+	var cell := Control.new()
+	cell.name = id.get_slice(".", id.get_slice_count(".") - 1)
+	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.position = Vector2(x, 0)
+	cell.size = Vector2(label_w + CELL_GAP + control_w, ROW_PITCH)
+	label.position = Vector2(0,
+			(ROW_PITCH - float(PaletteLib.ROW_H)) / 2.0)
+	label.size = Vector2(label_w, float(PaletteLib.ROW_H))
+	cell.add_child(label)
+	field.position = Vector2(label_w + CELL_GAP, 0)
+	field.size = Vector2(control_w, ROW_PITCH)
+	cell.add_child(field)
+	row.add_child(cell)
+	RegistryLib.register(SCREEN_ID, cell, id, {"role": "field"})
+	return x + cell.size.x + CELL_GAP
+
+
+## The bare variant — one self-labelled control (the compose checkbox)
+## or a lone field (the fixed-seed spin) as one registered cell.
+func _row_field_bare(row: Control, id: String, field: Control, x: float,
+		control_w: float) -> float:
+	var cell := Control.new()
+	cell.name = id.get_slice(".", id.get_slice_count(".") - 1)
+	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.position = Vector2(x, 0)
+	cell.size = Vector2(control_w, ROW_PITCH)
+	field.position = Vector2.ZERO
+	field.size = Vector2(control_w, ROW_PITCH)
+	cell.add_child(field)
+	row.add_child(cell)
+	RegistryLib.register(SCREEN_ID, cell, id, {"role": "field"})
+	return x + control_w + CELL_GAP
+
+
 ## Phase 12 — the +/− fleet buttons ride the editors row's right end (the
 ## 2026-11-09 horizontal-bands contract): `slot` 0 is the left button of
 ## the pair, slot 1 the right one (64px buttons, one gap apart).
@@ -774,25 +818,29 @@ func _build_player_stats_row() -> void:
 	_player_stats_row_h = row
 
 	var x := 0.0
+	var row_id := "player_panel.stats_row"
 	for key in ATTRIBUTES:
-		x = _row_pair(row, _field_label(_t("char.attr.%s" % key),
-			LABEL_W_ATTR), _spin(ATTR_MIN, ATTR_MAX,
-			_default_attribute(key), 96), x, LABEL_W_ATTR, 96)
-		var spin: SpinBox = row.get_child(row.get_child_count() - 1)
+		var spin := _spin(ATTR_MIN, ATTR_MAX, _default_attribute(key), 96)
+		x = _row_field(row, "%s.%s" % [row_id, key],
+				_field_label(_t("char.attr.%s" % key), LABEL_W_ATTR),
+				spin, x, LABEL_W_ATTR, 96)
 		_attribute_spins[key] = spin
 
 	_weapon_option = _option(160)
 	_armor_option = _option(160)
 	_fill_equipment_option(_weapon_option, "weapon")
 	_fill_equipment_option(_armor_option, "armor")
-	x = _row_pair(row, _field_label(_t("shipyard.slot.weapon"),
-		LABEL_W_SHORT), _weapon_option, x, LABEL_W_SHORT, 160)
-	x = _row_pair(row, _field_label(_t("shipyard.slot.armor"),
-		LABEL_W_SHORT), _armor_option, x, LABEL_W_SHORT, 160)
-	x = _row_pair(row, _field_label(_t("sandbox.morale.short"),
-		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
-		LABEL_W_MORALE, 96)
-	_player_morale_spin = row.get_child(row.get_child_count() - 1)
+	x = _row_field(row, "%s.weapon" % row_id,
+			_field_label(_t("shipyard.slot.weapon"), LABEL_W_SHORT),
+			_weapon_option, x, LABEL_W_SHORT, 160)
+	x = _row_field(row, "%s.armor" % row_id,
+			_field_label(_t("shipyard.slot.armor"), LABEL_W_SHORT),
+			_armor_option, x, LABEL_W_SHORT, 160)
+	var morale_spin := _spin(MORALE_MIN, MORALE_MAX, 50, 96)
+	x = _row_field(row, "%s.morale" % row_id,
+			_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE),
+			morale_spin, x, LABEL_W_MORALE, 96)
+	_player_morale_spin = morale_spin
 	_player_panel.add_child(row)
 
 
@@ -829,16 +877,19 @@ func _build_enemy_profile_row() -> void:
 	_enemy_profile_row_h = row
 
 	var x := 0.0
+	var row_id := "enemy_panel.profile_row"
 	_kind_option = _option(160)
 	_fill_option(_kind_option, KINDS, "sandbox.kind")
 	_kind_option.item_selected.connect(func(_index: int) -> void:
 		_apply_kind_profile(str(_option_value(_kind_option))))
-	x = _row_pair(row, _field_label(_t("sandbox.enemy.kind"), LABEL_W_MID),
-		_kind_option, x, LABEL_W_MID, 160)
+	x = _row_field(row, "%s.kind" % row_id,
+			_field_label(_t("sandbox.enemy.kind"), LABEL_W_MID),
+			_kind_option, x, LABEL_W_MID, 160)
 	_compose_check = CheckBox.new()
 	_compose_check.text = _t("sandbox.enemy.compose")
 	_compose_check.toggled.connect(_on_compose_toggled)
-	x = _row_cell(row, _compose_check, x, 240.0, ROW_PITCH)
+	x = _row_field_bare(row, "%s.compose" % row_id, _compose_check, x,
+			240.0)
 
 	var flagship_label := _field_label(_t("sandbox.enemy.flagship"),
 		LABEL_W_STD)
@@ -847,8 +898,6 @@ func _build_enemy_profile_row() -> void:
 	_enemy_captain_edit.placeholder_text = ""
 	_enemy_captain_edit.text_changed.connect(func(_text: String) -> void:
 		_sync_enemy_captain(false))
-	x = _row_cell(row, flagship_label, x, flagship_w,
-		float(PaletteLib.ROW_H))
 	# The flagship edit expands across the leftover width between here and
 	# the ai_level cell + the right-end button pair (an authored
 	# computation, not a stretch flag).
@@ -858,9 +907,8 @@ func _build_enemy_profile_row() -> void:
 		+ CELL_GAP + 96.0 + CELL_GAP)
 	var edit_w: float = maxf(128.0, row.size.x - x - flagship_w - CELL_GAP \
 		- right_reserved)
-	x = _row_cell(row, _enemy_captain_edit, x + flagship_w + CELL_GAP,
-		edit_w, ROW_PITCH)
-	x += CELL_GAP
+	x = _row_field(row, "%s.flagship" % row_id, flagship_label,
+			_enemy_captain_edit, x, flagship_w, edit_w)
 
 	_ai_level_option = _option(164)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t2"))
@@ -868,21 +916,25 @@ func _build_enemy_profile_row() -> void:
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t3"))
 	_ai_level_option.set_item_metadata(1, 1)
 	_ai_level_option.select(0)
-	x = _row_pair(row, _field_label(_t("sandbox.ai_level"), LABEL_W_STD),
-		_ai_level_option, x, LABEL_W_STD, 164)
+	x = _row_field(row, "%s.ai_level" % row_id,
+			_field_label(_t("sandbox.ai_level"), LABEL_W_STD),
+			_ai_level_option, x, LABEL_W_STD, 164)
 	_archetype_option = _option(136)
 	_fill_option(_archetype_option, ARCHETYPES, "sandbox.archetype")
-	x = _row_pair(row, _field_label(_t("sandbox.archetype"), LABEL_W_MID),
-		_archetype_option, x, LABEL_W_MID, 136)
+	x = _row_field(row, "%s.archetype" % row_id,
+			_field_label(_t("sandbox.archetype"), LABEL_W_MID),
+			_archetype_option, x, LABEL_W_MID, 136)
 
 	_formation_option = _option(140)
 	_fill_option(_formation_option, FORMATIONS, "battle.formation")
-	x = _row_pair(row, _field_label(_t("sandbox.formation"), LABEL_W_MID),
-		_formation_option, x, LABEL_W_MID, 140)
-	x = _row_pair(row, _field_label(_t("sandbox.morale.short"),
-		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
-		LABEL_W_MORALE, 96)
-	_enemy_morale_spin = row.get_child(row.get_child_count() - 1)
+	x = _row_field(row, "%s.formation" % row_id,
+			_field_label(_t("sandbox.formation"), LABEL_W_MID),
+			_formation_option, x, LABEL_W_MID, 140)
+	var morale_spin := _spin(MORALE_MIN, MORALE_MAX, 50, 96)
+	x = _row_field(row, "%s.morale" % row_id,
+			_field_label(_t("sandbox.morale.short"), LABEL_W_MORALE),
+			morale_spin, x, LABEL_W_MORALE, 96)
+	_enemy_morale_spin = morale_spin
 	_enemy_panel.add_child(row)
 
 
@@ -968,9 +1020,11 @@ func _build_conditions_row() -> void:
 	_conditions_grid = grid
 
 	var x := 0.0
+	var row_id := "conditions_panel.grid"
 	_day_spin = _spin(DAY_MIN, 9999, 1, 96)
-	x = _row_pair(grid, _field_label(_t("sandbox.day"), LABEL_W_SHORT),
-		_day_spin, x, LABEL_W_SHORT, 96)
+	x = _row_field(grid, "%s.day" % row_id,
+			_field_label(_t("sandbox.day"), LABEL_W_SHORT),
+			_day_spin, x, LABEL_W_SHORT, 96)
 	# The seed pair: the value spin rides beside its mode option (it shows
 	# only for `seed_mode = fixed` — the §4.7.16 resolution rules).
 	_seed_mode_option = _option(190)
@@ -978,31 +1032,38 @@ func _build_conditions_row() -> void:
 	_seed_spin = _spin(0, SEED_MAX, 1, 128)
 	_seed_mode_option.item_selected.connect(func(_index: int) -> void:
 		_seed_spin.visible = str(_option_value(_seed_mode_option)) == "fixed")
-	x = _row_pair(grid, _field_label(_t("sandbox.seed"), LABEL_W_SHORT),
-		_seed_mode_option, x, LABEL_W_SHORT, 190)
-	x = _row_cell(grid, _seed_spin, x, 128, ROW_PITCH)
+	x = _row_field(grid, "%s.seed_mode" % row_id,
+			_field_label(_t("sandbox.seed"), LABEL_W_SHORT),
+			_seed_mode_option, x, LABEL_W_SHORT, 190)
+	x = _row_field_bare(grid, "%s.seed_value" % row_id, _seed_spin, x,
+			128.0)
 	_weather_option = _option(112)
 	_fill_option(_weather_option, WEATHERS, "world.weather")
-	x = _row_pair(grid, _field_label(_t("sandbox.weather"), LABEL_W_STD),
-		_weather_option, x, LABEL_W_STD, 112)
+	x = _row_field(grid, "%s.weather" % row_id,
+			_field_label(_t("sandbox.weather"), LABEL_W_STD),
+			_weather_option, x, LABEL_W_STD, 112)
 
 	_wind_option = _option(88)
 	_fill_option(_wind_option, WIND_DIRS, "sandbox.dir")
-	x = _row_pair(grid, _field_label(_t("sandbox.wind_dir"), LABEL_W_LONG),
-		_wind_option, x, LABEL_W_LONG, 88)
+	x = _row_field(grid, "%s.wind_dir" % row_id,
+			_field_label(_t("sandbox.wind_dir"), LABEL_W_LONG),
+			_wind_option, x, LABEL_W_LONG, 88)
 	# The current pair: the direction option + the LABELED 0..3 strength
 	# spin (the strength was an unlabeled mystery box before 2026-11-09).
 	_current_dir_option = _option(84)
 	_fill_option(_current_dir_option, CURRENT_DIRS, "sandbox.dir")
 	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 96)
-	x = _row_pair(grid, _field_label(_t("sandbox.current"), LABEL_W_STD),
-		_current_dir_option, x, LABEL_W_STD, 84)
-	x = _row_pair(grid, _field_label(_t("sandbox.current.strength"),
-		LABEL_W_STRENGTH), _current_strength_spin, x, LABEL_W_STRENGTH, 96)
+	x = _row_field(grid, "%s.current" % row_id,
+			_field_label(_t("sandbox.current"), LABEL_W_STD),
+			_current_dir_option, x, LABEL_W_STD, 84)
+	x = _row_field(grid, "%s.current_strength" % row_id,
+			_field_label(_t("sandbox.current.strength"), LABEL_W_STRENGTH),
+			_current_strength_spin, x, LABEL_W_STRENGTH, 96)
 	_deployment_option = _option(150)
 	_fill_option(_deployment_option, DEPLOYMENTS, "sandbox.deployment")
-	x = _row_pair(grid, _field_label(_t("sandbox.deployment"), LABEL_W_LONG),
-		_deployment_option, x, LABEL_W_LONG, 150)
+	x = _row_field(grid, "%s.deployment" % row_id,
+			_field_label(_t("sandbox.deployment"), LABEL_W_LONG),
+			_deployment_option, x, LABEL_W_LONG, 150)
 
 	# Row 2: the four actions, right-aligned (a single 4-across row fits
 	# the 1888px strip now that the conditions carry their own row).
