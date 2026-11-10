@@ -125,7 +125,7 @@ SailAge/
 │   ├── skill_gates.json         # Phase 8: data-driven skill/stat gates (10-* §4.20)
 │   ├── officer_posts.json       # Phase 8: officer posts — prereqs + advice triggers (10-* §4.21)
 │   ├── backgrounds.json         # Phase 8: 6 new-game backgrounds (10-* §4.22)
-│   ├── ui_layout.json           # Phase 12: THE absolute layout file, v2 (10-* §4.23) — every static element's rect + list blocks; populated by the capture, single writer = the studio
+│   ├── ui_layout.json           # Phase 12: THE absolute layout file, v2 (10-* §4.23) — every static element's rect + list blocks; the ONLY layout artifact (the fragment/assembler pipeline is retired, 2026-11-11), single writer = the studio
 │   ├── maps/world.png           # generated, tool-owned (§9)
 │   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
 │   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)

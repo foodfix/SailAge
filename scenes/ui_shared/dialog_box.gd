@@ -26,7 +26,7 @@ extends Control
 ## the element tree; the old `Center → Panel → Margin → Body → Scroll →
 ## IconRow/Footer` flow chain is deleted and every control registers its
 ## stable id (activation at each OPEN; the plate is the fixed
-## `22,12,15,10` rect of `data/layout_fragments/dialog_box.json`).
+## `22,12,15,10` rect of `data/ui_layout.json`).
 
 const PaletteLib := preload("res://scripts/palette.gd")
 ## §4.9 icon registry (W4-B/W4-C): the illustration slot resolves here; a

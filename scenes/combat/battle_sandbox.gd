@@ -445,9 +445,15 @@ func _panel_column(panel_name: String, title_key: String, at: Vector2,
 	header.text = _t(title_key)
 	header.theme_type_variation = "Accent"
 	header.visible = false
-	header.position = Vector2(PANEL_PAD, PANEL_PAD)
-	header.size = Vector2(panel_size.x - 2.0 * PANEL_PAD,
-		float(PaletteLib.ROW_H))
+	# Anchors, not a fixed rect: the header tracks the panel's COMMITTED
+	# width (the user's arrangement narrowed the panel — a build-px size
+	# would overflow it after apply; this inert label is unregistered
+	# chrome, so anchors keep it inside at any committed width).
+	header.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	header.offset_left = PANEL_PAD
+	header.offset_right = -PANEL_PAD
+	header.offset_top = PANEL_PAD
+	header.offset_bottom = PANEL_PAD + float(PaletteLib.ROW_H)
 	panel.add_child(header)
 	return {"panel": panel, "header": header}
 

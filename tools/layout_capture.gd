@@ -1,21 +1,22 @@
 extends Node
-## Layout capture (docs/IMPLEMENT-Phase12.md W1; docs/80-* §4.8.9; the
-## generalized `nest_audit`): boots one screen with its suite rig, waits
-## out the layout, and emits the screen's v2 layout fragment — every
-## registered element's settled rect in PARENT-RELATIVE tiles plus the
-## list blocks (base/row_h derived from consecutive row origins,
-## viewport from the nearest ScrollContainer ancestor).
+## Layout capture (docs/80-* §4.8.9; the generalized `nest_audit`): boots
+## one screen with its suite rig, waits out the layout, and prints the
+## screen's v2 element rects — every registered element's settled rect in
+## PARENT-RELATIVE tiles plus the list blocks (a DEBUG dump to stdout).
 ##
 ##   godot --headless --path . res://tools/layout_capture.tscn -- --screen=market
 ##   godot --headless --path . res://tools/layout_capture.tscn -- --all
 ##
-## Output: `data/layout_fragments/<screen>.json` —
-## `{"elements": {id: {x, y, w, h}}, "lists": {id: {base, row_h,
-## viewport}}}` — canonical bytes (sorted keys, 2-space indent,
-## trailing newline). The master assembles fragments into the single
-## `data/ui_layout.json` at each merge gate (docs/IMPLEMENT-Phase12.md
-## §4). Determinism (W4.7): fixed rigs, settled-frame waits, sorted
-## output — a double capture must be byte-identical.
+## 2026-11-11: the fragment FILES (`data/layout_fragments/`) and the
+## assembler (`tools/assemble_layout.py`) are RETIRED — they were a
+## dev-side second writer that reset studio commits (the user's
+## 0bb39f07 arrangement was wiped by an assemble from a stale fragment).
+## `data/ui_layout.json` is the one layout artifact, the studio is its
+## only writer, and dev-side changes are data-only edits to the file.
+## This tool keeps the rigs + the `--audit` structural check and prints
+## a screen's rects for debugging.
+##
+## Determinism (W4.7): fixed rigs, settled-frame waits, sorted output.
 ##
 ## The registered-ancestor capture rule makes parent-relative rects
 ## robust to the W2 container deletion: a rect relative to its
@@ -286,19 +287,14 @@ func _capture_screen(screen_id: String) -> bool:
 	RegistryLib._reset_for_tests()
 	if fragment.is_empty():
 		return false
-	var dir := "res://data/layout_fragments"
-	DirAccess.make_dir_recursive_absolute(dir)
-	var path := "%s/%s.json" % [dir, screen_id]
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		push_error("layout_capture: cannot write %s" % path)
-		return false
-	f.store_string(JSON.stringify(fragment, "  ", true) + "\n")
-	f.close()
+	# Debug dump to stdout only (2026-11-11: the fragment FILES and the
+	# assembler are retired — `data/ui_layout.json` is the one layout
+	# artifact and the studio is its only writer; a captured dump must
+	# never re-enter the repo over a studio commit).
 	var elements: Dictionary = fragment.get("elements", {})
 	var lists: Dictionary = fragment.get("lists", {})
-	print("CAPTURED %s — %d elements, %d lists -> %s"
-			% [screen_id, elements.size(), lists.size(), path])
+	print("CAPTURED %s — %d elements, %d lists (stdout dump only)"
+			% [screen_id, elements.size(), lists.size()])
 	return true
 
 

@@ -538,7 +538,7 @@ func current_mutiny_offer() -> Dictionary:
 ## Disables the buttons the offer cannot satisfy: "Pay" needs `can_pay`,
 ## "Suppress" needs `can_suppress` (§4.8.3). (Phase 12: the confirm
 ## dialog's flow chain is deleted — the buttons hang off the plate,
-## `data/layout_fragments/confirm.json`.)
+## `data/ui_layout.json`.)
 func _apply_mutiny_offer() -> void:
 	if _mutiny_dialog == null:
 		return

@@ -311,6 +311,20 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   pin derives its width from the file. Gates: sandbox 174, the layout
   quartet, double capture byte-identical, assemble --check, validator
   exit 0, full sweep 67/67.
+- **Pipeline retirement (2026-11-11, user direction — "DELETE the
+  default layout value"):** the fragment files
+  (`data/layout_fragments/`) and the assembler
+  (`tools/assemble_layout.py`) are DELETED. They were a dev-side
+  second writer: every assemble re-asserted the fragment's rows over
+  `data/ui_layout.json`, which is exactly how the user's committed
+  studio arrangement (0bb39f07) was wiped by the scroll commit
+  (e5d67362) assembling from a stale fragment. The user's arrangement
+  was recovered from their commit and merged back (identical 89-row
+  id set; the list viewports re-derived for the scroll). From now on
+  `data/ui_layout.json` is the ONE layout artifact: the studio is its
+  only writer, dev-side layout changes are data-only edits to the
+  file, and the capture tool keeps the rigs + `--audit` with a stdout
+  debug dump only.
 - **Follow-up (2026-11-11, user request — the ship rows scroll):**
   `player_panel.rows` / `enemy_panel.rows` are ScrollContainer
   viewports now (the goods_scroll pattern): the five ship lines live

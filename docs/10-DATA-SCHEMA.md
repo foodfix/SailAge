@@ -1457,8 +1457,12 @@ screen's settled look).
 - **Serialization byte rule:** sorted keys, 2-space indent, trailing
   newline — byte-stable commits (group 14 checks the bytes).
 - **Single writer:** the studio writes this file (after an in-process
-  validator pass) and the capture tool regenerates it; the game and
-  bridge never write it.
+  validator pass); the game and bridge never write it. There is NO
+  build-time source: the fragment files and the assembler are retired
+  (2026-11-11 — they reset studio commits; the user's 0bb39f07
+  arrangement was wiped by an assemble from a stale fragment). A
+  dev-side layout change is a data-only edit to this file, same as
+  any content change.
 
 ```json
 {
@@ -3088,7 +3092,7 @@ no migration, the capture regenerates the file). It checks:
 6. **Serialization bytes.** The file's raw text equals
    `json.dumps(parsed, sort_keys=True, indent=2) + "\n"` — sorted keys,
    2-space indent, exactly one trailing newline (byte-stable commits;
-   the studio and the capture tool both serialize this way).
+   the studio serializes this way).
 
 ## 9. Edge Cases & Fail States
 

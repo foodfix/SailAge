@@ -291,26 +291,31 @@ func _test_add_ship_visibility() -> void:
 				else sandbox.enemy_panel()
 			var rows: Array = sandbox.ship_rows(side)
 			var last: Control = rows[rows.size() - 1]["root"]
-			var panel_rect := Rect2(panel.global_position, panel.size)
+			# The rows region is a scroll viewport (2026-11-11): the new
+			# row must sit inside the SCROLL's content extent (the
+			# stacked order), not the panel rect — the viewport clips
+			# and scrolls by design.
+			var content_rect := Rect2(
+					sandbox.rows_content(side).global_position,
+					sandbox.rows_content(side).size)
 			var row_rect := Rect2(last.global_position, last.size)
-			var inside := panel_rect.encloses(row_rect)
-			var note: String = "" if inside else " (row %s vs panel %s)" \
-				% [row_rect, panel_rect]
+			var inside := content_rect.encloses(row_rect)
+			var note: String = "" if inside else " (row %s vs content %s)" \
+				% [row_rect, content_rect]
 			var message: String = ("after the %s add, the new ship row is "
-				+ "inside the panel rect (all rows visible, no scroll)%s") \
+				+ "inside the rows scroll's content extent%s") \
 				% [side, note]
 			_check(inside, message)
 
-	# The 5-ship fleet fits its panel with NO scrolling: the rows content
-	# stays inside the pinned panel height.
+	# The scroll range covers the stacked fleet: the content node is
+	# exactly fleet_count rows tall (the region's viewport height is
+	# whatever the committed file says — the scroll does the rest).
 	for side in ["player", "enemy"]:
-		var content: float = (sandbox.rows_box(side) as Control).size.y
-		var panel: Control = sandbox.player_panel() if side == "player" \
-			else sandbox.enemy_panel()
-		_check(content <= panel.size.y + 1.0,
-			("%s: 5-ship rows content (%.0f px) fits the panel height "
-			+ "(%.0f px) — no scrolling needed") % [side, content,
-			panel.size.y])
+		var content_node: Control = sandbox.rows_content(side)
+		var expected: float = float(sandbox.ship_rows(side).size()) * 64.0
+		_check(absf(content_node.size.y - expected) <= 1.0,
+			"the %s rows scroll's content is %d rows tall"
+				% [side, sandbox.ship_rows(side).size()])
 
 	# Cap: the 6th add refuses, shows the sandbox.ship.max toast, and the
 	# Add button disables. Floor: Remove disables at 1, re-enables above.
@@ -862,47 +867,52 @@ func _test_layout_geometry() -> void:
 		_check(check is CheckBox and (check as CheckBox).text == compose_text,
 			"[%s] the compose toggle carries its own localized label" % locale)
 
-		# The fleet +/− buttons sit on the panel's FIRST row (the shared
-		# editors row) at its right end, inside the panel (the 2026-11-09
-		# horizontal-bands re-layout).
+		# The fleet +/− buttons sit inside their panel (the 2026-11-09
+		# horizontal-bands re-layout; the WHERE is the committed file's —
+		# the user's arrangement moved them to the stats row's second
+		# line, and the file is the pin).
 		for side in ["player", "enemy"]:
 			var panel: Control = sandbox.player_panel() if side == "player" \
 				else sandbox.enemy_panel()
 			var add: Button = sandbox.player_add_button() \
 				if side == "player" else sandbox.enemy_add_button()
-			var row_ok := add.global_position.y \
-				< panel.global_position.y + 72.0 \
-				and add.global_position.x + add.size.x \
-					<= panel.global_position.x + panel.size.x + 1.0
-			_check(row_ok,
-				("[%s] the %s fleet +/− buttons sit on the editors row's "
-				+ "right end inside the panel") % [locale, side])
+			var panel_rect := Rect2(panel.global_position, panel.size)
+			var add_rect := Rect2(add.global_position, add.size)
+			_check(panel_rect.encloses(add_rect),
+				"[%s] the %s fleet +/− buttons sit inside the panel"
+					% [locale, side])
 
-		# The three §4.7.16 regions sit at their EXACT managed rects (the
-		# Phase-12 v2 tile grid: the fragment `sandbox.json` is the pin —
-		# 1,2,59,13 / 1,16,59,13 / 1,29,59,5 in tiles × 32px).
+		# The three §4.7.16 regions sit at their committed rects — read
+		# from `data/ui_layout.json` (the file is the pin; no hardcoded
+		# geometry).
+		var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
+		var doc: Dictionary = JSON.parse_string(f.get_as_text()) if f != null \
+				else {}
+		if f != null:
+			f.close()
+		var committed: Dictionary = doc.get("screens", {}).get("sandbox",
+				{}).get("elements", {})
 		var rects := [
-			["player panel", sandbox.player_panel(),
-				Vector2(32, 64), Vector2(1888, 416)],
-			["enemy panel", sandbox.enemy_panel(),
-				Vector2(32, 512), Vector2(1888, 416)],
-			["conditions", sandbox.conditions_panel(),
-				Vector2(32, 928), Vector2(1888, 160)],
+			["player panel", sandbox.player_panel(), "player_panel"],
+			["enemy panel", sandbox.enemy_panel(), "enemy_panel"],
+			["conditions", sandbox.conditions_panel(), "conditions_panel"],
 		]
 		var rects_ok := true
 		var rects_note := ""
 		for entry in rects:
 			var control: Control = entry[1]
-			if control.position != (entry[2] as Vector2) \
-					or control.size != (entry[3] as Vector2):
+			var want: Dictionary = committed.get(entry[2], {})
+			var want_pos: Vector2 = Vector2(float(int(want.get("x", -9))),
+					float(int(want.get("y", -9)))) * 32.0
+			var want_size: Vector2 = Vector2(float(int(want.get("w", -9))),
+					float(int(want.get("h", -9)))) * 32.0
+			if control.position != want_pos or control.size != want_size:
 				rects_ok = false
-				rects_note += " %s at %s×%s" % [entry[0], control.position,
-					control.size]
+				rects_note += " %s at %s×%s (want %s×%s)" % [entry[0],
+					control.position, control.size, want_pos, want_size]
 		_check(rects_ok,
-			("[%s] the three §4.7.16 regions sit at the managed tile rects "
-			+ "(player 32,64 1888×416 / enemy 32,512 1888×416 / conditions "
-			+ "32,928 1888×160 — the v2 grid's quantized form of the pinned "
-			+ "bands)") % locale + rects_note)
+			"[%s] the three §4.7.16 regions sit at their committed rects"
+					% locale + rects_note)
 
 		sandbox.queue_free()
 		await get_tree().process_frame
@@ -930,7 +940,7 @@ func _panel_controls(root: Control) -> Array:
 func _layout_problems(sandbox) -> Array[String]:
 	var problems: Array[String] = []
 	# Phase 12 (W2-D): the regions are the managed data rects now (the
-	# 32-tile grid; `data/layout_fragments/sandbox.json` is the pin) — the
+	# 32-tile grid; `data/ui_layout.json` is the pin) — the
 	# screen bottom carries the §4.23 sliver row (the canvas is 60×33.75
 	# tiles: a full-height 34-tile element's bottom 8px are IN bounds).
 	var regions: Array = [
@@ -950,6 +960,19 @@ func _layout_problems(sandbox) -> Array[String]:
 			else panel.global_position.y + panel.size.y
 		for control in _panel_controls(panel):
 			if control == panel:
+				continue
+			# Scroll-owned subtrees are clip-managed (the 2026-11-11
+			# scroll conversion): the content node extends past the
+			# viewport BY DESIGN and the scroll does the rest — skip
+			# everything under a ScrollContainer.
+			var ancestor: Node = control.get_parent()
+			var scroll_owned := false
+			while ancestor is Control and ancestor != panel:
+				if ancestor is ScrollContainer:
+					scroll_owned = true
+					break
+				ancestor = ancestor.get_parent()
+			if scroll_owned:
 				continue
 			var right: float = control.global_position.x + control.size.x
 			var bottom: float = control.global_position.y + control.size.y
@@ -1153,13 +1176,17 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: a stats_row studio edit STICKS (got %s / %s)"
 					% [str(stats.position), str(stats.size)])
 	var morale: Control = live.call("player_panel.stats_row.morale")
-	var morale_w := float(int(rows.get("player_panel.stats_row.morale",
-			{}).get("w", -1)))
+	var morale_row: Dictionary = rows.get("player_panel.stats_row.morale", {})
+	var morale_x := float(int(morale_row.get("x", -9)))
+	var morale_w := float(int(morale_row.get("w", -1)))
+	# The clamp target derives from the file: the cell's committed x
+	# clamps to (shrunken width - its width) when it was right of it.
+	var clamped_x: float = minf(morale_x, 40.0 - morale_w)
 	_check(morale != null and morale_w > 0 and morale.position.x
-			== (40 - morale_w) * tile,
+			== clamped_x * tile,
 			"cells: the morale cell clamped into the shrunken row "
-			+ "(got %s)" % str(morale.position if morale != null
-					else "absent"))
+			+ "(got %s, want x=%s)" % [str(morale.position if morale != null
+					else "absent"), str(clamped_x * tile)])
 	RegistryLib.apply_overrides("sandbox", "player_panel.stats_row",
 			{"x": 1, "y": 1, "w": 58, "h": 2})
 	var region: Control = live.call("player_panel.rows")
@@ -1174,14 +1201,19 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: the scroll content is sized to the stacked "
 			+ "extent (got %s)" % str(content.size if content != null
 					else "absent"))
+	var rows_row: Dictionary = rows.get("player_panel.rows", {})
+	var region_file_y := float(int(rows_row.get("y", -9)))
 	var region_before: float = row1.global_position.y
 	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
 			{"x": 1, "y": 2})
 	await get_tree().process_frame
-	_check(region_before - row1.global_position.y == tile,
+	# The delta derives from the file (the user's region sits at y=5 —
+	# the move to y=2 is a 3-tile shift, whatever the file says).
+	_check(absf(region_before - row1.global_position.y)
+			== absf(region_file_y - 2.0) * tile,
 			"interiors: the ship rows follow their host region")
 	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
-			{"x": 1, "y": 3})
+			{"x": int(rows_row.get("x", 1)), "y": int(region_file_y)})
 	sandbox.queue_free()
 	await get_tree().process_frame
 

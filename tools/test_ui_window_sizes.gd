@@ -255,7 +255,7 @@ func _test_confirm_dialog() -> void:
 	_host.add_child(dialog)
 	await _settle()
 	# Phase 12: the flow chain is deleted — the plate IS the registered
-	# `panel` element (a fixed tile rect, `data/layout_fragments/confirm.json`).
+	# `panel` element (a fixed tile rect, `data/ui_layout.json`).
 	var panel: Control = dialog.get_node("Panel")
 	dialog.open_key("fleet.jettison.confirm",
 		{"ship": "Ship 1", "good": "Wine", "qty": 30})
@@ -288,7 +288,7 @@ func _test_dialog_box() -> void:
 	await _settle()
 	# Phase 12: the flow chain is deleted — the plate IS the registered
 	# `panel` element (a fixed tile rect,
-	# `data/layout_fragments/dialog_box.json`).
+	# `data/ui_layout.json`).
 	var panel: Control = dialog.get_node("Panel")
 	dialog.open_text("A short line.")
 	# The absolute-tile plate is a fixed rect: the width must never drift (the
@@ -355,7 +355,7 @@ func _test_duel_modal() -> void:
 	_host.add_child(modal)
 	await _settle()
 	# Phase 12: the plate IS the registered `panel` element (a fixed tile
-	# rect, `data/layout_fragments/duel.json`; the round rows are the
+	# rect, `data/ui_layout.json`; the round rows are the
 	# `rounds` list block inside it).
 	var panel: Control = modal.get_node("Panel")
 	modal.open_duel(_duel_config(33))
@@ -376,7 +376,7 @@ func _test_save_slot_dialog() -> void:
 	_host.add_child(dialog)
 	await _settle()
 	# Phase 12: the plate IS the registered `panel` element (a fixed tile
-	# rect, `data/layout_fragments/save_slot.json`; the slot rows are the
+	# rect, `data/ui_layout.json`; the slot rows are the
 	# `slots` list block inside it).
 	var panel: Control = dialog.get_node("Panel")
 	dialog.open(0)
@@ -399,7 +399,7 @@ func _test_settings_panel() -> void:
 	panel_screen.call("open")
 	await _settle()
 	# Phase 12: the plate IS the registered `panel` element (a fixed tile
-	# rect, `data/layout_fragments/settings.json`).
+	# rect, `data/ui_layout.json`).
 	var panel: Control = panel_screen.get_node("Panel")
 	var checkbox: Button = null
 	for node in panel_screen.find_children("Check", "", true, false):
@@ -500,7 +500,7 @@ func _test_fleet_view() -> void:
 	await _settle()
 	# A view that lists ships grows with the roster BY DESIGN (the intel
 	# window hosting it is the pinned surface) — the view root IS the fixed
-	# 32×12-tile element tree (`data/layout_fragments/fleet_view.json`); the
+	# 32×12-tile element tree (`data/ui_layout.json`); the
 	# pinned surface is the ships viewport.
 	await assert_window_size_invariant("fleet view", view.get_node("Scroll"), [
 		func() -> void:
@@ -536,7 +536,7 @@ func _test_officer_roster_view() -> void:
 	if attributes != null:
 		actions.append(func() -> void: attributes.pressed.emit())
 	# Phase 12: the Body chain is deleted — the view root IS the fixed
-	# 32×12-tile element tree (`data/layout_fragments/officer_roster.json`).
+	# 32×12-tile element tree (`data/ui_layout.json`).
 	await assert_window_size_invariant(
 		"officers roster view", roster, actions)
 	roster.queue_free()
@@ -663,7 +663,7 @@ func _test_full_screens() -> void:
 	await _settle()
 	ending.call("open_live")
 	# Phase 12: the plate IS the registered `panel` element (a fixed tile
-	# rect, `data/layout_fragments/ending.json`).
+	# rect, `data/ui_layout.json`).
 	await assert_window_size_invariant("ending screen", ending.get_node("Panel"), [
 		func() -> void: I18n.set_locale("zh"),
 		func() -> void: I18n.set_locale("en"),
@@ -676,7 +676,7 @@ func _test_full_screens() -> void:
 	await _settle()
 	gameover.call("open_reason", "starved")
 	# Phase 12: the plate IS the registered `panel` element (a fixed tile
-	# rect, `data/layout_fragments/gameover.json`).
+	# rect, `data/ui_layout.json`).
 	await assert_window_size_invariant("game-over screen",
 		gameover.get_node("Panel"), [
 			func() -> void: I18n.set_locale("zh"),

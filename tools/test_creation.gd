@@ -290,7 +290,7 @@ func _test_must_spend_all() -> void:
 #      — every − flips disabled→enabled, every + enabled→disabled, the hint
 #      empties — and (b) a manual − flip, in both locales;
 #   2. the live stepper rows sit EXACTLY on their v2 fragment rows
-#      (data/layout_fragments/creation.json) — the data rows are the
+#      (data/ui_layout.json) — the data rows are the
 #      geometry, not a derived minimum (docs/IMPLEMENT-Phase12.md §3 W2-B).
 
 func _test_stepper_pixel_stability() -> void:
@@ -354,17 +354,17 @@ func _test_stepper_pixel_stability() -> void:
 	I18n.set_locale("en")
 
 
-## The creation fragment's element rows (the W2-B data pin — the same bytes
-## the capture tool wrote; master assembles them into ui_layout.json).
+## The creation element rows (the W2-B data pin — from
+## `data/ui_layout.json`'s creation section: the one layout artifact).
 func _creation_fragment_rows() -> Dictionary:
-	var f := FileAccess.open("res://data/layout_fragments/creation.json",
-		FileAccess.READ)
+	var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
 	if f == null:
 		return {}
 	var parsed: Variant = JSON.parse_string(f.get_as_text())
 	f.close()
 	if parsed is Dictionary:
-		return (parsed as Dictionary).get("elements", {})
+		return (parsed as Dictionary).get("screens", {}) \
+				.get("creation", {}).get("elements", {})
 	return {}
 
 

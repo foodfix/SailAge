@@ -853,7 +853,7 @@ func _test_modal() -> void:
 		"the dim is 40%% black (§4.7: got %.2f)" % dim.color.a)
 	var panel: Control = modal.get_node("Panel")
 	# Phase 12: the plate is the fixed `22,11,15,12` tile rect (480px) — the
-	# width rides the data rect (`data/layout_fragments/duel.json`), not a
+	# width rides the data rect (`data/ui_layout.json`), not a
 	# flow minimum.
 	_check(panel.size.x == 480.0,
 		"the panel is 480px wide (§4.8: got %.0f)" % panel.size.x)

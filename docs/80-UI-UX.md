@@ -3590,9 +3590,11 @@ data.
   cannot run Godot: "run the suite after layout commits" is a manual
   discipline the Commit button's output banner reminds about.
 - **Scope:** ALL screens (the locked Phase-12 decision) — the 32-screen
-  set enumerated in `10-*` §4.23. The initial tables are the Phase-12
-  capture of today's settled look (`tools/layout_capture.gd`); restyle
-  happens afterwards, in the studio, visually.
+  set enumerated in `10-*` §4.23. The initial tables were the Phase-12
+  capture of today's settled look; the fragment/assembler pipeline was
+  retired on 2026-11-11 (the file is the one artifact — the studio
+  owns it, dev changes are data-only edits), and restyle happens in
+  the studio, visually.
 
 ### 4.9 Shared theme & widget kit (Phase 10)
 

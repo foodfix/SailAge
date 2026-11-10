@@ -257,8 +257,8 @@ func _place(control: Control, rect: Rect2i) -> void:
 
 
 ## The authored tile table — the centered prompt, flattened to the grid
-## (see the fragment this screen's capture emits: `data/layout_fragments/
-## provisions.json`).
+## (`data/ui_layout.json
+## `).
 func _place_statics() -> void:
 	_place(_panel, PANEL_RECT)
 	_place(_title, Rect2i(1, 1, 25, 1))

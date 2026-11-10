@@ -256,8 +256,8 @@ func _place(control: Control, rect: Rect2i) -> void:
 
 
 ## The authored tile table — today's captured look, flattened to the grid
-## (see the fragment this screen's capture emits: `data/layout_fragments/
-## port.json`).
+## (the committed rows live in `data/ui_layout.json
+## `).
 func _place_statics() -> void:
 	_place(_header, Rect2i(1, 2, 58, 4))
 	_place(_nation_swatch, Rect2i(0, 0, 1, 1))
@@ -598,7 +598,7 @@ func officers_panel() -> Control:
 		return null
 	# Phase 12: the intel window's flow chain is deleted — the roster
 	# hangs directly under the registered Panel/Content tree
-	# (`data/layout_fragments/intel_window.json`).
+	# (`data/ui_layout.json`).
 	return window.get_node_or_null("Panel/Content/OfficerRosterView")
 
 

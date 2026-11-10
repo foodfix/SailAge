@@ -102,7 +102,7 @@ const TIER_NAME_NUMBERS: Array[int] = [3, 6, 10]
 
 ## Phase 12 — the authored tile table (docs/80-* §4.8.9: today's captured
 ## look, flattened to the 32×32 grid; the capture
-## `data/layout_fragments/character_card.json` pins the same numbers).
+## `data/ui_layout.json` pins the same numbers).
 ## Parent-relative tiles: children of a group address the group's rect; the
 ## rows live in their list blocks (below). 1 tile = Palette.CHROME_TILE.
 const CARD_TILES := 15  # the content column's width in tiles

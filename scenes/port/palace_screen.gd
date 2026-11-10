@@ -297,8 +297,8 @@ func _place(control: Control, rect: Rect2i) -> void:
 
 
 ## The authored tile table — today's captured look, flattened to the grid
-## (see the fragment this screen's capture emits: `data/layout_fragments/
-## palace.json`).
+## (the committed rows live in `data/ui_layout.json
+## `).
 func _place_statics() -> void:
 	_place(_header, Rect2i(1, 1, 58, 2))
 	_place(_title, Rect2i(0, 0, 46, 1))
@@ -1266,7 +1266,7 @@ func _check_commendation() -> void:
 func _attach_commend_trophy() -> void:
 	# Phase 12: the shared dialog's flow chain is deleted — the body is
 	# the plate's scroll content (a plain Control,
-	# `data/layout_fragments/dialog_box.json`).
+	# `data/ui_layout.json`).
 	var body := _commend.get_node_or_null("Panel/Body/Content")
 	if body == null or body.get_node_or_null("CommendTrophy") != null:
 		return

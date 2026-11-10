@@ -188,8 +188,8 @@ func _place(control: Control, rect: Rect2i) -> void:
 
 
 ## The authored tile table — today's captured look, flattened to the grid
-## (see the fragment this screen's capture emits: `data/layout_fragments/
-## inn.json`).
+## (the committed rows live in `data/ui_layout.json
+## `).
 func _place_statics() -> void:
 	_place(_header, Rect2i(1, 1, 58, 1))
 	_place(_title, Rect2i(0, 0, 58, 1))
