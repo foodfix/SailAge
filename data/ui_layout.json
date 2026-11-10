@@ -4740,27 +4740,27 @@
           "y": 2
         },
         "player_panel.rows": {
-          "h": 10,
-          "w": 56,
+          "h": 7,
+          "w": 57,
           "x": 1,
-          "y": 3
+          "y": 5
         },
         "player_panel.stats_row": {
-          "h": 2,
-          "w": 58,
+          "h": 4,
+          "w": 56,
           "x": 1,
           "y": 1
         },
         "player_panel.stats_row.add": {
           "h": 2,
           "w": 2,
-          "x": 54,
-          "y": 0
+          "x": 0,
+          "y": 2
         },
         "player_panel.stats_row.armor": {
           "h": 2,
           "w": 7,
-          "x": 41,
+          "x": 43,
           "y": 0
         },
         "player_panel.stats_row.charisma": {
@@ -4796,18 +4796,18 @@
         "player_panel.stats_row.morale": {
           "h": 2,
           "w": 4,
-          "x": 49,
+          "x": 52,
           "y": 0
         },
         "player_panel.stats_row.remove": {
           "h": 2,
           "w": 2,
-          "x": 56,
-          "y": 0
+          "x": 2,
+          "y": 2
         },
         "player_panel.stats_row.weapon": {
           "h": 2,
-          "w": 6,
+          "w": 7,
           "x": 34,
           "y": 0
         },
