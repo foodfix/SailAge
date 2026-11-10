@@ -3338,13 +3338,13 @@
         "header.gold": {
           "h": 1,
           "w": 2,
-          "x": 43,
+          "x": 41,
           "y": 1
         },
         "header.hold": {
           "h": 1,
           "w": 4,
-          "x": 46,
+          "x": 44,
           "y": 1
         },
         "header.tax_badge": {
