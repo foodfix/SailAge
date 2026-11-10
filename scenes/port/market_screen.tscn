@@ -59,7 +59,7 @@ mouse_filter = 2
 
 [node name="GoodsScroll" type="ScrollContainer" parent="TableFrame/Table"]
 layout_mode = 0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="GoodsRows" type="Control" parent="TableFrame/Table/GoodsScroll"]
 layout_mode = 0

@@ -37,7 +37,7 @@ offset_top = 32.0
 offset_right = 448.0
 offset_bottom = 224.0
 follow_focus = true
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Message" type="Label" parent="Panel/Body"]
 layout_mode = 0

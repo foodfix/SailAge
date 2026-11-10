@@ -404,7 +404,7 @@ func _ready() -> void:
 	_back_button.pressed.connect(go_back)
 	_invest_button.pressed.connect(_on_invest_pressed)
 	_goods_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	_goods_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_goods_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 
 	_port_id = _read_current_port()
 	_cache_port_lists()

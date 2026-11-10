@@ -460,8 +460,11 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 	# The content floor quantized UP to whole tiles (kept from Phase 11
 	# as a clamp, not a flow — content mins still guard against clipping
 	# text) + the children-extent floor (rule 2: a parent cannot shrink
-	# so its children end up outside).
-	var content := control.get_minimum_size()
+	# so its children end up outside). A ScrollContainer reports no
+	# content floor: a viewport's content is scroll/clip-managed — the
+	# disabled-axis child minimum (the market's goods_scroll pinned at
+	# the rows' 1856 px width) must not pin the viewport's drag.
+	var content := _resize_min(control)
 	size.x = maxf(size.x, float(ceili(content.x / float(TILE)) * TILE))
 	size.y = maxf(size.y, float(ceili(content.y / float(TILE)) * TILE))
 	var kids := _children_extent(screen_id, id, control, parent_of)
@@ -497,15 +500,23 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 ## quantizes UP to whole tiles. `parent_of` is the pass's memoized map
 ## (built by `apply_layout`/`tree`/`capture_rows` via `_parent_map`);
 ## an empty map falls back to the per-record ancestor walk.
+## A ScrollContainer parent takes NO floor: a viewport exists to clip
+## its content — the scrolled rows' stacked extent (the market's
+## goods_scroll pinned at the rows' 42-tile height) must not pin the
+## viewport's size, and scroll-owned children never floor an ancestor.
 static func _children_extent(screen_id: String, parent_id: String,
 		parent: Control, parent_of: Dictionary = {}) -> Vector2:
 	var extent := Vector2.ZERO
+	if parent is ScrollContainer:
+		return extent
 	var per_screen: Dictionary = _screens.get(screen_id, {})
 	var pr := Rect2(parent.global_position, parent.size)
 	for id in per_screen:
 		var rec: Dictionary = per_screen[id]
 		var child := _live(rec)
 		if child == null or child == parent:
+			continue
+		if _inside_scroll(child):
 			continue
 		var child_parent: String = String(parent_of.get(id, ""))
 		if parent_of.is_empty():
@@ -627,13 +638,26 @@ static func tree(screen_id: String) -> Array:
 
 ## The control's CONTENT minimum (the studio drag floor):
 ## `get_minimum_size()` excludes `custom_minimum_size`. Ceiled to tiles
-## (a 33 px text row demands 2 whole tiles).
+## (a 33 px text row demands 2 whole tiles). A ScrollContainer reports
+## none — a viewport's content is scroll/clip-managed (see
+## `_resize_min`).
 static func _content_min_tiles(control: Control) -> Dictionary:
-	var content := control.get_minimum_size()
+	var content := _resize_min(control)
 	return {
 		"w": ceili(content.x / float(TILE)),
 		"h": ceili(content.y / float(TILE)),
 	}
+
+
+## The minimum that floors a resize: the control's own
+## `get_minimum_size()`, EXCEPT a ScrollContainer reports none — the
+## disabled-axis child minimum (the market's goods_scroll pinned at the
+## content's 1856 px width) and the scrolled content's extent are
+## viewport-managed, not layout floors.
+static func _resize_min(control: Control) -> Vector2:
+	if control is ScrollContainer:
+		return Vector2.ZERO
+	return control.get_minimum_size()
 
 
 ## True when a ScrollContainer ancestor owns the control's visibility.

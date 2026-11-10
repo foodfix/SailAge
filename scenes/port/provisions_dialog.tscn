@@ -73,7 +73,7 @@ mouse_filter = 2
 
 [node name="Scroll" type="ScrollContainer" parent="Panel/Cargo"]
 layout_mode = 0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Stacks" type="Control" parent="Panel/Cargo/Scroll"]
 layout_mode = 0

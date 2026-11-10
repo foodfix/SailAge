@@ -52,7 +52,7 @@ text = "Ship catalog"
 [node name="CatalogScroll" type="ScrollContainer" parent="CatalogPanel"]
 layout_mode = 0
 follow_focus = true
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="CatalogRows" type="Control" parent="CatalogPanel/CatalogScroll"]
 layout_mode = 0
@@ -82,7 +82,7 @@ mouse_filter = 2
 [node name="FleetScroll" type="ScrollContainer" parent="FleetPanel"]
 layout_mode = 0
 follow_focus = true
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="FleetRows" type="Control" parent="FleetPanel/FleetScroll"]
 layout_mode = 0

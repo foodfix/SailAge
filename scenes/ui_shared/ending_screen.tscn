@@ -62,7 +62,7 @@ offset_left = 32.0
 offset_top = 320.0
 offset_right = 544.0
 offset_bottom = 608.0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="RpgRows" type="Control" parent="Panel/RpgViewport"]
 layout_mode = 1

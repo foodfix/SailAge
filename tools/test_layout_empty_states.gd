@@ -115,6 +115,23 @@ func _probe(screen_id: String) -> void:
 				"%s: the marker sits at the block's row 0 (got %s, want %s)"
 						% [screen_id, str(control.position),
 						str(expected.position)])
+	if screen_id == "market":
+		# The user-reported goods_scroll pin (2026-11-10): the scroll's
+		# disabled horizontal axis floored its minimum at the rows'
+		# content width — the studio could not shrink or move it. The
+		# viewport is scroll-managed: an edit must STICK.
+		var scroll: Control = screen_root.get_node_or_null(
+				"TableFrame/Table/GoodsScroll")
+		if scroll != null:
+			RegistryLib.apply_overrides("market", "goods_scroll",
+					{"x": 2, "y": 5, "w": 30, "h": 12})
+			await get_tree().process_frame
+			await get_tree().process_frame
+			var tile := float(RegistryLib.TILE)
+			_check(scroll.position == Vector2(2, 5) * tile
+					and scroll.size == Vector2(30, 12) * tile,
+					"market: a goods_scroll rect edit STICKS (got %s / %s)"
+							% [str(scroll.position), str(scroll.size)])
 	screen_root.queue_free()
 	await get_tree().process_frame
 

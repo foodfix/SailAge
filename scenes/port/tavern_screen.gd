@@ -1949,7 +1949,7 @@ class RecruitDialog:
 		body.name = "Body"
 		var scroll := ScrollContainer.new()
 		scroll.custom_minimum_size = Vector2(0, 380)
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		body.add_child(scroll)
 		# The card drops in here at open (kind-specific build).
 		_card = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()

@@ -92,7 +92,7 @@ func _ready() -> void:
 	# Phase-10 sweep: the panel/title chrome retired to the theme (§4.9
 	# Panel + Label rows).
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_ok_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_ok_button.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)

@@ -78,7 +78,7 @@ func _ready() -> void:
 	# reserved 2-tile illustration cell (`panel.body.message`).
 	_message.custom_minimum_size.x = 352.0
 	_body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_ok_button.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)
 

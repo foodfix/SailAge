@@ -126,7 +126,7 @@ mouse_filter = 2
 
 [node name="RecruitableScroll" type="ScrollContainer" parent="body/OfficersPanel"]
 layout_mode = 0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Recruitable" type="Control" parent="body/OfficersPanel/RecruitableScroll"]
 layout_mode = 0
@@ -139,7 +139,7 @@ text = "Officers"
 
 [node name="RosterScroll" type="ScrollContainer" parent="body/OfficersPanel"]
 layout_mode = 0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Roster" type="Control" parent="body/OfficersPanel/RosterScroll"]
 layout_mode = 0
@@ -164,7 +164,7 @@ text = "Rumours cost 100 gold"
 
 [node name="Scroll" type="ScrollContainer" parent="body/RumorsPanel"]
 layout_mode = 0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Rows" type="Control" parent="body/RumorsPanel/Scroll"]
 layout_mode = 0

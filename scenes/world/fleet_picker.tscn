@@ -46,7 +46,7 @@ offset_left = 32.0
 offset_top = 32.0
 offset_right = 544.0
 offset_bottom = 288.0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Rows" type="Control" parent="Panel/Scroll"]
 

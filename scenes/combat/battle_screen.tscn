@@ -327,7 +327,7 @@ offset_left = 32.0
 offset_top = 96.0
 offset_right = 608.0
 offset_bottom = 352.0
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 1
 
 [node name="Lines" type="Control" parent="AfterAction/Panel/LinesViewport"]
 layout_mode = 1
