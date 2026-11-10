@@ -3490,7 +3490,14 @@ data.
   its registered parent (or the screen root). Intermediate layout
   containers (`MarginContainer → VBox → …` chains) are DELETED from the
   `.tscn` scenes and build code; group parents are plain
-  `Control`/`Panel` nodes placed at their data rects.
+  `Control`/`Panel` nodes placed at their data rects. The pairing is a
+  HARD invariant (amended 2026-11-10, the sandbox panel-interior case):
+  an UNREGISTERED intermediate between an element and its registered
+  parent makes the capture and apply tile spaces disagree by the
+  intermediate's offset — apply sets Godot-parent-local px, capture
+  records registered-parent-relative tiles, and every capture round
+  ratchets the row by the rounded offset (the Box's 16px pad → +1 tile
+  per round). Never leave an element under a plain content node.
 - **The only layout rules** (rule 2 amended 2026-11-10, user report —
   a committed parent shrink snapped back to the child's extent):
   1. a child cannot leave its parent's rect (clamp on move/resize);
@@ -3499,6 +3506,15 @@ data.
      (list members and scroll-owned children are exempt: they are
      data-driven/clip-managed content and never floor or clamp).
   Everything else is a rect.
+- **Every visible element registers** (amended 2026-11-10, user report
+  — the sandbox's panel interiors were "unregistered for now" at the
+  W2-D capture and the studio could not touch them): an editors row, a
+  ship-rows region, a +/− pair, a conditions grid — if the user can see
+  it, it has an id and a committed row. Builder-composed CELLS inside a
+  row (labels/spins/options) stay builder-owned flow (the row is the
+  movable unit); dynamic rows (the sandbox's per-ship lines) register
+  as list members of their block (`player_rows.<i>`, `enemy_rows.<i>`
+  — builder-placed via `list_rect`, coverage-exempt).
 - **The live loop:** a studio commit lands on the **next screen
   activation** — no restart. The game re-reads `ui_layout.json` when
   its bytes drift on disk (`DataLoader.reload_ui_layout_if_changed`,

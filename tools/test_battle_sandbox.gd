@@ -54,6 +54,8 @@ extends Node
 
 const SandboxLib := preload("res://scenes/combat/battle_sandbox.gd")
 const SandboxScene := preload("res://scenes/combat/battle_sandbox.tscn")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
+const PaletteLib := preload("res://scripts/palette.gd")
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const ScreenScene := preload("res://scenes/combat/battle_screen.tscn")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
@@ -99,6 +101,7 @@ func _ready() -> void:
 	await _test_title_and_restore()
 	await _test_randomize_fuzz()
 	await _test_layout_geometry()
+	await _test_panel_interiors_managed()
 	await _test_profile_overrides()
 	await _test_full_field_roundtrip()
 	_report()
@@ -1039,6 +1042,91 @@ func _ctrl_path(control: Control, root: Control) -> String:
 
 
 # --- 11. W5-C: the ai_level/archetype overrides become effective ------------
+
+## The panel interiors are managed (the 2026-11-10 user report: the
+## studios' ids stopped at the plates — the editors rows, the +/− pair,
+## the ship-rows regions and the conditions grid/actions were
+## unmodifiable). The pins derive expectations from the COMMITTED
+## `data/ui_layout.json` (the file is the pin): every interior id has a
+## live record, the rects apply from the file, the ship rows ride their
+## list block and follow their host, and a studio edit STICKS.
+func _test_panel_interiors_managed() -> void:
+	GameState.locale = "en"
+	SandboxLib.last_config = {}
+	var sandbox = await _new_sandbox()
+	if sandbox == null:
+		return
+	var tile := float(PaletteLib.CHROME_TILE)
+	var f := FileAccess.open("res://data/ui_layout.json", FileAccess.READ)
+	var doc: Dictionary = JSON.parse_string(f.get_as_text()) if f != null \
+			else {}
+	f.close()
+	var rows: Dictionary = doc.get("screens", {}).get("sandbox", {}) \
+			.get("elements", {})
+	var lists: Dictionary = doc.get("screens", {}).get("sandbox", {}) \
+			.get("lists", {})
+	_check(not rows.is_empty() and not lists.is_empty(),
+			"interiors: the committed file carries sandbox rows + lists")
+
+	var live := func(id: String) -> Control:
+		var rec: Dictionary = RegistryLib._screens.get("sandbox", {}) \
+				.get(id, {})
+		var ref: WeakRef = rec.get("control", null) if rec.has("control") \
+				else null
+		return ref.get_ref() if ref != null else null
+	var at := func(id: String) -> Vector2:
+		var r: Dictionary = rows.get(id, {})
+		return Vector2(float(int(r.get("x", -9))), float(int(r.get("y", -9)))) \
+				* tile
+
+	# Every interior id is live and at its committed rect (panel-local).
+	for id in ["player_panel.stats_row", "player_panel.rows",
+			"enemy_panel.profile_row", "enemy_panel.rows",
+			"conditions_panel.grid", "conditions_panel.actions",
+			"player_panel.stats_row.add", "player_panel.stats_row.remove",
+			"enemy_panel.profile_row.add", "enemy_panel.profile_row.remove"]:
+		var ctl: Control = live.call(id)
+		_check(ctl != null and ctl.position == at.call(id),
+				"interiors: %s is live at its committed rect (got %s)"
+						% [id, str(ctl.position if ctl != null else "absent")])
+
+	# The ship rows are list members riding the block (builder-placed via
+	# list_rect — the committed base/row_h).
+	var row0: Control = live.call("player_rows.0")
+	var row_h := float(int(lists.get("player_rows", {}).get("row_h", -9)))
+	_check(row0 != null and row_h == 2.0 and row0.position.y == 0.0,
+			"interiors: ship row 0 rides the player_rows block (row_h %s)"
+					% str(row_h))
+	sandbox.add_ship_row("player")
+	await get_tree().process_frame
+	var row1: Control = live.call("player_rows.1")
+	_check(row1 != null and row1.position.y == row_h * tile,
+			"interiors: an added ship row lands at the block's next row "
+			+ "(y=%s)" % str(row1.position.y if row1 != null else -1.0))
+
+	# A studio edit on the stats row STICKS (no floor snaps it back), and
+	# the ship rows follow their host region.
+	var stats: Control = live.call("player_panel.stats_row")
+	RegistryLib.apply_overrides("sandbox", "player_panel.stats_row",
+			{"x": 2, "y": 2, "w": 40, "h": 2})
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(stats.position == Vector2(2, 2) * tile
+			and stats.size == Vector2(40, 2) * tile,
+			"interiors: a stats_row studio edit STICKS (got %s / %s)"
+					% [str(stats.position), str(stats.size)])
+	var region: Control = live.call("player_panel.rows")
+	var region_before: float = row1.global_position.y
+	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
+			{"x": 1, "y": 2})
+	await get_tree().process_frame
+	_check(region_before - row1.global_position.y == tile,
+			"interiors: the ship rows follow their host region")
+	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
+			{"x": 1, "y": 3})
+	sandbox.queue_free()
+	await get_tree().process_frame
+
 
 func _test_profile_overrides() -> void:
 	_fixture_run_state()

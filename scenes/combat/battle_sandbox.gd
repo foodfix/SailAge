@@ -192,10 +192,11 @@ var _enemy_panel: Control
 var _player_header: Label
 var _enemy_header: Label
 ## Phase 12 (docs/80-* §4.8.9): the deleted flow containers are plain
-## Controls — the content columns, the editors rows and the ship-rows
-## regions are absolutely-placed plain Controls at their data rects.
-var _player_box: Control
-var _enemy_box: Control
+## Controls — the editors rows, the ship-rows regions and the conditions
+## grid/actions are absolutely-placed plain Controls at their data rects
+## (the 16px-inset content columns are deleted too — 2026-11-10: the
+## interiors parent straight to their panels so the registered parent IS
+## the Godot parent).
 var _conditions_panel: Panel
 var _player_rows_box: Control
 var _enemy_rows_box: Control
@@ -228,6 +229,8 @@ var _start_button: Button
 var _random_all_button: Button
 var _import_button: Button
 var _export_button: Button
+var _conditions_grid: Control
+var _conditions_actions: Control
 
 ## Per-ship widget rows: `{root, type, cannons, crew, durability, figurehead,
 ## sail, captain}` — fleet-index order.
@@ -243,8 +246,13 @@ func _ready() -> void:
 	# register their stable ids and activate at build. The flow containers
 	# are DELETED — the region panels are plain Panels, every editors row /
 	# ship line / conditions cell an absolutely-placed plain child at its
-	# authored tile rect (the interior rows are unregistered children; the
-	# registered plate above them is the layout contract).
+	# authored tile rect. The panels' INTERIORS register too (the
+	# 2026-11-10 user report: the studios' ids stopped at the plates, so
+	# the rows/buttons inside were unmodifiable): the editors rows, the
+	# +/− pair, the ship-rows regions and the conditions grid/actions —
+	# the Box/Headers stay unregistered (inert 16px pads: the interiors'
+	# parent space), and the per-ship lines register as list members of
+	# the `player_rows`/`enemy_rows` blocks.
 	_register_chrome_ids()
 	RegistryLib.screen_active(SCREEN_ID, self)
 	# The S10 round-trip restore (§4.7.16 "configuration kept on return");
@@ -283,6 +291,39 @@ func _register_chrome_ids() -> void:
 	if _export_button != null:
 		RegistryLib.register(SCREEN_ID, _export_button, "actions.export",
 			{"role": "button"})
+	# The panel interiors — each at its parent-local rect (the unregistered
+	# Box/Headers are the interiors' parent space; the rows' data is
+	# parent-relative by the capture rule).
+	if _player_stats_row_h != null:
+		RegistryLib.register(SCREEN_ID, _player_stats_row_h,
+			"player_panel.stats_row", {"role": "panel"})
+	if _enemy_profile_row_h != null:
+		RegistryLib.register(SCREEN_ID, _enemy_profile_row_h,
+			"enemy_panel.profile_row", {"role": "panel"})
+	if _player_rows_box != null:
+		RegistryLib.register(SCREEN_ID, _player_rows_box,
+			"player_panel.rows", {"role": "panel"})
+	if _enemy_rows_box != null:
+		RegistryLib.register(SCREEN_ID, _enemy_rows_box,
+			"enemy_panel.rows", {"role": "panel"})
+	if _player_add != null:
+		RegistryLib.register(SCREEN_ID, _player_add,
+			"player_panel.stats_row.add", {"role": "button"})
+	if _player_remove != null:
+		RegistryLib.register(SCREEN_ID, _player_remove,
+			"player_panel.stats_row.remove", {"role": "button"})
+	if _enemy_add != null:
+		RegistryLib.register(SCREEN_ID, _enemy_add,
+			"enemy_panel.profile_row.add", {"role": "button"})
+	if _enemy_remove != null:
+		RegistryLib.register(SCREEN_ID, _enemy_remove,
+			"enemy_panel.profile_row.remove", {"role": "button"})
+	if _conditions_grid != null:
+		RegistryLib.register(SCREEN_ID, _conditions_grid,
+			"conditions_panel.grid", {"role": "panel"})
+	if _conditions_actions != null:
+		RegistryLib.register(SCREEN_ID, _conditions_actions,
+			"conditions_panel.actions", {"role": "panel"})
 
 
 # --- Build ------------------------------------------------------------------
@@ -350,12 +391,10 @@ func _build_panels() -> void:
 	var player := _panel_column("PlayerPanel", "sandbox.player",
 		PLAYER_PANEL_RECT.position, PLAYER_PANEL_RECT.size)
 	_player_panel = player["panel"]
-	_player_box = player["box"]
 	_player_header = player["header"]
 	var enemy := _panel_column("EnemyPanel", "sandbox.enemy",
 		ENEMY_PANEL_RECT.position, ENEMY_PANEL_RECT.size)
 	_enemy_panel = enemy["panel"]
-	_enemy_box = enemy["box"]
 	_enemy_header = enemy["header"]
 
 	# Row 1 = the shared editors row (built FIRST so the ship rows
@@ -367,9 +406,9 @@ func _build_panels() -> void:
 	# five rows fit the pinned 416px panel by construction — the
 	# horizontal-bands re-layout's whole point).
 	_player_rows_box = _rows_box()
-	_player_box.add_child(_player_rows_box)
+	_player_panel.add_child(_player_rows_box)
 	_enemy_rows_box = _rows_box()
-	_enemy_box.add_child(_enemy_rows_box)
+	_enemy_panel.add_child(_enemy_rows_box)
 	_player_add = _fleet_button("sandbox.ship.add")
 	_player_remove = _fleet_button("sandbox.ship.remove")
 	_player_add.pressed.connect(func() -> void: add_ship_row("player"))
@@ -387,9 +426,12 @@ func _build_panels() -> void:
 
 ## One side panel: a plain Panel at `at` × `panel_size` (the deleted kit
 ## frame's chrome is the theme's Panel stylebox, §4.9) carrying the hidden
-## header Label and a plain-Control content column at the panel's 16px
-## inset (the deleted MarginContainer/VBox's rect). Returns
-## `{panel, box, header}`.
+## header Label. Returns `{panel, header}`. The former content-column
+## Control (the 16px-inset Box) is DELETED (2026-11-10): the interiors
+## parent straight to the panel so each element's registered parent IS
+## its Godot parent — the capture/apply coordinate spaces agree (the
+## unregistered Box's 16px offset made the tile rows ratchet +16px per
+## capture round).
 func _panel_column(panel_name: String, title_key: String, at: Vector2,
 		panel_size: Vector2) -> Dictionary:
 	var panel := Panel.new()
@@ -407,13 +449,7 @@ func _panel_column(panel_name: String, title_key: String, at: Vector2,
 	header.size = Vector2(panel_size.x - 2.0 * PANEL_PAD,
 		float(PaletteLib.ROW_H))
 	panel.add_child(header)
-	var box := Control.new()
-	box.name = "Box"
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.position = Vector2(PANEL_PAD, PANEL_PAD)
-	box.size = panel_size - Vector2(2.0 * PANEL_PAD, 2.0 * PANEL_PAD)
-	panel.add_child(box)
-	return {"panel": panel, "box": box, "header": header}
+	return {"panel": panel, "header": header}
 
 
 ## The ship-rows column of a side panel: a plain Control under the editors
@@ -423,7 +459,9 @@ func _rows_box() -> Control:
 	var box := Control.new()
 	box.name = "Rows"
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.position = Vector2(0, ROW_PITCH)
+	# Panel-local 16px pad + one editors row down, pre-apply (the data
+	# row snaps this to its committed tile at activation).
+	box.position = Vector2(PANEL_PAD, PANEL_PAD + ROW_PITCH)
 	box.size = Vector2(_panel_box_w(), ROWS_REGION_H)
 	return box
 
@@ -660,10 +698,21 @@ func _make_ship_row(side: String) -> Dictionary:
 		if side == "enemy":
 			_sync_enemy_captain(true))
 	var box := _player_rows_box if side == "player" else _enemy_rows_box
+	var list_id := "player_rows" if side == "player" else "enemy_rows"
 	var index := ship_rows(side).size()
-	line.position = Vector2(0, float(index * int(ROW_PITCH)))
-	line.size = Vector2(row_w, ROW_PITCH)
+	# The v2 list block drives the row rect (docs/80-* §4.8.9 — the same
+	# pattern as the market's goods rows); the authored pitch is the
+	# fallback when the block is absent (a suite table without lists).
+	var rect := RegistryLib.list_rect(SCREEN_ID, list_id, index)
+	if rect != Rect2():
+		line.position = rect.position
+		line.size = rect.size
+	else:
+		line.position = Vector2(0, float(index * int(ROW_PITCH)))
+		line.size = Vector2(row_w, ROW_PITCH)
 	box.add_child(line)
+	RegistryLib.register(SCREEN_ID, line, "%s.%d" % [list_id, index],
+		{"list": list_id})
 	if side == "player":
 		_player_rows.append(row)
 	else:
@@ -712,7 +761,9 @@ func _build_player_stats_row() -> void:
 	var row := Control.new()
 	row.name = "PlayerStats"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.position = Vector2.ZERO
+	# Panel-local 16px pad pre-apply (the deleted Box's inset); the data
+	# row snaps this to its committed tile at activation.
+	row.position = Vector2(PANEL_PAD, PANEL_PAD)
 	row.size = Vector2(_panel_box_w(), ROW_PITCH)
 	_player_stats_row_h = row
 
@@ -736,7 +787,7 @@ func _build_player_stats_row() -> void:
 		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
 		LABEL_W_MORALE, 96)
 	_player_morale_spin = row.get_child(row.get_child_count() - 1)
-	_player_box.add_child(row)
+	_player_panel.add_child(row)
 
 
 ## The private row holders (the +/− buttons append to these in
@@ -765,7 +816,9 @@ func _build_enemy_profile_row() -> void:
 	var row := Control.new()
 	row.name = "EnemyProfile"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.position = Vector2.ZERO
+	# Panel-local 16px pad pre-apply (the deleted Box's inset); the data
+	# row snaps this to its committed tile at activation.
+	row.position = Vector2(PANEL_PAD, PANEL_PAD)
 	row.size = Vector2(_panel_box_w(), ROW_PITCH)
 	_enemy_profile_row_h = row
 
@@ -824,7 +877,7 @@ func _build_enemy_profile_row() -> void:
 		LABEL_W_MORALE), _spin(MORALE_MIN, MORALE_MAX, 50, 96), x,
 		LABEL_W_MORALE, 96)
 	_enemy_morale_spin = row.get_child(row.get_child_count() - 1)
-	_enemy_box.add_child(row)
+	_enemy_panel.add_child(row)
 
 
 ## One-click `compose_enemy` generation toggle (§4.7.16): ON hides ONLY the
@@ -906,6 +959,7 @@ func _build_conditions_row() -> void:
 	grid.position = Vector2(PANEL_PAD, PANEL_PAD)
 	grid.size = Vector2(strip_w, ROW_PITCH)
 	panel.add_child(grid)
+	_conditions_grid = grid
 
 	var x := 0.0
 	_day_spin = _spin(DAY_MIN, 9999, 1, 96)
@@ -952,6 +1006,7 @@ func _build_conditions_row() -> void:
 	actions.position = Vector2(PANEL_PAD, PANEL_PAD + ROW_PITCH)
 	actions.size = Vector2(strip_w, ROW_PITCH)
 	panel.add_child(actions)
+	_conditions_actions = actions
 	_start_button = UiKitLib.button("sandbox.start")
 	_random_all_button = UiKitLib.button("sandbox.random_all")
 	_import_button = UiKitLib.button("sandbox.import")

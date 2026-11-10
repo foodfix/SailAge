@@ -234,6 +234,28 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   silently crashing since the partial (103 → 185 checks). Gates:
   battle_sandbox 155 / character_card 141 / fleet 185 / intel_window
   65 ALL PASS; D2's structural probe 98 records, 0 flow containers.
+- **Post-acceptance fix (2026-11-10, user-reported — the sandbox panel
+  interiors):** the studio could not modify ANY element inside
+  `player_panel` / `enemy_panel` — the W2-D capture had left the
+  panels' interiors unregistered ("the deep editor fields, for now"),
+  so the ids stopped at the plates. They now register: the editors
+  rows (`player_panel.stats_row`, `enemy_panel.profile_row`), the
+  +/− pairs (`*.add`/`*.remove`), the ship-rows regions
+  (`*.rows`), the conditions grid/actions, and the per-ship lines as
+  list members of new `player_rows`/`enemy_rows` blocks (builder-placed
+  via `list_rect`). The panels' 16px-inset Box content columns are
+  DELETED — an unregistered intermediate between an element and its
+  registered parent makes the capture/apply tile spaces disagree and
+  the rows ratchet +1 tile per capture round (found live during this
+  fix; now a hard invariant, `80-*` §4.8.9). Visual deltas at restyle
+  time: the interiors sit at the 1-tile panel inset (was 16px), the
+  action buttons are tile-aligned (1-tile gaps, was 8px). Pin:
+  `test_battle_sandbox._test_panel_interiors_managed` (15 checks —
+  the file is the pin: every interior id live at its committed rect,
+  ship rows riding the block, an added row landing at the next row,
+  a stats_row studio edit STICKS, the rows following their host).
+  Gates: sandbox 170, the layout quartet, double capture
+  byte-identical, assemble --check, validator exit 0.
 - **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
   drag pins):** goods_scroll could not be moved or resized (the
   disabled horizontal axis made Godot enforce the content's 1856 px
