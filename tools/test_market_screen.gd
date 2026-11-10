@@ -29,6 +29,7 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 const MarketScreenLib := preload("res://scenes/port/market_screen.gd")
 const MarketScene := preload("res://scenes/port/market_screen.tscn")
+const RegistryLib := preload("res://scripts/ui/layout_registry.gd")
 const TavernScene := preload("res://scenes/port/tavern_screen.tscn")
 const PaletteLib := preload("res://scripts/palette.gd")
 
@@ -126,6 +127,7 @@ func _ready() -> void:
 	_test_locale_swap()
 	_test_arrow_gates()
 	_test_memory_arrows()
+	await _test_list_host_edit_sticks()
 	_report()
 
 
@@ -270,6 +272,39 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		_failures.append(message)
 		push_error("FAIL: " + message)
+
+
+## The user-reported list-host pin (2026-11-10): the captains strip (a
+## list HOST — its sighting rows are `captains` list members) must take
+## a studio rect edit and STICK — the rows' stacked extent never floors
+## their host (docs/80-* §4.8.9; the registry rule-2 exemption).
+func _test_list_host_edit_sticks() -> void:
+	_make_run("lisbon")
+	var screen: Control = _instantiate_market()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tile := float(RegistryLib.TILE)
+	var captains: Control = screen.get_node_or_null("CaptainsRows")
+	if captains == null:
+		# The strip's node path changed — resolve through the registry
+		# record instead (the ids are the contract).
+		var rec: Dictionary = RegistryLib._screens.get("market", {}) \
+				.get("captains", {})
+		var ref: WeakRef = rec.get("control", null) if rec.has("control") \
+				else null
+		captains = ref.get_ref() if ref != null else null
+	_check(captains != null, "list host: the captains strip is live")
+	if captains != null:
+		RegistryLib.apply_overrides("market", "captains",
+				{"x": 2, "y": 24, "w": 40, "h": 4})
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(captains.position == Vector2(2 * tile, 24 * tile)
+				and captains.size == Vector2(40 * tile, 4 * tile),
+				"list host: a captains rect edit STICKS (got %s / %s)"
+						% [str(captains.position), str(captains.size)])
+	screen.queue_free()
+	await get_tree().process_frame
 
 
 func _report() -> void:

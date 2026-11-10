@@ -501,9 +501,10 @@ static func _apply_rect(screen_id: String, id: String, control: Control,
 ## (built by `apply_layout`/`tree`/`capture_rows` via `_parent_map`);
 ## an empty map falls back to the per-record ancestor walk.
 ## A ScrollContainer parent takes NO floor: a viewport exists to clip
-## its content — the scrolled rows' stacked extent (the market's
-## goods_scroll pinned at the rows' 42-tile height) must not pin the
-## viewport's size, and scroll-owned children never floor an ancestor.
+## its content. LIST MEMBERS and scroll-owned children take no floor
+## anywhere: they are data-driven content whose placement is governed
+## by their list block — the captains strip pinning at the sightings'
+## stacked extent (user report 2026-11-10) was exactly this.
 static func _children_extent(screen_id: String, parent_id: String,
 		parent: Control, parent_of: Dictionary = {}) -> Vector2:
 	var extent := Vector2.ZERO
@@ -515,6 +516,8 @@ static func _children_extent(screen_id: String, parent_id: String,
 		var rec: Dictionary = per_screen[id]
 		var child := _live(rec)
 		if child == null or child == parent:
+			continue
+		if not String(rec.get("list", "")).is_empty():
 			continue
 		if _inside_scroll(child):
 			continue

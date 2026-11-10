@@ -253,6 +253,23 @@ func _test_coverage_fallback() -> void:
 			and orphan.size == Vector2(2 * tile, 2 * tile),
 			"coverage: a row-less static element takes the (0,0,2,2) "
 			+ "fallback (the push_error is the loud trail)")
+	# Rule 2's list-member exemption: a list member NEVER floors its
+	# host — the rows are data-driven content governed by their list
+	# block (the user-reported captains strip: the sightings' stacked
+	# extent pinned the strip's studio drag).
+	var host := Panel.new()
+	root.add_child(host)
+	RegistryLib.register("market", host, "captains", {"role": "panel"})
+	var member := Panel.new()
+	host.add_child(member)
+	member.position = Vector2(0, 40 * tile)
+	member.size = Vector2(58 * tile, 2 * tile)
+	RegistryLib.register("market", member, "captains.rows.x",
+			{"list": "captains"})
+	var extent := RegistryLib._children_extent("market", "captains", host)
+	_check(extent == Vector2.ZERO,
+			"rule 2: a list member never floors its host (got %s)"
+					% str(extent))
 	_drop_root(root)
 	await get_tree().process_frame
 
