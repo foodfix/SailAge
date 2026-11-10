@@ -1214,6 +1214,23 @@ func _test_panel_interiors_managed() -> void:
 			"interiors: the ship rows follow their host region")
 	RegistryLib.apply_overrides("sandbox", "player_panel.rows",
 			{"x": int(rows_row.get("x", 1)), "y": int(region_file_y)})
+	await get_tree().process_frame
+	# The scrollbar engages when the stack exceeds the viewport (the
+	# 2026-11-11 content-minimum fix — the scroll range rides the
+	# content node's custom_minimum_size, the market's goods_rows
+	# pattern): 5 rows (320px) in the 7-tile region (224px) shows it.
+	while sandbox.ship_rows("player").size() < 5:
+		sandbox.add_ship_row("player")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var vbar: ScrollBar = (region as ScrollContainer).get_v_scroll_bar()
+	_check(vbar != null and vbar.visible,
+			"interiors: the rows scrollbar engages past the viewport")
+	_check(content != null
+			and content.custom_minimum_size.y == 5.0 * 2.0 * tile,
+			"interiors: the content minimum is the stacked extent "
+			+ "(got %s)" % str(content.custom_minimum_size
+			if content != null else "absent"))
 	sandbox.queue_free()
 	await get_tree().process_frame
 

@@ -492,8 +492,12 @@ func _sync_rows_content(side: String) -> void:
 	var rect := RegistryLib.list_rect(SCREEN_ID,
 			"player_rows" if side == "player" else "enemy_rows", 0)
 	var w: float = rect.size.x if rect != Rect2() else _panel_box_w()
-	content.size = Vector2(w,
+	# The scroll's stacked extent rides custom_minimum_size (the market's
+	# goods_rows pattern): a ScrollContainer computes its scroll range
+	# from the child's MINIMUM size — a plain size never engages it.
+	content.custom_minimum_size = Vector2(w,
 			maxf(1.0, float(ship_rows(side).size())) * ROW_PITCH)
+	content.size = content.custom_minimum_size
 
 
 ## The content column's width (the panel's pinned rect minus the 16px
