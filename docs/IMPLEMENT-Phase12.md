@@ -234,6 +234,21 @@ assembles them into the single `data/ui_layout.json` at each merge gate
   silently crashing since the partial (103 → 185 checks). Gates:
   battle_sandbox 155 / character_card 141 / fleet 185 / intel_window
   65 ALL PASS; D2's structural probe 98 records, 0 flow containers.
+- **Post-acceptance fix (2026-11-10, user-reported — the scroll/list
+  drag pins):** goods_scroll could not be moved or resized (the
+  disabled horizontal axis made Godot enforce the content's 1856 px
+  width as the scroll's own minimum, and the children-extent floor
+  counted the scrolled rows at their stacked extent), and the same
+  class pinned every list HOST (the captains strip's sightings floored
+  it). Registry: a ScrollContainer reports no resize minimum and no
+  children-extent floor, and LIST MEMBERS never floor anything (they
+  are data-driven content governed by their list block); the authored
+  hmode=0 scrolls flipped to SCROLL_MODE_AUTO except the chart's §4.6
+  legend (labels elide by contract). Pins: the goods_scroll/
+  captains edit-sticks checks (test_layout_empty_states 13,
+  test_market_screen 274) + the rule-2 exemption
+  (test_layout_registry 53). Full sweep green (one transient
+  captain_lifecycle RED; rerun ALL PASS 83).
 - **Post-acceptance fix (2026-11-10, user-reported — the 10:00 layout
   snap):** an hour-crossing rebuilt the §4.8.1 facility cards at the
   AUTHORED CARD_SLOTS — the §4.8.1 rebuild signature includes each
