@@ -4061,116 +4061,116 @@
           "y": 0
         },
         "cards.guild": {
-          "h": 2,
+          "h": 3,
           "w": 10,
           "x": 0,
-          "y": 5
+          "y": 12
         },
         "cards.guild.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 6,
+          "x": 3,
+          "y": 1
         },
         "cards.guild.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "cards.inn": {
-          "h": 2,
+          "h": 3,
           "w": 10,
-          "x": 10,
-          "y": 2
+          "x": 0,
+          "y": 9
         },
         "cards.inn.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 6,
+          "x": 3,
+          "y": 1
         },
         "cards.inn.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "cards.market": {
-          "h": 2,
+          "h": 3,
           "w": 10,
           "x": 0,
           "y": 0
         },
         "cards.market.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 6,
+          "x": 3,
+          "y": 1
         },
         "cards.market.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "cards.palace": {
-          "h": 2,
+          "h": 3,
           "w": 10,
-          "x": 10,
-          "y": 5
+          "x": 0,
+          "y": 15
         },
         "cards.palace.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 5,
+          "x": 3,
+          "y": 1
         },
         "cards.palace.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "cards.shipyard": {
-          "h": 2,
+          "h": 3,
           "w": 10,
-          "x": 10,
-          "y": 0
+          "x": 0,
+          "y": 3
         },
         "cards.shipyard.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 6,
+          "x": 3,
+          "y": 1
         },
         "cards.shipyard.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "cards.tavern": {
-          "h": 2,
+          "h": 3,
           "w": 10,
           "x": 0,
-          "y": 2
+          "y": 6
         },
         "cards.tavern.name": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 0
+          "w": 6,
+          "x": 3,
+          "y": 1
         },
         "cards.tavern.status": {
           "h": 1,
-          "w": 10,
-          "x": 0,
-          "y": 1
+          "w": 6,
+          "x": 2,
+          "y": 2
         },
         "facility_grid": {
-          "h": 7,
-          "w": 58,
+          "h": 24,
+          "w": 24,
           "x": 1,
           "y": 7
         },
