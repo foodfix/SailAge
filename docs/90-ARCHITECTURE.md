@@ -109,18 +109,33 @@ data/  tools/  assets/  docs/   unchanged owners
 | `battle_action` | `{verb: "broadside"\|"hook"\|"retreat"\|"surrender", side: "port"\|"starboard", shot: "round"\|"chain"\|"armor_piercing"\|"grape"}` — `side`/`shot` only on `broadside` | in battle |
 | `locale` | `{locale: "zh"\|"en"}` | anytime |
 
-### 0.4 HTTP action shape (frozen; the endpoint inventory freezes at M2)
+### 0.4 HTTP action shape (frozen; inventory frozen at M2)
 
 - Discrete actions are `POST /api/<facility>/<action>` with a JSON body in
   and JSON out: success `{"ok": true, …}` (the fresh authoritative snapshot
   rides the next `state` frame); refusal `{"ok": false, "error":
-  {"code", "msg"}}`. Reads are `GET`.
-- Fixed endpoints, frozen now: `POST /api/new_game {nation_id,
+  {"code", "msg"}}` where `msg` is a `ui_strings` key (i18n rule). Status:
+  `200` for in-game refusals (the body carries `ok:false`), `400`/`404` for
+  malformed bodies / unknown actions — never a 500 for a game refusal.
+- **Fixed endpoints (frozen):** `POST /api/new_game {nation_id,
   background_id, attr_alloc, skill_alloc}` · `POST /api/load {slot}` ·
-  `POST /api/save {slot}` · `GET /api/saves` · `GET /api/state` ·
-  `POST /api/locale {locale}`. The facility inventory (market, shipyard,
-  tavern, inn, guild, palace, provisions, people verbs) is enumerated and
-  frozen in the M2 acceptance record before the first screen consumes it.
+  `POST /api/save {slot}` · `GET /api/saves` · `GET /api/state` (returns
+  `{ok, state, hello}`) · `POST /api/locale {locale}`.
+- **Facility inventory (frozen at M2, 2026-11-11):**
+  `market: buy|sell|invest` · `shipyard: buy|repair|sell|refit|equip|
+  unequip|promote` · `tavern: hire|fire|spar|hint` · `inn: rest|odd_job` ·
+  `guild: offers|accept|complete|abandon|report` · `palace: mission|
+  ceremony|permit|commend|tournament_enter` · `provisions:
+  set_sail|buy_supplies` · `people: inspect|talk|gift|befriend|attack|
+  hail|appoint` · `fleet: jettison|promote`. Every action is a thin
+  adapter over a `server/sim` function — no rules in the API layer.
+- **Screen projections (the no-rules-in-TS channel):** `GET
+  /api/view/<screen_id>` → `{ok: true, screen, views}` where `views` is
+  the server-computed projection the screen renders (prices, tax badges,
+  gate reasons, facility open/closed, recruit lists, offers, permits,
+  tournament state…). The client performs no rule math; it requests the
+  view for the screen it shows and refreshes it on every `state` frame.
+  Shape details are per-screen and owned by the M2/M3 acceptance records.
 
 ### 0.5 Frozen numbers
 

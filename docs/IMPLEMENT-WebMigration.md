@@ -147,3 +147,37 @@ needed yet):** the §5 worked cannon example predates the broadside split;
 oracle/consumer carry the fleet index; the `phase` payload stamp is `"web"`
 for the web era (state.py keeps the Godot `PHASE = 9` constant unused by
 `save.py`).
+
+### M2 — 2026-11-11
+
+**Delivered:** `server/app.py` (FastAPI, static mounts for the SPA/assets/
+data/tiles), `server/session.py` (the single live session: GameState +
+ecology + the action adapters + the 10 Hz tick loop), `server/api/` (the
+frozen endpoint inventory of `90-*` §0.4), `server/ws.py` (the frozen §0.3
+protocol), `server/__main__.py` + `run.sh` (the frozen launch contract).
+
+- **Contract gates:** 967 pytest cases green (the API contract suite covers
+  the six endpoints, a full HTTP save round-trip, the facility inventory
+  frozen as a literal table, WS hello→state→tick→helm-motion→error, the
+  second-connection 4001 close, locale over both transports, and the
+  refusal paths never 500); validator groups 1–15 green.
+- **WS coverage:** every §0.3 frame implemented (hello/state/tick/
+  battle_tick/event/error) and all nine intents server-validated; one
+  client per session with code-4001 refusal; tick frames coalesced.
+- **Tick loop:** one asyncio task at `SIM_TICK_HZ` = 10; at sea it runs the
+  sailing motion advance + appointed voyage + the unified NPC accrual +
+  the contact funnel, then broadcasts one coalesced `tick`; battles pump
+  enemy turns and broadcast `battle_tick`.
+- **Inventory note:** `provisions/buy_supplies` was added to the frozen
+  inventory (set_sail is supply-gated; without it the demo loop cannot
+  leave port).
+- **Deferred seams (M5):** the §4.9b `FleetCommander` order generator runs
+  in M5's golden-trace work; `battle_order`'s `station`/`discipline` are
+  recorded; click-route suspension on battle entry; at-sea `explore`,
+  at-sea minor repair, mutiny, and the duel modal are not in the frozen
+  intent table yet.
+- **Doc-ambiguity resolutions frozen here:** refusal status semantics
+  (200 in-game / 400 malformed), `GET /api/state` → `{ok, state, hello}`,
+  `error.msg` is a ui_strings key, `tick` fires at sea only, and the
+  screen-projection channel `GET /api/view/<screen_id>` (amended into
+  `90-*` §0.4 with the M3 wiring).
