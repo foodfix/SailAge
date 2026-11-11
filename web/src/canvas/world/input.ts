@@ -49,6 +49,11 @@ function nextTrim(current: SailTrim, forward: boolean): SailTrim {
   return TRIM_ORDER[(((base + (forward ? 1 : -1)) % size) + size) % size];
 }
 
+/** The `]` trim cycle, shared with the touch helm pad (80-* §4.9.2). */
+export function cycleTrim(current: SailTrim): SailTrim {
+  return nextTrim(current, true);
+}
+
 export interface WorldInputOptions {
   client: GameClient;
   snapshot: GameSnapshot;

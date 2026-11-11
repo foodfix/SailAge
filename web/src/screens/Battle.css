@@ -46,6 +46,8 @@
 .battle__field > * {
   flex: 1 1 auto;
   min-width: 0;
+  /* Touch (80-* §4.9.2): the canvas owns drag-pan and pinch-zoom. */
+  touch-action: none;
 }
 
 /* Order strip (the §4.9b window): wind chip · three cycles · morales. */

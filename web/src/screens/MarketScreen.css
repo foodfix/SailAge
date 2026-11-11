@@ -82,3 +82,26 @@
 .market__table_caps > .sa-row > .sa-row__cell:nth-child(1) { flex: 1 1 auto; }
 .market__table_caps > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 12%; }
 .market__table_caps > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 40%; }
+
+/* Small viewports (80-* §4.9.2): the summary plate stacks under the trade
+   window, and the nine-column trade table scrolls horizontally instead of
+   crushing its columns. */
+@media (max-width: 900px) {
+  .market__content {
+    flex-direction: column;
+  }
+
+  .market__aside {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .market__window > .sa-scroll {
+    overflow-x: auto;
+  }
+
+  .market__table {
+    min-width: calc(var(--sailage-base-unit) * 120);
+  }
+}

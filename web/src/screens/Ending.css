@@ -13,6 +13,13 @@
   max-height: 88%;
 }
 
+/* Small viewports (80-* §4.9.2): percent widths widen to the viewport. */
+@media (max-width: 900px) {
+  .ending__window {
+    width: calc(100% - var(--sailage-margin) * 2);
+  }
+}
+
 .ending__rows {
   display: flex;
   flex-direction: column;

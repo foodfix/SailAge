@@ -12,6 +12,8 @@
   display: block;
   width: 100%;
   height: 100%;
+  /* Touch (80-* §4.9.2): a tap is click-to-sail; no double-tap zoom. */
+  touch-action: manipulation;
 }
 
 .world__hud,
@@ -71,4 +73,64 @@
   display: flex;
   align-items: center;
   gap: var(--sailage-base-unit);
+}
+
+/* Virtual helm pad (80-* §4.9.2) — coarse pointers only. */
+.world__pad {
+  position: absolute;
+  z-index: 1;
+  right: var(--sailage-margin);
+  bottom: calc(var(--sailage-base-unit) * 5);
+  display: flex;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+}
+
+@media (pointer: fine) {
+  .world__pad {
+    display: none;
+  }
+}
+
+.world__pad_side {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.world__pad_side > * {
+  flex: 1 1 0;
+  min-width: calc(var(--sailage-base-unit) * 11);
+}
+
+.world__pad_ring {
+  display: grid;
+  grid-template-columns: repeat(3, var(--sailage-button-h));
+  grid-template-rows: repeat(3, var(--sailage-button-h));
+  grid-template-areas:
+    "nw n ne"
+    "w c e"
+    "sw s se";
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.world__pad_cell {
+  padding: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.world__pad_cell[data-dir="NW"] { grid-area: nw; }
+.world__pad_cell[data-dir="N"] { grid-area: n; }
+.world__pad_cell[data-dir="NE"] { grid-area: ne; }
+.world__pad_cell[data-dir="W"] { grid-area: w; }
+.world__pad_cell[data-dir="E"] { grid-area: e; }
+.world__pad_cell[data-dir="SW"] { grid-area: sw; }
+.world__pad_cell[data-dir="S"] { grid-area: s; }
+.world__pad_cell[data-dir="SE"] { grid-area: se; }
+
+.world__pad_cell_center {
+  grid-area: c;
+  font-size: calc(var(--sailage-base-unit) * 1.5);
 }

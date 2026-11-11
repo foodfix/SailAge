@@ -59,6 +59,18 @@
   min-width: 0;
 }
 
+/* Small viewports (80-* §4.9.2): the six facility verbs wrap into rows. */
+@media (max-width: 900px) {
+  .port__facilities {
+    flex-wrap: wrap;
+  }
+
+  .port__facilities > * {
+    flex: 1 1 30%;
+    min-height: var(--sailage-button-h);
+  }
+}
+
 .port__verb_stack {
   display: flex;
   flex-direction: column;

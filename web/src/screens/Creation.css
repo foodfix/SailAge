@@ -13,6 +13,13 @@
   max-height: 88%;
 }
 
+/* Small viewports (80-* §4.9.2): percent widths widen to the viewport. */
+@media (max-width: 900px) {
+  .creation__window {
+    width: calc(100% - var(--sailage-margin) * 2);
+  }
+}
+
 /* The 3×2 background-card grid. */
 .creation__cards {
   display: grid;

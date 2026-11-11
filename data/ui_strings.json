@@ -1960,6 +1960,18 @@
     "zh": "满帆",
     "en": "Full sail"
   },
+  "world.pad.wait": {
+    "zh": "休整",
+    "en": "Wait"
+  },
+  "world.pad.stop": {
+    "zh": "停航",
+    "en": "Stop"
+  },
+  "world.pad.zoom": {
+    "zh": "缩放",
+    "en": "Zoom"
+  },
   "world.wait.done": {
     "zh": "原地休整一天。",
     "en": "Held position for one day."

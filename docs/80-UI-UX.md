@@ -3770,7 +3770,11 @@ shadows, bevels. A screen may author a **structural** CSS module
 position, gap, alignment, sizing through the tokens) but every color,
 font family and px value in it must still be a `--sailage-*` token
 reference; hex literals, color functions, px literals and font-family
-declarations are rejected outside `theme/`/`kit/`. The i18n lint (rule
+declarations are rejected outside `theme/`/`kit/` — with one exemption
+(§4.9.2): a **`@media` prelude's breakpoint width** (`px` on the
+`@media` line only) is structural geometry, not styling, and is
+allowed; every declaration *inside* the block stays token-only. The
+i18n lint (rule
 a) is unchanged; the static layout-coverage lint (the old rule c,
 `ui_layout.json` ids) is retired with the file — correctness of
 arrangement is verified visually and through the view contracts.
@@ -3780,6 +3784,85 @@ re-roll families (ships, wakes, icons, glyphs, portraits, the coast
 tileset). The Layout tab, the `ui_layout.json` commit path and the
 chrome-tileset re-roll cards are deleted (`90-*` §0.2; the studio
 never reads or writes `data/ui_layout.json` or `assets/ui/chrome`).
+
+### 4.9.2 Touch & small-viewport support *(web era; added 2026-11-12 — NORMATIVE for the SPA)*
+
+The §4.9.1 composition is authored on the 1920 × 1080 design canvas and
+scaled to fit (`--sa-scale`). On a phone that scale is unreadable
+(≈ 0.2× in portrait), so the SPA **adapts instead of shrinking**. Every
+rule here is presentation-only: the frozen WS/HTTP protocol, the screen
+inventory and the navigation graph are untouched — a touch gesture sends
+the same §4.3 intent its key sends.
+
+**The fluid viewport (media query `max-width: 900px`).** The
+scale-to-fit canvas becomes a fluid full-viewport layout — the frame box
+and canvas fill the viewport (`width/height: 100%`, `transform: none`;
+the `position: fixed; inset: 0` viewport already tracks the dynamic
+browser chrome) — and the sizing tokens shrink as a set:
+
+| Token | Desktop | Mobile (`max-width: 900px`) |
+|---|---|---|
+| `--sailage-base-unit` | 8px | 6px |
+| `--sailage-margin` | 16px | 12px |
+| `--sailage-row-h` | 32px | 24px |
+| `--sailage-button-h` | 64px | 48px |
+| `--sailage-top-bar-h` / `--sailage-bottom-bar-h` | 64px | 48px |
+| `--sailage-dialog-w` | 480px | `calc(100vw - 24px)` |
+
+`48px` keeps every button at the platform touch minimum. Safe-area
+insets (`env(safe-area-inset-*)`) pad the viewport in the notch corners.
+Browser-level zoom/scroll gestures are disabled (`user-scalable=no`,
+`overscroll-behavior: none`, tap highlight off) — the app owns its
+gestures. Desktop (> 900px) renders pixel-identical to the pre-mobile
+build. The token overrides live in `theme/base.css` (a theme authoring
+point); `tokens.css` stays the generated desktop source.
+
+**Gestures (per surface).**
+- **Everywhere:** a tap is a click (pointer events deliver it); the kit
+  buttons/tabs run `touch-action: manipulation` — no 300 ms double-tap
+  zoom delay, taps unaffected.
+- **S3 world canvas:** tap = the §4.3 click-to-sail (unchanged); no drag
+  pan (the camera follows the fleet); `touch-action: manipulation`.
+- **S10 battle canvas:** tap = select/act, single-finger drag = pan
+  (§4.7.1), **two-finger pinch = the wheel zoom** (0.45×–1.5×, anchored
+  at the pinch midpoint); `touch-action: none`.
+- **S17 chart:** unchanged — the fit view already shows the whole world;
+  the web chart has no pan/zoom state (pinning that as-out-of-scope
+  here).
+
+**The S3 virtual helm pad (coarse pointers only).** The sailing screen
+renders a helm pad over the canvas — hidden on fine-pointer viewports
+(`@media (pointer: fine) { display: none }`), so keyboard/mouse is
+unchanged. Layout: a 3×3 direction ring (8 §4.2 directions + center)
+plus a small side column (trim · zoom · chart), with the exact keyboard
+semantics:
+- **pointerdown** on a direction cell sends `helm {dir}`; **pointerup /
+  pointercancel / pointerleave** sends `helm {dir:"stop"}` — except in
+  **Helm mode**, where the course latches and release sends nothing
+  (the §4.3 keyboard rule verbatim; the server owns hold-to-repeat).
+- the **center cell** mirrors `Space`: in Helm mode while the fleet
+  moves it stops the fleet, otherwise it waits one day (`wait`).
+- the **trim** cell cycles `sail_trim` (the `]` key), the **zoom** cell
+  toggles the two camera levels (`Z`), the **chart** cell opens S17
+  (`Tab`).
+Every press sends the frozen intent its key sends — no client-side
+movement rule exists. Strings: `world.pad.wait` / `world.pad.stop` /
+`world.pad.zoom` (zh/en; the trim cell labels itself with the live
+`world.trim.<state>` name, the chart cell reuses `chart.title`, the
+direction cells are arrow glyphs).
+
+**Modal + table clamps.** The kit window atoms clamp to the viewport —
+`.sa-window` / `.sa-dialog` get
+`max-width: calc(100% - 2 × margin)` — so every fixed-width plate (the
+intel window, settings, game-over, fleet picker…) stays inside a narrow
+screen with no per-screen edits. On the market (S5) the content column
+stacks under the width breakpoint (summary plate below the trade
+window) and the trade table scrolls horizontally at a token `min-width`,
+keeping every column reachable.
+
+**Audit note.** A breakpoint width is structural geometry, not styling:
+the rule-(b) px rejection exempts the `@media` prelude line only —
+every declaration inside the block still token-only.
 
 ### 4.16 W3/W4 symbol contracts (Phase 7 — the launch condition; §4.9 before Phase 10)
 

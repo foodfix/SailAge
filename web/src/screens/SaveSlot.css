@@ -16,6 +16,14 @@
   width: 56%;
 }
 
+/* Small viewports (80-* §4.9.2): percent widths widen to the viewport. */
+@media (max-width: 900px) {
+  .save_slot__window,
+  .save_slot__confirm_window {
+    width: calc(100% - var(--sailage-margin) * 2);
+  }
+}
+
 .save_slot__table {
   margin-top: var(--sailage-base-unit);
 }

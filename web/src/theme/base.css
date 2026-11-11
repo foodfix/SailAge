@@ -1,11 +1,14 @@
 /**
- * Static shell + canvas rules (the design canvas, 80-UI-UX.md §4.9.1).
+ * Static shell + canvas rules (the design canvas, 80-UI-UX.md §4.9.1;
+ * the touch/small-viewport adaptation, §4.9.2).
  *
  * The chrome look is CSS-drawn from generated tokens: every colour, size
  * and font value here is a --sailage-* token reference (the audit gate
  * rejects literals outside theme/ + kit/). The canvas is the fixed
- * 1920 × 1080 design surface scaled by --sa-scale; the retired 32 px
- * chrome-tile token is no longer read anywhere.
+ * 1920 × 1080 design surface scaled by --sa-scale; under the §4.9.2
+ * narrow-viewport media query it becomes a fluid full-viewport layout
+ * with the sizing tokens shrunk as a set. The retired 32 px chrome-tile
+ * token is no longer read anywhere.
  */
 @import "./tokens.css";
 
@@ -102,4 +105,48 @@ input {
 .sa-devnav__btn[data-active="true"] {
   background: var(--sailage-accent);
   color: var(--sailage-panel-bg);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Touch & small viewports (80-* §4.9.2).                                   */
+/* Desktop (> 900px) is untouched; the overrides below shrink the sizing    */
+/* tokens as a set, turn the scaled 1920×1080 canvas into a fluid           */
+/* full-viewport layout, and keep browser gestures out of the app's way.    */
+/* ---------------------------------------------------------------------- */
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sailage-base-unit: 6px;
+    --sailage-margin: 12px;
+    --sailage-row-h: 24px;
+    --sailage-button-h: 48px;
+    --sailage-top-bar-h: 48px;
+    --sailage-bottom-bar-h: 48px;
+    --sailage-dialog-w: calc(100vw - 24px);
+  }
+
+  .sa-viewport {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* The fluid canvas: the design surface fills the viewport unscaled. */
+  .sa-frame-box,
+  .sa-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .sa-canvas {
+    transform: none;
+  }
 }

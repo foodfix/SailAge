@@ -176,7 +176,8 @@ function auditStyling(files) {
 
 /**
  * Structural screen CSS: flex/grid/geometry allowed, but colours, fonts
- * and px literals stay token-only (80-* §4.9.1).
+ * and px literals stay token-only (80-* §4.9.1) — except a `@media`
+ * prelude's breakpoint width, which is structural geometry (80-* §4.9.2).
  */
 function auditScreenCss(files) {
   for (const file of files) {
@@ -186,13 +187,14 @@ function auditScreenCss(files) {
       .replace(/(^|[^:"'])\/\/[^\n]*/g, (match, lead) => lead + " ".repeat(match.length - lead.length));
     const lines = source.split("\n");
     lines.forEach((line, index) => {
+      const isMediaPrelude = /^\s*@media\b/.test(line);
       if (HEX.test(line)) {
         fail("style", file, index + 1, "hex colour in a screen CSS module (use a --sailage-* token)");
       }
       if (COLOR_FN.test(line)) {
         fail("style", file, index + 1, "color function in a screen CSS module (use a token)");
       }
-      if (PX.test(line)) {
+      if (PX.test(line) && !isMediaPrelude) {
         fail("style", file, index + 1, "px literal in a screen CSS module (use a --sailage-* token)");
       }
       if (/\bfont-family\s*:/.test(line)) {

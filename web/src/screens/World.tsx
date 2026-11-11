@@ -34,6 +34,7 @@ import { fixtureSailing } from "../state/fixture";
 import { navigate } from "../app/router";
 import { Button, Toast } from "../kit";
 import { Label, useToastState, ViewFallback } from "./common";
+import { WorldPad } from "./WorldPad";
 import { terrainStats } from "../canvas/world/terrain";
 import { wsDebugInfo, CLOSE_OTHER_CLIENT } from "../client/http";
 import type { ScreenId } from "./ids";
@@ -324,6 +325,16 @@ export function WorldScreen() {
         <Label textKey="discovery.something_near" />
         <Button textKey="discovery.explore" compact />
       </div>
+
+      {/* Touch helm pad (80-* §4.9.2): coarse pointers only (CSS-hidden on
+          fine pointers), and only while the fleet is at sea. */}
+      {snapshot.current_port == null ? (
+        <WorldPad
+          trim={tick.sail_trim}
+          inputMode={snapshot.control_prefs.input_mode}
+          onToggleZoom={onToggleZoom}
+        />
+      ) : null}
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />

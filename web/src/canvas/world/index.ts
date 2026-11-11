@@ -2,7 +2,7 @@ export { MinimapCanvas } from "./MinimapCanvas";
 export { WorldCanvas } from "./WorldCanvas";
 export type { WorldScene } from "./renderer";
 export { WorldRenderer } from "./renderer";
-export { useWorldInput } from "./input";
+export { useWorldInput, cycleTrim } from "./input";
 export {
   GRID_HEIGHT,
   GRID_WIDTH,

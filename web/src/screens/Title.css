@@ -27,6 +27,13 @@
   margin-top: var(--sailage-base-unit);
 }
 
+/* Small viewports (80-* §4.9.2): the menu widens to the viewport. */
+@media (max-width: 900px) {
+  .title__menu {
+    width: calc(100% - var(--sailage-margin) * 2);
+  }
+}
+
 .title__menu_col {
   display: flex;
   flex-direction: column;
