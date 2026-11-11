@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Final
 
@@ -74,6 +75,7 @@ from server.sim.world import (
     hail_options,
     interactions,
     npc_fleets,
+    npc_intel,
     sailing,
 )
 from server.sim.world.raster import ocean_layers, raster
@@ -116,24 +118,38 @@ HOURS_PALACE_AUDIENCE: Final[int] = 1   # palace: mission / ceremony / ...
 HOURS_PALACE_REPAIR: Final[int] = 2     # palace: repair bays
 HOURS_PROVISIONS: Final[int] = 1        # market: buy supplies (24h prompt)
 
-# --- The frozen facility inventory (freezes in the M2 record, §0.4) -----------
+# --- The frozen facility inventory (M2 freeze, §0.4; M3 extension) -----------
 
 ## ``POST /api/<facility>/<action>`` — the exact inventory. The M3 screens
 ## consume this table; :func:`server.api.actions.build_router` dispatches it.
+## The M3 wiring (2026-11-11) appended the screen verbs the M2 freeze had
+## listed without an adapter: the Set-Sail prompt's ``fill`` / ``jettison``,
+## the tavern's ``fill_crew`` / ``down_to_min`` / ``dismiss`` and the
+## palace's ``repair_fleet`` / ``pay_bounty`` / ``inform`` / ``retire``
+## (``guild: complete|abandon`` were already wired).
 FACILITY_INVENTORY: Final[dict[str, tuple[str, ...]]] = {
     "market": ("buy", "sell", "invest"),
     "shipyard": ("buy", "repair", "sell", "refit", "equip", "unequip",
                  "promote"),
-    "tavern": ("hire", "fire", "spar", "hint"),
+    "tavern": ("hire", "fire", "spar", "hint", "fill_crew", "down_to_min",
+               "dismiss"),
     "inn": ("rest", "odd_job"),
     "guild": ("offers", "accept", "complete", "abandon", "report"),
     "palace": ("mission", "ceremony", "permit", "commend",
-               "tournament_enter"),
-    "provisions": ("set_sail", "buy_supplies"),
+               "tournament_enter", "repair_fleet", "pay_bounty", "inform",
+               "retire"),
+    "provisions": ("set_sail", "buy_supplies", "fill", "jettison"),
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
                "appoint"),
     "fleet": ("jettison", "promote"),
 }
+
+#: The six facilities the port hub renders (``server.api.views._port_view``)
+#: — the only rows a bounty closure can shut (§4.9.6). ``provisions/*`` and
+#: ``people/*`` are not hub rows: docking, Save, Set Sail and the sea
+#: interaction verbs keep working in a closed port.
+BOUNTY_GATED_FACILITIES: Final[tuple[str, ...]] = (
+    "market", "shipyard", "tavern", "inn", "guild", "palace")
 
 # --- Errors ------------------------------------------------------------------
 
@@ -707,10 +723,29 @@ class Session:
             raise ApiError("game_over", "error.game_over")
 
     def _guard_port(self, facility: str) -> str:
+        """The docked-port facility gate: live run, a port, bounty closure,
+        then the §4.1b hours window.
+
+        Precedence mirrors the port hub projection
+        (:func:`server.api.views._port_view`): a bounty-closed port renders
+        every hub row disabled with ``port.closed_bounty`` *before* the
+        phase/window checks, so the refusal here is the same key the hub
+        shows. :func:`server.sim.quests.bounty.can_open_facility` is the
+        §4.9.6 exception: a closed port still opens the palace of the
+        bountied nation's capital (the pay-off row).
+
+        Every caller is a **hub** facility (market/shipyard/tavern/inn/
+        guild/palace). The ``provisions/*`` and ``people/*`` verbs never
+        call this guard — §4.9.6 keeps docking, Save and Set Sail working in
+        a closed port, and the provisioning prompt is the Set-Sail flow.
+        """
         self._guard_run()
         port_id = self.port_id()
         if not port_id:
             raise ApiError("not_in_port", "error.not_in_port")
+        if not bounty.can_open_facility(self.gs, port_id, facility) \
+                and facility in BOUNTY_GATED_FACILITIES:
+            raise ApiError("closed", "port.closed_bounty")
         if not sailing.facility_open(self.store, self.gs, port_id, facility):
             raise ApiError("closed", f"{facility}.closed")
         return port_id
@@ -1050,6 +1085,54 @@ class Session:
                 "discovery_id": discovery_id, "entry": entry,
                 "gold": int(self.gs.gold)}
 
+    def _tavern_fill_crew(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The crew Fill button: ``tavern.fill_heads`` → :func:`tavern.hire`
+        (docs/30-* §4.5, ``tavern_engine.gd`` ``_on_fill_pressed``): as many
+        hands as fit under the flagship's ``crew_max`` *and* the purse can
+        pay for, then the §4.1b hour. A zero plan is refused with the same
+        gate key the crew row shows (``tavern.crew_full`` / ``market.no_gold``).
+        """
+        self._guard_port("tavern")
+        heads = tavern.fill_heads(self.store, self.gs.fleet,
+                                  int(self.gs.gold))
+        if heads <= 0:
+            full = tavern.max_hire(self.store, self.gs.fleet) <= 0
+            self._refuse("tavern.crew_full" if full else "market.no_gold")
+        if not tavern.hire(self.store, self.gs.fleet, self.gs, heads,
+                           open_now=True):  # pragma: no cover - filled plan
+            self._refuse("tavern.hire_refused")
+        self.gs.on_fleet_changed and self.gs.on_fleet_changed()
+        self._charge_hours(HOURS_TAVERN_CREW)
+        return {"ok": True, "heads": heads, "gold": int(self.gs.gold),
+                "crew": fleet_lib.total_crew(self.gs.fleet)}
+
+    def _tavern_down_to_min(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The Down-to-min button: ``tavern.min_fire`` → :func:`tavern.fire_clamped`
+        (docs/30-* §4.5/§6, ``tavern_engine.gd`` ``_on_down_to_min_pressed``):
+        let go exactly the hands above ``crew_min``, then the §4.1b hour."""
+        self._guard_port("tavern")
+        heads = tavern.min_fire(self.store, self.gs.fleet)
+        fired = tavern.fire_clamped(self.store, self.gs.fleet, heads,
+                                    open_now=True) if heads > 0 else 0
+        if fired <= 0:
+            self._refuse("tavern.fire_refused")
+        self.gs.on_fleet_changed and self.gs.on_fleet_changed()
+        self._charge_hours(HOURS_TAVERN_CREW)
+        return {"ok": True, "fired": fired,
+                "crew": fleet_lib.total_crew(self.gs.fleet)}
+
+    def _tavern_dismiss(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Officer dismissal: :func:`character.dismiss` (docs/50-* §4.5.5,
+        ``tavern_screen.gd`` ``dismiss_officer``) — no severance, the state
+        entry and post free with the roster row, one §4.1b hour."""
+        self._guard_port("tavern")
+        officer_id = _require_str(body, "officer_id")
+        if not character.dismiss(self.gs, officer_id):
+            self._refuse("tavern.fire_refused")
+        self._charge_hours(HOURS_TAVERN_CREW)
+        return {"ok": True, "officer_id": officer_id,
+                "gold": int(self.gs.gold)}
+
     # =====================================================================
     # inn
     # =====================================================================
@@ -1145,6 +1228,13 @@ class Session:
         return str(fleet.get("id", "")) if fleet else ""
 
     def _guild_complete(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Turns in one quest at the guild (docs/70-* §4.9.3):
+        :func:`quest_gen.complete_delivery_quests` (which removes the carried
+        goods from the hold, then pays) or
+        :func:`quest_gen.complete_exploration_quests`. Bounty quests complete
+        at battle end, never here. The delivery path announces the hold
+        change (``Fleet.notify_changed`` in the oracle — the caller's frame).
+        """
         port_id = self._guard_port("guild")
         instance_id = _require_str(body, "instance_id")
         quest = quest_gen.find(self.gs, instance_id)
@@ -1167,10 +1257,15 @@ class Session:
             self._refuse("quest.not_completable")
         if not done:
             self._refuse("quest.not_completable")
+        if quest_type == quest_gen.TYPE_DELIVERY:
+            self.gs.on_fleet_changed and self.gs.on_fleet_changed()
         self.emit_event("quests_changed", {})
         return {"ok": True, "completed": done}
 
     def _guild_abandon(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Abandons one active quest (docs/70-* §4.9.3):
+        :func:`quest_gen.abandon` is the same failure path (the origin
+        nation's reputation −5, no fame, no gold)."""
         self._guard_port("guild")
         instance_id = _require_str(body, "instance_id")
         quest = quest_gen.find(self.gs, instance_id)
@@ -1205,8 +1300,19 @@ class Session:
         return (bounty.is_port_closed(self.gs, port_id),
                 bounty.can_pay_here(self.gs, port_id))
 
+    def _guard_palace_audience(self, port_id: str) -> None:
+        """§4.9.6: a bounty-closed port's palace offers **only** ``Pay
+        bounty`` (and Leave). The oracle's ``palace_screen.gd``
+        ``_apply_closed_state`` disables ceremony / mission / repair /
+        tournament / retire / permits with ``port.closed_bounty``; the
+        server enforces the same, so ``palace/pay_bounty`` is the one verb
+        that survives closure (the §4.9.5 anti-lockout path)."""
+        if bounty.is_port_closed(self.gs, port_id):
+            self._refuse("port.closed_bounty")
+
     def _palace_mission(self, body: dict[str, Any]) -> dict[str, Any]:
         port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
         closed, can_pay = self._palace_closed_flags(port_id)
         reason = palace.open_block_reason(self.store, port_id, closed, can_pay)
         if reason:
@@ -1232,6 +1338,7 @@ class Session:
 
     def _palace_ceremony(self, body: dict[str, Any]) -> dict[str, Any]:
         port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
         rank = palace.attend_ceremony(self.store, self.gs, port_id,
                                       open_now=True)
         if not rank:
@@ -1246,6 +1353,7 @@ class Session:
 
     def _palace_permit(self, body: dict[str, Any]) -> dict[str, Any]:
         port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
         bought = palace.buy_permit(
             self.store, self.gs, self.run_view, self.gs.permits,
             self.gs.treasuries, port_id, open_now=True)
@@ -1258,6 +1366,7 @@ class Session:
 
     def _palace_commend(self, body: dict[str, Any]) -> dict[str, Any]:
         port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
         entry = palace.pending_commendation(
             self.store, self.gs, self.gs.pending_commendations,
             self.gs.commendations_shown, port_id)
@@ -1269,6 +1378,7 @@ class Session:
 
     def _palace_tournament_enter(self, body: dict[str, Any]) -> dict[str, Any]:
         port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
         closed, _can_pay = self._palace_closed_flags(port_id)
         status = palace.status(self.store, self.gs, self.run_view, port_id,
                                int(self.gs.day), closed)
@@ -1283,6 +1393,137 @@ class Session:
         self._open_battle(encounter, explicit=True)
         return {"ok": True, "port_id": port_id,
                 "encounter": encounter}
+
+    def _palace_repair_fleet(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The palace repair bays (docs/70-* §4.9.2, docs/40-* §4.3).
+
+        ``palace.repair_cost`` / ``palace.repair`` were explicitly deferred to
+        the shipyard engine at port time, so this adapter walks the oracle's
+        ``palace_screen.gd repair_fleet`` over the shipyard primitives:
+        per hull ``max_repair_points`` → ``repair_cost`` (the count-title
+        ×0.8 + carpenter factor) → ``repair_apply``, as many points as the
+        purse allows, and the two-hour bay visit charged **once**, never per
+        hull.
+        """
+        port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
+        if not palace.nation_of(self.store, port_id):
+            self._refuse("palace.not_capital")
+        title_discount, carpenter = self._repair_factors(port_id)
+        restored = 0
+        damage = 0
+        for index in range(len(self.gs.fleet)):
+            points = shipyard.max_repair_points(self.gs.fleet, index)
+            if points <= 0:
+                continue
+            damage += points
+            per_point = shipyard.repair_cost(
+                self.gs.fleet, index, 1,
+                title_repair_discount=title_discount,
+                carpenter_discount=carpenter)
+            if per_point <= 0:  # pragma: no cover - data fault
+                continue
+            want = min(points, int(self.gs.gold) // per_point)
+            if want <= 0:
+                break
+            result = shipyard.repair_apply(
+                self.gs.fleet, index, want,
+                title_repair_discount=title_discount,
+                carpenter_discount=carpenter)
+            if not result.ok:  # pragma: no cover - cost already proved
+                continue
+            self.gs.add_gold(int(result.gold_delta))
+            restored += want
+        if restored <= 0:
+            self._refuse("shipyard.no_damage" if damage <= 0
+                         else "shipyard.no_gold")
+        self.gs.on_fleet_changed and self.gs.on_fleet_changed()
+        self._charge_hours(HOURS_PALACE_REPAIR)
+        return {"ok": True, "port_id": port_id, "restored": restored,
+                "gold": int(self.gs.gold)}
+
+    def _palace_pay_bounty(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The palace bounty pay-off (docs/70-* §4.9.5/§4.9.6):
+        :func:`bounty.pay_off` charges the amount fixed at issue time and
+        ``_clear`` resets that nation's reputation to exactly −10. The
+        audience is one §4.1b hour; the client posts the port nation's id."""
+        port_id = self._guard_port("palace")
+        port_nation = palace.nation_of(self.store, port_id)
+        nation_id = _optional_str(body, "nation_id") or port_nation
+        if not port_nation or nation_id != port_nation:
+            self._refuse("bounty.none")
+        if not bounty.pay_off(self.gs, self.gs, nation_id):
+            self._refuse("bounty.no_gold"
+                         if bounty.has_bounty(self.gs, nation_id)
+                         else "bounty.none")
+        self.emit_event("bounty_cleared", {"nation_id": nation_id})
+        self._charge_hours(HOURS_PALACE_AUDIENCE)
+        return {"ok": True, "nation_id": nation_id,
+                "gold": int(self.gs.gold),
+                "reputation": character.reputation(self.gs, nation_id)}
+
+    def _palace_inform(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The paid inform on pirates (docs/70-* §4.5,
+        ``palace_engine.gd inform_on_pirates``): the fixed 500g buys one live
+        pirate/privateer captain's exact position through
+        :func:`npc_intel.reveal_position`. The client posts the poster row's
+        ``captain_id``; ``fleet_id`` is accepted as the direct spelling. A
+        bounty-closed port refuses with the hub key (the palace inform row's
+        ``canInform`` is false while closed)."""
+        port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
+        # Lazy (see :meth:`_provisions_fill`): one source for the 500g fee.
+        from server.api.plans import INFORM_COST
+
+        fleet_id = _optional_str(body, "fleet_id")
+        captain_id = _optional_str(body, "captain_id")
+        if fleet_id and not self._is_pirate_fleet(fleet_id):
+            self._refuse("ui.not_available")
+        if not fleet_id and captain_id:
+            for poster in npc_intel.wanted_posters(self.gs, port_id,
+                                                   store=self.store):
+                if str(poster.get("captain_id", "")) == captain_id:
+                    fleet_id = str(poster.get("id", ""))
+                    break
+        if not fleet_id:
+            self._refuse("ui.not_available")
+        if int(self.gs.gold) < INFORM_COST:
+            self._refuse("market.no_gold")
+        reveal = npc_intel.reveal_position(self.gs, fleet_id,
+                                           store=self.store)
+        if not reveal:
+            self._refuse("ui.not_available")
+        self.gs.add_gold(-INFORM_COST)
+        self._charge_hours(HOURS_PALACE_AUDIENCE)
+        return {"ok": True, "port_id": port_id, "reveal": reveal,
+                "gold": int(self.gs.gold)}
+
+    def _is_pirate_fleet(self, fleet_id: str) -> bool:
+        """The §4.5 inform-target rule: the fleet is live and is a
+        pirate/privateer (the oracle's role check, never a merchant)."""
+        for fleet in self.gs.npc_fleets:
+            if not isinstance(fleet, dict):
+                continue
+            if str(fleet.get("id", "")) == fleet_id:
+                return str(fleet.get("role", "")) in (
+                    npc_fleets.PIRATE, npc_fleets.PRIVATEER)
+        return False
+
+    def _palace_retire(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The win state (docs/70-* §4.7): :func:`palace.can_retire` (duke
+        with the docked port's nation) then :func:`palace.retire` marks the
+        run retired with the wall-clock stamp; the ``retired`` event routes
+        the client to the ending screen."""
+        port_id = self._guard_port("palace")
+        self._guard_palace_audience(port_id)
+        if not palace.can_retire(self.store, self.gs, port_id):
+            self._refuse("ui.not_available")
+        if not palace.retire(self.store, self.gs, self.run_view, port_id,
+                             int(time.time())):  # pragma: no cover - gated
+            self._refuse("ui.not_available")
+        self.emit_event("retired", {})
+        return {"ok": True, "port_id": port_id,
+                "retired_at": int(self.gs.retired_at)}
 
     # =====================================================================
     # provisions
@@ -1302,18 +1543,14 @@ class Session:
                 "position": {"x": self.gs.world_tile()[0],
                              "y": self.gs.world_tile()[1]}}
 
-    def _provisions_buy_supplies(self, body: dict[str, Any]) -> dict[str, Any]:
-        """The pre-sail prompt's supply purchase (TradeEngine.buy_supplies).
-
-        Supplies are bought at the prompt, not the market counter — no
-        facility window applies (30-* §4.1b exemption); a completed purchase
-        still charges the §4.1b action hour.
+    def _purchase_supplies(self, kind: str, qty: int) -> dict[str, Any]:
+        """One supplies lot through the single price path
+        (``TradeEngine.buy_supplies``, docs/20-* §4.10): the locked 2g/1g
+        price, the ``min(gold // price, hold_free)`` ceiling, the
+        ``fleet.add_supplies`` distribution. No clock and no window — the
+        §4.6.1 prompt is exempt from the market hours; the caller charges
+        the §4.1b hour and announces the fleet change.
         """
-        self._guard_run()
-        if not self.in_port():
-            self._refuse("error.not_in_port")
-        kind = _require_str(body, "kind")
-        qty = _require_int(body, "qty")
         price = trade.supplies_price(kind)
         if price <= 0:
             self._refuse("error.bad_request", "bad_request")
@@ -1333,11 +1570,103 @@ class Session:
                 fleet_lib.remove_supplies(self.gs.fleet, kind, stored)
             self._refuse("market.refused")
         self.gs.add_gold(-cost)
+        return {"kind": kind, "qty": qty, "cost": cost,
+                "held": fleet_lib.supplies(self.gs.fleet, kind)}
+
+    def _provisions_buy_supplies(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The pre-sail prompt's supply purchase (TradeEngine.buy_supplies).
+
+        Supplies are bought at the prompt, not the market counter — no
+        facility window applies (30-* §4.1b exemption); a completed purchase
+        still charges the §4.1b action hour.
+        """
+        self._guard_run()
+        if not self.in_port():
+            self._refuse("error.not_in_port")
+        kind = _require_str(body, "kind")
+        qty = _require_int(body, "qty")
+        receipt = self._purchase_supplies(kind, qty)
         self.gs.on_fleet_changed and self.gs.on_fleet_changed()
         self._charge_hours(HOURS_PROVISIONS)
-        return {"ok": True, "kind": kind, "qty": qty, "cost": cost,
-                "gold": int(self.gs.gold),
-                "held": fleet_lib.supplies(self.gs.fleet, kind)}
+        return {"ok": True, **receipt, "gold": int(self.gs.gold)}
+
+    def _provisions_fill(self, body: dict[str, Any]) -> dict[str, Any]:
+        """一键补满 / Auto-fill (``provisions_dialog.gd`` ``apply_fill_plan``,
+        docs/80-* §4.6.1 amended): discards the surplus first
+        (:func:`fleet.remove_supplies` — the only supplies-removal path,
+        freeing hold), then buys each shortfall through
+        :meth:`_purchase_supplies`, one §4.1b hour per completed purchase.
+        The plan is :func:`server.api.plans.fill_plan` over the live pooled
+        state; an all-zero plan is refused with the prompt's own
+        ``port.sail.fill.done`` copy (the button's disabled reason).
+        """
+        self._guard_run()
+        if not self.in_port():
+            self._refuse("error.not_in_port")
+        # Lazy: importing ``server.api`` runs the package __init__ (which
+        # imports this module) — the same seam :meth:`view` uses.
+        from server.api.plans import fill_plan
+
+        fleet = self.gs.fleet
+        plan = fill_plan(fleet_lib.supplies(fleet, "provisions"),
+                         fleet_lib.supplies(fleet, "water"),
+                         fleet_lib.fleet_free(fleet), int(self.gs.gold))
+        empty = (plan["buy_provisions"] + plan["buy_water"]
+                 + plan["discard_provisions"] + plan["discard_water"])
+        if empty <= 0:
+            self._refuse("port.sail.fill.done")
+        discarded: dict[str, int] = {}
+        for kind in trade.SUPPLY_KINDS:
+            qty = int(plan["discard_" + kind])
+            if qty <= 0:
+                continue
+            removed = fleet_lib.remove_supplies(fleet, kind, qty)
+            if removed != qty:  # pragma: no cover - the plan is exact
+                self._refuse("fleet.nothing_to_jettison")
+            discarded[kind] = removed
+        bought: dict[str, int] = {}
+        for kind in trade.SUPPLY_KINDS:
+            qty = int(plan["buy_" + kind])
+            if qty <= 0:
+                continue
+            self._purchase_supplies(kind, qty)
+            bought[kind] = qty
+            self._charge_hours(HOURS_PROVISIONS)
+        self.gs.on_fleet_changed and self.gs.on_fleet_changed()
+        return {"ok": True, "plan": plan, "discarded": discarded,
+                "bought": bought, "gold": int(self.gs.gold),
+                "provisions": fleet_lib.supplies(fleet, "provisions"),
+                "water": fleet_lib.supplies(fleet, "water")}
+
+    def _provisions_jettison(self, body: dict[str, Any]) -> dict[str, Any]:
+        """The Set-Sail prompt's jettison (docs/20-* §4.10, §4.6.1 amended):
+        a supply row stages ``{kind, qty}`` and leaves the pooled stock
+        flagship-first through :func:`fleet.remove_supplies` (refunding
+        nothing); the cargo list's per-stack form is
+        ``{kind: "cargo", ship_index, good_id}`` through
+        :func:`fleet.jettison_good` (whole stack, the prompt's confirm
+        payload). Port-only — the prompt never exists at sea.
+        """
+        self._guard_run()
+        if not self.in_port():
+            self._refuse("error.not_in_port")
+        kind = _require_str(body, "kind")
+        if kind in trade.SUPPLY_KINDS:
+            qty = _require_int(body, "qty")
+            if qty <= 0:
+                self._refuse("market.invalid_qty")
+            removed = fleet_lib.remove_supplies(self.gs.fleet, kind, qty)
+        elif kind == "cargo":
+            ship_index = _require_int(body, "ship_index")
+            good_id = _require_str(body, "good_id")
+            removed = fleet_lib.jettison_good(self.gs.fleet, ship_index,
+                                              good_id)
+        else:
+            self._refuse("error.bad_request", "bad_request")
+        if removed <= 0:
+            self._refuse("fleet.nothing_to_jettison")
+        self.gs.on_fleet_changed and self.gs.on_fleet_changed()
+        return {"ok": True, "kind": kind, "removed": removed}
 
     # =====================================================================
     # people (the §4.11.15 fleet interaction surface + officer verbs)

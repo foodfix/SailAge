@@ -27,6 +27,7 @@ from typing import Any, Final
 
 from fastapi import APIRouter, Request
 
+from server.api.plans import INFORM_COST, fill_plan
 from server.sim import fleet as fleet_lib
 from server.sim.data import DataStore
 from server.sim.player import character, fame, skills
@@ -66,9 +67,6 @@ DAYS_WARN_MIN: Final[int] = 3
 DAYS_BAR_MAX: Final[int] = DAYS_GOOD_MIN
 #: The market captain-intel free-lane stance gate (market_screen.gd).
 INTEL_FREE_STANCE: Final[int] = 2
-#: The palace inform-on-pirates price (palace_engine.gd ``INFORM_COST``,
-#: docs/70-* §4.5) — a fixed 500g reveal.
-INFORM_COST: Final[int] = 500
 
 
 # --- Localization of composed text ------------------------------------------
@@ -494,38 +492,6 @@ def _market_view(session: Any, port_id: str) -> dict[str, Any]:
     }
 
 
-def _fill_plan(provisions: int, water: int, free: int,
-               gold: int) -> dict[str, int]:
-    """The auto-fill plan (`provisions_dialog.gd` ``fill_plan``, docs/80-*
-    §4.6.1 amended) — pure integer maths, ported so the Set-Sail prompt's
-    ``fillBlocked`` is server-computed (no rule math in TS)."""
-    smaller = min(provisions, water)
-    larger = max(provisions, water)
-    small_price = (trade.WATER_PRICE if provisions >= water
-                   else trade.PROVISIONS_PRICE)
-    p_price = trade.PROVISIONS_PRICE
-    w_price = trade.WATER_PRICE
-    cost_at_larger = small_price * (larger - smaller)
-    if small_price <= 0 or p_price + w_price <= 0:
-        return {"target": 0, "buy_provisions": 0, "buy_water": 0,
-                "discard_provisions": 0, "discard_water": 0, "cost": 0}
-    if gold >= cost_at_larger:
-        gold_cap = larger + (gold - cost_at_larger) // (p_price + w_price)
-    else:
-        gold_cap = smaller + gold // small_price
-    space_cap = (free + provisions + water) // 2
-    target = min(gold_cap, space_cap)
-    return {
-        "target": target,
-        "buy_provisions": max(0, target - provisions),
-        "buy_water": max(0, target - water),
-        "discard_provisions": max(0, provisions - target),
-        "discard_water": max(0, water - target),
-        "cost": p_price * max(0, target - provisions)
-        + w_price * max(0, target - water),
-    }
-
-
 def _provisions_view(session: Any, port_id: str) -> dict[str, Any]:
     gs = session.gs
     fleet = gs.fleet
@@ -534,7 +500,7 @@ def _provisions_view(session: Any, port_id: str) -> dict[str, Any]:
     free = fleet_lib.fleet_free(fleet)
     days = sailing.fleet_supply_days(gs)
     gate = sailing.supply_block_reason(gs)
-    plan = _fill_plan(provisions, water, free, int(gs.gold))
+    plan = fill_plan(provisions, water, free, int(gs.gold))
     plan_empty = (plan["buy_provisions"] + plan["buy_water"]
                   + plan["discard_provisions"] + plan["discard_water"]) <= 0
     cargo: list[dict[str, Any]] = []
