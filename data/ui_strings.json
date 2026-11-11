@@ -4007,5 +4007,209 @@
   "sandbox.dir.VAR": {
     "zh": "多变",
     "en": "Variable"
+  },
+  "connection.connecting": {
+    "zh": "连接中…",
+    "en": "Connecting…"
+  },
+  "connection.lost": {
+    "zh": "连接已断开",
+    "en": "Connection lost"
+  },
+  "connection.other_client": {
+    "zh": "另一个客户端已连接",
+    "en": "Another client is connected"
+  },
+  "error.bad_frame": {
+    "zh": "数据帧格式错误",
+    "en": "Malformed frame"
+  },
+  "error.bad_intent": {
+    "zh": "无法执行该指令",
+    "en": "Invalid intent"
+  },
+  "error.bad_locale": {
+    "zh": "不支持的语言",
+    "en": "Unsupported language"
+  },
+  "error.bad_request": {
+    "zh": "请求无效",
+    "en": "Bad request"
+  },
+  "error.bad_slot": {
+    "zh": "存档槽无效",
+    "en": "Invalid save slot"
+  },
+  "error.game_over": {
+    "zh": "航程已结束",
+    "en": "The voyage has ended"
+  },
+  "error.internal": {
+    "zh": "服务器内部错误",
+    "en": "Internal server error"
+  },
+  "error.network": {
+    "zh": "网络错误",
+    "en": "Network error"
+  },
+  "error.no_run": {
+    "zh": "尚未开始游戏",
+    "en": "No game in progress"
+  },
+  "error.no_web_build": {
+    "zh": "网页前端尚未构建",
+    "en": "The web client is not built"
+  },
+  "error.not_at_sea": {
+    "zh": "只能在海上进行",
+    "en": "Only available at sea"
+  },
+  "error.not_found": {
+    "zh": "未找到",
+    "en": "Not found"
+  },
+  "error.not_in_battle": {
+    "zh": "当前没有战斗",
+    "en": "Not in battle"
+  },
+  "error.not_in_port": {
+    "zh": "只能在港口进行",
+    "en": "Only available in port"
+  },
+  "error.not_your_turn": {
+    "zh": "还没轮到你行动",
+    "en": "It is not your turn"
+  },
+  "error.request_failed": {
+    "zh": "请求失败",
+    "en": "Request failed"
+  },
+  "error.retired": {
+    "zh": "已经退休",
+    "en": "Already retired"
+  },
+  "error.save_load": {
+    "zh": "读取存档失败",
+    "en": "Failed to load the save"
+  },
+  "error.unknown_action": {
+    "zh": "未知操作",
+    "en": "Unknown action"
+  },
+  "error.unknown_background": {
+    "zh": "未知出身",
+    "en": "Unknown background"
+  },
+  "error.unknown_intent": {
+    "zh": "未知指令",
+    "en": "Unknown intent"
+  },
+  "error.unknown_nation": {
+    "zh": "未知国家",
+    "en": "Unknown nation"
+  },
+  "error.unknown_screen": {
+    "zh": "未知界面",
+    "en": "Unknown screen"
+  },
+  "fleet.nothing_to_jettison": {
+    "zh": "没有可抛弃的货物",
+    "en": "Nothing to jettison"
+  },
+  "guild.report.refused": {
+    "zh": "无法提交发现",
+    "en": "Report refused"
+  },
+  "inn.odd_job.refused": {
+    "zh": "无法打工",
+    "en": "Odd job refused"
+  },
+  "market.buy_max": {
+    "zh": "超出可购买数量",
+    "en": "Exceeds the buy limit"
+  },
+  "market.no_listing": {
+    "zh": "本港不交易此货物",
+    "en": "This good is not listed here"
+  },
+  "market.other_port_memory": {
+    "zh": "需要更久的价格记忆",
+    "en": "Price memory too short"
+  },
+  "market.over_qty": {
+    "zh": "超出数量",
+    "en": "Quantity too high"
+  },
+  "market.profit_arrows": {
+    "zh": "需要更高的鉴定技能",
+    "en": "Requires higher appraisal"
+  },
+  "market.refused": {
+    "zh": "交易被拒绝",
+    "en": "Trade refused"
+  },
+  "palace.commend.none": {
+    "zh": "没有可用的表彰",
+    "en": "No commendation available"
+  },
+  "palace.mission_refused": {
+    "zh": "无法接受任务",
+    "en": "Mission refused"
+  },
+  "palace.permit.refused": {
+    "zh": "无法购买免税证",
+    "en": "Permit purchase refused"
+  },
+  "provisions.blocked": {
+    "zh": "无法出海",
+    "en": "Cannot set sail"
+  },
+  "quest.no_offer": {
+    "zh": "没有可接的任务",
+    "en": "No offer available"
+  },
+  "quest.not_completable": {
+    "zh": "任务尚未完成",
+    "en": "Quest not completable yet"
+  },
+  "quest.not_found": {
+    "zh": "未找到任务",
+    "en": "Quest not found"
+  },
+  "quest.not_here": {
+    "zh": "任务不在本港",
+    "en": "Quest not available here"
+  },
+  "tavern.appoint_refused": {
+    "zh": "无法委任",
+    "en": "Appointment refused"
+  },
+  "tavern.fire_refused": {
+    "zh": "无法解雇",
+    "en": "Cannot dismiss"
+  },
+  "tavern.gift_refused": {
+    "zh": "无法赠礼",
+    "en": "Gift refused"
+  },
+  "tavern.hire_refused": {
+    "zh": "无法雇佣船员",
+    "en": "Cannot hire crew"
+  },
+  "tavern.recruit_refused": {
+    "zh": "无法招募",
+    "en": "Recruitment refused"
+  },
+  "tavern.spar_refused": {
+    "zh": "无法切磋",
+    "en": "Sparring refused"
+  },
+  "tavern.talk_refused": {
+    "zh": "无法交谈",
+    "en": "Cannot talk"
+  },
+  "world.ice_blocked": {
+    "zh": "海冰阻挡了航路",
+    "en": "Sea ice blocks the way"
   }
 }
