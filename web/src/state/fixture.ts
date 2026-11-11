@@ -9,7 +9,7 @@
  * reasons, open/closed status) — M2 must supply the same projections.
  */
 import { content } from "../i18n";
-import type { GameSnapshot, NpcMarkerState, ScreenViews, SailingView } from "./types";
+import type { Direction8, GameSnapshot, NpcMarkerState, ScreenViews, SailingView } from "./types";
 
 const LISBON = "lisbon";
 const PORTUGAL = "portugal";
@@ -520,4 +520,125 @@ export const fixtureSailing = {
   speed: 4.2,
   /** Lisbon's committed berth tile — the fixture's one docking target. */
   dock: { port_id: LISBON, x: 2050, y: 615 },
+} as const;
+
+/* ---------------------------------------------------------------------- */
+/* M5 battle fixture (additive; presentation only — no rules)              */
+/*                                                                         */
+/* The S10 canvas is demoable under `?fixture=1` from these constants.     */
+/* Ships/deployment follow the §4.11.2 cells and the §4.11.11 instance     */
+/* shape; the hull/crew numbers are authored fixture values (the live      */
+/* server sends authoritative frames). Nothing here computes combat.       */
+/* ---------------------------------------------------------------------- */
+
+export interface BattleFixtureShip {
+  id: string;
+  side: "player" | "enemy";
+  kind: string;
+  position: { x: number; y: number };
+  velocity: { x: number; y: number };
+  heading8: Direction8;
+  hull: number;
+  crew: number;
+}
+
+/** The §4.11.2 deployment cells, two player hulls vs three navy hulls. */
+export const fixtureBattleShips: BattleFixtureShip[] = [
+  {
+    id: "player_0",
+    side: "player",
+    kind: "caravel",
+    position: { x: 10, y: 15 },
+    velocity: { x: 1, y: 0 },
+    heading8: "E",
+    hull: 82,
+    crew: 15,
+  },
+  {
+    id: "player_1",
+    side: "player",
+    kind: "latin",
+    position: { x: 10, y: 14 },
+    velocity: { x: 0, y: 0 },
+    heading8: "E",
+    hull: 40,
+    crew: 12,
+  },
+  {
+    id: "enemy_0",
+    side: "enemy",
+    kind: "brigantine",
+    position: { x: 37, y: 15 },
+    velocity: { x: -1, y: 0 },
+    heading8: "W",
+    hull: 110,
+    crew: 20,
+  },
+  {
+    id: "enemy_1",
+    side: "enemy",
+    kind: "brigantine",
+    position: { x: 37, y: 14 },
+    velocity: { x: 0, y: 0 },
+    heading8: "W",
+    hull: 110,
+    crew: 20,
+  },
+  {
+    id: "enemy_2",
+    side: "enemy",
+    kind: "sloop",
+    position: { x: 37, y: 16 },
+    velocity: { x: 0, y: 0 },
+    heading8: "W",
+    hull: 90,
+    crew: 16,
+  },
+];
+
+/** The battle-open state slice (the at-sea sailing save + the encounter). */
+export const fixtureBattleSnapshot: GameSnapshot = {
+  ...fixtureSailingSnapshot,
+  day: 12,
+  pending_encounter: {
+    id: "nf_fixture_navy",
+    kind: "navy",
+    role: "navy",
+    nation_id: SPAIN,
+    contact: { x: 37, y: 15 },
+    day: 12,
+    wind_dir: "W",
+    weather: "fair",
+  },
+};
+
+/** The fixture's after-action outcome block (§4.12.2 shape, authored). */
+export const fixtureBattleOutcome = {
+  result: "victory",
+  rounds: 12,
+  kind: "navy",
+  nation_id: SPAIN,
+  contact: { x: 37, y: 15 },
+  sunk_enemy: ["sloop"],
+  captured_enemy: [{ ship_type_id: "brigantine" }],
+  surrendered_enemy: 0,
+  sunk_player: [],
+  lost_player: [],
+  salvage_gold: 750,
+  xp: 90,
+  morale_delta: 5,
+  rep_deltas: {},
+  cargo_overflow_lost: 0,
+};
+
+/** Scenario constants the fixture client and the battle screen share. */
+export const fixtureBattle = {
+  snapshot: fixtureBattleSnapshot,
+  encounter_id: "nf_fixture_navy",
+  enemy_kind: "navy",
+  enemy_nation: SPAIN,
+  weather: "fair",
+  wind: { dir: "W" as Direction8, strength: 3 },
+  ships: fixtureBattleShips,
+  outcome: fixtureBattleOutcome,
 } as const;

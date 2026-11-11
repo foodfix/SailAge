@@ -50,6 +50,7 @@ const REAL_SCREENS = {
   palace: "PalaceScreen.tsx",
   tavern: "TavernScreen.tsx",
   world: "World.tsx",
+  battle: "Battle.tsx",
 };
 
 const STYLE_ALLOWED_PREFIXES = ["theme" + sep, "kit" + sep];

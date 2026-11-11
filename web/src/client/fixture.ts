@@ -10,10 +10,17 @@
  * demoable before the live WS; it is not a second simulation and implements no
  * game rule (the server's tick remains authoritative in M2).
  */
-import { fixtureSailing, fixtureSailingSnapshot, fixtureState } from "../state/fixture";
+import {
+  fixtureBattle,
+  fixtureSailing,
+  fixtureSailingSnapshot,
+  fixtureState,
+} from "../state/fixture";
 import type { Direction8, FacilityId, GameSnapshot, Locale, SailTrim } from "../state/types";
 import type {
   ApiResult,
+  BattleShipFrame,
+  BattleTickFrame,
   ClientIntent,
   GameClient,
   SavesResponse,
@@ -192,6 +199,183 @@ class SailingFixture {
   }
 }
 
+/* ---------------------------------------------------------------------- */
+/* FIXTURE battle loop (M5)                                                */
+/*                                                                         */
+/* A scripted presentation sequence so the S10 canvas is demoable under    */
+/* `?fixture=1` without the server: ships glide along their initial        */
+/* velocities, a round counter ticks, and `battle_action` intents move a   */
+/* hull bar. It implements NO game rule — the live server's BattleSim      */
+/* stays authoritative; numbers here are authored demo values.             */
+/* ---------------------------------------------------------------------- */
+
+const BATTLE_TICK_MS = 100;
+const BATTLE_MOVE_TICKS = 4;
+const BATTLE_ROUND_TICKS = 20;
+const BATTLE_VOLLEY_TICKS = 30;
+const BATTLE_CLOSE_CELLS = 3;
+const BATTLE_BROADSIDE_DAMAGE = 25;
+const BATTLE_HOOK_DAMAGE = 35;
+const BATTLE_ENEMY_VOLLEY = 8;
+
+interface FixtureBattleShipState {
+  id: string;
+  side: "player" | "enemy";
+  kind: string;
+  position: { x: number; y: number };
+  velocity: { x: number; y: number };
+  heading8: Direction8;
+  hull: number;
+  crew: number;
+  alive: boolean;
+}
+
+class BattleFixture {
+  ships: FixtureBattleShipState[] = fixtureBattle.ships.map((ship) => ({
+    ...ship,
+    position: { ...ship.position },
+    velocity: { ...ship.velocity },
+    alive: true,
+  }));
+  round = 1;
+  phase = "player";
+  ticks = 0;
+  finished = false;
+  result = "";
+
+  reset(): void {
+    this.ships = fixtureBattle.ships.map((ship) => ({
+      ...ship,
+      position: { ...ship.position },
+      velocity: { ...ship.velocity },
+      alive: true,
+    }));
+    this.round = 1;
+    this.phase = "player";
+    this.ticks = 0;
+    this.finished = false;
+    this.result = "";
+  }
+
+  frame(): BattleTickFrame {
+    const ships: BattleShipFrame[] = this.ships.map((ship) => ({
+      id: ship.id,
+      side: ship.side,
+      kind: ship.kind,
+      position: { ...ship.position },
+      velocity: { ...ship.velocity },
+      heading8: ship.heading8,
+      hull: ship.hull,
+      crew: ship.crew,
+      morale: ship.side === "player" ? 70 : 60,
+      reload: {
+        port: this.round - (this.round % 2 === 0 ? 0 : 1),
+        starboard: this.round - 1,
+      },
+    }));
+    return {
+      type: "battle_tick",
+      round: this.round,
+      phase: this.finished ? "over" : this.phase,
+      ships,
+      wind: { ...fixtureBattle.wind },
+      weather: fixtureBattle.weather,
+      orders_due: !this.finished && this.phase === "player",
+    };
+  }
+
+  tick(): BattleTickFrame {
+    if (!this.finished) {
+      this.ticks += 1;
+      if (this.ticks % BATTLE_ROUND_TICKS === 0) {
+        this.round += 1;
+        this.phase = this.round % 2 === 0 ? "enemy" : "player";
+      }
+      if (this.ticks % BATTLE_MOVE_TICKS === 0) this.advance();
+      if (this.ticks % BATTLE_VOLLEY_TICKS === 0) this.enemyVolley();
+    }
+    return this.frame();
+  }
+
+  private advance(): void {
+    const livingPlayers = this.ships.filter((ship) => ship.side === "player" && ship.alive);
+    const livingEnemies = this.ships.filter((ship) => ship.side === "enemy" && ship.alive);
+    if (livingPlayers.length === 0 || livingEnemies.length === 0) return;
+    let closest = Number.POSITIVE_INFINITY;
+    for (const player of livingPlayers) {
+      for (const enemy of livingEnemies) {
+        closest = Math.min(
+          closest,
+          Math.max(
+            Math.abs(player.position.x - enemy.position.x),
+            Math.abs(player.position.y - enemy.position.y),
+          ),
+        );
+      }
+    }
+    if (closest <= BATTLE_CLOSE_CELLS) return;
+    for (const ship of [...livingPlayers, ...livingEnemies]) {
+      ship.position = {
+        x: Math.max(0, Math.min(47, ship.position.x + ship.velocity.x)),
+        y: Math.max(0, Math.min(29, ship.position.y + ship.velocity.y)),
+      };
+    }
+  }
+
+  private enemyVolley(): void {
+    const player = this.ships.find((ship) => ship.side === "player" && ship.alive);
+    if (!player) return;
+    player.hull = Math.max(1, player.hull - BATTLE_ENEMY_VOLLEY);
+  }
+
+  private nearestEnemy(from: FixtureBattleShipState): FixtureBattleShipState | null {
+    let best: FixtureBattleShipState | null = null;
+    let distance = Number.POSITIVE_INFINITY;
+    for (const ship of this.ships) {
+      if (ship.side !== "enemy" || !ship.alive) continue;
+      const value = Math.max(
+        Math.abs(ship.position.x - from.position.x),
+        Math.abs(ship.position.y - from.position.y),
+      );
+      if (value < distance) {
+        distance = value;
+        best = ship;
+      }
+    }
+    return best;
+  }
+
+  /** Applies one intent; returns true when the battle just finished. */
+  apply(intent: ClientIntent): boolean {
+    if (this.finished) {
+      if (intent.type === "battle_action") this.reset();
+      return false;
+    }
+    if (intent.type === "battle_action") {
+      if (intent.verb === "retreat" || intent.verb === "surrender") {
+        this.finished = true;
+        this.result = intent.verb;
+        return true;
+      }
+      const player = this.ships.find((ship) => ship.side === "player" && ship.alive);
+      if (!player) return false;
+      const target = this.nearestEnemy(player);
+      if (!target) return false;
+      target.hull = Math.max(
+        0,
+        target.hull - (intent.verb === "hook" ? BATTLE_HOOK_DAMAGE : BATTLE_BROADSIDE_DAMAGE),
+      );
+      target.alive = target.hull > 0;
+      if (!this.ships.some((ship) => ship.side === "enemy" && ship.alive)) {
+        this.finished = true;
+        this.result = "victory";
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
 export class FixtureGameClient implements GameClient {
   readonly transport = "fixture" as const;
 
@@ -201,11 +385,15 @@ export class FixtureGameClient implements GameClient {
   readonly intents: ClientIntent[] = [];
   /** FIXTURE sailing state (see the class comment above). */
   readonly sailing = new SailingFixture();
+  /** FIXTURE battle state (see the class comment above). */
+  readonly battle = new BattleFixture();
   /** Frames emitted so far (debug/tests). */
   tickFrames = 0;
+  battleTickFrames = 0;
 
   private handlers = new Set<(frame: ServerFrame) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
+  private battleTimer: ReturnType<typeof setInterval> | null = null;
 
   connect(handlers: {
     onFrame: (frame: ServerFrame) => void;
@@ -233,10 +421,12 @@ export class FixtureGameClient implements GameClient {
       ],
     };
     const state: StateFrame = { ...current, type: "state" };
+    const battleTick = this.battle.frame();
     queueMicrotask(() => {
       if (!this.handlers.has(handlers.onFrame)) return;
       handlers.onFrame(hello);
       handlers.onFrame(state);
+      handlers.onFrame(battleTick);
     });
 
     this.sailing.onDock = (snapshot) => {
@@ -246,11 +436,18 @@ export class FixtureGameClient implements GameClient {
     if (!this.timer) {
       this.timer = setInterval(() => this.emitTick(), TICK_MS);
     }
+    if (!this.battleTimer) {
+      this.battleTimer = setInterval(() => this.emitBattleTick(), BATTLE_TICK_MS);
+    }
     return () => {
       this.handlers.delete(handlers.onFrame);
       if (this.handlers.size === 0 && this.timer) {
         clearInterval(this.timer);
         this.timer = null;
+      }
+      if (this.handlers.size === 0 && this.battleTimer) {
+        clearInterval(this.battleTimer);
+        this.battleTimer = null;
       }
     };
   }
@@ -262,9 +459,47 @@ export class FixtureGameClient implements GameClient {
     for (const handler of this.handlers) handler(frame);
   }
 
+  private emitBattleTick(): void {
+    if (this.handlers.size === 0) return;
+    const frame = this.battle.tick();
+    this.battleTickFrames += 1;
+    for (const handler of this.handlers) handler(frame);
+  }
+
   send(intent: ClientIntent): void {
     this.intents.push(intent);
     this.sailing.apply(intent);
+    const finished = this.battle.apply(intent);
+    if (finished) {
+      const outcome =
+        this.battle.result === "victory"
+          ? { ...fixtureBattle.outcome }
+          : {
+              ...fixtureBattle.outcome,
+              result: this.battle.result,
+              rounds: this.battle.round,
+              salvage_gold: 0,
+              xp: 0,
+              sunk_enemy: [],
+              captured_enemy: [],
+              surrendered_enemy: 0,
+              sunk_player: [],
+              lost_player: [],
+              cargo_overflow_lost: 0,
+              rep_deltas: {},
+              morale_delta: 0,
+            };
+      const event: ServerFrame = {
+        type: "event",
+        name: "battle_finished",
+        args: {
+          encounter_id: fixtureBattle.encounter_id,
+          result: this.battle.result,
+          outcome,
+        },
+      };
+      for (const handler of this.handlers) handler(event);
+    }
   }
 
   async getState(): Promise<GameSnapshot> {
