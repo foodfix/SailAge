@@ -309,6 +309,100 @@ captains, ui_art (minus chrome), web_tiles.
 there is no static layout cross-check; arrangement correctness is
 visual + the view contracts and the i18n lint stay mechanical.
 
+### M7 — 2026-11-11 (acceptance record)
+
+**Wave 0 (docs):** `80-*` §4.8.9 retired in place (history note),
+§4.8's chrome-tileset/sizing-grid blocks banner-marked retired, §4.9's
+React-realization note superseded, and the normative **§4.9.1 UW2
+chrome spec** landed (window/dialog/button-4-state/table/HUD/ValueBar/
+typography numbers + the six family compositions + the styling
+boundary); §4.8.1's card grid re-expressed as the verb bar (state table
+unchanged). `10-*`: §4.23 retired in place, **§4.24** palette.json
+schema (the UW2 token block + the retirement-list mechanism), group 14
+row removed ("14 retired, number not reused"), §8.9 retired in place,
+§8.8 trimmed (chrome inventory clause + nine-patch torus rule). `90-*`:
+§0.2 tree (kit/theme/screens + no-chrome note), the audit wording (two
+rules), the studio scope note, §0.6 and §5.7 retirement marks.
+`AGENTS.md`: stack tree, the styling-boundary hard rule, gates note.
+This §9 ledger.
+
+**Wave 1 (foundation):** `palette.json` +`BUTTON_HOVER #fff7e2`,
+`DIALOG_FIELD #232a52`, `TABLE_ZEBRA #ecdcb4` + the `retired` block
+(`CHROME_TILE`; append-only, bytes stable) — `build_tokens.mjs` emits
+the retirement line and validates list membership; `tokens.css` 132
+colors + 8 sizes, `--check` byte-stable. `base.css`: the canvas math is
+plain 1920×1080 px × `--sa-scale`; `.sa-el` gone (screens are
+flow-laid). `kit.css` + the kit TSX redrawn as CSS-drawn UW2 atoms:
+`sa-window` (parchment plate, 3px gold outer + 1px ink inner rule,
+square corners), `sa-dialog` (indigo field, gold double frame), the
+beveled `sa-button` 4-state matrix (+`--compact`), zebra `sa-table`/
+`sa-row` (32px rows, wood header band), `sa-plate`/`sa-chip`/`sa-tabs`/
+`sa-verb-bar`/`sa-scene` HUD pieces, fields/toasts/ValueBar — component
+APIs kept (Button gains `compact`/`children`; Row gains
+`head`/`selected`; Frame gains `scroll`; new `Dialog` atom; `Icon`
+untouched). `audit.mjs`: rule (c) dropped; rule (b) restated (theme+kit
+own visuals; screen CSS structural and token-only); rule (a) unchanged,
+allowlist still empty. `screens/ids.ts` re-homes
+`SCREEN_IDS`/`ScreenId`/`isScreenId`.
+
+**Wave 2 (the 32-screen sweep):** all 32 screens + `common.tsx`
+re-composed (Label/class builders + the unchanged projection hooks),
+one structural CSS module per screen (hex/color-fn/px/font-family
+rejected there by audit). Port hub = scene backdrop + bottom verb bar
+(facility icon + name + hours status + Set-Sail primary); market/
+shipyard = framed table windows + side summary plates; tavern/inn/
+guild/palace = room windows (tavern with the tab strip); provisions =
+prepare-to-sail window; title = logotype plate + framed menu;
+nationality = 3×2 card grid; creation two-step window; save slots
+table; gameover/ending/dialogs = indigo message windows over the dim
+layer; world HUD plates + chips (canvas untouched); chart verb-bar +
+legend chips; hail = indigo dialog; fleet picker = contact table
+window; autopilot = bottom bar; intel = tabbed window (tabs stay
+mounted); character card/dossier/captain/fleet/roster/reputation =
+framed windows + zebra tables; battle = action bar + after-action
+overlay (canvas untouched); duel transcript = indigo dialog; sandbox =
+editor windows. `Confirm`/`DialogBox` export signatures unchanged
+(peer screens verified). `web/src/layout/` deleted; `StubScreen` is a
+layout-free placeholder window. Zero `ui_layout` reads; zero
+`Element`/`Box`/`ListRows`/`tile` imports remain. New ui_strings keys
+needed: **none** (all 32 screens verified key-complete against
+`data/ui_strings.json`).
+
+**Wave 3 (tooling):** `build_ui_art.py` −1,019 lines (the chrome class,
+nine-patch assembly + bar sheet, `--import-chrome-pixellab`, the
+contact-sheet chrome row; `ICON_BLOCK` hexes kept — committed icons64
+still carry them); `tools/ui_art/chrome/` (5 manifests) and
+`assets/ui/chrome/` (74 PNGs) deleted; `tools/contact_sheet.png`
+regenerated (chrome row gone; the sanctioned regen). `validate_data.py`
+−group 14 (+ its `--self-test-g14` harness + `SPECIAL_FILES` entry +
+header exit-line; group 15 keeps exit 15) and group 13's chrome
+expectations (ledger synthesis, inventory reconciliation, seam probe,
+class/block map). `model_studio`: the Layout tab (www/ −918 lines in
+studio.js + markup/CSS), the `/api/layout/*` endpoints + the commit
+serialization + the validator-gate staging, the chrome card family, FAMILIES["chrome"] — README rescoped (art bench, one-line M7 note).
+`server/sim/data.py`: the `ui_layout` loader + `reload_ui_layout_if_
+changed` + the 32-screen whitelist removed (a plan-facts correction:
+the loader existed and `test_data.py` pinned `len == 32` — both retired
+with the file); `tools/ui_art/icons/gen_icons.py`'s chrome-manifest
+writer removed (ungoverned helper, would write into the deleted tree).
+
+**Deletions:** `web/src/layout/`, `data/ui_layout.json`,
+`assets/ui/chrome/**`, `tools/ui_art/chrome/**`.
+
+**Gates (final):** `validate_data.py` exit 0 (groups 1–13, 15; g13
+probes 6/6 red-as-required, `--self-test-g6/g9/g10` pass) · `pytest
+server/tests` **993 passed, 1 skipped** · `npm run build` (pre-existing
+chunk-size warning only) · `npm run audit` OK (allowlist empty) ·
+`build_tokens.mjs --check` OK (132 colors, 8 sizes) ·
+`demo_loop_smoke` **ALL PASS (25 checks)** · byte-identity `--check`:
+world (`--verify`, unchanged bytes), ocean, shore, distance_field,
+captains, ui_art (**243 files**, minus chrome), web_tiles (876 tiles) ·
+`./run.sh` boot probe: app 200, SPA bundle 200, `/api/state` 200.
+Known non-gates: `gen_icons.py --check` drifts (pre-existing, untouched
+by M7 — the governed gate is `build_ui_art --check`); the ingest
+ledger's stale `chrome{}` sections are inert (both readers removed;
+dropped on the next family import).
+
 ## 7. M6 cutover plan (the explicit deletion / retirement lists)
 
 Executed only after every M6 screen lands and the full demo loop passes in

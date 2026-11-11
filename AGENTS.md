@@ -15,7 +15,7 @@ or data.**
    save v1); §1–§13 are the retired Godot era kept as history
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat, `70`-quests/endgame
-5. Migration ledger: `docs/IMPLEMENT-WebMigration.md` (M0–M6; the M0–M6
+5. Migration ledger: `docs/IMPLEMENT-WebMigration.md` (M0–M7; the M0–M7
    acceptance records and the cutover list). Phase 1–12 records live in the
    `IMPLEMENT-PhaseN.md` docs (Godot-era history).
 

@@ -68,7 +68,7 @@ first-party pixel art is Phase 10's scope (`docs/IMPLEMENT-Phase10.md`).
 
 **Phase ledger note (2026-11-11).** Phases 1–12 shipped on the Godot stack;
 their `IMPLEMENT-PhaseN.md` docs are the historical record. The active
-delivery program is the **web-stack migration (M0–M6)**, ledgered in
+delivery program is the **web-stack migration (M0–M7)**, ledgered in
 `docs/IMPLEMENT-WebMigration.md` with the same discipline: named tasks,
 cited docs, done-when criteria, acceptance records appended per milestone.
 
@@ -154,7 +154,7 @@ Read in this order. Each doc follows the Doc Template (§10).
 | — | `docs/IMPLEMENT-Phase8.md` | Phase-8 task backlog + wave plan + completion record | 8 |
 | — | `docs/IMPLEMENT-Phase9.md` | Phase-9 task backlog + wave plan + completion record | 9 |
 | — | `docs/IMPLEMENT-Phase10.md` | Phase-10 task backlog + wave plan (UI kit & pixel art) | 10 |
-| — | `docs/IMPLEMENT-WebMigration.md` | The web-stack migration program (M0–M6): Godot → Python/FastAPI + React; the active delivery ledger | web era |
+| — | `docs/IMPLEMENT-WebMigration.md` | The web-stack migration program (M0–M7): Godot → Python/FastAPI + React; the active delivery ledger | web era |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.
