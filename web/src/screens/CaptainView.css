@@ -1,0 +1,22 @@
+/* Captain view — structural composition (80-* §4.9.1: the scrollable card
+   column; token-only values, visuals live in theme/kit). */
+
+/* The embedded tab body fills the intel window's body; standalone fills the
+   StandaloneFrame window the same way. */
+.capview__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+  min-height: 0;
+}
+
+.capview__page {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.capview__window {
+  width: calc(var(--sailage-base-unit) * 62);
+  height: 92%;
+}

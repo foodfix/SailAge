@@ -1,0 +1,85 @@
+/* Fleet picker — structural composition (80-* §4.9.1: the parchment window
+   centered over the dim layer, contact rows as a kit table; token-only
+   values, visuals live in theme/kit). */
+
+.picker__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.picker__center {
+  position: relative;
+  z-index: 1;
+}
+
+.picker__window {
+  width: calc(var(--sailage-base-unit) * 76);
+  max-height: 90%;
+  padding: var(--sailage-base-unit);
+}
+
+.picker__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.picker__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The kit zebra rows, stretched to the verb button height (2 base rows). */
+.sa-table > .sa-row.picker__row {
+  height: var(--sailage-button-h);
+}
+
+.picker__row {
+  gap: calc(var(--sailage-base-unit) / 2);
+  padding: calc(var(--sailage-base-unit) / 2);
+}
+
+.picker__flag {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: calc(var(--sailage-base-unit) * 3);
+  height: 100%;
+}
+
+.picker__role {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--sailage-base-unit) * 3);
+  height: 100%;
+}
+
+.picker__letter {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 3);
+}
+
+.picker__name {
+  flex: 2 1 0;
+  min-width: 0;
+}
+
+.picker__tier {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--sailage-base-unit) * 4);
+}
+
+.picker__verb {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}

@@ -1,0 +1,116 @@
+/* S7 tavern — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.tavern__page {
+  gap: var(--sailage-margin);
+  height: 100%;
+  padding: var(--sailage-margin);
+}
+
+.tavern__header {
+  flex: 0 0 auto;
+  padding: var(--sailage-base-unit);
+}
+
+.tavern__header_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.tavern__window {
+  min-width: 0;
+}
+
+.tavern__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.tavern__panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: 0;
+}
+
+.tavern__recruit_rows,
+.tavern__roster_rows,
+.tavern__rumor_rows {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tavern__caps {
+  display: flex;
+  flex: 0 0 25%;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: 0;
+}
+
+.tavern__caps_rows {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tavern__spar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.tavern__line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.tavern__pair {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sailage-base-unit);
+}
+
+.tavern__bar {
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) * 4);
+}
+
+.tavern__actions {
+  display: flex;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.tavern__recruit {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.tavern__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.tavern__table_caps > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 8%; }
+.tavern__table_caps > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 32%; }
+.tavern__table_caps > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 26%; }
+.tavern__table_caps > .sa-row > .sa-row__cell:nth-child(4) { flex: 0 0 12%; }
+.tavern__table_caps > .sa-row > .sa-row__cell:nth-child(5) { flex: 1 1 auto; }
+
+.tavern__table_roster > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 34%; }
+.tavern__table_roster > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 26%; }
+.tavern__table_roster > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 22%; }
+.tavern__table_roster > .sa-row > .sa-row__cell:nth-child(4) { flex: 1 1 auto; }
+
+.tavern__table_rumors > .sa-row > .sa-row__cell:nth-child(1) { flex: 1 1 auto; }
+.tavern__table_rumors > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 20%; }

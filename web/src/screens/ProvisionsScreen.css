@@ -1,0 +1,80 @@
+/* S4 → S3 provisions — structural composition (80-* §4.9.1: token-only
+   values; visuals live in theme/kit). */
+
+.provisions__page {
+  padding: var(--sailage-margin);
+}
+
+.provisions__window {
+  width: 40%;
+  min-width: calc(var(--sailage-base-unit) * 60);
+  max-height: 100%;
+}
+
+.provisions__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.provisions__row {
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: var(--sailage-button-h);
+}
+
+.provisions__row_label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provisions__qty {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 10);
+}
+
+.provisions__days {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.provisions__days_label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.provisions__bar {
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) * 4);
+}
+
+.provisions__cargo {
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) * 12);
+}
+
+.provisions__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.provisions__footer {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  margin-top: calc(var(--sailage-base-unit) / 2);
+}
+
+.provisions__gate {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provisions__table_cargo > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 10%; }
+.provisions__table_cargo > .sa-row > .sa-row__cell:nth-child(2) { flex: 1 1 auto; }

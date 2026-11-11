@@ -1,18 +1,19 @@
 /**
- * S3 — the sailing screen (docs/80-UI-UX.md §4.5; docs/20-WORLD-AND-SAILING.md
- * §4.1–§4.3, §4.11).
+ * S3 — the sailing screen (docs/80-UI-UX.md §4.5; the §4.9.1 world
+ * composition; docs/20-WORLD-AND-SAILING.md §4.1–§4.3, §4.11).
  *
- * A pure renderer over the authoritative tick stream (`90-*` §0.3): the canvas
- * draws the world pyramid + fleet/markers, the HUD binds the `world` rows of
- * data/ui_layout.json, and every key becomes a frozen intent. The only client
- * math is presentation arithmetic (sums, calendar readout, supply days per the
- * locked §4.10 formula); no movement or economy rule lives here.
+ * A pure renderer over the authoritative tick stream (`90-*` §0.3): the
+ * WorldCanvas fills the screen and the HUD is DOM plates over it — the
+ * date/gold plate top-left, the stats plate bottom-left, the minimap
+ * plate top-right and the trim/wind/current chips along the bottom edge.
+ * Every key stays a frozen intent; the only client math is presentation
+ * arithmetic (sums, calendar readout, supply days per the locked §4.10
+ * formula); no movement or economy rule lives here.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useGameClient } from "../client/context";
 import type { TickFrame } from "../client/types";
-import { content, useI18n, type L10nValue } from "../i18n";
-import { Box, CANVAS_TILES, Element, type ScreenId } from "../layout";
+import { content, useI18n } from "../i18n";
 import {
   MinimapCanvas,
   MONTH_DAYS,
@@ -31,9 +32,10 @@ import type { Vec2, WorldScene } from "../canvas/world";
 import type { Direction8, GameSnapshot } from "../state/types";
 import { fixtureSailing } from "../state/fixture";
 import { navigate } from "../app/router";
-import { ButtonEl, LabelEl, PanelEl } from "./common";
-import type { LabelTone } from "./common";
-import type { ToastTone } from "../kit";
+import { Button, Toast } from "../kit";
+import { Label, useToastState } from "./common";
+import type { ScreenId } from "./ids";
+import "./World.css";
 
 const SCREEN: ScreenId = "world";
 
@@ -67,11 +69,7 @@ function initialTick(snapshot: GameSnapshot): TickFrame {
   };
 }
 
-interface ToastState {
-  key: string;
-  values?: Record<string, L10nValue>;
-  tone?: ToastTone;
-}
+type SupplyTone = "good" | "warn" | "bad";
 
 function clockText(clockMin: number): string {
   const minutes = ((Math.round(clockMin) % 1440) + 1440) % 1440;
@@ -87,7 +85,7 @@ function calendarOf(day: number): { year: number; month: number } {
   return { year: Math.floor((day - 1) / cycle) + 1, month: Math.floor(offset / MONTH_DAYS) + 1 };
 }
 
-function supplyTone(days: number): LabelTone {
+function supplyTone(days: number): SupplyTone {
   if (days >= SUPPLY_GOOD_DAYS) return "good";
   if (days >= SUPPLY_WARN_DAYS) return "warn";
   return "bad";
@@ -99,7 +97,7 @@ export function WorldScreen() {
   const [snapshot, setSnapshot] = useState<GameSnapshot>(fixtureSailing.snapshot);
   const [tick, setTick] = useState<TickFrame>(() => initialTick(fixtureSailing.snapshot));
   const [zoom, setZoom] = useState(ZOOM_NEAR);
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const { toast, showToast, clearToast } = useToastState();
 
   useEffect(
     () =>
@@ -138,14 +136,8 @@ export function WorldScreen() {
   useEffect(() => {
     const portId = snapshot.current_port;
     if (!portId) return;
-    setToast({ key: "world.enter_port", values: { port: content.portName(portId) }, tone: "good" });
-  }, [snapshot.current_port]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
+    showToast("world.enter_port", { port: content.portName(portId) }, "good");
+  }, [snapshot.current_port, showToast]);
 
   const fleet = useMemo(() => {
     let crew = 0;
@@ -171,7 +163,7 @@ export function WorldScreen() {
   }, [snapshot.fleet]);
 
   const moraleTier = MORALE_TIERS.find((entry) => tick.morale >= entry.min)?.tier ?? "mutinous";
-  const moraleTone: LabelTone = tick.morale < 20 ? "bad" : tick.morale < 40 ? "warn" : "good";
+  const moraleTone: SupplyTone | "default" = tick.morale < 20 ? "bad" : tick.morale < 40 ? "warn" : "good";
   const trimmed = tick.sail_trim !== "normal";
   const areaId = snapshot.current_port ?? nearestKnownPort(tick.position, snapshot.known_ports);
   const areaText = areaId ? t(content.portName(areaId)) : tKey("world.open_sea");
@@ -198,85 +190,60 @@ export function WorldScreen() {
   const speedLine = fmt("world.speed", { speed: tick.speed.toFixed(1) });
   const trimLine = fmt("world.trim.chip", { state: tKey(`world.trim.${tick.sail_trim}`) });
   const weather = tKey(`world.weather.${tick.weather}`);
+  const weatherTone: SupplyTone | "accent" =
+    tick.weather === "storm" ? "bad" : tick.weather === "strong" ? "warn" : "accent";
   const wind = `${tKey("world.wind.label")} ${WIND_GLYPHS[tick.wind_dir]}`;
 
   return (
-    <div className="sa-screen" data-world-screen="world">
-      <Box rect={{ x: 0, y: 0, w: CANVAS_TILES.w, h: CANVAS_TILES.h }}>
+    <div className="sa-screen world" data-screen={SCREEN}>
+      <div className="world__canvas">
         <WorldCanvas scene={scene} tick={tick} zoom={zoom} locale={locale} onSailTo={onSailTo} />
-      </Box>
+      </div>
 
-      <PanelEl screen={SCREEN} id="top_bar" skin="panel" />
-      <Element screen={SCREEN} id="hud">
-        <LabelEl screen={SCREEN} id="hud.day" parent="hud" textValue={dayTime} title />
-        <LabelEl screen={SCREEN} id="hud.calendar" parent="hud" textValue={calendar} />
-        <LabelEl screen={SCREEN} id="hud.gold" parent="hud" textValue={gold} />
-        <LabelEl screen={SCREEN} id="hud.morale" parent="hud" textValue={morale} tone={moraleTone} />
-        <LabelEl screen={SCREEN} id="hud.area" parent="hud" textValue={areaText} />
-        <ButtonEl
-          screen={SCREEN}
-          id="hud.intel"
-          parent="hud"
-          textKey="ui.intel"
-          onClick={() => navigate("intel_window")}
-        />
-      </Element>
+      <div className="world__hud sa-plate">
+        <Label textValue={dayTime} title />
+        <Label textValue={calendar} />
+        <Label textValue={gold} />
+        <Label textValue={morale} tone={moraleTone} />
+        <Label textValue={areaText} />
+        <Button textKey="ui.intel" compact onClick={() => navigate("intel_window")} />
+      </div>
 
-      <PanelEl screen={SCREEN} id="bottom_bar" skin="panel" />
-      <Element screen={SCREEN} id="status">
-        <LabelEl
-          screen={SCREEN}
-          id="status.provisions"
-          parent="status"
-          textValue={provisionsLine}
-          tone={supplyTone(fleet.provisionsDays)}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="status.water"
-          parent="status"
-          textValue={waterLine}
-          tone={supplyTone(fleet.waterDays)}
-        />
-        <LabelEl screen={SCREEN} id="status.crew" parent="status" textValue={crewLine} />
-        <LabelEl screen={SCREEN} id="status.cargo" parent="status" textValue={cargoLine} />
-        <LabelEl screen={SCREEN} id="status.speed" parent="status" textValue={speedLine} />
-        <LabelEl
-          screen={SCREEN}
-          id="status.trim"
-          parent="status"
-          textValue={trimLine}
-          tone={trimmed ? "accent" : "default"}
-        />
-      </Element>
+      <div className="world__minimap sa-plate">
+        <Label textKey="world.minimap" tone="accent" />
+        <div className="world__minimap_view">
+          <MinimapCanvas snapshot={snapshot} tick={tick} />
+        </div>
+      </div>
 
-      <Element screen={SCREEN} id="minimap">
-        <MinimapCanvas snapshot={snapshot} tick={tick} />
-      </Element>
-      <LabelEl screen={SCREEN} id="minimap_title" textKey="world.minimap" tone="accent" />
+      <div className="world__status sa-plate">
+        <Label textValue={provisionsLine} tone={supplyTone(fleet.provisionsDays)} />
+        <Label textValue={waterLine} tone={supplyTone(fleet.waterDays)} />
+        <Label textValue={crewLine} />
+        <Label textValue={cargoLine} />
+        <Label textValue={speedLine} />
+      </div>
 
-      <LabelEl
-        screen={SCREEN}
-        id="weather"
-        textValue={weather}
-        tone={tick.weather === "storm" ? "bad" : tick.weather === "strong" ? "warn" : "accent"}
-      />
-      <LabelEl screen={SCREEN} id="wind" textValue={wind} tone="accent" />
-      {/* Current indicator: §4.5 shows it only on a current tile; the frozen
-          tick frame carries no current vector yet (M2 contract note). */}
-      <LabelEl screen={SCREEN} id="current" textKey="world.current.label" tone="accent" hidden />
+      <div className="world__chips">
+        <Label textValue={trimLine} tone={trimmed ? "accent" : "default"} className="sa-chip" />
+        <Label textValue={weather} tone={weatherTone} className="sa-chip" />
+        <Label textValue={wind} tone="accent" className="sa-chip" />
+        {/* Current indicator: §4.5 shows it only on a current tile; the frozen
+            tick frame carries no current vector yet (M2 contract note). */}
+        <div hidden>
+          <Label textKey="world.current.label" tone="accent" className="sa-chip" />
+        </div>
+      </div>
 
-      <LabelEl screen={SCREEN} id="explore_hint" textKey="discovery.something_near" hidden />
-      <ButtonEl screen={SCREEN} id="explore" textKey="discovery.explore" hidden />
+      {/* Discovery seam: hidden until the M2 hint projection lands. */}
+      <div className="world__explore" hidden>
+        <Label textKey="discovery.something_near" />
+        <Button textKey="discovery.explore" compact />
+      </div>
 
-      <PanelEl screen={SCREEN} id="toast" skin="panel" hidden={!toast}>
-        <LabelEl
-          screen={SCREEN}
-          id="toast.label"
-          parent="toast"
-          textValue={toast ? fmt(toast.key, toast.values ?? {}) : ""}
-        />
-      </PanelEl>
+      {toast ? (
+        <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
+      ) : null}
     </div>
   );
 }

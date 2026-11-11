@@ -3631,6 +3631,7 @@ append-only; tokens of the same names in `tokens.css`):
 
 | Token | Hex | Role |
 |---|---|---|
+| `BUTTON_HOVER` | `#fff7e2` | the hover/focus brightened button plate |
 | `DIALOG_FIELD` | `#232a52` | the indigo message-window field |
 | `TABLE_ZEBRA` | `#ecdcb4` | the even-row parchment band |
 
@@ -3675,7 +3676,10 @@ layout change:
 `primary` carries the gold rule (border `ACCENT_LO`, hover border
 `ACCENT`); `danger` swaps the rule pair to `BAD`/`BAD_HI`; `quiet` is
 transparent with the ink label until hover (then the pressed plate).
-`focus-visible` adds a 2 px `ACCENT` outline offset 1 px.
+`focus-visible` adds a 2 px `ACCENT` outline offset 1 px. The
+**compact** variant (`.sa-button--compact`) is 32 px tall with a 12 px
+label — for dense table-row actions and chips; the full matrix applies
+to it unchanged.
 
 **Table chrome** (the `.sa-table` stack + `.sa-row` atoms; market,
 shipyard, guild, roster, reputation). Header band **32 px**,

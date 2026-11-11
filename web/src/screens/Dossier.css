@@ -1,0 +1,44 @@
+/* Dossier — structural composition (80-* §4.9.1: the card + career-log
+   window centered over the dim layer; token-only values, visuals live in
+   theme/kit). */
+
+.dossier__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.dossier__center {
+  position: relative;
+  z-index: 1;
+}
+
+.dossier__window {
+  width: calc(var(--sailage-base-unit) * 60);
+  max-height: 92%;
+}
+
+.dossier__fallback {
+  width: 40%;
+  min-height: 20%;
+}
+
+.dossier__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  min-height: 0;
+}
+
+.dossier__log {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.dossier__log_section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}

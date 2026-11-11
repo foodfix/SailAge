@@ -1,0 +1,108 @@
+/* Character card — structural composition (80-* §4.9.1: the §4.12 flow
+   column; token-only values, visuals live in theme/kit). */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.card__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+}
+
+/* The layered bust: cloth sprite stacked over base/face/hair/eyes/beard. */
+.card__portrait {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 6);
+  height: calc(var(--sailage-base-unit) * 6);
+}
+
+.card__portrait > * {
+  position: absolute;
+  inset: 0;
+}
+
+.card__flag {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 3);
+  height: calc(var(--sailage-base-unit) * 3);
+}
+
+.card__names {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.card__tier {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.card__level {
+  flex: 0 0 auto;
+}
+
+.card__stats {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sailage-margin);
+  min-width: 0;
+}
+
+.card__stat_col {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.card__lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.card__alloc {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+/* The standalone route's window (content-sized column inside). */
+.card__standalone {
+  width: calc(var(--sailage-base-unit) * 56);
+  max-height: 92%;
+}
+
+/* Attribute rows: name · bar · value · (+) stepper. */
+.card__attr_table > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 26%; }
+.card__attr_table > .sa-row > .sa-row__cell:nth-child(2) { flex: 1 1 auto; }
+.card__attr_table > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 14%; }
+.card__attr_table > .sa-row > .sa-row__cell:nth-child(4) { flex: 0 0 20%; }
+
+/* Skill rows: name · bar · value · uses. */
+.card__skill_table > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 22%; }
+.card__skill_table > .sa-row > .sa-row__cell:nth-child(2) { flex: 1 1 auto; }
+.card__skill_table > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 12%; }
+.card__skill_table > .sa-row > .sa-row__cell:nth-child(4) { flex: 0 0 14%; }

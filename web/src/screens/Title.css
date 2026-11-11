@@ -1,0 +1,57 @@
+/* S1 title — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+/* The flow column over the scene: logotype, then the framed menu. */
+.title__stack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The logotype plate sits so its center lands ~38% canvas height
+   (80-* §4.9.1 Title pin). */
+.title__logotype {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  margin-top: 19%;
+  padding: var(--sailage-margin);
+}
+
+/* The framed menu column beneath the logotype. */
+.title__menu {
+  width: 24%;
+  margin-top: var(--sailage-base-unit);
+}
+
+.title__menu_col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+}
+
+.title__menu_col > * {
+  flex: 1 1 auto;
+  min-height: var(--sailage-button-h);
+}
+
+.title__error {
+  margin-top: var(--sailage-base-unit);
+}
+
+/* The phase-tag plate (version + language toggle), top-left. */
+.title__phase {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  margin: var(--sailage-margin);
+  padding: var(--sailage-base-unit);
+}

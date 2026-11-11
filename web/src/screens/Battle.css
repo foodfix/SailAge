@@ -1,0 +1,140 @@
+/* S10 battle HUD — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.battle {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Content stacks above the scene backdrop (the PortScreen pattern). */
+.battle__top,
+.battle__field,
+.battle__order,
+.battle__bottom {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header plate: title + day column, the round readout at the right. */
+.battle__top {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  margin: var(--sailage-base-unit);
+  padding: calc(var(--sailage-base-unit) / 2) var(--sailage-base-unit);
+}
+
+.battle__top_names {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.battle__top_round {
+  flex: 0 0 auto;
+}
+
+/* The canvas mount: one growing field, the canvas fills it. */
+.battle__field {
+  position: relative;
+  display: flex;
+  margin: 0 var(--sailage-base-unit);
+}
+
+.battle__field > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Order strip (the §4.9b window): wind chip · three cycles · morales. */
+.battle__order {
+  flex: 0 0 auto;
+  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
+  padding: calc(var(--sailage-base-unit) / 2);
+}
+
+.battle__order_weather {
+  flex: 0 0 auto;
+  min-height: var(--sailage-row-h);
+}
+
+.battle__order_main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+}
+
+.battle__order_main > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.battle__order_morale {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+/* Bottom HUD plate: readouts / actions / shots rows + the log. */
+.battle__bottom {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
+  padding: calc(var(--sailage-base-unit) / 2);
+}
+
+.battle__row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+}
+
+.battle__row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.battle__log {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Overlays: the dim layer + a centered indigo dialog plate. */
+.battle__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.battle__overlay_dim {
+  position: absolute;
+  inset: 0;
+}
+
+.battle__dialog {
+  position: relative;
+  width: var(--sailage-dialog-w);
+  max-height: 80%;
+}
+
+.battle__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+}
+
+.battle__after_lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}

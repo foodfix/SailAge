@@ -1,20 +1,20 @@
 /**
- * S19 — the Settings modal (docs/80-UI-UX.md §4.6.3; the §4.6.3 S19 rows).
+ * S19 — the Settings modal (docs/80-UI-UX.md §4.6.3; the §4.9.1
+ * composition: a centred parchment window over the dim layer, one field
+ * row per setting).
  *
  * One panel, two mounts (the S1 title entry, pre-game, and the S4 hub footer,
  * mid-run). Rows:
  *  · **language** — live: the I18n store flips every string and the shell
  *    forwards `POST /api/locale` (§0.3 `locale` intent is the WS twin);
  *  · **sea traffic** (`npc_preset`), **input mode** and **current mode**
- *    (`control_prefs`) — these are GameState fields, but the frozen §0.4
- *    inventory has **no action verb** for them and the §0.3 intent table has
- *    no settings intent. They render the authoritative value and the row is
- *    disabled with the `ui.not_available` reason (reported: the missing verbs
- *    are `settings/npc_preset`, `settings/input_mode`, `settings/current_mode`);
+ *    (`control_prefs`) — live through the frozen §0.4 `settings/*` verbs; the
+ *    server is authoritative and the next `state` frame re-renders the
+ *    current-value labels;
  *  · **debug overlays** — session-only, client-side (§4.6 symbol contract;
  *    never persisted), so it is live;
- *  · **save** (S4 mount only) and **return to main menu** (S4 mount only,
- *    confirm-first, §4.6.3/§4.7).
+ *  · **save** and **return to main menu** (confirm-first, §4.6.3/§4.7) —
+ *    docked mounts only; the pre-game / at-sea mounts omit both rows.
  *
  * Esc / Close returns to the hub (§4.2 edge). The route defaults to `port`
  * when docked, `world` at sea (the S4/S3 landings, same rule as the Chart).
@@ -22,35 +22,25 @@
 import { useCallback, useEffect, useState } from "react";
 import { navigate } from "../app/router";
 import { useI18n } from "../i18n";
-import { Element, type ScreenId } from "../layout";
 import { useGameState } from "../state/context";
 import { useGameClient } from "../client/context";
 import { setDebugOverlays, useChartView } from "../canvas/chart";
+import { Button, FieldRow, Frame } from "../kit";
+import { Label } from "./common";
 import { ConfirmDialog } from "./Confirm";
-import { ButtonEl, LabelEl, PanelEl } from "./common";
+import type { ScreenId } from "./ids";
+import "./Settings.css";
 
 const SCREEN: ScreenId = "settings";
 
 /** The five §4.6.3 sea-traffic presets (`npc_config.json`'s locked set). */
-const PRESETS = [
-  { id: "deserted", element: "presets.deserted" },
-  { id: "low", element: "presets.low" },
-  { id: "normal", element: "presets.normal" },
-  { id: "high", element: "presets.high" },
-  { id: "extreme", element: "presets.extreme" },
-] as const;
+const PRESETS = ["deserted", "low", "normal", "high", "extreme"] as const;
 
 /** The §4.6.3 input-mode row (`control_prefs.input_mode`). */
-const INPUT_MODES = [
-  { id: "step", element: "settings.input.step" },
-  { id: "helm", element: "settings.input.helm" },
-] as const;
+const INPUT_MODES = ["step", "helm"] as const;
 
 /** The §4.6.3 current-mode row (`control_prefs.current_mode`). */
-const CURRENT_MODES = [
-  { id: "modifier", element: "settings.current.modifier" },
-  { id: "drift", element: "settings.current.drift" },
-] as const;
+const CURRENT_MODES = ["modifier", "drift"] as const;
 
 export function SettingsScreen() {
   const { state } = useGameState();
@@ -92,167 +82,98 @@ export function SettingsScreen() {
     void client.action("settings", "current_mode", { mode: next });
   }, [client]);
 
+  /** The native select/option control on the recessed field plate (§4.9.1). */
+  const select = (
+    labelKey: string,
+    value: string,
+    ids: readonly string[],
+    keyPrefix: string,
+    apply: (next: string) => void,
+  ) => (
+    <FieldRow labelKey={labelKey}>
+      <label className="sa-field">
+        <select
+          className="sa-field__input"
+          aria-label={tKey(labelKey)}
+          value={value}
+          onChange={(event) => apply(event.target.value)}
+        >
+          {ids.map((id) => (
+            <option key={id} value={id}>
+              {tKey(`${keyPrefix}.${id}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </FieldRow>
+  );
+
   return (
-    <div className="sa-screen" data-settings-screen="settings">
-      <Element screen={SCREEN} id="dim" className="sa-dim" />
+    <div className="sa-screen settings" data-screen={SCREEN}>
+      <div className="settings__dim sa-dim" aria-hidden="true" />
 
-      <PanelEl screen={SCREEN} id="panel">
-        <LabelEl screen={SCREEN} id="panel.title" parent="panel" textKey="settings.title" title />
-
-        <LabelEl
-          screen={SCREEN}
-          id="panel.density_label"
-          parent="panel"
-          textKey="settings.density"
-          heading
-        />
-        <Element screen={SCREEN} id="panel.presets" parent="panel">
-          {PRESETS.map((entry) => (
-            <ButtonEl
-              key={entry.id}
-              screen={SCREEN}
-              id={entry.element}
-              parent="panel.presets"
-              textKey={`settings.density.${entry.id}`}
-              kind={preset === entry.id ? "primary" : "default"}
-              onClick={() => applyPreset(entry.id)}
+      <div className="sa-fill-center settings__layer">
+        <Frame titleKey="settings.title" className="settings__window" scroll>
+          <div className="settings__stack">
+            {select("settings.density", preset, PRESETS, "settings.density", applyPreset)}
+            <Label
+              textValue={fmt("settings.density.current", {
+                preset: tKey(`settings.density.${preset}`),
+              })}
+              tone="dim"
             />
-          ))}
-        </Element>
-        <LabelEl
-          screen={SCREEN}
-          id="panel.current"
-          parent="panel"
-          textValue={fmt("settings.density.current", {
-            preset: tKey(`settings.density.${preset}`),
-          })}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="panel.hint"
-          parent="panel"
-          textKey="settings.density.hint"
-          tone="dim"
-        />
+            <Label textKey="settings.density.hint" tone="dim" wrap />
 
-        <LabelEl
-          screen={SCREEN}
-          id="panel.input_label"
-          parent="panel"
-          textKey="settings.input.mode"
-        />
-        <Element screen={SCREEN} id="panel.input_buttons" parent="panel">
-          {INPUT_MODES.map((entry) => (
-            <ButtonEl
-              key={entry.id}
-              screen={SCREEN}
-              id={entry.element}
-              parent="panel.input_buttons"
-              textKey={`settings.input.${entry.id}`}
-              kind={inputMode === entry.id ? "primary" : "default"}
-              onClick={() => applyInputMode(entry.id)}
+            {select("settings.input.mode", inputMode, INPUT_MODES, "settings.input", applyInputMode)}
+            <Label
+              textValue={fmt("settings.input.current", {
+                mode: tKey(`settings.input.${inputMode}`),
+              })}
+              tone="dim"
             />
-          ))}
-        </Element>
-        <LabelEl
-          screen={SCREEN}
-          id="panel.input_current"
-          parent="panel"
-          textValue={fmt("settings.input.current", {
-            mode: tKey(`settings.input.${inputMode}`),
-          })}
-          tone="dim"
-        />
 
-        <LabelEl
-          screen={SCREEN}
-          id="panel.current_mode_label"
-          parent="panel"
-          textKey="settings.current.mode"
-        />
-        <Element screen={SCREEN} id="panel.current_mode_buttons" parent="panel">
-          {CURRENT_MODES.map((entry) => (
-            <ButtonEl
-              key={entry.id}
-              screen={SCREEN}
-              id={entry.element}
-              parent="panel.current_mode_buttons"
-              textKey={`settings.current.${entry.id}`}
-              kind={currentMode === entry.id ? "primary" : "default"}
-              onClick={() => applyCurrentMode(entry.id)}
+            {select(
+              "settings.current.mode",
+              currentMode,
+              CURRENT_MODES,
+              "settings.current",
+              applyCurrentMode,
+            )}
+            <Label
+              textValue={fmt("settings.current.current", {
+                mode: tKey(`settings.current.${currentMode}`),
+              })}
+              tone="dim"
             />
-          ))}
-        </Element>
-        <LabelEl
-          screen={SCREEN}
-          id="panel.current_mode_current"
-          parent="panel"
-          textValue={fmt("settings.current.current", {
-            mode: tKey(`settings.current.${currentMode}`),
-          })}
-          tone="dim"
-        />
 
-        <LabelEl
-          screen={SCREEN}
-          id="panel.debug_label"
-          parent="panel"
-          textKey="settings.debug.overlays"
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.debug_button"
-          parent="panel"
-          textKey={flags.debugOverlays ? "settings.debug.on" : "settings.debug.off"}
-          kind={flags.debugOverlays ? "primary" : "default"}
-          onClick={() => setDebugOverlays(!flags.debugOverlays)}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="panel.debug_hint"
-          parent="panel"
-          textKey="settings.debug.session_hint"
-          tone="dim"
-        />
+            <FieldRow labelKey="settings.debug.overlays">
+              <Button
+                textKey={flags.debugOverlays ? "settings.debug.on" : "settings.debug.off"}
+                kind={flags.debugOverlays ? "primary" : "default"}
+                onClick={() => setDebugOverlays(!flags.debugOverlays)}
+              />
+            </FieldRow>
+            <Label textKey="settings.debug.session_hint" tone="dim" wrap />
 
-        <LabelEl
-          screen={SCREEN}
-          id="panel.locale_label"
-          parent="panel"
-          textKey="settings.locale"
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.locale_button"
-          parent="panel"
-          textKey="ui.language_toggle"
-          onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-        />
+            <FieldRow labelKey="settings.locale">
+              <Button
+                textKey="ui.language_toggle"
+                onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+              />
+            </FieldRow>
 
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.save_button"
-          parent="panel"
-          textKey="ui.save.title"
-          hidden={!docked}
-          onClick={() => navigate("save_slot")}
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.return_button"
-          parent="panel"
-          textKey="settings.return_menu"
-          hidden={!docked}
-          onClick={() => setConfirmReturn(true)}
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.close"
-          parent="panel"
-          textKey="settings.close"
-          onClick={close}
-        />
-      </PanelEl>
+            <div className="settings__actions">
+              {docked ? (
+                <Button fill textKey="ui.save.title" onClick={() => navigate("save_slot")} />
+              ) : null}
+              {docked ? (
+                <Button fill textKey="settings.return_menu" onClick={() => setConfirmReturn(true)} />
+              ) : null}
+              <Button fill textKey="settings.close" onClick={close} />
+            </div>
+          </div>
+        </Frame>
+      </div>
 
       {confirmReturn ? (
         <ConfirmDialog

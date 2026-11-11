@@ -1,7 +1,8 @@
 /**
- * The shared dialog box (docs/80-UI-UX.md §4.7: `dialog_box.tscn` — message +
- * OK, centred, dimming the background; chained events queue and show one at a
- * time, never simultaneously; §4.3: Enter/Y confirm).
+ * The shared dialog box (docs/80-UI-UX.md §4.9.1: dialogs are indigo message
+ * windows — gold frames over the dim layer; §4.7: message + OK, centred;
+ * chained events queue and show one at a time, never simultaneously; §4.3:
+ * Enter/Y confirm).
  *
  * Two shapes, one component:
  *  · **in place** — `<DialogBox request={…} onClose={…}/>` for a host screen;
@@ -11,18 +12,18 @@
  *    → desertion → greeting, in fixed order).
  *
  * Optional `entries` are the key/value lines the day-dialog queue carries
- * (e.g. damage amounts); each is one `<Row>` inside the message body, so no
- * new layout rows are invented.
+ * (e.g. damage amounts); each is one kit `<Row>` inside the message body.
  */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { navigate, parseHash } from "../app/router";
 import { useI18n, type L10nString, type L10nValue } from "../i18n";
-import { Element, type ScreenId } from "../layout";
 import type { SpriteId } from "../assets/sprites";
+import type { ScreenId } from "./ids";
 import { useGameState } from "../state/context";
-import { ButtonEl, PanelEl } from "./common";
+import { Button, Dialog, Footer, Icon, Row } from "../kit";
+import { Label } from "./common";
 import { defaultBackScreen } from "./Confirm";
-import { Icon, Row } from "../kit";
+import "./DialogBox.css";
 
 export const DIALOG_SCREEN: ScreenId = "dialog_box";
 
@@ -153,17 +154,15 @@ export function DialogBox({ request, onClose }: DialogBoxProps) {
 
   return (
     <>
-      <Element screen={DIALOG_SCREEN} id="dim" className="sa-dim" />
-      <PanelEl screen={DIALOG_SCREEN} id="panel">
-        <Element screen={DIALOG_SCREEN} id="panel.body" parent="panel">
-          <Element screen={DIALOG_SCREEN} id="panel.body.icon" parent="panel.body">
-            <Icon id={request.icon ?? "bell"} />
-          </Element>
-          <Element screen={DIALOG_SCREEN} id="panel.body.message" parent="panel.body">
-            {request.titleKey ? (
-              <div className="sa-label sa-label--heading">{tKey(request.titleKey)}</div>
-            ) : null}
-            <div className="sa-label">{message}</div>
+      <div className="dialogbox__dim sa-dim" aria-hidden="true" />
+
+      <div className="sa-fill-center dialogbox__layer">
+        <Dialog titleKey={request.titleKey} className="dialogbox__window">
+          <div className="dialogbox__stack">
+            <div className="dialogbox__icon" aria-hidden="true">
+              <Icon id={request.icon ?? "bell"} />
+            </div>
+            <Label textValue={message} light wrap />
             {(request.entries ?? []).map((entry, index) => (
               <Row
                 key={index}
@@ -177,17 +176,19 @@ export function DialogBox({ request, onClose }: DialogBoxProps) {
                 ]}
               />
             ))}
-          </Element>
-        </Element>
-        <ButtonEl
-          screen={DIALOG_SCREEN}
-          id="panel.ok"
-          parent="panel"
-          text={tKey(request.okKey ?? "ui.ok")}
-          kind="primary"
-          onClick={onClose}
-        />
-      </PanelEl>
+            <Footer
+              buttons={[
+                <Button
+                  key="ok"
+                  textKey={request.okKey ?? "ui.ok"}
+                  kind="primary"
+                  onClick={onClose}
+                />,
+              ]}
+            />
+          </div>
+        </Dialog>
+      </div>
     </>
   );
 }
@@ -201,5 +202,9 @@ export function DialogScreen() {
   const onClose = useCallback(() => dismiss(fallback), [fallback]);
 
   const request: DialogRequest = head?.request ?? { opener: fallback };
-  return <DialogBox request={request} onClose={onClose} />;
+  return (
+    <div className="sa-screen dialogbox" data-screen={DIALOG_SCREEN}>
+      <DialogBox request={request} onClose={onClose} />
+    </div>
+  );
 }

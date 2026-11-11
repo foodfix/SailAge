@@ -40,7 +40,7 @@ import { Toast } from "./kit";
 import { ScreenHost } from "./screens";
 import { navigate, useScreenRoute } from "./app/router";
 import { DevNav } from "./app/DevNav";
-import type { ScreenId } from "./layout";
+import type { ScreenId } from "./screens/ids";
 
 function useCanvasScale() {
   const canvasRef = useRef<HTMLDivElement>(null);

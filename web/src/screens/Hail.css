@@ -1,0 +1,73 @@
+/* Hail modal — structural composition (80-* §4.9.1: the indigo message
+   window centered over the dim layer; token-only values, visuals live in
+   theme/kit). */
+
+.hail__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.hail__center {
+  position: relative;
+  z-index: 1;
+}
+
+.hail__dialog {
+  width: calc(var(--sailage-base-unit) * 60);
+  max-height: 90%;
+}
+
+.hail__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  min-height: 0;
+}
+
+.hail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.hail__head_text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+/* The layered captain bust: cloth sprite stacked over the base sprite. */
+.hail__portrait {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 8);
+  height: calc(var(--sailage-base-unit) * 8);
+}
+
+.hail__portrait > * {
+  position: absolute;
+  inset: 0;
+}
+
+.hail__option {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.hail__stepper {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.hail__qty {
+  width: calc(var(--sailage-base-unit) * 5);
+}
+
+.hail__cost {
+  flex: 1 1 auto;
+  min-width: 0;
+}

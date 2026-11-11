@@ -1,6 +1,9 @@
 /**
- * Screen authoring helpers. These only compose the kit + layout layers;
- * they add no styling of their own (the audit gate would reject it).
+ * Screen authoring helpers. Screens compose the CSS-drawn kit (80-*
+ * §4.9.1) directly — these keep the server projections, the toast state
+ * and the at-sea hand-offs, plus the two tiny composition seams (the
+ * label-class builder and the standalone intel-tab shell). They add no
+ * visual CSS of their own (the audit gate would reject it).
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { L10nString, L10nValue } from "../i18n";
@@ -11,138 +14,65 @@ import type {
   ScreenViewOf,
   ScreenViewState,
 } from "../state/views";
-import { Box, Element, type ScreenId, type SheetId, type TileRect } from "../layout";
-import { Button, Icon, type ButtonKind, type ToastTone } from "../kit";
-import type { SpriteId } from "../assets/sprites";
+import type { ScreenId } from "./ids";
+import { Frame, type ToastTone } from "../kit";
 import { useGameClient } from "../client/context";
 import type { LiveGameClient } from "../client/http";
 import type { ActionFacility, ApiResult, GameClient } from "../client/types";
 
-export type LabelTone = "default" | "dim" | "accent" | "warn" | "good" | "bad";
-export type LabelAlign = "left" | "center" | "right";
+/* ---------------------------------------------------------------------- */
+/* Composition seams (class-string builders; no styling here)              */
+/* ---------------------------------------------------------------------- */
 
-export interface LabelElProps {
-  screen: ScreenId;
-  id: string;
-  parent?: string;
+export interface LabelOpts {
+  tone?: "default" | "dim" | "accent" | "warn" | "good" | "bad";
+  align?: "left" | "center" | "right";
+  title?: boolean;
+  heading?: boolean;
+  light?: boolean;
+  wrap?: boolean;
+  className?: string;
+}
+
+/** The `.sa-label` class string (kit-owned visuals; screens own geometry). */
+export function labelClass(opts?: LabelOpts): string {
+  if (!opts) return "sa-label";
+  return [
+    "sa-label",
+    opts.tone && opts.tone !== "default" ? `sa-label--${opts.tone}` : "",
+    opts.align ? `sa-label--${opts.align}` : "",
+    opts.title ? "sa-label--title" : "",
+    opts.heading ? "sa-label--heading" : "",
+    opts.light ? "sa-label--light" : "",
+    opts.wrap ? "sa-label--wrap" : "",
+    opts.className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** A translated label element (the screen supplies textKey/text/textValue). */
+export function Label({
+  textKey,
+  text,
+  textValue,
+  values,
+  ...opts
+}: LabelOpts & {
   textKey?: string;
   text?: L10nString;
   /** Already-translated text (nested fmt / computed labels). */
   textValue?: string;
   values?: Record<string, L10nValue>;
-  tone?: LabelTone;
-  align?: LabelAlign;
-  title?: boolean;
-  heading?: boolean;
-  hidden?: boolean;
-}
-
-export function LabelEl({
-  screen,
-  id,
-  parent,
-  textKey,
-  text,
-  textValue,
-  values,
-  tone = "default",
-  align,
-  title,
-  heading,
-  hidden,
-}: LabelElProps) {
+}) {
   const { t, tKey, fmt } = useI18n();
   const body = textValue ?? (text ? t(text) : textKey ? (values ? fmt(textKey, values) : tKey(textKey)) : "");
-  const classes = [
-    "sa-label",
-    tone !== "default" ? `sa-label--${tone}` : "",
-    align ? `sa-label--${align}` : "",
-    title ? "sa-label--title" : "",
-    heading ? "sa-label--heading" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <Element screen={screen} id={id} parent={parent} className={classes} hidden={hidden}>
-      {body}
-    </Element>
-  );
+  return <div className={labelClass(opts)}>{body}</div>;
 }
 
-export interface ButtonElProps {
-  screen: ScreenId;
-  id: string;
-  parent?: string;
-  textKey?: string;
-  text?: string;
-  kind?: ButtonKind;
-  icon?: SpriteId;
-  onClick?: () => void;
-  disabled?: boolean;
-  hidden?: boolean;
-  titleKey?: string;
-}
-
-export function ButtonEl({
-  screen,
-  id,
-  parent,
-  textKey,
-  text,
-  kind,
-  icon,
-  onClick,
-  disabled,
-  hidden,
-  titleKey,
-}: ButtonElProps) {
-  return (
-    <Element screen={screen} id={id} parent={parent} hidden={hidden}>
-      <Button
-        textKey={textKey}
-        text={text}
-        kind={kind}
-        icon={icon}
-        onClick={onClick}
-        disabled={disabled}
-        titleKey={titleKey}
-        fill
-      />
-    </Element>
-  );
-}
-
-export interface PanelElProps {
-  screen: ScreenId;
-  id: string;
-  parent?: string;
-  skin?: SheetId;
-  className?: string;
-  hidden?: boolean;
-  children?: ReactNode;
-}
-
-export function PanelEl({ screen, id, parent, skin = "panel", className, hidden, children }: PanelElProps) {
-  return (
-    <Element screen={screen} id={id} parent={parent} skin={skin} className={className} hidden={hidden}>
-      {children}
-    </Element>
-  );
-}
-
-export interface IconBoxProps {
-  rect: TileRect;
-  id: SpriteId;
-  className?: string;
-}
-
-export function IconBox({ rect, id, className }: IconBoxProps) {
-  return (
-    <Box rect={rect} className={className}>
-      <Icon id={id} />
-    </Box>
-  );
-}
+/* ---------------------------------------------------------------------- */
+/* Toast state                                                             */
+/* ---------------------------------------------------------------------- */
 
 export interface ToastState {
   messageKey: string;
@@ -193,11 +123,11 @@ export function useScreenView<S extends ScreenViewId>(screen: S): ScreenViewResu
 /**
  * Reads a server projection for a screen that the shell does not own.
  *
- * The M3 shell refreshes `GET /api/view/<screen>` only for the eight port
- * screens; the M6-c people surfaces also consume the `tavern` and
- * `provisions` projections (recruit rows / pooled supply days). The live
- * transport is asked for that one extra read; the fixture transport reads
- * the in-memory table. No rule is computed here.
+ * The shell refreshes `GET /api/view/<screen>` only for the eight port
+ * screens; the people surfaces also consume the `tavern` and `provisions`
+ * projections (recruit rows / pooled supply days). The live transport is
+ * asked for that one extra read; the fixture transport reads the
+ * in-memory table. No rule is computed here.
  */
 export function useFetchedView<S extends ScreenViewId>(screen: S): ScreenViewResult<S> {
   const { views, viewStatus } = useGameState();
@@ -231,23 +161,28 @@ export function useFetchedView<S extends ScreenViewId>(screen: S): ScreenViewRes
 }
 
 /**
- * A standalone host for an embeddable tab body: the 60 × 33.75 backdrop
- * plus a centered 32 × 12 page plate. The body rows keep their authored
- * 0,0-relative coordinates.
+ * A standalone host for an embeddable tab body: a centered UW2 window on
+ * the plain canvas (the intel window's tab bodies render inside the
+ * window itself; the standalone routes wrap the same body).
  */
 export function StandaloneFrame({
+  titleKey,
+  scroll,
   children,
-  rect = { x: 14, y: 10.5, w: 32, h: 12 },
+  className,
 }: {
+  titleKey?: string;
+  scroll?: boolean;
   children: ReactNode;
-  rect?: TileRect;
+  className?: string;
 }) {
   return (
     <div className="sa-screen">
-      <Box rect={{ x: 0, y: 0, w: 60, h: 33.75 }} skin="backdrop" />
-      <Box rect={rect} skin="panel">
-        {children}
-      </Box>
+      <div className="sa-fill-center">
+        <Frame titleKey={titleKey} scroll={scroll} className={className}>
+          {children}
+        </Frame>
+      </div>
     </div>
   );
 }
@@ -290,11 +225,9 @@ export function fleetAction<T = Record<string, unknown>>(
 
 /** The loading/error state every port screen renders in place of its body. */
 export function ViewFallback({
-  screen,
   status,
-  elementId = "background",
 }: {
-  screen: ScreenId;
+  screen?: ScreenId;
   status: ScreenViewState;
   elementId?: string;
 }) {
@@ -304,8 +237,12 @@ export function ViewFallback({
       ? status.errorKey ?? "ui.not_available"
       : "connection.connecting";
   return (
-    <PanelEl screen={screen} id={elementId} skin="backdrop">
-      <div className="sa-cell">{tKey(textKey)}</div>
-    </PanelEl>
+    <div className="sa-screen">
+      <div className="sa-fill-center">
+        <Frame titleKey="ui.not_available" className="sa-frame-fallback">
+          <div className="sa-cell">{tKey(textKey)}</div>
+        </Frame>
+      </div>
+    </div>
   );
 }

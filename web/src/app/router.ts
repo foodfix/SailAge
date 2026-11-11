@@ -3,7 +3,7 @@
  * screens for real and stubs the rest; `#/port` is the default.
  */
 import { useEffect, useState } from "react";
-import { isScreenId, type ScreenId } from "../layout";
+import { isScreenId, type ScreenId } from "../screens/ids";
 
 export function parseHash(hash: string): ScreenId {
   const raw = hash.replace(/^#\/?/, "").replace(/\/$/, "");

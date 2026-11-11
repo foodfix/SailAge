@@ -1,0 +1,68 @@
+/* S8 inn — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.inn__page {
+  gap: var(--sailage-margin);
+  height: 100%;
+  padding: var(--sailage-margin);
+}
+
+.inn__header {
+  flex: 0 0 auto;
+  padding: var(--sailage-base-unit);
+}
+
+.inn__header_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.inn__content {
+  gap: var(--sailage-margin);
+}
+
+.inn__main {
+  flex: 0 0 45%;
+  min-width: 0;
+}
+
+.inn__captains {
+  min-width: 0;
+}
+
+.inn__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  height: 100%;
+}
+
+.inn__bar {
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) * 4);
+}
+
+.inn__pair {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sailage-base-unit);
+}
+
+.inn__action {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.inn__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.inn__table > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 8%; }
+.inn__table > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 34%; }
+.inn__table > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 28%; }
+.inn__table > .sa-row > .sa-row__cell:nth-child(4) { flex: 1 1 auto; }

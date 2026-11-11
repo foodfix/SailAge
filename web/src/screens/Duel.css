@@ -1,0 +1,31 @@
+/* S11 duel transcript — structural composition (80-* §4.9.1: token-only
+   values; visuals live in theme/kit). */
+
+.duel__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.duel__dialog {
+  width: var(--sailage-dialog-w);
+  max-height: 80%;
+}
+
+.duel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  height: 100%;
+  min-height: 0;
+}
+
+.duel__rounds {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.duel__ack {
+  display: flex;
+  flex: 0 0 auto;
+  height: var(--sailage-button-h);
+}

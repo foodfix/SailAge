@@ -1,0 +1,40 @@
+/* S10/S11 save-load dialog — structural composition (80-* §4.9.1:
+   token-only values; visuals live in theme/kit). */
+
+.save_slot__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.save_slot__layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* The centered slot window. */
+.save_slot__window {
+  width: 56%;
+}
+
+.save_slot__table {
+  margin-top: var(--sailage-base-unit);
+}
+
+.save_slot__footer {
+  margin-top: var(--sailage-margin);
+}
+
+/* The overwrite confirm rides above the dialog layer. */
+.save_slot__confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.save_slot__confirm_window {
+  width: 40%;
+}
+
+.save_slot__confirm_footer {
+  margin-top: var(--sailage-margin);
+}

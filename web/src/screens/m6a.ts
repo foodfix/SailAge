@@ -3,7 +3,7 @@
  * creation, save_slot, gameover, ending. Owned by exactly one M6 agent;
  * merged here so parallel screen agents never touch index.tsx.
  */
-import type { ScreenId } from "../layout";
+import type { ScreenId } from "./ids";
 import { TitleScreen } from "./Title";
 import { NationalitySelectScreen } from "./NationalitySelect";
 import { CreationScreen } from "./Creation";

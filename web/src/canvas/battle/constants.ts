@@ -23,7 +23,7 @@ export const WORLD_H = GRID_H * TILE_PX;
 /**
  * §4.7.1: the camera viewport is 1920 px wide; the authored layout gives
  * the world rows 2..30 of the 34-tile (1080 px) design canvas — the top bar
- * is 2 tiles and the bottom bar 3 (data/ui_layout.json `battle`).
+ * is 2 tiles and the bottom bar 3 (the battle HUD pins, 80-* §4.7.1).
  */
 export const CHROME_TILE_PX = 32;
 export const TOP_TILES = 2;

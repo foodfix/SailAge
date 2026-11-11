@@ -1,16 +1,15 @@
 /**
  * S16 retirement summary (docs/70-* §4.7; docs/80-UI-UX.md §4.1, §4.2,
- * §4.14). Read-only: six summary lines then the Phase-8 RPG segment.
+ * §4.14, §4.9.1). Read-only: six summary lines then the Phase-8 RPG
+ * segment, in one centered window over the scene.
  *
  * Summary: days sailed, gold, fame, titles (every nation whose rank is not
  * `none`), discoveries reported, battles won.
  * RPG segment: the nemesis list (top 3 captains by wins), the deepest
  * grudge (lowest negative stance), the most loyal veteran (officer with
  * `sea_days ≥ 90` and the highest loyalty) and the background bio line.
- *
- * Every `ending` element row is rendered (`background`, `panel` + title /
- * subtitle / rows / rpg viewport / continue, the six `rows.*` lines) plus
- * the `rpg` list block.
+ * The mode title swaps to `ending.retired_title` when a retired save was
+ * just loaded; the `ending.continue` button returns to the title.
  */
 import { useEffect, useState } from "react";
 import rawBackgrounds from "../../../data/backgrounds.json";
@@ -20,10 +19,12 @@ import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { GameSnapshot } from "../state/types";
 import type { CaptainStateExtras } from "../state/views";
-import { Element, ListRows, type ScreenId } from "../layout";
-import { ButtonEl, LabelEl, PanelEl } from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Footer, Frame } from "../kit";
+import { Label } from "./common";
 import { navigate } from "../app/router";
 import { getEndingRetiredMode } from "./SaveSlot";
+import "./Ending.css";
 
 const SCREEN: ScreenId = "ending";
 
@@ -161,92 +162,52 @@ export function EndingScreen() {
   );
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" skin="backdrop" />
-      <Element screen={SCREEN} id="panel" skin="panel">
-        <LabelEl
-          screen={SCREEN}
-          id="panel.title"
-          parent="panel"
-          textKey={summaryMode ? "ending.retired_title" : "ending.title"}
-          title
-          align="center"
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="panel.subtitle"
-          parent="panel"
-          textKey={summaryMode ? "ending.retired_title" : "title.subtitle"}
-          tone="dim"
-          align="center"
-        />
+    <div className="sa-screen ending" data-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
 
-        <Element screen={SCREEN} id="panel.rows" parent="panel">
-          <LabelEl
-            screen={SCREEN}
-            id="rows.days"
-            parent="panel.rows"
-            textKey="ending.days"
-            values={{ days: state.day }}
+      <div className="sa-fill-center ending__layer">
+        <Frame
+          titleKey={summaryMode ? "ending.retired_title" : "ending.title"}
+          className="ending__window"
+          scroll
+        >
+          <Label
+            textKey={summaryMode ? "ending.retired_title" : "title.subtitle"}
+            tone="dim"
+            align="center"
           />
-          <LabelEl
-            screen={SCREEN}
-            id="rows.gold"
-            parent="panel.rows"
-            textKey="ending.gold"
-            values={{ gold }}
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="rows.fame"
-            parent="panel.rows"
-            textKey="ending.fame"
-            values={{ fame: state.fame }}
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="rows.titles"
-            parent="panel.rows"
-            textValue={fmt("ending.titles", { titles: titlesText })}
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="rows.discoveries"
-            parent="panel.rows"
-            textKey="ending.discoveries"
-            values={{ count: state.discoveries_reported.length }}
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="rows.battles"
-            parent="panel.rows"
-            textKey="ending.battles"
-            values={{ count: state.battles_won }}
-          />
-        </Element>
 
-        <Element screen={SCREEN} id="panel.rpg_viewport" parent="panel" className="sa-scroll">
-          <ListRows
-            screen={SCREEN}
-            listId="rpg"
-            count={rpgRows.length}
-            renderRow={(index) => (
-              <div className={`sa-cell${rpgRows[index].dim ? " sa-label--dim" : ""}`}>
-                {rpgRows[index].text}
+          <div className="ending__rows">
+            <Label textKey="ending.days" values={{ days: state.day }} />
+            <Label textKey="ending.gold" values={{ gold }} />
+            <Label textKey="ending.fame" values={{ fame: state.fame }} />
+            <Label textValue={fmt("ending.titles", { titles: titlesText })} wrap />
+            <Label textKey="ending.discoveries" values={{ count: state.discoveries_reported.length }} />
+            <Label textKey="ending.battles" values={{ count: state.battles_won }} />
+          </div>
+
+          <div className="ending__rpg">
+            {rpgRows.map((row, index) => (
+              <div key={index} className={`sa-cell${row.dim ? " sa-label--dim" : ""}`}>
+                {row.text}
               </div>
-            )}
-          />
-        </Element>
+            ))}
+          </div>
 
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.continue"
-          parent="panel"
-          textKey="ending.continue"
-          kind="primary"
-          onClick={() => navigate("title")}
-        />
-      </Element>
-    </>
+          <div className="ending__footer">
+            <Footer
+              buttons={[
+                <Button
+                  key="continue"
+                  textKey="ending.continue"
+                  kind="primary"
+                  onClick={() => navigate("title")}
+                />,
+              ]}
+            />
+          </div>
+        </Frame>
+      </div>
+    </div>
   );
 }

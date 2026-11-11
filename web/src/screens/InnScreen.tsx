@@ -1,22 +1,17 @@
 /**
- * S8 inn — morale/gold/day status, rest, the harbour-relief odd job and the
- * captains' rest table. Every `inn` element row is rendered.
+ * S8 inn — the UW2 room window (80-* §4.9.1): a toolbar row (back /
+ * title), the status panel (morale bar, gold, day) with the rest and
+ * harbour-relief odd-job verbs, and the captains' rest table window.
  */
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { CaptainTableRow } from "../state/views";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Icon, Toast, ValueBar } from "../kit";
-import {
-  ButtonEl,
-  LabelEl,
-  PanelEl,
-  useScreenView,
-  useToastState,
-  ViewFallback,
-} from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Frame, Icon, Row, Toast, ValueBar } from "../kit";
+import { Label, useScreenView, useToastState, ViewFallback } from "./common";
 import { navigate } from "../app/router";
+import "./InnScreen.css";
 
 const SCREEN: ScreenId = "inn";
 
@@ -34,135 +29,85 @@ export function InnScreen() {
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
 
-  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
+  if (!view) return <ViewFallback status={status} />;
 
   const portName = t(content.portName(view.portId));
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" />
+    <div className="sa-screen inn" data-screen={SCREEN}>
+      <div className="inn__page sa-col">
+        <div className="inn__header sa-plate">
+          <div className="inn__header_line">
+            <Button textKey="ui.back" onClick={() => navigate("port")} />
+            <Label textKey="inn.title" values={{ port: portName }} title />
+          </div>
+        </div>
 
-      <Element screen={SCREEN} id="header">
-        <LabelEl
-          screen={SCREEN}
-          id="header.title"
-          parent="header"
-          textKey="inn.title"
-          values={{ port: portName }}
-          title
-        />
-      </Element>
+        <div className="inn__content sa-rowline sa-grow">
+          <Frame className="inn__main">
+            <div className="inn__body">
+              <Label textKey="inn.morale" values={{ amount: state.morale }} />
+              <div className="inn__bar">
+                <ValueBar value={state.morale} max={view.moraleMax} tier={view.moraleTier} />
+              </div>
+              <div className="inn__pair">
+                <Label textKey="ui.gold_amount" values={{ gold: state.gold }} />
+                <Label textKey="world.day" values={{ day: state.day }} />
+              </div>
 
-      <PanelEl screen={SCREEN} id="status">
-        <LabelEl
-          screen={SCREEN}
-          id="status.morale"
-          parent="status"
-          textKey="inn.morale"
-          values={{ amount: state.morale }}
-        />
-        <Element screen={SCREEN} id="status.morale_bar" parent="status">
-          <ValueBar value={state.morale} max={view.moraleMax} tier={view.moraleTier} />
-        </Element>
-        <LabelEl
-          screen={SCREEN}
-          id="status.gold"
-          parent="status"
-          textKey="ui.gold_amount"
-          values={{ gold: state.gold }}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="status.day"
-          parent="status"
-          textKey="world.day"
-          values={{ day: state.day }}
-        />
-      </PanelEl>
+              <div className="inn__action">
+                <Button
+                  text={fmt("inn.rest_cost", { day: view.rest.days, price: view.rest.price })}
+                  disabled={!view.rest.canRest}
+                  onClick={() => {
+                    void client.inn.rest(view.rest.days);
+                    showToast("inn.rest_done", { day: view.rest.days }, "good");
+                  }}
+                />
+                <Label textKey="inn.rest" values={{ day: view.rest.days }} tone="dim" />
+              </div>
+              <div className="inn__action">
+                <Button
+                  textKey="inn.odd_job.offer"
+                  disabled={!view.oddJob.eligible}
+                  onClick={() => {
+                    void client.inn.oddJob();
+                    showToast("inn.odd_job.result", undefined, "good");
+                  }}
+                />
+                <Label
+                  textValue={view.oddJob.reasonKey ? tKey(view.oddJob.reasonKey) : tKey("inn.odd_job.offer")}
+                  tone={view.oddJob.eligible ? "dim" : "warn"}
+                />
+              </div>
+            </div>
+          </Frame>
 
-      <Element screen={SCREEN} id="actions">
-        <ButtonEl
-          screen={SCREEN}
-          id="actions.rest"
-          parent="actions"
-          text={fmt("inn.rest_cost", { day: view.rest.days, price: view.rest.price })}
-          disabled={!view.rest.canRest}
-          onClick={() => {
-            void client.inn.rest(view.rest.days);
-            showToast("inn.rest_done", { day: view.rest.days }, "good");
-          }}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="actions.rest_hint"
-          parent="actions"
-          textKey="inn.rest"
-          values={{ day: view.rest.days }}
-          tone="dim"
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="actions.work_odd_job"
-          parent="actions"
-          textKey="inn.odd_job.offer"
-          disabled={!view.oddJob.eligible}
-          onClick={() => {
-            void client.inn.oddJob();
-            showToast("inn.odd_job.result", undefined, "good");
-          }}
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="actions.odd_job_hint"
-          parent="actions"
-          textValue={view.oddJob.reasonKey ? tKey(view.oddJob.reasonKey) : tKey("inn.odd_job.offer")}
-          tone={view.oddJob.eligible ? "dim" : "warn"}
-        />
-      </Element>
-
-      <LabelEl screen={SCREEN} id="captains.header" textKey="captain.section.inn" heading />
-      <Element screen={SCREEN} id="captains.rows">
-        <ListRows
-          screen={SCREEN}
-          listId="captains"
-          count={view.captains.length}
-          renderRow={(index) => {
-            const captain = view.captains[index];
-            return (
-              <>
-                <Box rect={{ x: 0, y: 0, w: 2, h: 2 }}>
-                  <Icon id={captainRoleIcon(captain)} />
-                </Box>
-                <Box rect={{ x: 2, y: 0, w: 20, h: 2 }}>
-                  <span className="sa-cell">{t(captain.name)}</span>
-                </Box>
-                <Box rect={{ x: 22, y: 0, w: 18, h: 2 }}>
-                  <span className="sa-cell">{tKey(captain.roleKey)}</span>
-                </Box>
-                <Box rect={{ x: 40, y: 0, w: 18, h: 2 }}>
-                  <span className="sa-cell sa-label--dim">
-                    {fmt("captain.table.last_seen", { day: captain.lastSeenDay })}
-                  </span>
-                </Box>
-              </>
-            );
-          }}
-        />
-      </Element>
-
-      <Element screen={SCREEN} id="footer">
-        <ButtonEl
-          screen={SCREEN}
-          id="footer.back"
-          parent="footer"
-          textKey="ui.back"
-          onClick={() => navigate("port")}
-        />
-      </Element>
+          <Frame titleKey="captain.section.inn" scroll className="inn__captains sa-grow">
+            <div className="sa-table inn__table">
+              {view.captains.map((captain) => (
+                <Row
+                  key={captain.id}
+                  cols={[
+                    <span className="inn__icon">
+                      <Icon id={captainRoleIcon(captain)} />
+                    </span>,
+                    <div className="sa-cell">{t(captain.name)}</div>,
+                    <div className="sa-cell">{tKey(captain.roleKey)}</div>,
+                    <div className="sa-cell sa-label--dim">
+                      {fmt("captain.table.last_seen", { day: captain.lastSeenDay })}
+                    </div>,
+                  ]}
+                />
+              ))}
+            </div>
+          </Frame>
+        </div>
+      </div>
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }

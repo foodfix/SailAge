@@ -1,10 +1,15 @@
 /**
- * The unified character card (docs/80-UI-UX.md §4.12.1 — locked layout).
+ * The unified character card (docs/80-UI-UX.md §4.12.1 — locked layout; the
+ * §4.9.1 composition). One renderer for every Person: the player, an
+ * employed officer, or an NPC captain. The card is a flow column: the
+ * portrait+name identity header, the attribute/skill tables (with the
+ * §4.12.2 allocation steppers for the player), the personality/appearance
+ * chips, the relations lines and the career lines. The standalone route
+ * hosts the same column in a centered parchment window (`StandaloneFrame`).
  *
- * One renderer for every Person: the player, an employed officer, or an NPC
- * captain. The identity pin is literal: the same person renders the same
- * data from the intel captain tab, the dossier, the officer detail page and
- * the rigged picker. IDENTIFY = FULL REVEAL — no number is familiarity-gated
+ * The identity pin is literal: the same person renders the same data from
+ * the intel captain tab, the dossier, the officer detail page and the
+ * rigged picker. IDENTIFY = FULL REVEAL — no number is familiarity-gated
  * (only the dossier career log is; §4.11.3).
  *
  * Server contract (reported, not patched): `GET /api/view/character_card`
@@ -17,20 +22,17 @@
  * it computes no rule.
  */
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import { content, useI18n } from "../i18n";
 import type { L10nString } from "../i18n";
 import { useGameState } from "../state/context";
 import { useGameClient } from "../client/context";
 import type { GameSnapshot } from "../state/types";
 import type { PersonKind } from "../state/views";
-import { Box, Element, ListRows, tile, type ScreenId } from "../layout";
-import { Button, Icon, ValueBar } from "../kit";
-import { Box as RectBox } from "../layout";
+import { Button, Footer, Icon, Row, ValueBar } from "../kit";
+import { Label, StandaloneFrame } from "./common";
 import rawCaptains from "../../../data/captains.json";
 import rawGates from "../../../data/skill_gates.json";
-
-const SCREEN: ScreenId = "character_card";
+import "./CharacterCard.css";
 
 export const ATTRIBUTE_KEYS = [
   "constitution",
@@ -250,44 +252,14 @@ function barTier(value: number): "good" | "warn" | "bad" {
   return "bad";
 }
 
-function portraitCloth(kind: PersonKind, data: CharacterCardProps): string {
+function portraitCloth(kind: PersonKind, personId: string): string {
   if (kind === "player") return "pp_cloth_player";
   if (kind === "officer") {
-    const officer = data.personId ? officerCanon(data.personId) : undefined;
+    const officer = personId ? officerCanon(personId) : undefined;
     return `pp_cloth_${officer ? "player" : "trader"}`;
   }
-  const canon = data.personId ? captainCanon(data.personId) : undefined;
+  const canon = personId ? captainCanon(personId) : undefined;
   return `pp_cloth_${canon?.role ?? "trader"}`;
-}
-
-/** One registered row whose authored ui_layout rect overlaps a sibling. */
-function FixedEl({
-  id,
-  rect,
-  hidden,
-  children,
-}: {
-  id: string;
-  rect: { x: number; y: number; w: number; h: number };
-  hidden?: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <div
-      className="sa-el"
-      data-element-id={id}
-      data-screen={SCREEN}
-      hidden={hidden}
-      style={{
-        left: tile(rect.x),
-        top: tile(rect.y),
-        width: tile(rect.w),
-        height: tile(rect.h),
-      }}
-    >
-      {children}
-    </div>
-  );
 }
 
 export function CharacterCard({
@@ -304,11 +276,7 @@ export function CharacterCard({
   const [draft, setDraft] = useState<Record<string, number>>({});
 
   if (!data) {
-    return (
-      <RectBox rect={{ x: 0, y: 0, w: 15, h: 4 }}>
-        <div className="sa-cell">{tKey("ui.not_available")}</div>
-      </RectBox>
-    );
+    return <div className="sa-cell" data-character-card="missing">{tKey("ui.not_available")}</div>;
   }
 
   const statTip = (key: string): string => tKey(`char.attr.${key}.desc`);
@@ -335,37 +303,30 @@ export function CharacterCard({
   const attributeRows = ATTRIBUTE_KEYS.map((key) => {
     const value = Number(data.attributes[key] ?? 0);
     return (
-      <div key={key} data-row={key}>
-        <Box rect={{ x: 0, y: 0, w: 5, h: 1 }}>
-          <span className="sa-cell" title={statTip(key)}>
-            {tKey(`char.attr.${key}`)}
-          </span>
-        </Box>
-        <Box rect={{ x: 5, y: 0, w: 6, h: 1 }}>
-          <div className="sa-cell" title={statTip(key)}>
-            <ValueBar value={value} max={100} tier={barTier(value)} />
-          </div>
-        </Box>
-        <Box rect={{ x: 11, y: 0, w: 1, h: 1 }}>
-          <span className="sa-cell sa-label--right" title={statTip(key)}>
-            {value}
-          </span>
-        </Box>
-        {alloc && kind === "player" ? (
-          <Box rect={{ x: 12, y: 0, w: 2, h: 1 }}>
-            <Button
-              text={String.fromCharCode(0x2b)}
-              kind="quiet"
-              disabled={data.allocPending <= 0 || value + (draft[key] ?? 0) >= 100}
-              titleKey="char.points_pending"
-              fill
-              onClick={() =>
-                setDraft((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }))
-              }
-            />
-          </Box>
-        ) : null}
-      </div>
+      <Row key={key} cols={[
+        <span className="sa-cell" title={statTip(key)}>
+          {tKey(`char.attr.${key}`)}
+        </span>,
+        <div className="sa-cell" title={statTip(key)}>
+          <ValueBar value={value} max={100} tier={barTier(value)} />
+        </div>,
+        <span className="sa-cell sa-cell--right" title={statTip(key)}>
+          {value}
+        </span>,
+        ...(alloc && kind === "player" ? [
+          <Button
+            key={`${key}_plus`}
+            text={String.fromCharCode(0x2b)}
+            kind="quiet"
+            disabled={data.allocPending <= 0 || value + (draft[key] ?? 0) >= 100}
+            titleKey="char.points_pending"
+            fill
+            onClick={() =>
+              setDraft((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }))
+            }
+          />,
+        ] : []),
+      ]} />
     );
   });
 
@@ -373,32 +334,25 @@ export function CharacterCard({
     const value = Number(data.skills[key] ?? 0);
     const grayed = data.grayed.includes(key);
     const signature = data.mainSkill !== "" && data.mainSkill === key;
-    const tone = value <= 0 || grayed ? "dim" : signature ? "accent" : "default";
+    const tone = value <= 0 || grayed ? " sa-label--dim" : signature ? " sa-label--accent" : "";
+    const tip = skillTip(key);
     return (
-      <div key={key} data-row={key}>
-        <Box rect={{ x: 0, y: 0, w: 4, h: 1 }}>
-          <span className={`sa-cell${tone === "dim" ? " sa-label--dim" : tone === "accent" ? " sa-label--accent" : ""}`} title={skillTip(key)}>
-            {tKey(`skill.${key}`)}
-          </span>
-        </Box>
-        <Box rect={{ x: 4, y: 0, w: 6, h: 1 }}>
-          <div className="sa-cell" title={skillTip(key)}>
-            <ValueBar value={value} max={100} tier={signature ? "warn" : "good"} />
-          </div>
-        </Box>
-        <Box rect={{ x: 10, y: 0, w: 2, h: 1 }}>
-          <span className="sa-cell sa-label--right" title={skillTip(key)}>
-            {value}
-          </span>
-        </Box>
-        {kind === "player" && !grayed ? (
-          <Box rect={{ x: 12, y: 0, w: 3, h: 1 }}>
-            <span className="sa-cell sa-label--dim" title={skillTip(key)}>
-              {Number(data.uses[key] ?? 0)}
-            </span>
-          </Box>
-        ) : null}
-      </div>
+      <Row key={key} cols={[
+        <span className={`sa-cell${tone}`} title={tip}>
+          {tKey(`skill.${key}`)}
+        </span>,
+        <div className="sa-cell" title={tip}>
+          <ValueBar value={value} max={100} tier={signature ? "warn" : "good"} />
+        </div>,
+        <span className="sa-cell sa-cell--right" title={tip}>
+          {value}
+        </span>,
+        ...(kind === "player" && !grayed ? [
+          <span key={`${key}_uses`} className="sa-cell sa-label--dim" title={tip}>
+            {Number(data.uses[key] ?? 0)}
+          </span>,
+        ] : []),
+      ]} />
     );
   });
 
@@ -414,178 +368,132 @@ export function CharacterCard({
     .map((tag) => tKey(`char.personality.${tag}`))
     .join(" · ");
 
-  const cloth = portraitCloth(kind, { kind, personId });
+  const cloth = portraitCloth(kind, personId);
+  const portraitSprites = [
+    "pp_base",
+    `pp_face_${data.appearance.face ?? "lean"}`,
+    `pp_hair_${data.appearance.hair ?? "brown"}`,
+    `pp_eyes_${data.appearance.eyes ?? "grey"}`,
+    `pp_beard_${data.appearance.beard ?? "clean"}`,
+    cloth,
+  ];
 
   const card = (
-    <div
-      className="sa-list-content"
-      style={{ width: tile(15), height: tile(34) }}
-      data-character-card={kind}
-    >
-      <Element screen={SCREEN} id="identity">
-        <Element screen={SCREEN} id="identity.portrait" parent="identity">
-          {["pp_base", `pp_face_${data.appearance.face ?? "lean"}`, `pp_hair_${data.appearance.hair ?? "brown"}`, `pp_eyes_${data.appearance.eyes ?? "grey"}`, `pp_beard_${data.appearance.beard ?? "clean"}`, cloth].map(
-            (sprite) => (
-              <Box key={sprite} rect={{ x: 0, y: 0, w: 3, h: 3 }}>
-                <Icon id={sprite} />
-              </Box>
-            ),
-          )}
-        </Element>
-        <Element screen={SCREEN} id="identity.flag" parent="identity">
-          <span className={`sa-nation-swatch sa-nation-swatch--${data.nationId}`} aria-hidden="true" />
-        </Element>
-        <Element screen={SCREEN} id="identity.names" parent="identity">
-          <Element screen={SCREEN} id="identity.names.name" parent="identity.names">
-            <div className="sa-cell sa-label--heading">
-              {kind === "player" ? tKey("char.title") : t(data.name)}
+    <div className="card" data-character-card={kind}>
+      <div className="card__identity">
+        <div className="card__portrait" aria-hidden="true">
+          {portraitSprites.map((sprite) => (
+            <Icon key={sprite} id={sprite} />
+          ))}
+        </div>
+        <div className="card__flag" aria-hidden="true">
+          <span className={`sa-nation-swatch sa-nation-swatch--${data.nationId}`} />
+        </div>
+        <div className="card__names">
+          <Label textValue={kind === "player" ? tKey("char.title") : t(data.name)} heading />
+          <Label textValue={tKey(data.roleKey)} tone="dim" />
+        </div>
+        {kind === "npc" ? (
+          <div className="card__tier">
+            <span className="sa-badge">{data.tier}</span>
+          </div>
+        ) : null}
+        {data.level > 0 ? (
+          <Label
+            className="card__level"
+            textValue={fmt("char.level", { level: data.level })}
+            align="right"
+          />
+        ) : null}
+      </div>
+
+      {statBlocks ? (
+        <div className="card__stats">
+          <div className="card__stat_col">
+            <Label textKey="char.card.attributes" heading />
+            <div className="sa-table card__attr_table">
+              {attributeRows}
             </div>
-          </Element>
-          <Element screen={SCREEN} id="identity.names.role" parent="identity.names">
-            <div className="sa-cell sa-label--dim">{tKey(data.roleKey)}</div>
-          </Element>
-        </Element>
-        <Element screen={SCREEN} id="identity.tier_badge" parent="identity" hidden={kind !== "npc"}>
-          <span className="sa-badge">{data.tier}</span>
-        </Element>
-        <Element screen={SCREEN} id="identity.level" parent="identity" hidden={data.level <= 0}>
-          <div className="sa-cell sa-label--right">
-            {fmt("char.level", { level: data.level })}
           </div>
-        </Element>
-      </Element>
+          <div className="card__stat_col">
+            <Label textKey="char.card.skills" heading />
+            <div className="sa-table card__skill_table">
+              {skillRows}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
-      <Element screen={SCREEN} id="stat_columns" hidden={!statBlocks}>
-        <Element screen={SCREEN} id="stat_columns.attribute_column" parent="stat_columns">
-          <Element
-            screen={SCREEN}
-            id="stat_columns.attribute_column.header"
-            parent="stat_columns.attribute_column"
-          >
-            <div className="sa-cell sa-label--heading">{tKey("char.card.attributes")}</div>
-          </Element>
-          <Element
-            screen={SCREEN}
-            id="stat_columns.attribute_column.attributes"
-            parent="stat_columns.attribute_column"
-          >
-            <ListRows
-              screen={SCREEN}
-              listId="attributes"
-              count={attributeRows.length}
-              renderRow={(index) => attributeRows[index]}
+      <div className="card__tags">
+        {personality !== "" ? (
+          <span className="sa-chip">
+            <Label textValue={fmt("char.personality_line", { tags: personality })} />
+          </span>
+        ) : null}
+        {appearance !== "" ? (
+          <span className="sa-chip">
+            <Label textValue={fmt("char.appearance.sentence", { parts: appearance })} tone="dim" />
+          </span>
+        ) : null}
+      </div>
+
+      <Label textKey="char.card.relations" heading />
+      <div className="card__lines">
+        {kind === "officer" ? (
+          <>
+            <Label textValue={fmt("char.card.loyalty", { amount: data.loyalty })} />
+            <Label
+              tone="dim"
+              textValue={data.postId ? tKey(`officer.post.${data.postId}`) : tKey("officer.post.idle")}
             />
-          </Element>
-        </Element>
-        <Element screen={SCREEN} id="stat_columns.skill_column" parent="stat_columns">
-          <Element
-            screen={SCREEN}
-            id="stat_columns.skill_column.header"
-            parent="stat_columns.skill_column"
-          >
-            <div className="sa-cell sa-label--heading">{tKey("char.card.skills")}</div>
-          </Element>
-          <Element
-            screen={SCREEN}
-            id="stat_columns.skill_column.skills"
-            parent="stat_columns.skill_column"
-          >
-            <ListRows
-              screen={SCREEN}
-              listId="skills"
-              count={skillRows.length}
-              renderRow={(index) => skillRows[index]}
+          </>
+        ) : null}
+        {kind === "npc" ? (
+          <>
+            <Label textValue={fmt("char.rep_value", { amount: data.stance })} />
+            <Label tone="dim" textValue={`${tKey("dossier.familiarity")}: ${data.familiarity}`} />
+          </>
+        ) : null}
+        {kind === "player" ? <Label tone="dim" textKey="char.none" /> : null}
+      </div>
+
+      <Label textKey="char.card.career" heading />
+      <div className="card__lines">
+        {kind === "npc" ? (
+          <>
+            <Label
+              textValue={`${fmt("char.card.wins", { amount: data.wins })} · ${fmt("char.card.defeats", { amount: data.defeats })}`}
             />
-          </Element>
-        </Element>
-      </Element>
+            {data.status === "returning" ? (
+              <Label tone="dim" textValue={fmt("char.card.return_day", { day: data.returnDay })} />
+            ) : null}
+          </>
+        ) : null}
+        {kind === "player" ? (
+          <>
+            <Label textValue={fmt("char.xp", { xp: data.xp })} />
+            <Label tone="dim" textKey="ui.not_available" />
+          </>
+        ) : null}
+        {kind === "officer" ? <Label tone="dim" textKey="ui.empty" /> : null}
+      </div>
 
-      <Element screen={SCREEN} id="tags">
-        <Element screen={SCREEN} id="tags.personality" parent="tags">
-          <div className="sa-cell">
-            {personality
-              ? fmt("char.personality_line", { tags: personality })
-              : ""}
-          </div>
-        </Element>
-        <Element screen={SCREEN} id="tags.appearance" parent="tags">
-          <div className="sa-cell sa-label--dim">
-            {appearance ? fmt("char.appearance.sentence", { parts: appearance }) : ""}
-          </div>
-        </Element>
-      </Element>
-
-      <Element screen={SCREEN} id="relations.header">
-        <div className="sa-cell sa-label--heading">{tKey("char.card.relations")}</div>
-      </Element>
-      <Element screen={SCREEN} id="relations">
-        <FixedEl id="relations.loyalty" rect={{ x: 0, y: 0, w: 15, h: 1 }} hidden={kind !== "officer"}>
-          <div className="sa-cell">
-            {fmt("char.card.loyalty", { amount: data.loyalty })}
-          </div>
-        </FixedEl>
-        <FixedEl id="relations.post" rect={{ x: 0, y: 1, w: 15, h: 1 }} hidden={kind !== "officer"}>
-          <div className="sa-cell sa-label--dim">
-            {data.postId ? tKey(`officer.post.${data.postId}`) : tKey("officer.post.idle")}
-          </div>
-        </FixedEl>
-        <FixedEl id="relations.stance" rect={{ x: 0, y: 0, w: 15, h: 1 }} hidden={kind !== "npc"}>
-          <div className="sa-cell">
-            {fmt("char.rep_value", { amount: data.stance })}
-          </div>
-        </FixedEl>
-        <FixedEl id="relations.tier" rect={{ x: 0, y: 1, w: 15, h: 1 }} hidden={kind !== "npc"}>
-          <div className="sa-cell sa-label--dim">
-            {`${tKey("dossier.familiarity")}: ${data.familiarity}`}
-          </div>
-        </FixedEl>
-        <FixedEl id="relations.empty" rect={{ x: 0, y: 0, w: 15, h: 1 }} hidden={kind !== "player"}>
-          <div className="sa-cell sa-label--dim">{tKey("char.none")}</div>
-        </FixedEl>
-      </Element>
-
-      <Element screen={SCREEN} id="career.header">
-        <div className="sa-cell sa-label--heading">{tKey("char.card.career")}</div>
-      </Element>
-      <Element screen={SCREEN} id="career">
-        <Element screen={SCREEN} id="career.record" parent="career" hidden={kind !== "npc"}>
-          <div className="sa-cell">
-            {`${fmt("char.card.wins", { amount: data.wins })} · ${fmt("char.card.defeats", { amount: data.defeats })}`}
-          </div>
-        </Element>
-        <Element screen={SCREEN} id="career.returning" parent="career" hidden={kind !== "npc" || data.status !== "returning"}>
-          <div className="sa-cell sa-label--dim">
-            {fmt("char.card.return_day", { day: data.returnDay })}
-          </div>
-        </Element>
-        <FixedEl id="career.xp" rect={{ x: 0, y: 0, w: 15, h: 1 }} hidden={kind !== "player"}>
-          <div className="sa-cell">{fmt("char.xp", { xp: data.xp })}</div>
-        </FixedEl>
-        <FixedEl id="career.next" rect={{ x: 0, y: 1, w: 15, h: 1 }} hidden={kind !== "player"}>
-          <div className="sa-cell sa-label--dim">{tKey("ui.not_available")}</div>
-        </FixedEl>
-        <FixedEl id="career.empty" rect={{ x: 0, y: 0, w: 15, h: 1 }} hidden={kind === "npc" || kind === "player"}>
-          <div className="sa-cell sa-label--dim">{tKey("ui.empty")}</div>
-        </FixedEl>
-      </Element>
-
-      <Element screen={SCREEN} id="allocation" hidden={!alloc || kind !== "player"}>
-        <Element screen={SCREEN} id="allocation.pending" parent="allocation">
-          <div className="sa-cell">{tKey("char.points_pending")}</div>
-        </Element>
-        <Element screen={SCREEN} id="allocation.left" parent="allocation">
-          <div className="sa-cell sa-label--dim">
-            {fmt("creation.points.left", { count: data.allocPending })}
-          </div>
-        </Element>
-        <Element screen={SCREEN} id="allocation.clamp_note" parent="allocation">
-          <div className="sa-cell sa-label--dim">
-            {fmt("creation.points.attributes", { count: Object.values(draft).reduce((a, b) => a + b, 0) })}
-          </div>
-        </Element>
-        <Element screen={SCREEN} id="allocation.buttons" parent="allocation">
-          <Element screen={SCREEN} id="allocation.confirm" parent="allocation.buttons">
+      {alloc && kind === "player" ? (
+        <div className="card__alloc">
+          <Label textKey="char.points_pending" />
+          <Label
+            tone="dim"
+            textValue={fmt("creation.points.left", { count: data.allocPending })}
+          />
+          <Label
+            tone="dim"
+            textValue={fmt("creation.points.attributes", {
+              count: Object.values(draft).reduce((a, b) => a + b, 0),
+            })}
+          />
+          <Footer buttons={[
             <Button
+              key="alloc_confirm"
               textKey="ui.confirm"
               kind="primary"
               disabled={Object.keys(draft).length === 0}
@@ -597,24 +505,19 @@ export function CharacterCard({
                   });
               }}
               fill
-            />
-          </Element>
-          <Element screen={SCREEN} id="allocation.cancel" parent="allocation.buttons">
-            <Button textKey="ui.cancel" onClick={() => setDraft({})} fill />
-          </Element>
-        </Element>
-      </Element>
+            />,
+            <Button key="alloc_cancel" textKey="ui.cancel" onClick={() => setDraft({})} fill />,
+          ]} />
+        </div>
+      ) : null}
     </div>
   );
 
   if (!standalone) return card;
 
   return (
-    <div className="sa-screen">
-      <Box rect={{ x: 0, y: 0, w: 60, h: 33.75 }} skin="backdrop" />
-      <Box rect={{ x: 22, y: 1, w: 15, h: 32.75 }} className="sa-scroll">
-        {card}
-      </Box>
-    </div>
+    <StandaloneFrame scroll className="card__standalone">
+      {card}
+    </StandaloneFrame>
   );
 }

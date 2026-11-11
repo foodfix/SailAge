@@ -1,16 +1,17 @@
 /**
- * S1 title — the front door (docs/80-UI-UX.md §4.1, §4.2, §4.6.3;
+ * S1 title — the front door (docs/80-UI-UX.md §4.1, §4.2, §4.6.3, §4.9.1;
  * docs/90-ARCHITECTURE.md §0).
  *
- * Every `title` element row of data/ui_layout.json is rendered:
- * `background`, `game_title`, `subtitle`, `phase_tag`, `new_game`,
- * `sandbox`, `load`, `settings`, `quit`, `data_error`.
- *
- * The phase-tag row carries the version / save-presence readout and the
- * immediate language toggle (§4.6.3: the locale is persisted by the
- * locale store and forwarded to the server through `POST /api/locale` by
- * the shell). Load opens the 3-slot dialog in load mode; New Game starts
- * the two-step nationality → creation flow.
+ * The UW2 title layout (§4.9.1): the sea scene backdrop, the logotype
+ * plate (the brand proper noun + `title.subtitle`) centered around 38%
+ * canvas height, and the framed menu column beneath it — new game
+ * (primary), the sea-battle sandbox, load, settings and the quit notice.
+ * The phase-tag plate (top-left) carries the version / save-presence
+ * readout and the immediate language toggle (§4.6.3: the locale is
+ * persisted by the locale store and forwarded to the server through
+ * `POST /api/locale` by the shell). Load opens the 3-slot dialog in load
+ * mode; New Game starts the two-step nationality → creation flow. A
+ * failed save listing shows the `title.data_error` line under the menu.
  *
  * Boot landing (M6-a): the hash router opens `#/port` by default. This
  * module probes `GET /api/state` once at import time (when no explicit
@@ -24,11 +25,12 @@ import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { SaveSlot } from "../client/types";
 import type { BootstrapHello } from "../state/views";
-import { Box, Element, isScreenId, type ScreenId } from "../layout";
-import { Button, Toast } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import { isScreenId, type ScreenId } from "./ids";
+import { Button, Frame, Toast } from "../kit";
+import { Label, useToastState } from "./common";
 import { navigate } from "../app/router";
 import { openSaveSlot, setEndingRetiredMode } from "./SaveSlot";
+import "./Title.css";
 
 const SCREEN: ScreenId = "title";
 
@@ -95,66 +97,52 @@ export function TitleScreen() {
   const versionText = `${state.save_version} · ${filled}/${slots}`;
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" skin="backdrop" />
-      <LabelEl screen={SCREEN} id="game_title" textValue={GAME_TITLE} title align="center" />
-      <LabelEl screen={SCREEN} id="subtitle" textKey="title.subtitle" tone="dim" align="center" />
+    <div className="sa-screen title" data-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
 
-      <Element screen={SCREEN} id="phase_tag">
-        <Box rect={{ x: 0, y: 0, w: 5, h: 2 }}>
-          <span className="sa-label sa-label--dim">{versionText}</span>
-        </Box>
-        <Box rect={{ x: 5, y: 0, w: 5, h: 2 }}>
-          <Button textKey="ui.language_toggle" kind="quiet" fill onClick={toggleLocale} />
-        </Box>
-      </Element>
+      <div className="title__stack">
+        <div className="title__logotype sa-plate">
+          <Label textValue={GAME_TITLE} title align="center" />
+          <Label textKey="title.subtitle" tone="dim" align="center" />
+        </div>
 
-      <ButtonEl
-        screen={SCREEN}
-        id="new_game"
-        textKey="title.new_game"
-        kind="primary"
-        onClick={() => navigate("nationality_select")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="sandbox"
-        textKey="sandbox.title"
-        onClick={() => navigate("sandbox")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="load"
-        textKey="title.load_game"
-        onClick={() => openSaveSlot("load")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="settings"
-        textKey="settings.title"
-        onClick={() => navigate("settings")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="quit"
-        textKey="title.quit"
-        kind="quiet"
-        onClick={() => showToast("ui.not_available", undefined, "bad")}
-      />
+        <Frame className="title__menu">
+          <div className="title__menu_col">
+            <Button
+              textKey="title.new_game"
+              kind="primary"
+              onClick={() => navigate("nationality_select")}
+            />
+            <Button textKey="sandbox.title" onClick={() => navigate("sandbox")} />
+            <Button textKey="title.load_game" onClick={() => openSaveSlot("load")} />
+            <Button textKey="settings.title" onClick={() => navigate("settings")} />
+            <Button
+              textKey="title.quit"
+              kind="quiet"
+              onClick={() => showToast("ui.not_available", undefined, "bad")}
+            />
+          </div>
+        </Frame>
 
-      <LabelEl
-        screen={SCREEN}
-        id="data_error"
-        textKey="title.data_error"
-        values={{ reason: tKey(errorKey ?? "error.network") }}
-        tone="bad"
-        align="center"
-        hidden={!errorKey}
-      />
+        {errorKey ? (
+          <Label
+            className="title__error"
+            textKey="title.data_error"
+            values={{ reason: tKey(errorKey) }}
+            tone="bad"
+            align="center"
+          />
+        ) : null}
+      </div>
+
+      <div className="title__phase sa-plate">
+        <Label textValue={versionText} tone="dim" />
+        <Button textKey="ui.language_toggle" kind="quiet" onClick={toggleLocale} />
+      </div>
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }

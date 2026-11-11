@@ -1,30 +1,30 @@
 /**
- * S7 tavern — crew hire/fire, officer recruiting/roster, rumours and the
- * captains' table + sparring row. Every `tavern` element row is rendered;
- * `recruitable` / `rumors` / `table` are the declared list blocks.
+ * S7 tavern — the UW2 room window (80-* §4.9.1): a toolbar row (back /
+ * title / gold), the tab strip (crew / officers / rumours) over framed
+ * panels, the captains' table section and the sparring row.
  */
 import { useEffect, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { CaptainTableRow, RecruitRow } from "../state/views";
-import { Box, Element, ListRows, StackRows, type ScreenId } from "../layout";
-import { Button, Icon, Toast, ValueBar } from "../kit";
-import {
-  ButtonEl,
-  LabelEl,
-  PanelEl,
-  useScreenView,
-  useToastState,
-  ViewFallback,
-} from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Frame, Icon, Row, Toast, ValueBar } from "../kit";
+import { Label, useScreenView, useToastState, ViewFallback } from "./common";
 import { navigate } from "../app/router";
+import "./TavernScreen.css";
 
 const SCREEN: ScreenId = "tavern";
 const MINUS = String.fromCharCode(0x2212);
 const PLUS = String.fromCharCode(0x2b);
 
 type Tab = "crew" | "officers" | "rumors";
+
+const TAB_KEYS: Record<Tab, string> = {
+  crew: "tavern.crew_tab",
+  officers: "tavern.officers_tab",
+  rumors: "tavern.rumor_tab",
+};
 
 function officerIcon(roleKey: string): string {
   if (roleKey.endsWith(".navigator")) return "compass";
@@ -54,404 +54,253 @@ export function TavernScreen() {
     setStake((current) => (current > 0 ? current : view.spar.stake));
   }, [view]);
 
-  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
+  if (!view) return <ViewFallback status={status} />;
 
   const portName = t(content.portName(view.portId));
 
   const recruitRow = (row: RecruitRow) => (
-    <>
-      <Box rect={{ x: 0, y: 0, w: 2, h: 4 }}>
-        <Icon id={officerIcon(row.roleKey)} />
-      </Box>
-      <Box rect={{ x: 2, y: 0, w: 16, h: 1 }}>
-        <span className="sa-cell sa-label--heading">{t(content.officerName(row.officerId))}</span>
-      </Box>
-      <Box rect={{ x: 18, y: 0, w: 12, h: 1 }}>
-        <span className="sa-cell">{tKey(row.roleKey)}</span>
-      </Box>
-      <Box rect={{ x: 30, y: 0, w: 14, h: 1 }}>
-        <span className="sa-cell">{fmt("tavern.wage", { price: row.wage })}</span>
-      </Box>
-      <Box rect={{ x: 2, y: 1, w: 24, h: 1 }}>
-        <span className="sa-cell">
-          {fmt("tavern.stats", {
-            leadership: row.skills.leadership ?? 0,
-            seamanship: row.skills.seamanship ?? 0,
-            combat: row.skills.combat ?? 0,
-            navigation: row.skills.navigation ?? 0,
-          })}
-        </span>
-      </Box>
-      <Box rect={{ x: 26, y: 1, w: 18, h: 1 }}>
-        <span className="sa-cell">{fmt("tavern.signing_cost", { amount: row.signingFee })}</span>
-      </Box>
-      <Box rect={{ x: 46, y: 2, w: 12, h: 2 }}>
-        <Button
-          textKey="tavern.recruit"
-          kind="primary"
-          disabled={!row.canRecruit}
-          fill
-          onClick={() => {
-            void client.tavern.recruit(row.officerId);
-            showToast("tavern.recruited", { name: content.officerName(row.officerId) }, "good");
-          }}
-        />
-      </Box>
-    </>
+    <Row
+      key={row.officerId}
+      height={104}
+      cols={[
+        <div className="tavern__recruit">
+          <div className="tavern__line">
+            <span className="tavern__icon">
+              <Icon id={officerIcon(row.roleKey)} />
+            </span>
+            <div className="sa-cell sa-label--heading">{t(content.officerName(row.officerId))}</div>
+            <div className="sa-cell sa-grow">{tKey(row.roleKey)}</div>
+            <div className="sa-cell sa-cell--right">{fmt("tavern.wage", { price: row.wage })}</div>
+          </div>
+          <div className="tavern__line">
+            <div className="sa-cell sa-grow">
+              {fmt("tavern.stats", {
+                leadership: row.skills.leadership ?? 0,
+                seamanship: row.skills.seamanship ?? 0,
+                combat: row.skills.combat ?? 0,
+                navigation: row.skills.navigation ?? 0,
+              })}
+            </div>
+            <div className="sa-cell">{fmt("tavern.signing_cost", { amount: row.signingFee })}</div>
+          </div>
+          <div className="tavern__line">
+            <div className="sa-grow" />
+            <Button
+              compact
+              textKey="tavern.recruit"
+              kind="primary"
+              disabled={!row.canRecruit}
+              onClick={() => {
+                void client.tavern.recruit(row.officerId);
+                showToast("tavern.recruited", { name: content.officerName(row.officerId) }, "good");
+              }}
+            />
+          </div>
+        </div>,
+      ]}
+    />
   );
 
-  const crewRow = (
-    kind: "hire" | "fire",
-    ids: { row: string; one: string; ten: string; third: string },
-  ) => {
+  const crewRow = (kind: "hire" | "fire") => {
     const isHire = kind === "hire";
-    const rowId = ids.row;
     return (
-      <Element key={kind} screen={SCREEN} id={rowId} parent="crew">
-        <ButtonEl
-          screen={SCREEN}
-          id={ids.one}
-          parent={rowId}
+      <div key={kind} className="tavern__actions">
+        <Button
           text={isHire ? fmt("tavern.hire", { qty: 1 }) : fmt("tavern.fire", { qty: 1 })}
           disabled={isHire ? !view.crew.canHire : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.hire(1) : client.tavern.fire(1))}
         />
-        <ButtonEl
-          screen={SCREEN}
-          id={ids.ten}
-          parent={rowId}
+        <Button
           text={isHire ? fmt("tavern.hire", { qty: 10 }) : fmt("tavern.fire", { qty: 10 })}
           disabled={isHire ? !view.crew.canHire : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.hire(10) : client.tavern.fire(10))}
         />
-        <ButtonEl
-          screen={SCREEN}
-          id={ids.third}
-          parent={rowId}
+        <Button
           textKey={isHire ? "tavern.fill" : "tavern.down_to_min"}
           disabled={isHire ? !view.crew.fillAvailable : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.fillCrew() : client.tavern.downToMin())}
         />
-      </Element>
+      </div>
     );
   };
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" />
+    <div className="sa-screen tavern" data-screen={SCREEN}>
+      <div className="tavern__page sa-col">
+        <div className="tavern__header sa-plate">
+          <div className="tavern__header_line">
+            <Button textKey="ui.back" onClick={() => navigate("port")} />
+            <Label textKey="tavern.title" values={{ port: portName }} title />
+            <div className="sa-grow" />
+            <Label textKey="ui.gold_amount" values={{ gold: state.gold }} />
+          </div>
+        </div>
 
-      <Element screen={SCREEN} id="header">
-        <LabelEl
-          screen={SCREEN}
-          id="header.title"
-          parent="header"
-          textKey="tavern.title"
-          values={{ port: portName }}
-          title
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="header.gold"
-          parent="header"
-          textKey="ui.gold_amount"
-          values={{ gold: state.gold }}
-          align="right"
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="header.back"
-          parent="header"
-          textKey="ui.back"
-          onClick={() => navigate("port")}
-        />
-      </Element>
+        <Frame className="tavern__window sa-grow">
+          <div className="tavern__body">
+            <div className="sa-tabs">
+              {(Object.keys(TAB_KEYS) as Tab[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="sa-tab"
+                  data-active={tab === id ? "true" : "false"}
+                  onClick={() => setTab(id)}
+                >
+                  {tKey(TAB_KEYS[id])}
+                </button>
+              ))}
+            </div>
 
-      <Element screen={SCREEN} id="tabs">
-        <ButtonEl
-          screen={SCREEN}
-          id="tabs.crew"
-          parent="tabs"
-          textKey="tavern.crew_tab"
-          kind={tab === "crew" ? "primary" : "default"}
-          onClick={() => setTab("crew")}
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="tabs.officers"
-          parent="tabs"
-          textKey="tavern.officers_tab"
-          kind={tab === "officers" ? "primary" : "default"}
-          onClick={() => setTab("officers")}
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="tabs.rumors"
-          parent="tabs"
-          textKey="tavern.rumor_tab"
-          kind={tab === "rumors" ? "primary" : "default"}
-          onClick={() => setTab("rumors")}
-        />
-      </Element>
+            {tab === "crew" ? (
+              <div className="tavern__panel">
+                <div className="tavern__pair">
+                  <Label textKey="tavern.crew_count" values={{ crew: view.crew.count, max: view.crew.max }} />
+                  <Label textKey="inn.morale" values={{ amount: view.crew.morale }} />
+                </div>
+                <div className="tavern__bar">
+                  <ValueBar value={view.crew.morale} max={view.moraleMax} tier={view.moraleTier} />
+                </div>
+                <Label textKey="tavern.per_head" values={{ price: view.crew.perHead }} tone="dim" />
+                {crewRow("hire")}
+                {crewRow("fire")}
+                <Label textValue={view.crew.reasonKey ? tKey(view.crew.reasonKey) : ""} tone="warn" />
+                <Label textKey="tavern.crew_min_note" values={{ crew: view.crew.min }} tone="dim" />
+              </div>
+            ) : null}
 
-      <Element screen={SCREEN} id="body">
-        <Element screen={SCREEN} id="crew" parent="body" hidden={tab !== "crew"}>
-          <LabelEl
-            screen={SCREEN}
-            id="crew.count"
-            parent="crew"
-            textKey="tavern.crew_count"
-            values={{ crew: view.crew.count, max: view.crew.max }}
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="crew.morale"
-            parent="crew"
-            textKey="inn.morale"
-            values={{ amount: view.crew.morale }}
-          />
-          <Element screen={SCREEN} id="crew.morale_bar" parent="crew">
-            <ValueBar value={view.crew.morale} max={view.moraleMax} tier={view.moraleTier} />
-          </Element>
-          <LabelEl
-            screen={SCREEN}
-            id="crew.per_head"
-            parent="crew"
-            textKey="tavern.per_head"
-            values={{ price: view.crew.perHead }}
-            tone="dim"
-          />
-          {crewRow("hire", {
-            row: "crew.hire_row",
-            one: "crew.hire_row.hire_1",
-            ten: "crew.hire_row.hire_10",
-            third: "crew.hire_row.fill",
-          })}
-          {crewRow("fire", {
-            row: "crew.fire_row",
-            one: "crew.fire_row.fire_1",
-            ten: "crew.fire_row.fire_10",
-            third: "crew.fire_row.down_to_min",
-          })}
-          <LabelEl
-            screen={SCREEN}
-            id="crew.reason"
-            parent="crew"
-            textValue={view.crew.reasonKey ? tKey(view.crew.reasonKey) : ""}
-            tone="warn"
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="crew.min_note"
-            parent="crew"
-            textKey="tavern.crew_min_note"
-            values={{ crew: view.crew.min }}
-            tone="dim"
-          />
-        </Element>
-
-        <Element screen={SCREEN} id="officers" parent="body" hidden={tab !== "officers"}>
-          <Element screen={SCREEN} id="officers.recruitable_scroll" parent="officers" className="sa-scroll">
-            <ListRows
-              screen={SCREEN}
-              listId="recruitable"
-              count={view.recruitable.length}
-              renderRow={(index) => recruitRow(view.recruitable[index])}
-            />
-          </Element>
-          <LabelEl
-            screen={SCREEN}
-            id="officers.roster_header"
-            parent="officers"
-            textKey="char.officers"
-            heading
-          />
-          <Element screen={SCREEN} id="officers.roster_scroll" parent="officers" className="sa-scroll">
-            <StackRows
-              count={view.roster.length}
-              renderRow={(index) => {
-                const row = view.roster[index];
-                return (
-                  <>
-                    <Box rect={{ x: 0, y: 0, w: 20, h: 1 }}>
-                      <span className="sa-cell">{t(content.officerName(row.officerId))}</span>
-                    </Box>
-                    <Box rect={{ x: 20, y: 0, w: 12, h: 1 }}>
-                      <span className="sa-cell">{tKey(row.roleKey)}</span>
-                    </Box>
-                    <Box rect={{ x: 32, y: 0, w: 14, h: 1 }}>
-                      <span className="sa-cell">{fmt("tavern.wage", { price: row.wage })}</span>
-                    </Box>
-                    <Box rect={{ x: 48, y: 0, w: 10, h: 1 }}>
-                      <Button
-                        textKey="tavern.dismiss"
-                        disabled={!(row.canDismiss ?? row.canRecruit)}
-                        fill
-                        onClick={() => void client.tavern.dismiss(row.officerId)}
+            {tab === "officers" ? (
+              <div className="tavern__panel">
+                <div className="sa-scroll tavern__recruit_rows">
+                  <div className="sa-table">
+                    {view.recruitable.map((row) => recruitRow(row))}
+                  </div>
+                </div>
+                <Label textKey="char.officers" heading />
+                <div className="sa-scroll tavern__roster_rows">
+                  <div className="sa-table tavern__table_roster">
+                    {view.roster.map((row) => (
+                      <Row
+                        key={row.officerId}
+                        cols={[
+                          <div className="sa-cell">{t(content.officerName(row.officerId))}</div>,
+                          <div className="sa-cell">{tKey(row.roleKey)}</div>,
+                          <div className="sa-cell">{fmt("tavern.wage", { price: row.wage })}</div>,
+                          <Button
+                            compact
+                            fill
+                            textKey="tavern.dismiss"
+                            disabled={!(row.canDismiss ?? row.canRecruit)}
+                            onClick={() => void client.tavern.dismiss(row.officerId)}
+                          />,
+                        ]}
                       />
-                    </Box>
-                  </>
-                );
-              }}
-            />
-          </Element>
-          <LabelEl
-            screen={SCREEN}
-            id="officers.roster.empty"
-            parent="officers"
-            textKey="char.no_officers"
-            hidden={view.roster.length > 0}
-          />
-          <LabelEl screen={SCREEN} id="officers.reason" parent="officers" />
-        </Element>
+                    ))}
+                  </div>
+                </div>
+                {view.roster.length === 0 ? <Label textKey="char.no_officers" /> : null}
+              </div>
+            ) : null}
 
-        <Element screen={SCREEN} id="rumors" parent="body" hidden={tab !== "rumors"}>
-          <LabelEl
-            screen={SCREEN}
-            id="rumors.tournament"
-            parent="rumors"
-            textValue={view.rumors.tournament ? t(view.rumors.tournament) : ""}
-            tone="accent"
-          />
-          <LabelEl
-            screen={SCREEN}
-            id="rumors.price"
-            parent="rumors"
-            textKey="tavern.rumor.price"
-            values={{ gold: view.rumors.price }}
-            tone="dim"
-          />
-          <Element screen={SCREEN} id="rumors.scroll" parent="rumors" className="sa-scroll">
-            <ListRows
-              screen={SCREEN}
-              listId="rumors"
-              count={view.rumors.rows.length + view.investments.length}
-              renderRow={(index) => {
-                if (index >= view.rumors.rows.length) {
-                  const invest = view.investments[index - view.rumors.rows.length];
-                  return (
-                    <Box rect={{ x: 0, y: 0, w: 58, h: 2 }}>
-                      <span className="sa-cell sa-label--accent">
-                        {fmt("tavern.invest.row", {
-                          nation: content.nationName(invest.nationId),
-                          amount: invest.amount,
-                          port: content.portName(invest.portId),
-                        })}
-                      </span>
-                    </Box>
-                  );
-                }
-                const rumor = view.rumors.rows[index];
-                return (
-                  <>
-                    <Box rect={{ x: 0, y: 0, w: 46, h: 2 }}>
-                      <span className={rumor.purchasable === false ? "sa-cell sa-label--dim" : "sa-cell"}>
-                        {t(rumor.text)}
-                      </span>
-                    </Box>
-                    {rumor.purchasable === false ? null : (
-                      <Box rect={{ x: 46, y: 0, w: 12, h: 2 }}>
-                        <Button
-                          textKey={rumor.known ? "tavern.rumor.bought" : "tavern.rumor.buy"}
-                          disabled={rumor.known}
-                          fill
-                          onClick={() => void client.tavern.buyRumor(rumor.id)}
-                        />
-                      </Box>
-                    )}
-                  </>
-                );
-              }}
-            />
-          </Element>
-          <LabelEl
-            screen={SCREEN}
-            id="rumors.empty"
-            parent="rumors"
-            textKey="tavern.rumor.none"
-            hidden={view.rumors.rows.length > 0 || view.investments.length > 0}
-          />
-        </Element>
+            {tab === "rumors" ? (
+              <div className="tavern__panel">
+                <Label
+                  textValue={view.rumors.tournament ? t(view.rumors.tournament) : ""}
+                  tone="accent"
+                />
+                <Label textKey="tavern.rumor.price" values={{ gold: view.rumors.price }} tone="dim" />
+                <div className="sa-scroll tavern__rumor_rows">
+                  <div className="sa-table tavern__table_rumors">
+                    {view.rumors.rows.map((rumor) => (
+                      <Row
+                        key={rumor.id}
+                        cols={[
+                          <div className={`sa-cell${rumor.purchasable === false ? " sa-label--dim" : ""}`}>
+                            {t(rumor.text)}
+                          </div>,
+                          rumor.purchasable === false ? (
+                            <div className="sa-cell" />
+                          ) : (
+                            <Button
+                              compact
+                              fill
+                              textKey={rumor.known ? "tavern.rumor.bought" : "tavern.rumor.buy"}
+                              disabled={rumor.known}
+                              onClick={() => void client.tavern.buyRumor(rumor.id)}
+                            />
+                          ),
+                        ]}
+                      />
+                    ))}
+                    {view.investments.map((invest, index) => (
+                      <Row
+                        key={`invest_${index}`}
+                        cols={[
+                          <div className="sa-cell sa-label--accent">
+                            {fmt("tavern.invest.row", {
+                              nation: content.nationName(invest.nationId),
+                              amount: invest.amount,
+                              port: content.portName(invest.portId),
+                            })}
+                          </div>,
+                          <div className="sa-cell" />,
+                        ]}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {view.rumors.rows.length === 0 && view.investments.length === 0 ? (
+                  <Label textKey="tavern.rumor.none" />
+                ) : null}
+              </div>
+            ) : null}
 
-        <Element screen={SCREEN} id="captains_table" parent="body">
-          <LabelEl
-            screen={SCREEN}
-            id="captains_table.header"
-            parent="captains_table"
-            textKey="captain.table.title"
-            heading
-          />
-          <ListRows
-            screen={SCREEN}
-            listId="table"
-            count={view.captains.length}
-            renderRow={(index) => {
-              const captain = view.captains[index];
-              return (
-                <>
-                  <Box rect={{ x: 0, y: 0, w: 2, h: 2 }}>
-                    <Icon id={captainIcon(captain)} />
-                  </Box>
-                  <Box rect={{ x: 2, y: 0, w: 20, h: 2 }}>
-                    <span className="sa-cell">{t(captain.name)}</span>
-                  </Box>
-                  <Box rect={{ x: 22, y: 0, w: 15, h: 2 }}>
-                    <span className="sa-cell">{tKey(captain.roleKey)}</span>
-                  </Box>
-                  <Box rect={{ x: 37, y: 0, w: 5, h: 2 }}>
-                    <span className="sa-cell">
-                      {`${tKey("captain.table.tier")} ${captain.tier}`}
-                    </span>
-                  </Box>
-                  <Box rect={{ x: 42, y: 0, w: 16, h: 2 }}>
-                    <span className="sa-cell sa-label--dim">
-                      {fmt("captain.table.last_seen", { day: captain.lastSeenDay })}
-                    </span>
-                  </Box>
-                </>
-              );
-            }}
-          />
-        </Element>
+            <div className="tavern__caps">
+              <Label textKey="captain.table.title" heading />
+              <div className="sa-scroll tavern__caps_rows">
+                <div className="sa-table tavern__table_caps">
+                  {view.captains.map((captain) => (
+                    <Row
+                      key={captain.id}
+                      cols={[
+                        <span className="tavern__icon">
+                          <Icon id={captainIcon(captain)} />
+                        </span>,
+                        <div className="sa-cell">{t(captain.name)}</div>,
+                        <div className="sa-cell">{tKey(captain.roleKey)}</div>,
+                        <div className="sa-cell">{`${tKey("captain.table.tier")} ${captain.tier}`}</div>,
+                        <div className="sa-cell sa-label--dim">
+                          {fmt("captain.table.last_seen", { day: captain.lastSeenDay })}
+                        </div>,
+                      ]}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
 
-        <Element screen={SCREEN} id="spar" parent="body">
-          <LabelEl screen={SCREEN} id="spar.header" parent="spar" textKey="tavern.spar.title" heading />
-          <LabelEl
-            screen={SCREEN}
-            id="spar.terms"
-            parent="spar"
-            textKey="tavern.spar.stake"
-            values={{ gold: stake, pct: view.spar.winPct }}
-          />
-          <LabelEl screen={SCREEN} id="spar.result" parent="spar" />
-          <ButtonEl
-            screen={SCREEN}
-            id="spar.controls.stake_down"
-            parent="spar"
-            text={MINUS}
-            onClick={() => setStake((value) => Math.max(0, value - view.spar.step))}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="spar.controls.stake_up"
-            parent="spar"
-            text={PLUS}
-            onClick={() => setStake((value) => value + view.spar.step)}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="spar.controls.bet"
-            parent="spar"
-            textKey="tavern.spar.go"
-            kind="primary"
-            disabled={stake <= 0 || view.spar.canSpar === false}
-            onClick={() => void client.tavern.spar(stake)}
-          />
-        </Element>
-      </Element>
+            <div className="tavern__spar">
+              <Label textKey="tavern.spar.title" heading />
+              <div className="tavern__line">
+                <Label textKey="tavern.spar.stake" values={{ gold: stake, pct: view.spar.winPct }} />
+                <div className="sa-grow" />
+                <Button text={MINUS} onClick={() => setStake((value) => Math.max(0, value - view.spar.step))} />
+                <Button text={PLUS} onClick={() => setStake((value) => value + view.spar.step)} />
+                <Button
+                  textKey="tavern.spar.go"
+                  kind="primary"
+                  disabled={stake <= 0 || view.spar.canSpar === false}
+                  onClick={() => void client.tavern.spar(stake)}
+                />
+              </div>
+            </div>
+          </div>
+        </Frame>
+      </div>
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }

@@ -1,6 +1,14 @@
 /**
- * S21 naval-battle sandbox (docs/80-UI-UX.md §4.7.16) — a ZERO-WRITE
- * proving ground reached from the title screen.
+ * S21 naval-battle sandbox (docs/80-UI-UX.md §4.7.16; the M7 kit
+ * composition per 80-* §4.9.1) — a ZERO-WRITE proving ground reached from
+ * the title screen.
+ *
+ * The DOM chrome is a stack of kit windows over the sea backdrop: the
+ * player panel (captain stats row + one-line ship rows), the enemy panel
+ * (profile row + ship rows, hidden while compose is armed) and the
+ * conditions strip (encounter conditions + the four verbs). Fields are
+ * `FieldRow` compositions; the per-ship editors keep their `data-field` /
+ * `data-sandbox-row` identity hooks.
  *
  * The editor is a pure local fixture: it never calls an HTTP action or a WS
  * intent, never touches `GameState`, and never writes the save. `开战` builds
@@ -12,20 +20,23 @@
  * no endpoint drives it), so the preview is a static deployment snapshot,
  * not a simulated battle.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { shipTypes } from "../i18n/strings";
 import { useGameState } from "../state/context";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Button, Field } from "../kit";
-import { ButtonEl, LabelEl, useToastState } from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Field, FieldRow, Footer, Frame, Toast } from "../kit";
+import { Label, useToastState } from "./common";
 import { BattleCanvas, toBattleView } from "../canvas/battle";
 import type { BattleShipFrame, BattleTickFrame } from "../client/types";
 import type { Direction8, Weather } from "../state/types";
 import { navigate } from "../app/router";
 import rawEquipment from "../../../data/equipment.json";
+import "./Sandbox.css";
 
 const SCREEN: ScreenId = "sandbox";
+const MINUS = String.fromCharCode(0x2212);
+const PLUS = String.fromCharCode(0x2b);
 
 type SeedMode = "fixed" | "random" | "auto";
 type Deployment = "standard" | "tournament";
@@ -84,7 +95,7 @@ const ATTRS = ["constitution", "intellect", "charisma", "courage", "luck"] as co
 
 export function Sandbox() {
   const { state } = useGameState();
-  const { t, tKey, fmt } = useI18n();
+  const { t, tKey } = useI18n();
   const { toast, showToast, clearToast } = useToastState();
   const [preview, setPreview] = useState(false);
 
@@ -130,11 +141,6 @@ export function Sandbox() {
 
   const [config, setConfig] = useState<SandboxConfig>(defaultConfig);
   useEffect(() => setConfig(defaultConfig), [defaultConfig]);
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(clearToast, 2600);
-    return () => window.clearTimeout(timer);
-  }, [toast, clearToast]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -305,10 +311,8 @@ export function Sandbox() {
       });
     const equipment = (slot: string) => EQUIPMENT.filter((item) => item.slot === slot);
     return (
-      <div key={prefix} data-sandbox-row={prefix}>
-        <Element screen={SCREEN} id={`${prefix}.header`}>
-          <span className="sa-cell sa-label--heading">{String(index + 1)}</span>
-        </Element>
+      <div key={prefix} className="sandbox__shiprow" data-sandbox-row={prefix}>
+        <span className="sa-badge sandbox__shipnum">{String(index + 1)}</span>
         <SelectField
           id={`${prefix}.type`}
           labelKey="sandbox.ship.type"
@@ -371,284 +375,249 @@ export function Sandbox() {
   };
 
   return (
-    <div className="sa-screen">
-      <Element screen={SCREEN} id="background" skin="backdrop" />
+    <div className="sa-screen sandbox" data-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
+      <div className="sandbox__head sa-plate">
+        <div className="sandbox__head_names">
+          <Label textKey="sandbox.title" title />
+          <Label textKey="sandbox.zero_write" tone="warn" />
+        </div>
+        <Label textKey="sandbox.back" tone="dim" />
+      </div>
+
+      <div className="sandbox__actions">
+        <Button textKey="sandbox.start" kind="primary" onClick={start} />
+        <Button textKey="sandbox.random_all" onClick={randomize} />
+        <Button textKey="sandbox.import" onClick={importJson} />
+        <Button textKey="sandbox.export" onClick={exportJson} />
+      </div>
+
       {preview ? (
-        <Box rect={{ x: 0, y: 2, w: 60, h: 29 }}>
+        <div className="sandbox__field sa-grow">
           <BattleCanvas
             scene={{ view, selectedId: null, targetId: null, aiInstant: false }}
             fitSignal={0}
             onSelect={() => undefined}
           />
-        </Box>
-      ) : null}
-      <LabelEl screen={SCREEN} id="title" textKey="sandbox.title" title />
-      <LabelEl screen={SCREEN} id="zero_write" textKey="sandbox.zero_write" tone="warn" />
-      <LabelEl screen={SCREEN} id="back_hint" textKey="sandbox.back" tone="dim" />
-      <LabelEl
-        screen={SCREEN}
-        id="toast"
-        textValue={toast ? (toast.values ? fmt(toast.messageKey, toast.values) : tKey(toast.messageKey)) : ""}
-        tone={toast?.tone === "bad" ? "bad" : "good"}
-        hidden={!toast}
-      />
-      <ButtonEl screen={SCREEN} id="actions.start" textKey="sandbox.start" kind="primary" onClick={start} />
-      <ButtonEl screen={SCREEN} id="actions.random" textKey="sandbox.random_all" onClick={randomize} />
-      <ButtonEl screen={SCREEN} id="actions.import" textKey="sandbox.import" onClick={importJson} />
-      <ButtonEl screen={SCREEN} id="actions.export" textKey="sandbox.export" onClick={exportJson} />
-
-      {!preview ? (
-        <>
-          <Element screen={SCREEN} id="player_panel" skin="panel">
-            <Element screen={SCREEN} id="player_panel.stats_row" parent="player_panel">
-              {ATTRS.map((key) => (
-                <NumberField
-                  key={key}
-                  id={`player_panel.stats_row.${key}`}
-                  baseRelative
-                  labelKey={`char.attr.${key}`}
-                  value={Number(config.player.stats[key] ?? 0)}
-                  max={100}
-                  onChange={(value) => update((draft) => { draft.player.stats[key] = value; })}
+        </div>
+      ) : (
+        <div className="sandbox__editor sa-grow sa-scroll">
+          <Frame titleKey="sandbox.player" className="sandbox__panel">
+            <div className="sandbox__panel_body">
+              <div className="sandbox__grid sandbox__stats">
+                {ATTRS.map((key) => (
+                  <NumberField
+                    key={key}
+                    id={`player_panel.stats_row.${key}`}
+                    labelKey={`char.attr.${key}`}
+                    value={Number(config.player.stats[key] ?? 0)}
+                    max={100}
+                    onChange={(value) => update((draft) => { draft.player.stats[key] = value; })}
+                  />
+                ))}
+                <SelectField
+                  id="player_panel.stats_row.weapon"
+                  labelKey="shipyard.slot.weapon"
+                  value={String(config.player.stats.weapon ?? "")}
+                  options={[{ value: "", label: tKey("char.none") }, ...EQUIPMENT.filter((item) => item.slot === "weapon").map((item) => ({ value: item.id, label: t(item.name) }))]}
+                  onChange={(value) => update((draft) => { draft.player.stats.weapon = value; })}
                 />
-              ))}
-              <SelectField
-                id="player_panel.stats_row.weapon"
-                baseRelative
-                labelKey="shipyard.slot.weapon"
-                value={String(config.player.stats.weapon ?? "")}
-                options={[{ value: "", label: tKey("char.none") }, ...EQUIPMENT.filter((item) => item.slot === "weapon").map((item) => ({ value: item.id, label: t(item.name) }))]}
-                onChange={(value) => update((draft) => { draft.player.stats.weapon = value; })}
-              />
-              <SelectField
-                id="player_panel.stats_row.armor"
-                baseRelative
-                labelKey="shipyard.slot.armor"
-                value={String(config.player.stats.armor ?? "")}
-                options={[{ value: "", label: tKey("char.none") }, ...EQUIPMENT.filter((item) => item.slot === "armor").map((item) => ({ value: item.id, label: t(item.name) }))]}
-                onChange={(value) => update((draft) => { draft.player.stats.armor = value; })}
-              />
-              <NumberField
-                id="player_panel.stats_row.morale"
-                baseRelative
-                labelKey="sandbox.morale.short"
-                value={config.player.morale}
-                max={100}
-                onChange={(value) => update((draft) => { draft.player.morale = value; })}
-              />
-              <ButtonEl
-                screen={SCREEN}
-                id="player_panel.stats_row.add"
-                text={String.fromCharCode(0x2b)}
-                onClick={() => update((draft) => {
-                  if (draft.player.ships.length >= 5) {
-                    showToast("sandbox.ship.max", undefined, "bad");
-                    return;
-                  }
-                  draft.player.ships.push(blankShip("sloop"));
-                })}
-              />
-              <ButtonEl
-                screen={SCREEN}
-                id="player_panel.stats_row.remove"
-                text={String.fromCharCode(0x2212)}
-                onClick={() => update((draft) => {
-                  if (draft.player.ships.length > 1) draft.player.ships.pop();
-                })}
-              />
-            </Element>
-            <Element screen={SCREEN} id="player_panel.rows" parent="player_panel" className="sa-scroll">
-              <ListRows
-                screen={SCREEN}
-                listId="player_rows"
-                count={config.player.ships.length}
-                renderRow={(index) => shipRow("player", index, config.player.ships[index])}
-              />
-            </Element>
-          </Element>
+                <SelectField
+                  id="player_panel.stats_row.armor"
+                  labelKey="shipyard.slot.armor"
+                  value={String(config.player.stats.armor ?? "")}
+                  options={[{ value: "", label: tKey("char.none") }, ...EQUIPMENT.filter((item) => item.slot === "armor").map((item) => ({ value: item.id, label: t(item.name) }))]}
+                  onChange={(value) => update((draft) => { draft.player.stats.armor = value; })}
+                />
+                <NumberField
+                  id="player_panel.stats_row.morale"
+                  labelKey="sandbox.morale.short"
+                  value={config.player.morale}
+                  max={100}
+                  onChange={(value) => update((draft) => { draft.player.morale = value; })}
+                />
+                <Button
+                  text={PLUS}
+                  compact
+                  onClick={() => update((draft) => {
+                    if (draft.player.ships.length >= 5) {
+                      showToast("sandbox.ship.max", undefined, "bad");
+                      return;
+                    }
+                    draft.player.ships.push(blankShip("sloop"));
+                  })}
+                />
+                <Button
+                  text={MINUS}
+                  compact
+                  onClick={() => update((draft) => {
+                    if (draft.player.ships.length > 1) draft.player.ships.pop();
+                  })}
+                />
+              </div>
+              <div className="sandbox__rows">
+                {config.player.ships.map((ship, index) => shipRow("player", index, ship))}
+              </div>
+            </div>
+          </Frame>
 
-          <Element screen={SCREEN} id="enemy_panel" skin="panel">
-            <Element screen={SCREEN} id="enemy_panel.profile_row" parent="enemy_panel">
-              <SelectField
-                id="enemy_panel.profile_row.kind"
-                baseRelative
-                labelKey="sandbox.enemy.kind"
-                value={config.enemy.kind}
-                options={KIND_KEYS.map((kind) => ({ value: kind, label: tKey(`sandbox.kind.${kind}`) }))}
-                onChange={(value) => update((draft) => { draft.enemy.kind = value; })}
-              />
-              <ButtonEl
-                screen={SCREEN}
-                id="enemy_panel.profile_row.compose"
-                textKey="sandbox.enemy.compose"
-                kind={config.enemy.compose ? "primary" : "default"}
-                onClick={() => update((draft) => { draft.enemy.compose = !draft.enemy.compose; })}
-              />
-              <TextField
-                id="enemy_panel.profile_row.flagship"
-                baseRelative
-                labelKey="sandbox.enemy.flagship"
-                value={config.enemy.ships[0]?.captain_id ?? ""}
-                onChange={(value) => update((draft) => {
-                  if (draft.enemy.ships[0]) draft.enemy.ships[0].captain_id = value;
-                })}
-              />
-              <SelectField
-                id="enemy_panel.profile_row.ai_level"
-                baseRelative
-                labelKey="sandbox.ai_level"
-                value={String(config.enemy.ai_level)}
-                options={[
-                  { value: "0", label: tKey("sandbox.ai_level.t2") },
-                  { value: "1", label: tKey("sandbox.ai_level.t3") },
+          <Frame titleKey="sandbox.enemy" className="sandbox__panel">
+            <div className="sandbox__panel_body">
+              <div className="sandbox__grid sandbox__profile">
+                <SelectField
+                  id="enemy_panel.profile_row.kind"
+                  labelKey="sandbox.enemy.kind"
+                  value={config.enemy.kind}
+                  options={KIND_KEYS.map((kind) => ({ value: kind, label: tKey(`sandbox.kind.${kind}`) }))}
+                  onChange={(value) => update((draft) => { draft.enemy.kind = value; })}
+                />
+                <Button
+                  textKey="sandbox.enemy.compose"
+                  kind={config.enemy.compose ? "primary" : "default"}
+                  onClick={() => update((draft) => { draft.enemy.compose = !draft.enemy.compose; })}
+                />
+                <TextField
+                  id="enemy_panel.profile_row.flagship"
+                  labelKey="sandbox.enemy.flagship"
+                  value={config.enemy.ships[0]?.captain_id ?? ""}
+                  onChange={(value) => update((draft) => {
+                    if (draft.enemy.ships[0]) draft.enemy.ships[0].captain_id = value;
+                  })}
+                />
+                <SelectField
+                  id="enemy_panel.profile_row.ai_level"
+                  labelKey="sandbox.ai_level"
+                  value={String(config.enemy.ai_level)}
+                  options={[
+                    { value: "0", label: tKey("sandbox.ai_level.t2") },
+                    { value: "1", label: tKey("sandbox.ai_level.t3") },
+                  ]}
+                  onChange={(value) => update((draft) => { draft.enemy.ai_level = Number(value); })}
+                />
+                <SelectField
+                  id="enemy_panel.profile_row.archetype"
+                  labelKey="sandbox.archetype"
+                  value={config.enemy.archetype}
+                  options={["aggressive", "balanced", "cautious"].map((kind) => ({ value: kind, label: tKey(`sandbox.archetype.${kind}`) }))}
+                  onChange={(value) => update((draft) => { draft.enemy.archetype = value; })}
+                />
+                <SelectField
+                  id="enemy_panel.profile_row.formation"
+                  labelKey="sandbox.formation"
+                  value={config.enemy.formation}
+                  options={FORMATIONS.map((formation) => ({ value: formation, label: tKey(`battle.formation.${formation}`) }))}
+                  onChange={(value) => update((draft) => { draft.enemy.formation = value; })}
+                />
+                <NumberField
+                  id="enemy_panel.profile_row.morale"
+                  labelKey="sandbox.morale.enemy"
+                  value={config.enemy.morale}
+                  max={100}
+                  onChange={(value) => update((draft) => { draft.enemy.morale = value; })}
+                />
+                <Button
+                  text={PLUS}
+                  compact
+                  onClick={() => update((draft) => {
+                    if (draft.enemy.ships.length >= 5) {
+                      showToast("sandbox.ship.max", undefined, "bad");
+                      return;
+                    }
+                    draft.enemy.ships.push(blankShip("sloop"));
+                  })}
+                />
+                <Button
+                  text={MINUS}
+                  compact
+                  onClick={() => update((draft) => {
+                    if (draft.enemy.ships.length > 1) draft.enemy.ships.pop();
+                  })}
+                />
+              </div>
+              {!config.enemy.compose ? (
+                <div className="sandbox__rows">
+                  {config.enemy.ships.map((ship, index) => shipRow("enemy", index, ship))}
+                </div>
+              ) : null}
+            </div>
+          </Frame>
+
+          <Frame className="sandbox__panel">
+            <div className="sandbox__panel_body">
+              <div className="sandbox__grid sandbox__conditions">
+                <NumberField
+                  id="conditions_panel.grid.day"
+                  labelKey="sandbox.day"
+                  value={config.conditions.day}
+                  min={1}
+                  max={3600}
+                  onChange={(value) => update((draft) => { draft.conditions.day = value; })}
+                />
+                <SelectField
+                  id="conditions_panel.grid.seed_mode"
+                  labelKey="sandbox.seed"
+                  value={config.conditions.seed_mode}
+                  options={(["fixed", "random", "auto"] as SeedMode[]).map((mode) => ({ value: mode, label: tKey(`sandbox.seed.${mode}`) }))}
+                  onChange={(value) => update((draft) => { draft.conditions.seed_mode = value as SeedMode; })}
+                />
+                <TextField
+                  id="conditions_panel.grid.seed_value"
+                  labelKey="sandbox.seed"
+                  hasLabel={false}
+                  value={String(config.conditions.seed)}
+                  onChange={(value) => update((draft) => { draft.conditions.seed = Number(value.replace(/[^0-9]/g, "")) || 0; })}
+                />
+                <SelectField
+                  id="conditions_panel.grid.weather"
+                  labelKey="sandbox.weather"
+                  value={config.conditions.weather}
+                  options={WEATHERS.map((weather) => ({ value: weather, label: tKey(`world.weather.${weather}`) }))}
+                  onChange={(value) => update((draft) => { draft.conditions.weather = value as Weather; })}
+                />
+                <SelectField
+                  id="conditions_panel.grid.wind_dir"
+                  labelKey="sandbox.wind_dir"
+                  value={config.conditions.wind_dir}
+                  options={DIRECTIONS.map((dir) => ({ value: dir, label: tKey(`sandbox.dir.${dir}`) }))}
+                  onChange={(value) => update((draft) => { draft.conditions.wind_dir = value as Direction8; })}
+                />
+                <SelectField
+                  id="conditions_panel.grid.current"
+                  labelKey="sandbox.current"
+                  value={config.conditions.current.dir}
+                  options={DIRECTIONS.map((dir) => ({ value: dir, label: tKey(`sandbox.dir.${dir}`) }))}
+                  onChange={(value) => update((draft) => { draft.conditions.current.dir = value as Direction8; })}
+                />
+                <NumberField
+                  id="conditions_panel.grid.current_strength"
+                  labelKey="sandbox.current.strength"
+                  value={config.conditions.current.strength}
+                  max={3}
+                  onChange={(value) => update((draft) => { draft.conditions.current.strength = value; })}
+                />
+                <SelectField
+                  id="conditions_panel.grid.deployment"
+                  labelKey="sandbox.deployment"
+                  value={config.conditions.deployment}
+                  options={(["standard", "tournament"] as Deployment[]).map((deployment) => ({ value: deployment, label: tKey(`sandbox.deployment.${deployment}`) }))}
+                  onChange={(value) => update((draft) => { draft.conditions.deployment = value as Deployment; })}
+                />
+              </div>
+              <Footer
+                buttons={[
+                  <Button key="start" textKey="sandbox.start" kind="primary" onClick={start} />,
+                  <Button key="random" textKey="sandbox.random_all" onClick={randomize} />,
+                  <Button key="import" textKey="sandbox.import" onClick={importJson} />,
+                  <Button key="export" textKey="sandbox.export" onClick={exportJson} />,
                 ]}
-                onChange={(value) => update((draft) => { draft.enemy.ai_level = Number(value); })}
               />
-              <SelectField
-                id="enemy_panel.profile_row.archetype"
-                baseRelative
-                labelKey="sandbox.archetype"
-                value={config.enemy.archetype}
-                options={["aggressive", "balanced", "cautious"].map((kind) => ({ value: kind, label: tKey(`sandbox.archetype.${kind}`) }))}
-                onChange={(value) => update((draft) => { draft.enemy.archetype = value; })}
-              />
-              <SelectField
-                id="enemy_panel.profile_row.formation"
-                baseRelative
-                labelKey="sandbox.formation"
-                value={config.enemy.formation}
-                options={FORMATIONS.map((formation) => ({ value: formation, label: tKey(`battle.formation.${formation}`) }))}
-                onChange={(value) => update((draft) => { draft.enemy.formation = value; })}
-              />
-              <NumberField
-                id="enemy_panel.profile_row.morale"
-                baseRelative
-                labelKey="sandbox.morale.enemy"
-                value={config.enemy.morale}
-                max={100}
-                onChange={(value) => update((draft) => { draft.enemy.morale = value; })}
-              />
-              <ButtonEl
-                screen={SCREEN}
-                id="enemy_panel.profile_row.add"
-                text={String.fromCharCode(0x2b)}
-                onClick={() => update((draft) => {
-                  if (draft.enemy.ships.length >= 5) {
-                    showToast("sandbox.ship.max", undefined, "bad");
-                    return;
-                  }
-                  draft.enemy.ships.push(blankShip("sloop"));
-                })}
-              />
-              <ButtonEl
-                screen={SCREEN}
-                id="enemy_panel.profile_row.remove"
-                text={String.fromCharCode(0x2212)}
-                onClick={() => update((draft) => {
-                  if (draft.enemy.ships.length > 1) draft.enemy.ships.pop();
-                })}
-              />
-            </Element>
-            <Element
-              screen={SCREEN}
-              id="enemy_panel.rows"
-              parent="enemy_panel"
-              className="sa-scroll"
-              hidden={config.enemy.compose}
-            >
-              <ListRows
-                screen={SCREEN}
-                listId="enemy_rows"
-                count={config.enemy.ships.length}
-                renderRow={(index) => shipRow("enemy", index, config.enemy.ships[index])}
-              />
-            </Element>
-          </Element>
+            </div>
+          </Frame>
+        </div>
+      )}
 
-          <Element screen={SCREEN} id="conditions_panel" skin="panel">
-            <Element screen={SCREEN} id="conditions_panel.grid" parent="conditions_panel">
-              <NumberField
-                id="conditions_panel.grid.day"
-                baseRelative
-                labelKey="sandbox.day"
-                value={config.conditions.day}
-                min={1}
-                max={3600}
-                onChange={(value) => update((draft) => { draft.conditions.day = value; })}
-              />
-              <SelectField
-                id="conditions_panel.grid.seed_mode"
-                baseRelative
-                labelKey="sandbox.seed"
-                value={config.conditions.seed_mode}
-                options={(["fixed", "random", "auto"] as SeedMode[]).map((mode) => ({ value: mode, label: tKey(`sandbox.seed.${mode}`) }))}
-                onChange={(value) => update((draft) => { draft.conditions.seed_mode = value as SeedMode; })}
-              />
-              <TextField
-                id="conditions_panel.grid.seed_value"
-                baseRelative
-                labelKey="sandbox.seed"
-                hasLabel={false}
-                value={String(config.conditions.seed)}
-                onChange={(value) => update((draft) => { draft.conditions.seed = Number(value.replace(/[^0-9]/g, "")) || 0; })}
-              />
-              <SelectField
-                id="conditions_panel.grid.weather"
-                baseRelative
-                labelKey="sandbox.weather"
-                value={config.conditions.weather}
-                options={WEATHERS.map((weather) => ({ value: weather, label: tKey(`world.weather.${weather}`) }))}
-                onChange={(value) => update((draft) => { draft.conditions.weather = value as Weather; })}
-              />
-              <SelectField
-                id="conditions_panel.grid.wind_dir"
-                baseRelative
-                labelKey="sandbox.wind_dir"
-                value={config.conditions.wind_dir}
-                options={DIRECTIONS.map((dir) => ({ value: dir, label: tKey(`sandbox.dir.${dir}`) }))}
-                onChange={(value) => update((draft) => { draft.conditions.wind_dir = value as Direction8; })}
-              />
-              <SelectField
-                id="conditions_panel.grid.current"
-                baseRelative
-                labelKey="sandbox.current"
-                value={config.conditions.current.dir}
-                options={DIRECTIONS.map((dir) => ({ value: dir, label: tKey(`sandbox.dir.${dir}`) }))}
-                onChange={(value) => update((draft) => { draft.conditions.current.dir = value as Direction8; })}
-              />
-              <NumberField
-                id="conditions_panel.grid.current_strength"
-                baseRelative
-                labelKey="sandbox.current.strength"
-                value={config.conditions.current.strength}
-                max={3}
-                onChange={(value) => update((draft) => { draft.conditions.current.strength = value; })}
-              />
-              <SelectField
-                id="conditions_panel.grid.deployment"
-                baseRelative
-                labelKey="sandbox.deployment"
-                value={config.conditions.deployment}
-                options={(["standard", "tournament"] as Deployment[]).map((deployment) => ({ value: deployment, label: tKey(`sandbox.deployment.${deployment}`) }))}
-                onChange={(value) => update((draft) => { draft.conditions.deployment = value as Deployment; })}
-              />
-            </Element>
-            <Element screen={SCREEN} id="conditions_panel.actions" parent="conditions_panel">
-              <Box rect={{ x: 0, y: 0, w: 12, h: 2 }}>
-                <Button textKey="sandbox.start" kind="primary" fill onClick={start} />
-              </Box>
-              <Box rect={{ x: 13, y: 0, w: 12, h: 2 }}>
-                <Button textKey="sandbox.random_all" fill onClick={randomize} />
-              </Box>
-              <Box rect={{ x: 26, y: 0, w: 12, h: 2 }}>
-                <Button textKey="sandbox.import" fill onClick={importJson} />
-              </Box>
-              <Box rect={{ x: 39, y: 0, w: 12, h: 2 }}>
-                <Button textKey="sandbox.export" fill onClick={exportJson} />
-              </Box>
-            </Element>
-          </Element>
-        </>
+      {toast ? (
+        <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
     </div>
   );
@@ -666,48 +635,9 @@ function blankShip(shipTypeId: string): SandboxShip {
   };
 }
 
-function FieldShell({
-  id,
-  labelKey,
-  hasLabel = true,
-  baseRelative = false,
-  children,
-}: {
-  id: string;
-  labelKey: string;
-  hasLabel?: boolean;
-  baseRelative?: boolean;
-  children: ReactNode;
-}) {
-  const { tKey } = useI18n();
-  if (baseRelative) {
-    return (
-      <Element screen={SCREEN} id={id}>
-        {hasLabel ? (
-          <Element screen={SCREEN} id={`${id}.label`} parent={id}>
-            <span className="sa-cell">{tKey(labelKey)}</span>
-          </Element>
-        ) : null}
-        <Element screen={SCREEN} id={`${id}.field`} parent={id}>
-          {children}
-        </Element>
-      </Element>
-    );
-  }
-  return (
-    <>
-      <Element screen={SCREEN} id={id} />
-      {hasLabel ? (
-        <Element screen={SCREEN} id={`${id}.label`}>
-          <span className="sa-cell">{tKey(labelKey)}</span>
-        </Element>
-      ) : null}
-      <Element screen={SCREEN} id={`${id}.field`}>
-        {children}
-      </Element>
-    </>
-  );
-}
+/* --- Editor field shells -------------------------------------------------- */
+/* Each keeps its layout-era identity (`data-field`) and clamping; the label
+   rides the kit FieldRow (or is dropped where the old editor dropped it). */
 
 function NumberField({
   id,
@@ -715,7 +645,7 @@ function NumberField({
   value,
   min = 0,
   max,
-  baseRelative = false,
+  hasLabel = true,
   onChange,
 }: {
   id: string;
@@ -723,20 +653,23 @@ function NumberField({
   value: number;
   min?: number;
   max: number;
-  baseRelative?: boolean;
+  hasLabel?: boolean;
   onChange: (value: number) => void;
 }) {
+  const control = (
+    <Field
+      value={String(value)}
+      ariaLabelKey={labelKey}
+      onChange={(text) => {
+        const parsed = Number(text.replace(/[^0-9]/g, ""));
+        onChange(Math.max(min, Math.min(max, Number.isFinite(parsed) ? parsed : min)));
+      }}
+    />
+  );
   return (
-    <FieldShell id={id} labelKey={labelKey} baseRelative={baseRelative}>
-      <Field
-        value={String(value)}
-        ariaLabelKey={labelKey}
-        onChange={(text) => {
-          const parsed = Number(text.replace(/[^0-9]/g, ""));
-          onChange(Math.max(min, Math.min(max, Number.isFinite(parsed) ? parsed : min)));
-        }}
-      />
-    </FieldShell>
+    <div data-field={id} className="sandbox__cell">
+      {hasLabel ? <FieldRow labelKey={labelKey}>{control}</FieldRow> : control}
+    </div>
   );
 }
 
@@ -745,20 +678,19 @@ function TextField({
   labelKey,
   value,
   hasLabel = true,
-  baseRelative = false,
   onChange,
 }: {
   id: string;
   labelKey: string;
   value: string;
   hasLabel?: boolean;
-  baseRelative?: boolean;
   onChange: (value: string) => void;
 }) {
+  const control = <Field value={value} ariaLabelKey={labelKey} onChange={onChange} />;
   return (
-    <FieldShell id={id} labelKey={labelKey} hasLabel={hasLabel} baseRelative={baseRelative}>
-      <Field value={value} ariaLabelKey={labelKey} onChange={onChange} />
-    </FieldShell>
+    <div data-field={id} className="sandbox__cell">
+      {hasLabel ? <FieldRow labelKey={labelKey}>{control}</FieldRow> : control}
+    </div>
   );
 }
 
@@ -768,7 +700,6 @@ function SelectField({
   value,
   options,
   hasLabel = true,
-  baseRelative = false,
   onChange,
 }: {
   id: string;
@@ -776,26 +707,28 @@ function SelectField({
   value: string;
   options: { value: string; label: string }[];
   hasLabel?: boolean;
-  baseRelative?: boolean;
   onChange: (value: string) => void;
 }) {
   const { tKey } = useI18n();
+  const control = (
+    <label className="sa-field">
+      <select
+        className="sa-field__input"
+        aria-label={tKey(labelKey)}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   return (
-    <FieldShell id={id} labelKey={labelKey} hasLabel={hasLabel} baseRelative={baseRelative}>
-      <label className="sa-field">
-        <select
-          className="sa-field__input"
-          aria-label={tKey(labelKey)}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    </FieldShell>
+    <div data-field={id} className="sandbox__cell">
+      {hasLabel ? <FieldRow labelKey={labelKey}>{control}</FieldRow> : control}
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
- * The shared confirm dialog (docs/80-UI-UX.md §4.7: `confirm_dialog.tscn` —
- * message + confirm/cancel, centred, dimming the background; §4.3: Enter/Y
- * confirm, N/Esc cancel).
+ * The shared confirm dialog (docs/80-UI-UX.md §4.9.1: dialogs are indigo
+ * message windows — gold frames over the dim layer; §4.7: message +
+ * confirm/cancel, centred; §4.3: Enter/Y confirm, N/Esc cancel).
  *
  * Two shapes, one component:
  *  · **in place** — `<ConfirmDialog request={…} onConfirm={…} onCancel={…}/>`
@@ -18,9 +18,11 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { navigate, parseHash } from "../app/router";
 import { useI18n, type L10nString, type L10nValue } from "../i18n";
-import { Element, type ScreenId } from "../layout";
+import type { ScreenId } from "./ids";
 import { useGameState } from "../state/context";
-import { ButtonEl, PanelEl } from "./common";
+import { Button, Dialog, Footer } from "../kit";
+import { Label } from "./common";
+import "./Confirm.css";
 
 export const CONFIRM_SCREEN: ScreenId = "confirm";
 
@@ -131,32 +133,28 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: ConfirmDialogPro
 
   return (
     <>
-      <Element screen={CONFIRM_SCREEN} id="dim" className="sa-dim" />
-      <PanelEl screen={CONFIRM_SCREEN} id="panel">
-        <Element screen={CONFIRM_SCREEN} id="panel.body" parent="panel">
-          <Element screen={CONFIRM_SCREEN} id="panel.body.message" parent="panel.body">
-            {request.titleKey ? (
-              <div className="sa-label sa-label--heading">{tKey(request.titleKey)}</div>
-            ) : null}
-            <div className="sa-label">{message}</div>
-          </Element>
-        </Element>
-        <ButtonEl
-          screen={CONFIRM_SCREEN}
-          id="panel.confirm"
-          parent="panel"
-          text={tKey(request.confirmKey ?? "ui.confirm")}
-          kind={request.destructive ? "danger" : "primary"}
-          onClick={onConfirm}
-        />
-        <ButtonEl
-          screen={CONFIRM_SCREEN}
-          id="panel.cancel"
-          parent="panel"
-          text={tKey(request.cancelKey ?? "ui.cancel")}
-          onClick={onCancel}
-        />
-      </PanelEl>
+      <div className="confirm__dim sa-dim" aria-hidden="true" />
+
+      <div className="sa-fill-center confirm__layer">
+        <Dialog titleKey={request.titleKey} className="confirm__window">
+          <Label textValue={message} light wrap />
+          <Footer
+            buttons={[
+              <Button
+                key="confirm"
+                text={tKey(request.confirmKey ?? "ui.confirm")}
+                kind={request.destructive ? "danger" : "primary"}
+                onClick={onConfirm}
+              />,
+              <Button
+                key="cancel"
+                text={tKey(request.cancelKey ?? "ui.cancel")}
+                onClick={onCancel}
+              />,
+            ]}
+          />
+        </Dialog>
+      </div>
     </>
   );
 }
@@ -178,5 +176,9 @@ export function ConfirmScreen() {
     opener: fallback,
   };
 
-  return <ConfirmDialog request={request} onConfirm={onConfirm} onCancel={onCancel} />;
+  return (
+    <div className="sa-screen confirm" data-screen={CONFIRM_SCREEN}>
+      <ConfirmDialog request={request} onConfirm={onConfirm} onCancel={onCancel} />
+    </div>
+  );
 }

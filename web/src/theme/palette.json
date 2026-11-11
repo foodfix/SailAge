@@ -130,7 +130,10 @@
     "CLOTH_ENGLAND": "#274b8f",
     "CLOTH_HOLLAND": "#d97b1e",
     "CLOTH_OTTOMAN": "#6a3d9a",
-    "CLOTH_ITALY": "#c9a227"
+    "CLOTH_ITALY": "#c9a227",
+    "BUTTON_HOVER": "#fff7e2",
+    "DIALOG_FIELD": "#232a52",
+    "TABLE_ZEBRA": "#ecdcb4"
   },
   "numbers": {
     "CHROME_TILE": 32,
@@ -141,5 +144,10 @@
     "BOTTOM_BAR_H": 64,
     "ROW_H": 32,
     "DIALOG_W": 480
+  },
+  "retired": {
+    "colors": [],
+    "numbers": ["CHROME_TILE"],
+    "note": "M7 (80-* §4.9.1, 10-* §4.24): the 32px chrome tile unit is retired with the ui_layout/chrome era — the key stays (append-only) so token bytes are stable, but new work must not consume it; the web base unit is BASE_UNIT."
   }
 }

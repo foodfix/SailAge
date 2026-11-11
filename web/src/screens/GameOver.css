@@ -1,0 +1,27 @@
+/* S9 game over — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.gameover__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.gameover__layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* The centered indigo bookend dialog. */
+.gameover__window {
+  width: calc(var(--sailage-dialog-w) * 1.5);
+}
+
+.gameover__line {
+  margin-top: calc(var(--sailage-base-unit) / 2);
+}
+
+.gameover__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sailage-margin);
+}

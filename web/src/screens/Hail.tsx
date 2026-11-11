@@ -1,5 +1,6 @@
 /**
- * The at-sea hail modal (docs/80-UI-UX.md §4.10.2; docs/60-* §4.11.15).
+ * The at-sea hail modal (docs/80-UI-UX.md §4.10.2; the §4.9.1 message
+ * window; docs/60-* §4.11.15).
  *
  * The option matrix (role × stance × skill), its gates and its prices are
  * server-built; the screen renders the rows and posts the frozen
@@ -8,16 +9,21 @@
  * action for the option list while a fleet is known, and otherwise derives
  * a disabled four-row display from the encounter/captain state it already
  * has. No chance, price or clamp is computed here.
+ *
+ * Composition (§4.9.1): a centered indigo Dialog over the dim layer —
+ * captain portrait + title, the option buttons with their terms inline
+ * (the §4.6.1 stepper for buy supplies), the result line and the close verb.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Button, Icon, Toast } from "../kit";
-import { ButtonEl, getHailFleetId, LabelEl, PanelEl, peopleAction, useToastState } from "./common";
+import { Button, Dialog, Icon, Toast } from "../kit";
+import { getHailFleetId, Label, peopleAction, useToastState } from "./common";
 import { captainCanon } from "./CharacterCard";
+import type { ScreenId } from "./ids";
 import { navigate } from "../app/router";
+import "./Hail.css";
 
 const SCREEN: ScreenId = "hail";
 const PLUS = String.fromCharCode(0x2b);
@@ -47,13 +53,6 @@ function optionLabelKey(id: string): string {
   if (id === "intimidate") return "hail.option.intimidate";
   return "hail.option.befriend";
 }
-
-const ACTION_IDS: Record<string, string> = {
-  ask_rumours: "rows.ask_rumours.action",
-  buy_supplies: "rows.buy_supplies.action",
-  intimidate: "rows.intimidate.action",
-  befriend: "rows.befriend.action",
-};
 
 function termsKey(id: string): string {
   if (id === "ask_rumours") return "hail.rumours.intel_terms";
@@ -146,129 +145,85 @@ export function Hail({ fleetId }: { fleetId?: string }) {
   const cloth = canon?.role ? `pp_cloth_${canon.role}` : "pp_cloth_trader";
   const portrait = ["pp_base", cloth];
 
-  const rowModels: { kind: "portrait" | "option" | "terms"; option?: HailOption; hidden?: boolean }[] = [
-    { kind: "portrait" },
-  ];
-  for (const option of rows) {
-    rowModels.push({ kind: "option", option });
-    rowModels.push({ kind: "terms", option, hidden: option.id === "ask_rumours" && !option.intel });
-  }
-
   return (
-    <div className="sa-screen">
-      <PanelEl screen={SCREEN} id="dim" skin="backdrop" className="sa-dim" />
-      <PanelEl screen={SCREEN} id="panel" skin="panel">
-        <LabelEl
-          screen={SCREEN}
-          id="panel.title"
-          parent="panel"
-          textKey="hail.title"
-          values={{ name: name ?? tKey("interact.unknown_name") }}
-          title
-        />
-        <Box rect={{ x: 1, y: 1, w: 13, h: 12 }} className="sa-scroll">
-          <ListRows
-            screen={SCREEN}
-            listId="rows"
-            count={rowModels.length}
-            renderRow={(index) => {
-              const model = rowModels[index];
-              if (!model) return null;
-              if (model.kind === "portrait") {
-                return (
-                  <Element screen={SCREEN} id="rows.portrait.bust" hidden={!canon}>
-                    {portrait.map((sprite) => (
-                      <Box key={sprite} rect={{ x: 0, y: 0, w: 2, h: 2 }}>
-                        <Icon id={sprite} />
-                      </Box>
-                    ))}
-                  </Element>
-                );
-              }
-              const option = model.option;
-              if (!option) return null;
-              if (model.kind === "terms") {
-                const termsId = option.id === "ask_rumours"
-                  ? "rows.terms_rumours.terms"
-                  : option.id === "buy_supplies"
-                    ? "rows.terms_supplies.terms"
-                    : option.id === "befriend"
-                      ? "rows.terms_befriend.terms"
-                      : "";
-                if (!termsId) {
-                  return (
-                    <span className="sa-cell sa-label--dim">{tKey(termsKey(option.id))}</span>
-                  );
-                }
-                return (
-                  <Element screen={SCREEN} id={termsId} hidden={model.hidden}>
-                    <span className="sa-cell sa-label--dim">{tKey(termsKey(option.id))}</span>
-                  </Element>
-                );
-              }
-              return (
-                <>
-                  <Element screen={SCREEN} id={ACTION_IDS[option.id] ?? "rows.ask_rumours.action"}>
+    <div className="sa-screen hail" data-screen={SCREEN}>
+      <div className="hail__dim sa-dim" aria-hidden="true" />
+
+      <div className="sa-fill-center hail__center">
+        <Dialog className="hail__dialog" scroll>
+          <div className="hail__stack">
+            <div className="hail__head">
+              <div className="hail__head_text">
+                <Label
+                  textKey="hail.title"
+                  values={{ name: name ?? tKey("interact.unknown_name") }}
+                  title
+                  light
+                />
+                {resultKey ? <Label textKey={resultKey} /> : null}
+              </div>
+              {canon ? (
+                <div className="hail__portrait" aria-hidden="true">
+                  {portrait.map((sprite) => (
+                    <Icon key={sprite} id={sprite} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {rows.map((option) => (
+              <div className="hail__option" key={option.id}>
+                <Button
+                  textKey={optionLabelKey(option.id)}
+                  disabled={!option.enabled}
+                  titleKey={option.reason_key}
+                  fill
+                  onClick={() => run(option)}
+                />
+                {option.id === "ask_rumours" && !option.intel ? null : (
+                  <Label textKey={termsKey(option.id)} tone="dim" wrap />
+                )}
+                {option.id === "buy_supplies" ? (
+                  <div className="hail__stepper">
                     <Button
-                      textKey={optionLabelKey(option.id)}
-                      disabled={!option.enabled}
-                      titleKey={option.reason_key}
-                      fill
-                      onClick={() => run(option)}
+                      text={MINUS}
+                      kind="quiet"
+                      compact
+                      disabled={(option.max_qty ?? 0) <= 0}
+                      onClick={() => setQty((value) => Math.max(0, value - 10))}
                     />
-                  </Element>
-                  {option.id === "buy_supplies" ? (
-                    <>
-                      <Element screen={SCREEN} id="rows.buy_supplies.minus">
-                        <Button
-                          text={MINUS}
-                          kind="quiet"
-                          disabled={(option.max_qty ?? 0) <= 0}
-                          fill
-                          onClick={() => setQty((value) => Math.max(0, value - 10))}
-                        />
-                      </Element>
-                      <Element screen={SCREEN} id="rows.buy_supplies.qty">
-                        <span className="sa-cell sa-label--center">{qty}</span>
-                      </Element>
-                      <Element screen={SCREEN} id="rows.buy_supplies.plus">
-                        <Button
-                          text={PLUS}
-                          kind="quiet"
-                          disabled={qty + 10 > (option.max_qty ?? 0)}
-                          fill
-                          onClick={() => setQty((value) => Math.min(option.max_qty ?? value, value + 10))}
-                        />
-                      </Element>
-                      <Element screen={SCREEN} id="rows.buy_supplies.cost">
-                        <span className="sa-cell sa-label--right">
-                          {option.unit_prices
-                            ? fmt("ui.gold_amount", {
-                                gold: qty * (option.unit_prices.provisions + option.unit_prices.water),
-                              })
-                            : ""}
-                        </span>
-                      </Element>
-                    </>
-                  ) : null}
-                </>
-              );
-            }}
-          />
-        </Box>
-        {resultKey ? (
-          <Box rect={{ x: 1, y: 13, w: 9, h: 1 }}>
-            <span className="sa-cell">{tKey(resultKey)}</span>
-          </Box>
-        ) : null}
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.ok"
-          parent="panel"
-          textKey="ui.close"
-          onClick={() => navigate(state.current_port ? "port" : "world")}
-        />
-      </PanelEl>
+                    <Label textValue={String(qty)} align="center" className="hail__qty" />
+                    <Button
+                      text={PLUS}
+                      kind="quiet"
+                      compact
+                      disabled={qty + 10 > (option.max_qty ?? 0)}
+                      onClick={() => setQty((value) => Math.min(option.max_qty ?? value, value + 10))}
+                    />
+                    <Label
+                      textValue={
+                        option.unit_prices
+                          ? fmt("ui.gold_amount", {
+                              gold: qty * (option.unit_prices.provisions + option.unit_prices.water),
+                            })
+                          : ""
+                      }
+                      align="right"
+                      className="hail__cost"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ))}
+
+            <Button
+              textKey="ui.close"
+              onClick={() => navigate(state.current_port ? "port" : "world")}
+            />
+          </div>
+        </Dialog>
+      </div>
+
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}

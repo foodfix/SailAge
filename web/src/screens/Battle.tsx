@@ -1,10 +1,15 @@
 /**
  * S10 — the sea-battle screen (docs/80-UI-UX.md §4.7.1; docs/60-COMBAT.md
- * §4.2–§4.9c, §4.11.9/§4.11.10).
+ * §4.2–§4.9c, §4.11.9/§4.11.10; the M7 kit composition per 80-* §4.9.1).
  *
  * A pure renderer over the frozen `battle_tick` stream (`90-*` §0.3): the
- * canvas draws the 48×30 world, the HUD binds every `battle` row of
- * data/ui_layout.json, and every control becomes a frozen WS intent
+ * canvas draws the 48×30 world and the DOM chrome is a flow-laid stack of
+ * kit atoms — the header plate (battle.title · day · round), the order
+ * strip (heading / speed band / assigned target cycles + the §4.9b wind
+ * chip and the side morales), the bottom HUD (speed/heading readouts, the
+ * reload side pair, action verbs with their gates, the shot selector and
+ * the presentation log) and the two overlays (the Esc menu and the
+ * §4.12.2 after-action dialog). Every control becomes a frozen WS intent
  * (`battle_order` + `battle_action`). No rule lives here — the server owns
  * the engine; the only client arithmetic is presentation (bars, headings,
  * a Chebyshev read for the shot selector's enabled state).
@@ -22,8 +27,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGameClient } from "../client/context";
 import type { CannonSide, ShotType } from "../client/types";
 import { content, useI18n } from "../i18n";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Button, Toast } from "../kit";
+import type { ScreenId } from "./ids";
+import { Button, Dialog, Footer, Toast } from "../kit";
+import { Label } from "./common";
 import {
   ARMOR_PIERCING_GATE,
   BattleCanvas,
@@ -38,7 +44,7 @@ import type { BattleOrder, BattleShip, BattleView } from "../canvas/battle";
 import { useGameState } from "../state/context";
 import type { GameSnapshot } from "../state/types";
 import { navigate } from "../app/router";
-import { ButtonEl, LabelEl, PanelEl } from "./common";
+import "./Battle.css";
 
 const SCREEN: ScreenId = "battle";
 
@@ -146,12 +152,6 @@ export function BattleScreen() {
   const pushLog = useCallback((line: LogLine) => {
     setLogLines((current) => [...current.slice(-2), line]);
   }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
 
   useEffect(
     () =>
@@ -390,10 +390,27 @@ export function BattleScreen() {
   };
 
   return (
-    <div className="sa-screen" data-battle-screen="battle">
-      <Element screen={SCREEN} id="background" skin="backdrop" />
+    <div className="sa-screen battle" data-screen={SCREEN} data-battle-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
+      <div className="battle__top sa-plate">
+        <div className="battle__top_names">
+          <Label textKey="battle.title" title />
+          <Label
+            textValue={fmt("ui.day_nation_gold", {
+              day: snapshot.day,
+              nation: t(content.nationName(snapshot.player.nation_id)),
+              gold: snapshot.gold,
+            })}
+          />
+        </div>
+        <Label
+          className="battle__top_round"
+          textValue={fmt("battle.round", { round: view.round })}
+          tone={view.ordersDue ? "accent" : "default"}
+        />
+      </div>
 
-      <Box rect={{ x: 0, y: 2, w: 60, h: 29 }}>
+      <div className="battle__field sa-grow">
         <BattleCanvas
           scene={{
             view,
@@ -412,296 +429,217 @@ export function BattleScreen() {
             }
           }}
         />
-      </Box>
+      </div>
 
-      <PanelEl screen={SCREEN} id="top_bar" skin="panel" />
-      <LabelEl screen={SCREEN} id="top.title" textKey="battle.title" title />
-      <LabelEl
-        screen={SCREEN}
-        id="top.day"
-        textValue={fmt("ui.day_nation_gold", {
-          day: snapshot.day,
-          nation: t(content.nationName(snapshot.player.nation_id)),
-          gold: snapshot.gold,
-        })}
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="top.round"
-        textValue={fmt("battle.round", { round: view.round })}
-        tone={view.ordersDue ? "accent" : "default"}
-      />
-      <Element screen={SCREEN} id="top.weather">
-        <Box rect={{ x: 0, y: 0, w: 10, h: 2 }}>
-          <span className="sa-label sa-label--accent">
-            {`${tKey(`world.weather.${view.weather}`)} · ${view.wind.dir}`}
-          </span>
-        </Box>
-        {/* The §4.9b order window — the layout owns no rows for it, so it
-            rides the wide top-weather row as extra positioned controls
-            (reported contract gap). */}
-        <Box rect={{ x: 10, y: 0, w: 6, h: 2 }}>
+      {/* The §4.9b order strip: wind/weather chip, the heading / speed /
+          target cycles and the two side morales. */}
+      <div className="battle__order sa-verb-bar">
+        <Label
+          className="battle__order_weather"
+          textValue={`${tKey(`world.weather.${view.weather}`)} · ${view.wind.dir}`}
+          tone="accent"
+        />
+        <div className="battle__order_main">
           <Button
             text={`${tKey("battle.heading")} ${headingToken}`}
-            fill
             onClick={cycleHeading}
           />
-        </Box>
-        <Box rect={{ x: 16, y: 0, w: 6, h: 2 }}>
           <Button
             text={`${tKey("battle.speed")} ${order.speedBand[0]}–${order.speedBand[1]}`}
-            fill
             onClick={cycleBand}
           />
-        </Box>
-        <Box rect={{ x: 22, y: 0, w: 8, h: 2 }}>
           <Button
             text={target ? t(content.shipName(target.kind)) : tKey("battle.target.none")}
-            fill
             onClick={cycleTarget}
           />
-        </Box>
-        <Box rect={{ x: 31, y: 0, w: 5, h: 2 }}>
-          <span className="sa-label sa-label--dim">{`${tKey("battle.morale")} ${moralePlayer}`}</span>
-        </Box>
-        <Box rect={{ x: 36, y: 0, w: 5, h: 2 }}>
-          <span className="sa-label sa-label--dim">{`${tKey("battle.morale")} ${moraleEnemy}`}</span>
-        </Box>
-      </Element>
+        </div>
+        <div className="battle__order_morale">
+          <Label textValue={`${tKey("battle.morale")} ${moralePlayer}`} tone="dim" />
+          <Label textValue={`${tKey("battle.morale")} ${moraleEnemy}`} tone="dim" />
+        </div>
+      </div>
 
-      <PanelEl screen={SCREEN} id="bottom_panel" skin="panel" />
+      <div className="battle__bottom sa-plate">
+        <div className="battle__row">
+          <Label
+            textValue={
+              selected
+                ? `${tKey("battle.speed")} ${Math.hypot(selected.velocity.x, selected.velocity.y).toFixed(1)}`
+                : tKey("battle.speed")
+            }
+          />
+          <Label
+            textValue={selected ? `${tKey("battle.heading")} ${selected.heading8}` : tKey("battle.heading")}
+          />
+          <Button
+            textKey="battle.reload.port"
+            kind={selectedSide === "port" ? "primary" : "default"}
+            onClick={() => setSelectedSide("port")}
+          />
+          <Button
+            textKey="battle.reload.starboard"
+            kind={selectedSide === "starboard" ? "primary" : "default"}
+            onClick={() => setSelectedSide("starboard")}
+          />
+          <Label textValue={`${tKey("battle.wind")} ${view.wind.dir}`} tone="accent" />
+          <Label
+            textValue={tKey(`world.weather.${view.weather}`)}
+            tone={view.weather === "storm" ? "bad" : view.weather === "strong" ? "warn" : "accent"}
+          />
+          <Button textKey="battle.fit" onClick={() => setFitSignal((value) => value + 1)} />
+        </div>
 
-      <LabelEl
-        screen={SCREEN}
-        id="bottom.speed"
-        textValue={
-          selected
-            ? `${tKey("battle.speed")} ${Math.hypot(selected.velocity.x, selected.velocity.y).toFixed(1)}`
-            : tKey("battle.speed")
-        }
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="bottom.heading"
-        textValue={selected ? `${tKey("battle.heading")} ${selected.heading8}` : tKey("battle.heading")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="bottom.reload_port"
-        textKey="battle.reload.port"
-        kind={selectedSide === "port" ? "primary" : "default"}
-        onClick={() => setSelectedSide("port")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="bottom.reload_starboard"
-        textKey="battle.reload.starboard"
-        kind={selectedSide === "starboard" ? "primary" : "default"}
-        onClick={() => setSelectedSide("starboard")}
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="bottom.wind"
-        textValue={`${tKey("battle.wind")} ${view.wind.dir}`}
-        tone="accent"
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="bottom.weather_label"
-        textValue={tKey(`world.weather.${view.weather}`)}
-        tone={view.weather === "storm" ? "bad" : view.weather === "strong" ? "warn" : "accent"}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="bottom.fit"
-        textKey="battle.fit"
-        onClick={() => setFitSignal((value) => value + 1)}
-      />
+        <div className="battle__row">
+          <Button
+            text={target ? t(content.shipName(target.kind)) : tKey("battle.target.none")}
+            onClick={cycleTarget}
+          />
+          <Button
+            textKey="battle.action.cannon"
+            kind="primary"
+            disabled={!canFire}
+            onClick={() => act("broadside")}
+          />
+          {/* No `ram` verb exists in the frozen §0.3 intent table — the Phase-9
+              action set is broadside/hook/retreat/surrender. Rendered disabled. */}
+          <Button textKey="battle.action.ram" disabled />
+          <Button
+            textKey="battle.action.board"
+            disabled={!canHook}
+            onClick={() => act("hook")}
+          />
+          {/* No `hold` verb either: this issues the order five-tuple only. */}
+          <Button
+            textKey="battle.action.hold"
+            onClick={() => {
+              sendOrder();
+              pushLog({ key: "battle.action.hold", values: {} });
+            }}
+          />
+        </div>
 
-      <ButtonEl
-        screen={SCREEN}
-        id="actions.target"
-        text={target ? t(content.shipName(target.kind)) : tKey("battle.target.none")}
-        onClick={cycleTarget}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="actions.cannon"
-        textKey="battle.action.cannon"
-        kind="primary"
-        disabled={!canFire}
-        onClick={() => act("broadside")}
-      />
-      {/* No `ram` verb exists in the frozen §0.3 intent table — the Phase-9
-          action set is broadside/hook/retreat/surrender. Rendered disabled. */}
-      <ButtonEl screen={SCREEN} id="actions.ram" textKey="battle.action.ram" disabled />
-      <ButtonEl
-        screen={SCREEN}
-        id="actions.board"
-        textKey="battle.action.board"
-        disabled={!canHook}
-        onClick={() => act("hook")}
-      />
-      {/* No `hold` verb either: this issues the order five-tuple only. */}
-      <ButtonEl
-        screen={SCREEN}
-        id="actions.hold"
-        textKey="battle.action.hold"
-        onClick={() => {
-          sendOrder();
-          pushLog({ key: "battle.action.hold", values: {} });
-        }}
-      />
+        <div className="battle__row">
+          <Button
+            textKey="battle.shot.round"
+            kind={selectedShot === "round" ? "primary" : "default"}
+            onClick={() => setSelectedShot("round")}
+          />
+          <Button
+            text={
+              shotLockedValue("chain") === null
+                ? tKey("battle.shot.chain")
+                : fmt("battle.shot.locked", { value: CHAIN_GATE })
+            }
+            kind={selectedShot === "chain" ? "primary" : "default"}
+            disabled={shotLockedValue("chain") !== null}
+            onClick={() => setSelectedShot("chain")}
+          />
+          <Button
+            text={
+              shotLockedValue("armor_piercing") === null
+                ? tKey("battle.shot.armor_piercing")
+                : fmt("battle.shot.locked", { value: ARMOR_PIERCING_GATE })
+            }
+            kind={selectedShot === "armor_piercing" ? "primary" : "default"}
+            disabled={shotLockedValue("armor_piercing") !== null}
+            onClick={() => setSelectedShot("armor_piercing")}
+          />
+          <Button
+            textKey="battle.shot.grape"
+            kind={selectedShot === "grape" ? "primary" : "default"}
+            disabled={!targetAdjacent}
+            onClick={() => setSelectedShot("grape")}
+          />
+        </div>
 
-      <ButtonEl
-        screen={SCREEN}
-        id="shots.round"
-        textKey="battle.shot.round"
-        kind={selectedShot === "round" ? "primary" : "default"}
-        onClick={() => setSelectedShot("round")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="shots.chain"
-        text={
-          shotLockedValue("chain") === null
-            ? tKey("battle.shot.chain")
-            : fmt("battle.shot.locked", { value: CHAIN_GATE })
-        }
-        kind={selectedShot === "chain" ? "primary" : "default"}
-        disabled={shotLockedValue("chain") !== null}
-        onClick={() => setSelectedShot("chain")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="shots.armor_piercing"
-        text={
-          shotLockedValue("armor_piercing") === null
-            ? tKey("battle.shot.armor_piercing")
-            : fmt("battle.shot.locked", { value: ARMOR_PIERCING_GATE })
-        }
-        kind={selectedShot === "armor_piercing" ? "primary" : "default"}
-        disabled={shotLockedValue("armor_piercing") !== null}
-        onClick={() => setSelectedShot("armor_piercing")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="shots.grape"
-        textKey="battle.shot.grape"
-        kind={selectedShot === "grape" ? "primary" : "default"}
-        disabled={!targetAdjacent}
-        onClick={() => setSelectedShot("grape")}
-      />
-
-      <LabelEl screen={SCREEN} id="log.0" textValue={logAt(0)} />
-      <LabelEl screen={SCREEN} id="log.1" textValue={logAt(1)} />
-      <LabelEl screen={SCREEN} id="log.2" textValue={logAt(2)} />
+        <div className="battle__log">
+          <Label textValue={logAt(0)} />
+          <Label textValue={logAt(1)} />
+          <Label textValue={logAt(2)} />
+        </div>
+      </div>
 
       {/* --- Battle menu (Esc): retreat / surrender / AI speed / back --- */}
-      <Element screen={SCREEN} id="menu" hidden={!menuOpen}>
-        <Element screen={SCREEN} id="menu.dim" parent="menu" />
-        <PanelEl screen={SCREEN} id="menu.panel" parent="menu">
-          <LabelEl
-            screen={SCREEN}
-            id="menu.panel.title"
-            parent="menu.panel"
-            textValue={
+      {menuOpen ? (
+        <div className="battle__overlay">
+          <div className="battle__overlay_dim sa-dim" aria-hidden="true" />
+          <Dialog
+            titleKey={
               pendingVerb
-                ? tKey(
-                    pendingVerb === "retreat"
-                      ? "battle.retreat.confirm"
-                      : "battle.surrender.confirm",
-                  )
-                : tKey("battle.title")
+                ? pendingVerb === "retreat"
+                  ? "battle.retreat.confirm"
+                  : "battle.surrender.confirm"
+                : "battle.title"
             }
-            heading
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="menu.panel.retreat"
-            parent="menu.panel"
-            textKey={pendingVerb === "retreat" ? "ui.confirm" : "battle.action.retreat"}
-            kind={pendingVerb === "retreat" ? "danger" : "default"}
-            onClick={() => {
-              if (pendingVerb === "retreat") act("retreat");
-              else setPendingVerb("retreat");
-            }}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="menu.panel.surrender"
-            parent="menu.panel"
-            textKey={pendingVerb === "surrender" ? "ui.confirm" : "battle.action.surrender"}
-            kind={pendingVerb === "surrender" ? "danger" : "default"}
-            onClick={() => {
-              if (pendingVerb === "surrender") act("surrender");
-              else setPendingVerb("surrender");
-            }}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="menu.panel.ai_animate"
-            parent="menu.panel"
-            textKey="battle.ai_speed.animate"
-            disabled={!aiInstant}
-            onClick={() => setAiInstant(false)}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="menu.panel.ai_instant"
-            parent="menu.panel"
-            textKey="battle.ai_speed.instant"
-            disabled={aiInstant}
-            onClick={() => setAiInstant(true)}
-          />
-          <ButtonEl
-            screen={SCREEN}
-            id="menu.panel.back"
-            parent="menu.panel"
-            textKey={pendingVerb ? "ui.cancel" : "ui.back"}
-            onClick={() => {
-              if (pendingVerb) setPendingVerb(null);
-              else setMenuOpen(false);
-            }}
-          />
-        </PanelEl>
-      </Element>
+            className="battle__dialog"
+          >
+            <div className="battle__stack">
+              <Button
+                textKey={pendingVerb === "retreat" ? "ui.confirm" : "battle.action.retreat"}
+                kind={pendingVerb === "retreat" ? "danger" : "default"}
+                onClick={() => {
+                  if (pendingVerb === "retreat") act("retreat");
+                  else setPendingVerb("retreat");
+                }}
+              />
+              <Button
+                textKey={pendingVerb === "surrender" ? "ui.confirm" : "battle.action.surrender"}
+                kind={pendingVerb === "surrender" ? "danger" : "default"}
+                onClick={() => {
+                  if (pendingVerb === "surrender") act("surrender");
+                  else setPendingVerb("surrender");
+                }}
+              />
+              <Button
+                textKey="battle.ai_speed.animate"
+                disabled={!aiInstant}
+                onClick={() => setAiInstant(false)}
+              />
+              <Button
+                textKey="battle.ai_speed.instant"
+                disabled={aiInstant}
+                onClick={() => setAiInstant(true)}
+              />
+              <Button
+                textKey={pendingVerb ? "ui.cancel" : "ui.back"}
+                onClick={() => {
+                  if (pendingVerb) setPendingVerb(null);
+                  else setMenuOpen(false);
+                }}
+              />
+            </div>
+          </Dialog>
+        </div>
+      ) : null}
 
       {/* --- After-action dialog (§4.12.2 outcome block) --- */}
-      <Element screen={SCREEN} id="after" hidden={!outcome}>
-        <Element screen={SCREEN} id="after.dim" parent="after" />
-        <PanelEl screen={SCREEN} id="after.panel" parent="after">
-          <LabelEl
-            screen={SCREEN}
-            id="after.panel.title"
-            parent="after.panel"
-            textKey="battle.after.title"
-            title
-          />
-          <Element screen={SCREEN} id="after.panel.lines_viewport" parent="after.panel">
-            <ListRows
-              screen={SCREEN}
-              listId="after_lines"
-              count={Math.min(afterLines.length, 4)}
-              renderRow={(index) => (
-                <span className="sa-label">{fmt(afterLines[index].key, afterLines[index].values)}</span>
-              )}
-            />
-          </Element>
-          <Element screen={SCREEN} id="after.panel.lines" parent="after.panel" hidden />
-          <ButtonEl
-            screen={SCREEN}
-            id="after.panel.continue"
-            parent="after.panel"
-            textKey="ui.back"
-            kind="primary"
-            onClick={() => {
-              setOutcome(null);
-              navigate("world");
-            }}
-          />
-        </PanelEl>
-      </Element>
+      {outcome ? (
+        <div className="battle__overlay">
+          <div className="battle__overlay_dim sa-dim" aria-hidden="true" />
+          <Dialog titleKey="battle.after.title" className="battle__dialog">
+            <div className="battle__stack">
+              <div className="battle__after_lines">
+                {afterLines.slice(0, 4).map((line, index) => (
+                  <Label key={index} textValue={fmt(line.key, line.values)} light />
+                ))}
+              </div>
+              <Footer
+                buttons={[
+                  <Button
+                    key="continue"
+                    textKey="ui.back"
+                    kind="primary"
+                    onClick={() => {
+                      setOutcome(null);
+                      navigate("world");
+                    }}
+                  />,
+                ]}
+              />
+            </div>
+          </Dialog>
+        </div>
+      ) : null}
 
       {toast ? <Toast messageKey={toast} tone="bad" onDismiss={() => setToast(null)} /> : null}
     </div>

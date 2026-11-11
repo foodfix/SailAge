@@ -1,10 +1,13 @@
 /**
- * The captain dossier (docs/80-UI-UX.md §4.11.3) — the §4.12 card plus the
- * familiarity-gated career log. Read-only.
+ * The captain dossier (docs/80-UI-UX.md §4.11.3; the §4.9.1 composition) —
+ * the §4.12 card plus the familiarity-gated career log, one scrollable
+ * parchment window centered over the dim layer. Read-only; `ui.close` (and
+ * `Escape`) step back to the intel window.
  *
  * Familiarity gates only the career log (locked): 3 = last-seen fleet
  * composition, 6 = home port + sighting history, 10 = the full lane picture.
- * The card above is never gated (identify = full reveal, §4.12.1).
+ * The card above is never gated (identify = full reveal, §4.12.1); locked
+ * sections render their hint lines dimmed.
  *
  * Missing server projection (reported): `GET /api/view/dossier` should carry
  * the already-localized gated log sections and the familiarity tier. Until
@@ -15,10 +18,12 @@
 import { useEffect } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameState } from "../state/context";
-import { Box, ListRows, type ScreenId } from "../layout";
-import { ButtonEl, LabelEl, PanelEl } from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Frame } from "../kit";
+import { Label } from "./common";
 import { CharacterCard, captainCanon } from "./CharacterCard";
 import { navigate } from "../app/router";
+import "./Dossier.css";
 
 const SCREEN: ScreenId = "dossier";
 const FAMILIARITY_TIERS = [3, 6, 10] as const;
@@ -65,8 +70,11 @@ export function Dossier({ captainId: requestedId }: { captainId?: string } = {})
   if (!canon) {
     return (
       <div className="sa-screen">
-        <PanelEl screen={SCREEN} id="dim" skin="backdrop" />
-        <div className="sa-cell">{tKey("ui.not_available")}</div>
+        <div className="sa-fill-center">
+          <Frame titleKey="dossier.title" className="dossier__fallback">
+            <div className="sa-cell">{tKey("ui.not_available")}</div>
+          </Frame>
+        </div>
       </div>
     );
   }
@@ -113,69 +121,37 @@ export function Dossier({ captainId: requestedId }: { captainId?: string } = {})
   };
 
   return (
-    <div className="sa-screen">
-      <PanelEl screen={SCREEN} id="dim" skin="backdrop" className="sa-dim" />
-      <PanelEl screen={SCREEN} id="panel" skin="panel">
-        <LabelEl
-          screen={SCREEN}
-          id="panel.title"
-          parent="panel"
-          textKey="dossier.title"
-          values={{ name }}
-          title
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="panel.header"
-          parent="panel"
-          textValue={headerParts.join(" · ")}
-          tone="dim"
-        />
-        <Box rect={{ x: 1, y: 3, w: 20, h: 14 }} className="sa-scroll">
-          <CharacterCard kind="npc" personId={captainId} statBlocks />
-        </Box>
-        <Box rect={{ x: 1, y: 3, w: 20, h: 19 }}>
-          <ListRows
-            screen={SCREEN}
-            listId="content_lines"
-            count={2}
-            renderRow={(index) => (
-              <div className="sa-cell" data-row={index}>
-                {index === 0
-                  ? `${tKey("dossier.familiarity")}: ${familiarity}`
-                  : tier > 0
-                    ? tKey(`dossier.tier.${FAMILIARITY_TIERS[tier - 1]}`)
-                    : ""}
-              </div>
-            )}
-          />
-        </Box>
-        <Box rect={{ x: 1, y: 3, w: 20, h: 19 }}>
-          <ListRows
-            screen={SCREEN}
-            listId="log"
-            count={LOG_SECTIONS.length}
-            renderRow={(index) => {
-              const locked = familiarity < FAMILIARITY_TIERS[index];
-              return (
-                <div data-row={index}>
-                  <div className="sa-cell sa-label--heading">{tKey(LOG_SECTIONS[index])}</div>
-                  <div className={`sa-cell${locked ? " sa-label--dim" : ""}`}>
-                    {sectionValue(index)}
+    <div className="sa-screen dossier" data-screen={SCREEN}>
+      <div className="dossier__dim sa-dim" aria-hidden="true" />
+
+      <div className="sa-fill-center dossier__center">
+        <Frame scroll className="dossier__window">
+          <div className="dossier__stack">
+            <Label textKey="dossier.title" values={{ name }} title />
+            <Label textValue={headerParts.join(" · ")} tone="dim" />
+
+            <CharacterCard kind="npc" personId={captainId} statBlocks />
+
+            <div className="dossier__log">
+              <Label textValue={`${tKey("dossier.familiarity")}: ${familiarity}`} />
+              {tier > 0 ? (
+                <Label textKey={`dossier.tier.${FAMILIARITY_TIERS[tier - 1]}`} tone="dim" />
+              ) : null}
+              {LOG_SECTIONS.map((sectionKey, index) => {
+                const locked = familiarity < FAMILIARITY_TIERS[index];
+                return (
+                  <div key={sectionKey} className="dossier__log_section" data-log={sectionKey}>
+                    <Label textKey={sectionKey} heading />
+                    <Label textValue={sectionValue(index)} tone={locked ? "dim" : "default"} wrap />
                   </div>
-                </div>
-              );
-            }}
-          />
-        </Box>
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.close"
-          parent="panel"
-          textKey="ui.close"
-          onClick={() => navigate("intel_window")}
-        />
-      </PanelEl>
+                );
+              })}
+            </div>
+
+            <Button textKey="ui.close" onClick={() => navigate("intel_window")} />
+          </div>
+        </Frame>
+      </div>
     </div>
   );
 }

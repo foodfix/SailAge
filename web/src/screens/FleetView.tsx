@@ -1,32 +1,29 @@
 /**
- * The fleet view (docs/80-UI-UX.md §4.5.1) — the intel window's 船队 tab and
- * the retired S15 body. Every number is a read of the authoritative state /
- * the content tables; every action is the frozen `fleet:*` verb.
+ * The fleet view (docs/80-UI-UX.md §4.5.1; the §4.9.1 composition) — the
+ * intel window's 船队 tab and the standalone route. A scrollable column of
+ * per-ship blocks (name/flagship line + promote verb, the stat lines with
+ * the durability value bar, the cargo stacks with their jettison verbs)
+ * over the pooled totals plate. Every number is a read of the authoritative
+ * state / the content tables; every action is the frozen `fleet:*` verb.
  *
  * Missing server projection (reported): `GET /api/view/fleet_view` should
  * carry each hull's effective speed + wind factor and each stack's own
  * days-of-supply (§4.10). The screen currently renders the base hull speed,
  * the weather label and the pooled `provisions` view's days; it performs no
- * formula. Promotion and jettison are port actions (§4.4), so the whole view
- * is read-only at sea with its reason.
+ * formula. Promotion and jettison are port actions (§4.4), so the whole
+ * view is read-only at sea with its reason.
  */
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import { Box, Element, type ScreenId } from "../layout";
+import type { ScreenId } from "./ids";
 import { Button, Toast, ValueBar } from "../kit";
-import {
-  fleetAction,
-  LabelEl,
-  StandaloneFrame,
-  useFetchedView,
-  useToastState,
-} from "./common";
+import { Label, StandaloneFrame, fleetAction, useFetchedView, useToastState } from "./common";
 import type { ShipState } from "../state/types";
+import "./FleetView.css";
 
 const SCREEN: ScreenId = "fleet_view";
 const FLEET_MAX = 5;
-const ROW_TILES = 7;
 
 function shortKind(key: "world.provisions" | "world.water", tKey: (key: string) => string): string {
   return tKey(key).replace("{amount}", "").trim();
@@ -71,7 +68,9 @@ export function FleetView({ embedded = false }: { embedded?: boolean }) {
     });
   };
 
-  const shipRows = state.fleet.map((ship: ShipState, index) => {
+  const weather = tKey(`world.weather.${state.world.weather}`);
+
+  const shipBlocks = state.fleet.map((ship: ShipState, index) => {
     const def = content.shipType(ship.ship_type_id);
     const shipName = t(content.shipName(ship.ship_type_id));
     const captain = Object.entries(state.officer_states).find(
@@ -94,121 +93,93 @@ export function FleetView({ embedded = false }: { embedded?: boolean }) {
     const used = Object.values(ship.cargo).reduce((a, b) => a + b, 0);
     const durabilityMax = def?.durability ?? ship.durability;
     const speed = def?.speed ?? 0;
-    const weather = tKey(`world.weather.${state.world.weather}`);
     return (
-      <div key={`${ship.ship_type_id}_${index}`} data-ship-index={index}>
-        <Box rect={{ x: 0, y: 0, w: 22, h: 1 }}>
-          <div className="sa-cell sa-label--heading">
-            {`${fmt("fleet.ship_n", { amount: index + 1 })} · ${shipName}${index === 0 ? ` · ${tKey("fleet.flagship")}` : ""}`}
-          </div>
-        </Box>
-        {index > 0 ? (
-          <Box rect={{ x: 26, y: 0, w: 6, h: 1 }}>
-            <Button
-              textKey="fleet.promote"
-              disabled={!atPort}
-              titleKey={reason}
-              fill
-              onClick={() => {
-                void fleetAction(client, "promote", { index }).then((result) => {
-                  if (!result.ok) showToast(result.error.msg, undefined, "bad");
-                });
-              }}
-            />
-          </Box>
-        ) : null}
-        <Box rect={{ x: 0, y: 1, w: 32, h: 1 }}>
-          <div className="sa-row">
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.durability", { current: ship.durability, max: durabilityMax })}
-              </span>
-            </div>
-            <div className="sa-row__cell">
-              <ValueBar
-                value={ship.durability}
-                max={durabilityMax}
-                tier={durabilityTier(ship.durability, durabilityMax)}
+      <div key={`${ship.ship_type_id}_${index}`} className="fleet__ship" data-ship-index={index}>
+        <div className="fleet__ship_head">
+          <Label
+            heading
+            textValue={`${fmt("fleet.ship_n", { amount: index + 1 })} · ${shipName}${index === 0 ? ` · ${tKey("fleet.flagship")}` : ""}`}
+          />
+          {index > 0 ? (
+            <div className="fleet__promote">
+              <Button
+                textKey="fleet.promote"
+                disabled={!atPort}
+                titleKey={reason}
+                fill
+                onClick={() => {
+                  void fleetAction(client, "promote", { index }).then((result) => {
+                    if (!result.ok) showToast(result.error.msg, undefined, "bad");
+                  });
+                }}
               />
             </div>
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.cargo", {
-                  used,
-                  capacity,
-                  free: Math.max(0, capacity - used),
-                })}
-              </span>
-            </div>
+          ) : null}
+        </div>
+        <div className="fleet__statline">
+          <Label textValue={fmt("fleet.stat.durability", { current: ship.durability, max: durabilityMax })} />
+          <div className="fleet__bar">
+            <ValueBar
+              value={ship.durability}
+              max={durabilityMax}
+              tier={durabilityTier(ship.durability, durabilityMax)}
+            />
           </div>
-        </Box>
-        <Box rect={{ x: 0, y: 2, w: 32, h: 1 }}>
-          <div className="sa-row">
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.crew", { crew: ship.crew, max: def?.crew_max ?? ship.crew })}
-              </span>
+          <Label
+            textValue={fmt("fleet.stat.cargo", {
+              used,
+              capacity,
+              free: Math.max(0, capacity - used),
+            })}
+            align="right"
+          />
+        </div>
+        <div className="fleet__statline">
+          <Label textValue={fmt("fleet.stat.crew", { crew: ship.crew, max: def?.crew_max ?? ship.crew })} />
+          <Label
+            textValue={fmt("fleet.stat.guns", { cannons: ship.cannons, slots: def?.armament_slots ?? ship.cannons })}
+            align="right"
+          />
+        </div>
+        <Label textValue={fmt("fleet.stat.speed", { speed, max: speed, wind: weather })} />
+        <div className="fleet__statline">
+          <Label
+            textValue={fmt("fleet.stat.supply", {
+              kind: shortKind("world.provisions", tKey),
+              amount: ship.provisions,
+              days: pooledDays ?? tKey("ui.not_available"),
+            })}
+          />
+          <Label
+            textValue={fmt("fleet.stat.supply", {
+              kind: shortKind("world.water", tKey),
+              amount: ship.water,
+              days: pooledDays ?? tKey("ui.not_available"),
+            })}
+            align="right"
+          />
+        </div>
+        <Label
+          tone="dim"
+          textValue={captain ? t(content.officerName(captain[0])) : tKey("officer.post.no_captain")}
+        />
+        <div className="fleet__stacks">
+          {stacks.map((stack) => (
+            <div key={stack.key} className="fleet__stack">
+              <Label textValue={`${stack.label} × ${stack.qty}`} />
+              <Button
+                textKey="fleet.jettison"
+                kind="quiet"
+                disabled={!atPort || stack.qty <= 0}
+                titleKey={reason}
+                fill
+                onClick={() =>
+                  jettison(index, shipName, stack.kind, stack.goodId ?? "", stack.qty)
+                }
+              />
             </div>
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.guns", { cannons: ship.cannons, slots: def?.armament_slots ?? ship.cannons })}
-              </span>
-            </div>
-          </div>
-        </Box>
-        <Box rect={{ x: 0, y: 3, w: 32, h: 1 }}>
-          <span className="sa-cell">
-            {fmt("fleet.stat.speed", { speed, max: speed, wind: weather })}
-          </span>
-        </Box>
-        <Box rect={{ x: 0, y: 4, w: 32, h: 1 }}>
-          <div className="sa-row">
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.supply", {
-                  kind: shortKind("world.provisions", tKey),
-                  amount: ship.provisions,
-                  days: pooledDays ?? tKey("ui.not_available"),
-                })}
-              </span>
-            </div>
-            <div className="sa-row__cell">
-              <span className="sa-cell">
-                {fmt("fleet.stat.supply", {
-                  kind: shortKind("world.water", tKey),
-                  amount: ship.water,
-                  days: pooledDays ?? tKey("ui.not_available"),
-                })}
-              </span>
-            </div>
-          </div>
-        </Box>
-        <Box rect={{ x: 0, y: 5, w: 32, h: 1 }}>
-          <span className="sa-cell sa-label--dim">
-            {captain
-              ? t(content.officerName(captain[0]))
-              : tKey("officer.post.no_captain")}
-          </span>
-        </Box>
-        <Box rect={{ x: 0, y: 6, w: 32, h: 1 }}>
-          <div className="sa-row">
-            {stacks.map((stack) => (
-              <div className="sa-row__cell" key={stack.key}>
-                <span className="sa-cell">{`${stack.label} × ${stack.qty}`}</span>
-                <Button
-                  textKey="fleet.jettison"
-                  kind="quiet"
-                  disabled={!atPort || stack.qty <= 0}
-                  titleKey={reason}
-                  fill
-                  onClick={() =>
-                    jettison(index, shipName, stack.kind, stack.goodId ?? "", stack.qty)
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        </Box>
+          ))}
+        </div>
       </div>
     );
   });
@@ -221,55 +192,37 @@ export function FleetView({ embedded = false }: { embedded?: boolean }) {
   }, 0);
 
   const body = (
-    <>
-      <LabelEl
-        screen={SCREEN}
-        id="summary"
-        textKey="fleet.count"
-        values={{ count: state.fleet.length, max: FLEET_MAX }}
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="mode_note"
-        textKey={reason ?? "fleet.full"}
-        values={{ max: FLEET_MAX }}
-        tone="warn"
-        hidden={atPort}
-      />
-      <LabelEl screen={SCREEN} id="ships_header" textKey="fleet.ship_header" heading />
-      <Element screen={SCREEN} id="ships_viewport" className="sa-scroll">
-        <Element screen={SCREEN} id="ships" parent="ships_viewport" hidden />
-        {shipRows.map((row, index) => (
-          <Box key={index} rect={{ x: 0, y: index * ROW_TILES, w: 32, h: ROW_TILES }}>
-            {row}
-          </Box>
-        ))}
-      </Element>
-      <Element screen={SCREEN} id="totals">
-        <Box rect={{ x: 1, y: 0, w: 30, h: 1 }}>
-          <div className="sa-cell sa-label--heading">{tKey("fleet.totals")}</div>
-        </Box>
-        <Box rect={{ x: 1, y: 1, w: 20, h: 1 }}>
-          <span className="sa-cell">
-            {`${fmt("world.provisions", { amount: pooledProvisions })} · ${fmt("world.water", { amount: pooledWater })}`}
-          </span>
-        </Box>
-        <Box rect={{ x: 20, y: 1, w: 11, h: 1 }}>
-          <span className="sa-cell sa-label--right">
-            {fmt("fleet.total_days", { days: pooledDays ?? tKey("ui.not_available") })}
-          </span>
-        </Box>
-        <Box rect={{ x: 20, y: 2, w: 11, h: 1 }}>
-          <span className="sa-cell sa-label--right">
-            {fmt("world.speed", { speed: slowest })}
-          </span>
-        </Box>
-      </Element>
+    <div className="fleet__body" data-screen={SCREEN}>
+      <Label textKey="fleet.count" values={{ count: state.fleet.length, max: FLEET_MAX }} />
+      {atPort ? null : (
+        <Label textKey={reason ?? "fleet.full"} values={{ max: FLEET_MAX }} tone="warn" />
+      )}
+      <Label textKey="fleet.ship_header" heading />
+      <div className="sa-scroll fleet__ships">
+        {shipBlocks}
+      </div>
+      <div className="fleet__totals">
+        <Label textKey="fleet.totals" heading />
+        <div className="fleet__totals_line">
+          <Label
+            textValue={`${fmt("world.provisions", { amount: pooledProvisions })} · ${fmt("world.water", { amount: pooledWater })}`}
+          />
+          <div className="sa-grow" />
+          <Label
+            align="right"
+            textValue={fmt("fleet.total_days", { days: pooledDays ?? tKey("ui.not_available") })}
+          />
+        </div>
+        <div className="fleet__totals_line">
+          <div className="sa-grow" />
+          <Label align="right" textValue={fmt("world.speed", { speed: slowest })} />
+        </div>
+      </div>
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 
-  return embedded ? body : <StandaloneFrame>{body}</StandaloneFrame>;
+  return embedded ? body : <StandaloneFrame className="fleet__window">{body}</StandaloneFrame>;
 }

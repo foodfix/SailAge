@@ -1,7 +1,10 @@
 /**
- * The officers roster (docs/80-UI-UX.md §4.6.2) — the intel window's 官员
- * tab: the employed table + the detail page, with the tavern's employable
- * offers appended while in port.
+ * The officers roster (docs/80-UI-UX.md §4.6.2; the §4.9.1 composition) —
+ * the intel window's 官员 tab and the standalone route: the employed table
+ * (kit zebra table: name · post · loyalty · wage + the switchable stat
+ * columns) + the detail page (the §4.12 card, the post·wage·recruit-port
+ * line and the fixed action row), with the tavern's employable offers
+ * appended while in port and the appoint post-picker over its own dim.
  *
  * Missing server projection (reported): `GET /api/view/officer_roster`
  * should carry the wage multiplier, cooldown gates, post prereqs and the
@@ -15,18 +18,12 @@ import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { RecruitRow } from "../state/views";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Button, Toast } from "../kit";
-import {
-  ButtonEl,
-  LabelEl,
-  peopleAction,
-  StandaloneFrame,
-  useFetchedView,
-  useToastState,
-} from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Footer, Frame, Row, Toast } from "../kit";
+import { Label, StandaloneFrame, peopleAction, useFetchedView, useToastState } from "./common";
 import { CharacterCard } from "./CharacterCard";
 import rawPosts from "../../../data/officer_posts.json";
+import "./OfficerRoster.css";
 
 const SCREEN: ScreenId = "officer_roster";
 const OFFICER_MAX = 12;
@@ -133,43 +130,25 @@ export function OfficerRoster({ embedded = false }: { embedded?: boolean }) {
       ];
 
   const rowCells = (row: (typeof allRows)[number]) => {
-    const statValues = statKeys.map((key) => {
-      const source = mode === "attributes" ? row.officer.attributes : row.officer.skills;
-      return Number(source[key] ?? 0);
-    });
-    return (
-      <>
-        <Box rect={{ x: 0, y: 0, w: 6, h: 1 }}>
-          <span className="sa-cell">{t(row.officer.name)}</span>
-        </Box>
-        <Box rect={{ x: 6, y: 0, w: 5, h: 1 }}>
-          <span className="sa-cell sa-label--accent">
-            {row.employed
-              ? postText(row.postId, row.shipId, tKey)
-              : tKey("tavern.recruit")}
-          </span>
-        </Box>
-        <Box rect={{ x: 11, y: 0, w: 2, h: 1 }}>
-          <span className="sa-cell sa-label--right">
-            {row.employed ? row.loyalty : ""}
-          </span>
-        </Box>
-        <Box rect={{ x: 13, y: 0, w: 4, h: 1 }}>
-          <span className="sa-cell">
-            {fmt("tavern.wage", { price: row.wage })}
-          </span>
-        </Box>
-        <Box rect={{ x: 17, y: 0, w: 15, h: 1 }}>
-          <div className="sa-row">
-            {statValues.map((value, index) => (
-              <div className="sa-row__cell" key={statKeys[index]}>
-                <span className="sa-cell sa-label--right">{value}</span>
-              </div>
-            ))}
-          </div>
-        </Box>
-      </>
-    );
+    const source = mode === "attributes" ? row.officer.attributes : row.officer.skills;
+    const statCells = statKeys.map((key) => (
+      <span key={key} className="sa-cell sa-cell--right">{Number(source[key] ?? 0)}</span>
+    ));
+    return [
+      <div className="sa-cell">{t(row.officer.name)}</div>,
+      <div className="sa-cell sa-label--accent">
+        {row.employed
+          ? postText(row.postId, row.shipId, tKey)
+          : tKey("tavern.recruit")}
+      </div>,
+      <div className="sa-cell sa-cell--right">
+        {row.employed ? row.loyalty : ""}
+      </div>,
+      <div className="sa-cell">
+        {fmt("tavern.wage", { price: row.wage })}
+      </div>,
+      ...statCells,
+    ];
   };
 
   const selectRow = (id: string, isEmployable: boolean) => {
@@ -210,258 +189,231 @@ export function OfficerRoster({ embedded = false }: { embedded?: boolean }) {
     });
   };
 
+  const appoint = (
+    body: Record<string, unknown>,
+    onOk: () => void,
+  ) => {
+    void peopleAction(client, "appoint", body).then((result) => {
+      if (!result.ok) showToast(result.error.msg, undefined, "bad");
+      else onOk();
+    });
+  };
+
   const table = (
-    <>
-      <LabelEl
-        screen={SCREEN}
-        id="slots"
+    <div className="roster__body" data-screen={SCREEN}>
+      <Label
         textKey="officers.slots"
         values={{ used: employed.length, max: OFFICER_MAX, wage: totalWage }}
       />
-      <LabelEl
-        screen={SCREEN}
-        id="mode_note"
-        textKey="officers.readonly_sea"
-        tone="warn"
-        hidden={atPort}
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="result"
-        textValue={toast ? (toast.values ? fmt(toast.messageKey, toast.values) : tKey(toast.messageKey)) : ""}
-        tone={toast?.tone === "bad" ? "bad" : "accent"}
-        hidden={!toast}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="toggles.attributes"
-        textKey="char.stats"
-        kind={mode === "attributes" ? "primary" : "default"}
-        onClick={() => setMode("attributes")}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="toggles.skills"
-        textKey="char.card.skills"
-        kind={mode === "skills" ? "primary" : "default"}
-        onClick={() => setMode("skills")}
-      />
-      <Element screen={SCREEN} id="table_viewport" className="sa-scroll">
-        <ListRows
-          screen={SCREEN}
-          listId="roster"
-          count={allRows.length + 1}
-          renderRow={(index) => {
-            if (index === 0) {
-              return (
-                <div className="sa-row">
-                  <div className="sa-row__cell">
-                    <span className="sa-cell sa-label--heading">{tKey("intel.officers.name")}</span>
-                  </div>
-                  <div className="sa-row__cell">
-                    <span className="sa-cell sa-label--heading">{tKey("officer.post.idle")}</span>
-                  </div>
-                  <div className="sa-row__cell">
-                    <span className="sa-cell sa-label--heading">{tKey("char.card.loyalty").replace("{amount}", "").trim()}</span>
-                  </div>
-                  <div className="sa-row__cell">
-                    <span className="sa-cell sa-label--heading">{tKey("intel.officers.wage")}</span>
-                  </div>
-                  <div className="sa-row__cell">
-                    <span className="sa-cell sa-label--heading">
-                      {statKeys
-                        .map((key) => tKey(mode === "attributes" ? `char.attr.${key}` : `skill.${key}`))
-                        .join(" · ")}
-                    </span>
-                  </div>
-                </div>
-              );
-            }
-            const row = allRows[index - 1];
-            if (!row) return null;
-            return (
-              <div
-                className="sa-card-button"
-                role="button"
-                tabIndex={0}
-                onClick={() => selectRow(row.id, !row.employed)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") selectRow(row.id, !row.employed);
-                }}
-              >
-                {rowCells(row)}
-              </div>
-            );
-          }}
+      {atPort ? null : <Label textKey="officers.readonly_sea" tone="warn" />}
+      {toast ? (
+        <Label
+          textValue={toast.values ? fmt(toast.messageKey, toast.values) : tKey(toast.messageKey)}
+          tone={toast.tone === "bad" ? "bad" : "accent"}
         />
-      </Element>
-      <LabelEl screen={SCREEN} id="table_empty" textKey="char.no_officers" hidden={allRows.length > 0} />
-      <LabelEl screen={SCREEN} id="table_empty_hint" textKey="officers.empty_hint" tone="dim" hidden={allRows.length > 0} />
-    </>
+      ) : null}
+      <div className="roster__toggles">
+        <Button
+          textKey="char.stats"
+          kind={mode === "attributes" ? "primary" : "default"}
+          onClick={() => setMode("attributes")}
+        />
+        <Button
+          textKey="char.card.skills"
+          kind={mode === "skills" ? "primary" : "default"}
+          onClick={() => setMode("skills")}
+        />
+      </div>
+      <div className="sa-scroll roster__table_wrap">
+        <div className="sa-table roster__table">
+          <Row
+            head
+            cols={[
+              <div className="sa-cell">{tKey("intel.officers.name")}</div>,
+              <div className="sa-cell">{tKey("officer.post.idle")}</div>,
+              <div className="sa-cell">{tKey("char.card.loyalty").replace("{amount}", "").trim()}</div>,
+              <div className="sa-cell">{tKey("intel.officers.wage")}</div>,
+              ...statKeys.map((key) => (
+                <div key={key} className="sa-cell sa-cell--right">
+                  {tKey(mode === "attributes" ? `char.attr.${key}` : `skill.${key}`)}
+                </div>
+              )),
+            ]}
+          />
+          {allRows.map((row) => (
+            <Row
+              key={row.id}
+              selected={selected === row.id}
+              onClick={() => selectRow(row.id, !row.employed)}
+              cols={rowCells(row)}
+            />
+          ))}
+        </div>
+      </div>
+      {allRows.length === 0 ? (
+        <>
+          <Label textKey="char.no_officers" />
+          <Label textKey="officers.empty_hint" tone="dim" />
+        </>
+      ) : null}
+    </div>
   );
 
   const detail = (
-    <>
-      <Element screen={SCREEN} id="detail">
-        <LabelEl
-          screen={SCREEN}
-          id="detail.line"
-          parent="detail"
-          textValue={
-            detailOfficer
-              ? `${postText(detailRun?.post_id ?? "", detailRun?.ship_id ?? undefined, tKey)} · ${fmt("tavern.wage", {
-                  price: Math.round(detailOfficer.wage_daily * Number(detailRun?.wage_mult ?? 1)),
-                })} · ${fmt("officers.recruited_at", {
-                  port: detailOfficer.recruit_ports.length > 0
-                    ? t(content.portName(detailOfficer.recruit_ports[0]))
-                    : tKey("char.none"),
-                })}`
-              : ""
-          }
+    <div className="roster__body" data-screen={SCREEN}>
+      {detailOfficer ? (
+        <Label
+          textValue={`${postText(detailRun?.post_id ?? "", detailRun?.ship_id ?? undefined, tKey)} · ${fmt("tavern.wage", {
+            price: Math.round(detailOfficer.wage_daily * Number(detailRun?.wage_mult ?? 1)),
+          })} · ${fmt("officers.recruited_at", {
+            port: detailOfficer.recruit_ports.length > 0
+              ? t(content.portName(detailOfficer.recruit_ports[0]))
+              : tKey("char.none"),
+          })}`}
         />
-        <Element screen={SCREEN} id="detail.card_host" parent="detail" className="sa-scroll">
-          {selected ? <CharacterCard kind="officer" personId={selected} statBlocks /> : null}
-        </Element>
-        <Box rect={{ x: 4, y: 7, w: 28, h: 2 }}>
-          <div className="sa-row">
-            <div className="sa-row__cell">
-              <Button
-                textKey="char.action.talk"
-                disabled={!selected || employableSelected || Boolean(talkReason)}
-                titleKey={talkReason ? "char.action.cooldown" : undefined}
-                fill
-                onClick={() => selected && doAction("talk", selected)}
-              />
-            </div>
-            <div className="sa-row__cell">
-              <Button
-                textKey="char.action.gift"
-                disabled={!selected || employableSelected || Boolean(giftReason)}
-                titleKey={giftReason ? "char.action.cooldown" : undefined}
-                fill
-                onClick={() => selected && doAction("gift", selected)}
-              />
-            </div>
-            <div className="sa-row__cell">
-              <Button textKey="char.action.train" disabled titleKey="ui.not_available" fill />
-            </div>
-            <div className="sa-row__cell">
-              <Button
-                textKey="char.action.appoint"
-                disabled={!selected || employableSelected || !atPort}
-                titleKey={atPort ? undefined : "officers.readonly_sea"}
-                fill
-                onClick={() => setAppointOpen(true)}
-              />
-            </div>
-            <div className="sa-row__cell">
-              <Button
-                textKey="officers.dismiss"
-                disabled={!selected || employableSelected || !atPort}
-                titleKey={atPort ? undefined : "officers.readonly_sea"}
-                fill
-                onClick={() => {
-                  if (!selected) return;
-                  const message = fmt("officers.dismiss.confirm", {
-                    name: content.officerName(selected),
-                  });
-                  if (typeof window !== "undefined" && !window.confirm(message)) return;
-                  doAction("dismiss", selected);
-                  setSelected(null);
-                }}
-              />
-            </div>
-            {employableSelected && selected ? (
-              <div className="sa-row__cell">
-                <Button
-                  textKey="tavern.recruit"
-                  kind="primary"
-                  fill
-                  onClick={() => {
-                    doAction("recruit", selected);
-                    setSelected(null);
-                  }}
-                />
-              </div>
-            ) : null}
-            <div className="sa-row__cell">
-              <Button textKey="ui.back" fill onClick={() => setSelected(null)} />
-            </div>
-          </div>
-        </Box>
-        <Element screen={SCREEN} id="detail.back" parent="detail" hidden />
-      </Element>
-      {appointOpen && selected ? (
-        <Box rect={{ x: 0, y: 0, w: 32, h: 9 }} skin="panel">
-          <div className="sa-cell sa-label--heading">{tKey("char.action.appoint")}</div>
-          <Box rect={{ x: 1, y: 1, w: 30, h: 7 }} className="sa-scroll">
-            {POSTS.map((post) => {
-              const met = postMet(post);
-              const label = tKey(`officer.post.${post.post_id}`);
-              if (post.post_id === "captain") {
-                return state.fleet.map((ship, index) => (
-                  <Button
-                    key={`${post.post_id}_${index}`}
-                    text={`${label} · ${t(content.shipName(ship.ship_type_id))}`}
-                    disabled={!met}
-                    titleKey={met ? undefined : "officer.post.prereq_unmet"}
-                    onClick={() => {
-                      void peopleAction(client, "appoint", {
-                        officer_id: selected,
-                        post_id: post.post_id,
-                        ship_id: ship.ship_type_id,
-                      }).then((result) => {
-                        if (!result.ok) showToast(result.error.msg, undefined, "bad");
-                        else setAppointOpen(false);
-                      });
-                    }}
-                  />
-                ));
-              }
-              return (
-                <Button
-                  key={post.post_id}
-                  text={label}
-                  disabled={!met}
-                  titleKey={met ? undefined : "officer.post.prereq_unmet"}
-                  onClick={() => {
-                    void peopleAction(client, "appoint", {
-                      officer_id: selected,
-                      post_id: post.post_id,
-                    }).then((result) => {
-                      if (!result.ok) showToast(result.error.msg, undefined, "bad");
-                      else setAppointOpen(false);
-                    });
-                  }}
-                />
-              );
-            })}
+      ) : null}
+      <div className="sa-scroll roster__card">
+        {selected ? <CharacterCard kind="officer" personId={selected} statBlocks /> : null}
+      </div>
+      <div className="roster__actions">
+        <div className="roster__action">
+          <Button
+            textKey="char.action.talk"
+            disabled={!selected || employableSelected || Boolean(talkReason)}
+            titleKey={talkReason ? "char.action.cooldown" : undefined}
+            fill
+            onClick={() => selected && doAction("talk", selected)}
+          />
+        </div>
+        <div className="roster__action">
+          <Button
+            textKey="char.action.gift"
+            disabled={!selected || employableSelected || Boolean(giftReason)}
+            titleKey={giftReason ? "char.action.cooldown" : undefined}
+            fill
+            onClick={() => selected && doAction("gift", selected)}
+          />
+        </div>
+        <div className="roster__action">
+          <Button textKey="char.action.train" disabled titleKey="ui.not_available" fill />
+        </div>
+        <div className="roster__action">
+          <Button
+            textKey="char.action.appoint"
+            disabled={!selected || employableSelected || !atPort}
+            titleKey={atPort ? undefined : "officers.readonly_sea"}
+            fill
+            onClick={() => setAppointOpen(true)}
+          />
+        </div>
+        <div className="roster__action">
+          <Button
+            textKey="officers.dismiss"
+            disabled={!selected || employableSelected || !atPort}
+            titleKey={atPort ? undefined : "officers.readonly_sea"}
+            fill
+            onClick={() => {
+              if (!selected) return;
+              const message = fmt("officers.dismiss.confirm", {
+                name: content.officerName(selected),
+              });
+              if (typeof window !== "undefined" && !window.confirm(message)) return;
+              doAction("dismiss", selected);
+              setSelected(null);
+            }}
+          />
+        </div>
+        {employableSelected && selected ? (
+          <div className="roster__action">
             <Button
-              textKey="officer.post.to_idle"
+              textKey="tavern.recruit"
+              kind="primary"
+              fill
               onClick={() => {
-                if (!selected) return;
-                void peopleAction(client, "appoint", {
-                  officer_id: selected,
-                  post_id: "",
-                }).then((result) => {
-                  if (!result.ok) showToast(result.error.msg, undefined, "bad");
-                  else setAppointOpen(false);
-                });
+                doAction("recruit", selected);
+                setSelected(null);
               }}
             />
-          </Box>
-          <Box rect={{ x: 28, y: 7, w: 4, h: 2 }}>
-            <Button textKey="ui.cancel" fill onClick={() => setAppointOpen(false)} />
-          </Box>
-        </Box>
+          </div>
+        ) : null}
+        <div className="roster__action">
+          <Button textKey="ui.back" fill onClick={() => setSelected(null)} />
+        </div>
+      </div>
+
+      {appointOpen && selected ? (
+        <div className="roster__overlay">
+          <div className="roster__overlay_dim sa-dim" aria-hidden="true" />
+          <div className="sa-fill-center roster__overlay_center">
+            <Frame titleKey="char.action.appoint" scroll className="roster__appoint">
+              <div className="roster__appoint_stack">
+                {POSTS.map((post) => {
+                  const met = postMet(post);
+                  const label = tKey(`officer.post.${post.post_id}`);
+                  if (post.post_id === "captain") {
+                    return state.fleet.map((ship, index) => (
+                      <Button
+                        key={`${post.post_id}_${index}`}
+                        text={`${label} · ${t(content.shipName(ship.ship_type_id))}`}
+                        disabled={!met}
+                        titleKey={met ? undefined : "officer.post.prereq_unmet"}
+                        fill
+                        onClick={() => {
+                          appoint(
+                            {
+                              officer_id: selected,
+                              post_id: post.post_id,
+                              ship_id: ship.ship_type_id,
+                            },
+                            () => setAppointOpen(false),
+                          );
+                        }}
+                      />
+                    ));
+                  }
+                  return (
+                    <Button
+                      key={post.post_id}
+                      text={label}
+                      disabled={!met}
+                      titleKey={met ? undefined : "officer.post.prereq_unmet"}
+                      fill
+                      onClick={() => {
+                        appoint(
+                          { officer_id: selected, post_id: post.post_id },
+                          () => setAppointOpen(false),
+                        );
+                      }}
+                    />
+                  );
+                })}
+                <Button
+                  textKey="officer.post.to_idle"
+                  fill
+                  onClick={() => {
+                    if (!selected) return;
+                    appoint(
+                      { officer_id: selected, post_id: "" },
+                      () => setAppointOpen(false),
+                    );
+                  }}
+                />
+                <Footer buttons={[
+                  <Button key="appoint_cancel" textKey="ui.cancel" onClick={() => setAppointOpen(false)} />,
+                ]} />
+              </div>
+            </Frame>
+          </div>
+        </div>
       ) : null}
+
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 
   const body = selected ? detail : table;
 
-  return embedded ? body : <StandaloneFrame>{body}</StandaloneFrame>;
+  return embedded ? body : <StandaloneFrame className="roster__window">{body}</StandaloneFrame>;
 }

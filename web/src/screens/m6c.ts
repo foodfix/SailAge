@@ -10,7 +10,7 @@
  * composed with `createElement` rather than JSX.
  */
 import { createElement } from "react";
-import type { ScreenId } from "../layout";
+import type { ScreenId } from "./ids";
 import { AutopilotHud } from "./AutopilotHud";
 import { CaptainView } from "./CaptainView";
 import { CharacterCard } from "./CharacterCard";

@@ -1,0 +1,18 @@
+/* Reputation view — structural composition (80-* §4.9.1: the per-nation
+   kit table; token-only values, visuals live in theme/kit). */
+
+.repview__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+  min-height: 0;
+}
+
+.repview__table {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.repview__table > .sa-row > .sa-row__cell:nth-child(1) { flex: 1 1 auto; }
+.repview__table > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 20%; }

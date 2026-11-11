@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * audit.mjs — the M3 acceptance gates (docs/IMPLEMENT-WebMigration.md §3 M3;
- * docs/80-UI-UX.md §4.9 "React realization"; docs/90-ARCHITECTURE.md §0.2).
+ * audit.mjs — the SPA's mechanical gates (docs/IMPLEMENT-WebMigration.md
+ * §9 M7; docs/80-UI-UX.md §4.9.1 "styling boundary"; docs/90-ARCHITECTURE.md §0.2).
  *
- * Three mechanical rules, no dependencies, empty allowlist:
+ * Two mechanical rules, no dependencies, empty allowlist:
  *
  *  (a) i18n lint — no hardcoded player-facing strings in TSX.
  *     ・JSX text nodes containing letters/CJK (outside `{...}` expressions)
@@ -14,20 +14,21 @@
  *       sheet, data-*) are allowed.
  *     Every player-facing string must pass through t() / tKey() / fmt().
  *
- *  (b) styling lint — no styling outside the theme + kit layers.
- *     ・hex colors, rgb()/hsl(), and px literals are rejected in any file
- *       outside web/src/theme/** and web/src/kit/**.
- *     ・inline style object literals may carry layout keys only
+ *  (b) styling boundary — only theme/ + kit/ author visual CSS.
+ *     ・hex colors, rgb()/hsl(), and px literals are rejected in any TS/TSX
+ *       file outside web/src/theme/** and web/src/kit/**.
+ *     ・inline style object literals in TSX may carry layout keys only
  *       (left/top/width/height/zIndex/transform/…) or `--sa-*` custom
  *       properties; visual props (background,color,border,radius,padding,
  *       font*, box-shadow, filter, opacity, …) are rejected.
- *     The only CSS authoring points are theme/tokens.css (generated),
- *     theme/base.css and kit/kit.css.
- *
- *  (c) layout coverage — every element id and every list id in
- *     data/ui_layout.json for the eight M3 port screens must appear in its
- *     screen component (static cross-check; the data file is the port spec,
- *     10-DATA-SCHEMA.md §4.23).
+ *     ・a screen's structural CSS module (a CSS file under
+ *       web/src/screens/) may author flex/grid/geometry rules, but every
+ *       colour, font family and px literal in it must still be a token
+ *       reference — hex literals, color functions, px literals and
+ *       `font-family` declarations are rejected there too.
+ *     The visual CSS authoring points are theme/tokens.css (generated),
+ *     theme/base.css and kit/kit.css. (The M7 retirement: the former rule
+ *     (c) — ui_layout.json id coverage — died with the file.)
  *
  * Exit 0 = all gates pass. Exit 1 = at least one violation.
  */
@@ -40,42 +41,6 @@ const WEB = join(HERE, "..");
 const SRC = join(WEB, "src");
 const REPO = join(WEB, "..");
 
-const REAL_SCREENS = {
-  port: "PortScreen.tsx",
-  market: "MarketScreen.tsx",
-  provisions: "ProvisionsScreen.tsx",
-  shipyard: "ShipyardScreen.tsx",
-  inn: "InnScreen.tsx",
-  guild: "GuildScreen.tsx",
-  palace: "PalaceScreen.tsx",
-  tavern: "TavernScreen.tsx",
-  world: "World.tsx",
-  battle: "Battle.tsx",
-  title: "Title.tsx",
-  nationality_select: "NationalitySelect.tsx",
-  creation: "Creation.tsx",
-  save_slot: "SaveSlot.tsx",
-  gameover: "GameOver.tsx",
-  ending: "Ending.tsx",
-  chart: "Chart.tsx",
-  settings: "Settings.tsx",
-  confirm: "Confirm.tsx",
-  dialog_box: "DialogBox.tsx",
-  intel_window: "IntelWindow.tsx",
-  character_card: "CharacterCard.tsx",
-  dossier: "Dossier.tsx",
-  captain_view: "CaptainView.tsx",
-  fleet_view: "FleetView.tsx",
-  officer_roster: "OfficerRoster.tsx",
-  reputation_view: "ReputationView.tsx",
-  hail: "Hail.tsx",
-  fleet_picker: "FleetPicker.tsx",
-  autopilot_hud: "AutopilotHud.tsx",
-  duel: "Duel.tsx",
-  sandbox: "Sandbox.tsx",
-};
-
-const STYLE_ALLOWED_PREFIXES = ["theme" + sep, "kit" + sep];
 const LABEL_PROPS = new Set(["title", "aria-label", "placeholder", "alt", "label", "text"]);
 const LAYOUT_STYLE_KEYS = new Set([
   "left",
@@ -118,6 +83,15 @@ function codeFiles() {
   return walk(SRC).filter((file) => file.endsWith(".ts") || file.endsWith(".tsx"));
 }
 
+function screenCssFiles() {
+  const dir = join(SRC, "screens");
+  try {
+    return walk(dir).filter((file) => file.endsWith(".css"));
+  } catch {
+    return [];
+  }
+}
+
 /* ---------------------------------------------------------------------- */
 /* (a) i18n lint                                                           */
 /* ---------------------------------------------------------------------- */
@@ -154,17 +128,17 @@ function auditI18n(files) {
 }
 
 /* ---------------------------------------------------------------------- */
-/* (b) styling lint                                                        */
+/* (b) styling boundary                                                    */
 /* ---------------------------------------------------------------------- */
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 const COLOR_FN = /\b(?:rgb|rgba|hsl|hsla)\s*\(/;
+const PX = /\b\d+(?:\.\d+)?px\b/;
 
 function auditStyling(files) {
   for (const file of files) {
     const rel = relative(SRC, file);
-    const allowed = STYLE_ALLOWED_PREFIXES.some((prefix) => rel.startsWith(prefix));
-    if (allowed) continue;
+    if (rel.startsWith("theme" + sep) || rel.startsWith("kit" + sep)) continue;
 
     const raw = readFileSync(file, "utf8");
     const source = stripComments(raw);
@@ -177,7 +151,7 @@ function auditStyling(files) {
       if (COLOR_FN.test(line)) {
         fail("style", file, index + 1, "rgb()/hsl() outside theme/kit");
       }
-      if (/\b\d+(?:\.\d+)?px\b/.test(line)) {
+      if (PX.test(line)) {
         fail("style", file, index + 1, "px literal outside theme/kit (use a --sailage-* token)");
       }
     });
@@ -200,57 +174,32 @@ function auditStyling(files) {
   }
 }
 
-/* ---------------------------------------------------------------------- */
-/* (c) layout coverage                                                     */
-/* ---------------------------------------------------------------------- */
-
-function auditLayout() {
-  const layout = JSON.parse(readFileSync(join(REPO, "data", "ui_layout.json"), "utf8"));
-  if (layout.version !== 2) {
-    fail("layout", join(REPO, "data", "ui_layout.json"), 0, `expected version 2, got ${layout.version}`);
-    return;
-  }
-  for (const [screen, fileName] of Object.entries(REAL_SCREENS)) {
-    const data = layout.screens[screen];
-    if (!data) {
-      fail("layout", join(REPO, "data", "ui_layout.json"), 0, `missing screen "${screen}"`);
-      continue;
-    }
-    const file = join(SRC, "screens", fileName);
-    const source = readFileSync(file, "utf8");
-    // Shared field/row internals also register ids (e.g. a SelectField's
-    // `<id>.field` / `<id>.label`), so the dynamic-id check reads the screen
-    // and the shared screen helpers together.
-    const helpers = readFileSync(join(SRC, "screens", "common.tsx"), "utf8");
-    const corpus = source + "\n" + helpers;
-    for (const id of Object.keys(data.elements ?? {})) {
-      if (source.includes(`"${id}"`)) continue;
-      let covered = false;
-      // Dynamic ids (list members `rows.<index>.<tail>` and editor cells
-      // `<group>.<key>.field`) are built from templates at render time. The
-      // static proxy: the screen (or a shared helper) must contain the id's
-      // generated parent stem as a template fragment — e.g. the sandbox row
-      // builder's `player_rows.` / `player_panel.stats_row.`. The in-DOM
-      // coverage stays the authoritative check for these (the M6 agents
-      // verified all 299 sandbox ids at max fleet size).
-      const segments = id.split(".");
-      for (let cut = 1; cut <= 3 && cut < segments.length; cut += 1) {
-        const stem = segments.slice(0, -cut).join(".");
-        if (corpus.includes(stem)) {
-          covered = true;
-          break;
-        }
+/**
+ * Structural screen CSS: flex/grid/geometry allowed, but colours, fonts
+ * and px literals stay token-only (80-* §4.9.1).
+ */
+function auditScreenCss(files) {
+  for (const file of files) {
+    const raw = readFileSync(file, "utf8");
+    const source = raw
+      .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
+      .replace(/(^|[^:"'])\/\/[^\n]*/g, (match, lead) => lead + " ".repeat(match.length - lead.length));
+    const lines = source.split("\n");
+    lines.forEach((line, index) => {
+      if (HEX.test(line)) {
+        fail("style", file, index + 1, "hex colour in a screen CSS module (use a --sailage-* token)");
       }
-      if (covered) continue;
-      fail("layout", file, 0, `element id "${id}" from data/ui_layout.json is not rendered`);
-    }
-    for (const listId of Object.keys(data.lists ?? {})) {
-      if (!source.includes(`"${listId}"`)) {
-        fail("layout", file, 0, `list block "${listId}" from data/ui_layout.json is not rendered`);
+      if (COLOR_FN.test(line)) {
+        fail("style", file, index + 1, "color function in a screen CSS module (use a token)");
       }
-    }
+      if (PX.test(line)) {
+        fail("style", file, index + 1, "px literal in a screen CSS module (use a --sailage-* token)");
+      }
+      if (/\bfont-family\s*:/.test(line)) {
+        fail("style", file, index + 1, "font-family in a screen CSS module (theme owns the stack)");
+      }
+    });
   }
-  return layout;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -258,10 +207,7 @@ function auditLayout() {
 const files = codeFiles();
 auditI18n(files);
 auditStyling(files);
-const layout = auditLayout();
-
-const realCount = Object.keys(REAL_SCREENS).length;
-const totalScreens = layout ? Object.keys(layout.screens).length : 0;
+auditScreenCss(screenCssFiles());
 
 if (violations.length > 0) {
   console.error(`audit: ${violations.length} violation(s)`);
@@ -272,6 +218,6 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `audit: OK — i18n allowlist empty (0 hardcoded strings), styling boundary clean, ` +
-    `layout coverage ${realCount}/${totalScreens} screens (${realCount} real, ${totalScreens - realCount} stubs)`,
+  "audit: OK — i18n allowlist empty (0 hardcoded strings), styling boundary clean " +
+    "(theme+kit own visuals; screen CSS is structural, token-only)",
 );

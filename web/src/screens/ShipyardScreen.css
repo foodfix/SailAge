@@ -1,0 +1,121 @@
+/* S6 shipyard — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.shipyard__page {
+  gap: var(--sailage-margin);
+  height: 100%;
+  padding: var(--sailage-margin);
+}
+
+.shipyard__header {
+  flex: 0 0 auto;
+  padding: var(--sailage-base-unit);
+}
+
+.shipyard__header_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.shipyard__content {
+  gap: var(--sailage-margin);
+}
+
+.shipyard__main {
+  flex: 1 1 auto;
+  gap: var(--sailage-margin);
+  min-width: 0;
+}
+
+.shipyard__catalog {
+  flex: 1 1 40%;
+  min-height: 0;
+}
+
+.shipyard__fleet {
+  flex: 1 1 60%;
+  min-height: 0;
+}
+
+.shipyard__aside {
+  display: flex;
+  flex: 0 0 30%;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+  padding: var(--sailage-base-unit);
+}
+
+.shipyard__equip {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.shipyard__slot {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.shipyard__slot_worn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shipyard__offers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.shipyard__entry {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.shipyard__entry_line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.shipyard__ship {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.shipyard__ship_line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.shipyard__ship_slot {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.shipyard__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.shipyard__field {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 8);
+}

@@ -1,0 +1,32 @@
+/* S19 settings — structural composition (80-* §4.9.1: the parchment
+   settings window centred over the dim layer; token-only values, visuals
+   live in theme/kit). */
+
+.settings__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.settings__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.settings__window {
+  width: calc(var(--sailage-dialog-w) * 1.5);
+  max-height: 90%;
+}
+
+.settings__stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: 0;
+}
+
+.settings__actions {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  margin-top: var(--sailage-base-unit);
+}

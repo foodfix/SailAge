@@ -1,6 +1,7 @@
 /**
- * S4 port hub — the facility cards + Set Sail (80-* §4.8.1, 4.8.9).
- * Every element row of data/ui_layout.json's `port` screen is rendered.
+ * S4 port hub — the UW2 scene composition (80-* §4.9.1): a sea/land
+ * backdrop with the port plate top-left and the facility verb bar along
+ * the bottom edge.
  *
  * The card state (present / activation phase / bounty-closed / hours-open)
  * is the server projection's (`GET /api/view/port`, 90-* §0.4); this
@@ -10,29 +11,16 @@ import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { PortFacilityStatus } from "../state/views";
-import { Box, Element, type ScreenId } from "../layout";
-import { Icon, Toast } from "../kit";
-import {
-  ButtonEl,
-  LabelEl,
-  PanelEl,
-  useScreenView,
-  useToastState,
-  ViewFallback,
-} from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Icon, Toast } from "../kit";
+import { Label, useScreenView, useToastState, ViewFallback } from "./common";
 import { navigate } from "../app/router";
+import "./PortScreen.css";
 
 const SCREEN: ScreenId = "port";
 const FACILITY_ICON = (id: string) => `facility_${id}`;
 
-const CARD_IDS = [
-  { id: "market", card: "cards.market", name: "cards.market.name", status: "cards.market.status" },
-  { id: "shipyard", card: "cards.shipyard", name: "cards.shipyard.name", status: "cards.shipyard.status" },
-  { id: "tavern", card: "cards.tavern", name: "cards.tavern.name", status: "cards.tavern.status" },
-  { id: "inn", card: "cards.inn", name: "cards.inn.name", status: "cards.inn.status" },
-  { id: "guild", card: "cards.guild", name: "cards.guild.name", status: "cards.guild.status" },
-  { id: "palace", card: "cards.palace", name: "cards.palace.name", status: "cards.palace.status" },
-] as const;
+const FACILITIES = ["market", "shipyard", "tavern", "inn", "guild", "palace"] as const;
 
 function useStatusText() {
   const { tKey, fmt } = useI18n();
@@ -57,7 +45,7 @@ export function PortScreen() {
   const { toast, clearToast } = useToastState();
   const statusText = useStatusText();
 
-  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
+  if (!view) return <ViewFallback status={status} />;
 
   const portId = view.portId ?? state.current_port ?? "";
   const port = content.port(portId);
@@ -69,87 +57,54 @@ export function PortScreen() {
   };
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" />
+    <div className="sa-screen port" data-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
 
-      <Element screen={SCREEN} id="header">
-        <Element screen={SCREEN} id="header.nation_swatch" parent="header">
-          <span className={`sa-nation-swatch sa-nation-swatch--${nationId}`} aria-hidden="true" />
-        </Element>
-        <LabelEl screen={SCREEN} id="header.port_name" parent="header" text={content.portName(portId)} title />
-        <LabelEl screen={SCREEN} id="header.nation_name" parent="header" text={content.nationName(nationId)} />
-        {port?.flavor ? (
-          <LabelEl screen={SCREEN} id="header.greeting" parent="header" text={port.flavor} align="center" />
-        ) : (
-          <LabelEl screen={SCREEN} id="header.greeting" parent="header" />
-        )}
-        <LabelEl
-          screen={SCREEN}
-          id="header.day_greeting"
-          parent="header"
-          textKey="port.day_greeting"
-          values={{ port: content.portName(portId), day: state.day }}
-          align="center"
-          tone="dim"
-        />
-      </Element>
+      <div className="port__header sa-plate">
+        <div className="port__nation" aria-hidden="true">
+          <span className={`sa-nation-swatch sa-nation-swatch--${nationId}`} />
+        </div>
+        <div className="port__header_names">
+          <Label text={content.portName(portId)} title />
+          <Label text={content.nationName(nationId)} />
+          {port?.flavor ? <Label text={port.flavor} align="center" wrap /> : null}
+          <Label textKey="port.day_greeting" values={{ port: content.portName(portId), day: state.day }} tone="dim" />
+        </div>
+      </div>
 
-      <LabelEl screen={SCREEN} id="facility_heading" textKey="port.facilities" heading />
-
-      <Element screen={SCREEN} id="facility_grid">
-        {CARD_IDS.map((card) => {
-          const facility = view.facilities.find((entry) => entry.id === card.id);
-          if (!facility) return null;
-          return (
-            <Element
-              key={card.id}
-              screen={SCREEN}
-              id={card.card}
-              parent="facility_grid"
-              skin="panel"
-              as="button"
-              className="sa-card-button"
-              disabled={!facility.enabled}
-              onClick={facility.enabled ? () => openFacility(facility) : undefined}
-              ariaLabelKey={`port.${facility.id}`}
-            >
-              <Box rect={{ x: 0, y: 0, w: 2, h: 2 }}>
-                <Icon id={FACILITY_ICON(facility.id)} />
-              </Box>
-              <LabelEl screen={SCREEN} id={card.name} parent={card.card} textKey={`port.${facility.id}`} heading />
-              <LabelEl
-                screen={SCREEN}
-                id={card.status}
-                parent={card.card}
-                textValue={statusText(facility.status)}
-                tone="dim"
-              />
-            </Element>
-          );
-        })}
-      </Element>
-
-      <Element screen={SCREEN} id="footer">
-        <ButtonEl
-          screen={SCREEN}
-          id="footer.set_sail"
-          parent="footer"
-          textKey="port.set_sail"
-          kind="primary"
-          onClick={() => navigate("provisions")}
-        />
-        <ButtonEl
-          screen={SCREEN}
-          id="footer.settings"
-          parent="footer"
-          textKey="settings.title"
-          onClick={() => navigate("settings")}
-        />
-      </Element>
+      <div className="port__verb_bar sa-verb-bar">
+        <div className="port__facilities">
+          {FACILITIES.map((id) => {
+            const facility = view.facilities.find((entry) => entry.id === id);
+            if (!facility) return null;
+            return (
+              <Button
+                key={id}
+                fill
+                disabled={!facility.enabled}
+                onClick={facility.enabled ? () => openFacility(facility) : undefined}
+                titleKey={`port.${facility.id}`}
+              >
+                <span className="port__verb_stack">
+                  <span className="port__verb_icon">
+                    <Icon id={FACILITY_ICON(facility.id)} />
+                  </span>
+                  <Label textKey={`port.${facility.id}`} heading />
+                  <Label textValue={statusText(facility.status)} tone="dim" />
+                </span>
+              </Button>
+            );
+          })}
+        </div>
+        <div className="port__actions">
+          <Button textKey="port.set_sail" kind="primary" onClick={() => navigate("provisions")} />
+          <Button textKey="settings.title" onClick={() => navigate("settings")} />
+        </div>
+      </div>
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }

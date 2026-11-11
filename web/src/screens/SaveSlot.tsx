@@ -1,5 +1,6 @@
 /**
- * Save / load slot dialog (docs/80-UI-UX.md §4.6, §4.7; docs/90-* §0.4).
+ * Save / load slot dialog (docs/80-UI-UX.md §4.6, §4.7, §4.9.1; docs/90-*
+ * §0.4).
  *
  * One modal, two modes:
  *   * **save** — S4-hosted only in spirit: the rows are disabled with the
@@ -9,20 +10,24 @@
  *     row loads it and routes to the ending (retired), the port (docked)
  *     or the world (at sea).
  *
- * Every `save_slot` element row is rendered (`dim`, `panel` + its title /
- * prompt / slots viewport / slots content / cancel), plus the `slots` list
- * block. The confirm is the local fallback (M6-b owns the `confirm`
- * screen; this dialog never depends on it).
+ * The composition (§4.9.1): a full-canvas dim layer carrying one centered
+ * window — the mode title band, the prompt line, the `.sa-table` of three
+ * slots (slot number / day·nation·gold / timestamp columns with a compact
+ * load-or-save button per row) and the cancel footer. The overwrite
+ * confirm is the local fallback (M6-b owns the `confirm` screen; this
+ * dialog never depends on it), mounted as a second centered window over
+ * the layer.
  */
 import { useEffect, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { SaveSlot as SaveSlotRow } from "../client/types";
-import { Box, Element, ListRows, type ScreenId } from "../layout";
-import { Button, Frame, Toast } from "../kit";
-import { ButtonEl, LabelEl, useToastState } from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Footer, Frame, Row, Toast } from "../kit";
+import { Label, useToastState } from "./common";
 import { navigate } from "../app/router";
+import "./SaveSlot.css";
 
 const SCREEN: ScreenId = "save_slot";
 const SLOT_COUNT = 3;
@@ -107,23 +112,25 @@ export function SaveSlotScreen() {
 
   const isEmpty = (entry: SaveSlotRow): boolean => !(entry.day > 0 || Boolean(entry.nation_id));
 
-  const rowText = (entry: SaveSlotRow): string => {
-    const slotLabel = fmt("ui.slot_n", { slot: entry.slot });
-    if (!loaded) return `${slotLabel} — ${tKey("connection.connecting")}`;
-    if (isEmpty(entry)) return `${slotLabel} — ${tKey("ui.empty")}`;
+  const summaryText = (entry: SaveSlotRow): string => {
+    if (!loaded) return tKey("connection.connecting");
+    if (isEmpty(entry)) return tKey("ui.empty");
     const nation = entry.nation_id ? t(content.nationName(entry.nation_id)) : tKey("char.none");
-    const summary = fmt("ui.day_nation_gold", {
+    return fmt("ui.day_nation_gold", {
       day: entry.day,
       nation,
       gold: entry.gold,
     });
+  };
+
+  const stampText = (entry: SaveSlotRow): string => {
     const stamp =
       entry.saved_at > 0
         ? new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(
             new Date(entry.saved_at * 1000),
           )
         : "-";
-    return `${slotLabel} — ${summary} — ${fmt("ui.timestamp", { amount: stamp })}`;
+    return fmt("ui.timestamp", { amount: stamp });
   };
 
   const doSave = async (slot: number): Promise<void> => {
@@ -185,84 +192,80 @@ export function SaveSlotScreen() {
   };
 
   return (
-    <>
-      <Element screen={SCREEN} id="dim" className="sa-dim" />
-      <Element screen={SCREEN} id="panel" parent="dim" skin="panel">
-        <LabelEl
-          screen={SCREEN}
-          id="panel.title"
-          parent="panel"
-          textKey={mode === "save" ? "ui.save.title" : "ui.load.title"}
-          title
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="panel.prompt"
-          parent="panel"
-          textKey={
-            mode === "save" && !inPort
-              ? "ui.cant_save_here"
-              : mode === "save"
-                ? "ui.save.select_slot"
-                : "ui.load.select_slot"
-          }
-          tone={mode === "save" && !inPort ? "warn" : "dim"}
-        />
+    <div className="sa-screen save_slot" data-screen={SCREEN}>
+      <div className="save_slot__dim sa-dim" aria-hidden="true" />
 
-        <Element screen={SCREEN} id="panel.slots_viewport" parent="panel" className="sa-scroll">
-          <Element screen={SCREEN} id="panel.slots" parent="panel.slots_viewport">
-            <ListRows
-              screen={SCREEN}
-              listId="slots"
-              count={rows.length}
-              renderRow={(index) => {
-                const entry = rows[index];
-                const empty = isEmpty(entry);
-                const disabled =
-                  busy || !loaded || (mode === "load" && empty) || (mode === "save" && !inPort);
-                return (
-                  <Button
-                    text={rowText(entry)}
-                    fill
-                    disabled={disabled}
-                    onClick={() => choose(entry)}
-                  />
-                );
-              }}
-            />
-          </Element>
-        </Element>
+      <div className="sa-fill-center save_slot__layer">
+        <Frame
+          titleKey={mode === "save" ? "ui.save.title" : "ui.load.title"}
+          className="save_slot__window"
+        >
+          <Label
+            textKey={
+              mode === "save" && !inPort
+                ? "ui.cant_save_here"
+                : mode === "save"
+                  ? "ui.save.select_slot"
+                  : "ui.load.select_slot"
+            }
+            tone={mode === "save" && !inPort ? "warn" : "dim"}
+          />
 
-        <ButtonEl
-          screen={SCREEN}
-          id="panel.cancel"
-          parent="panel"
-          textKey="ui.cancel"
-          onClick={cancel}
-        />
-      </Element>
+          <div className="sa-table save_slot__table">
+            {rows.map((entry) => {
+              const empty = isEmpty(entry);
+              const disabled =
+                busy || !loaded || (mode === "load" && empty) || (mode === "save" && !inPort);
+              return (
+                <Row
+                  key={entry.slot}
+                  cols={[
+                    <Label key="slot" textValue={fmt("ui.slot_n", { slot: entry.slot })} />,
+                    <Label key="summary" textValue={summaryText(entry)} />,
+                    <Label key="stamp" textValue={stampText(entry)} />,
+                    <Button
+                      key="action"
+                      compact
+                      textKey={mode === "save" ? "ui.save.title" : "ui.load.title"}
+                      disabled={disabled}
+                      onClick={() => choose(entry)}
+                    />,
+                  ]}
+                />
+              );
+            })}
+          </div>
+
+          <div className="save_slot__footer">
+            <Footer buttons={[<Button key="cancel" textKey="ui.cancel" onClick={cancel} />]} />
+          </div>
+        </Frame>
+      </div>
 
       {confirmSlot !== null ? (
-        <Box rect={{ x: 0, y: 0, w: 60, h: 34 }}>
-          <Box rect={{ x: 22, y: 12, w: 15, h: 10 }}>
-            <Frame titleKey="ui.confirm_title">
-              <div className="sa-cell">{fmt("ui.overwrite_confirm", { slot: confirmSlot })}</div>
-              <div className="sa-footer">
-                <Button textKey="ui.cancel" onClick={() => setConfirmSlot(null)} />
-                <Button
-                  textKey="ui.confirm"
-                  kind="danger"
-                  onClick={() => void doSave(confirmSlot)}
-                />
-              </div>
-            </Frame>
-          </Box>
-        </Box>
+        <div className="sa-fill-center save_slot__confirm">
+          <Frame titleKey="ui.confirm_title" className="save_slot__confirm_window">
+            <div className="sa-cell">{fmt("ui.overwrite_confirm", { slot: confirmSlot })}</div>
+            <div className="save_slot__confirm_footer">
+              <Footer
+                buttons={[
+                  <Button key="cancel" textKey="ui.cancel" onClick={() => setConfirmSlot(null)} />,
+                  <Button
+                    key="confirm"
+                    textKey="ui.confirm"
+                    kind="danger"
+                    onClick={() => void doSave(confirmSlot)}
+                  />,
+                ]}
+              />
+            </div>
+          </Frame>
+        </div>
       ) : null}
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }

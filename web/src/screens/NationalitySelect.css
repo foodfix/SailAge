@@ -1,0 +1,36 @@
+/* S2 nationality select — structural composition (80-* §4.9.1: token-only
+   values; visuals live in theme/kit). */
+
+.nat__layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* The wide centered card window. */
+.nat__window {
+  width: 56%;
+}
+
+/* The 3×2 nation-card grid; the swatch shows the flag colors. */
+.nat__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: calc(var(--sailage-button-h) * 2);
+  gap: var(--sailage-base-unit);
+  margin-top: var(--sailage-margin);
+}
+
+.nat__flag {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 6);
+  height: calc(var(--sailage-base-unit) * 3);
+}
+
+.nat__world {
+  margin-top: var(--sailage-base-unit);
+}
+
+.nat__footer {
+  margin-top: var(--sailage-margin);
+}

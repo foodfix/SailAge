@@ -1,0 +1,74 @@
+/* S3 sailing screen — structural composition (80-* §4.9.1: the canvas
+   fills the screen, the HUD is DOM plates over it; token-only values,
+   visuals live in theme/kit). */
+
+.world__canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.world__canvas > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.world__hud,
+.world__minimap,
+.world__status,
+.world__chips {
+  position: absolute;
+  z-index: 1;
+}
+
+.world__hud {
+  left: var(--sailage-margin);
+  top: var(--sailage-margin);
+  width: calc(var(--sailage-base-unit) * 28);
+  gap: calc(var(--sailage-base-unit) / 2);
+  padding: var(--sailage-base-unit);
+}
+
+.world__minimap {
+  right: var(--sailage-margin);
+  top: var(--sailage-margin);
+  gap: calc(var(--sailage-base-unit) / 2);
+  padding: var(--sailage-base-unit);
+}
+
+.world__minimap_view {
+  width: calc(var(--sailage-base-unit) * 24);
+  height: calc(var(--sailage-base-unit) * 18);
+  overflow: hidden;
+}
+
+.world__minimap_view > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.world__status {
+  left: var(--sailage-margin);
+  bottom: calc(var(--sailage-base-unit) * 7);
+  width: calc(var(--sailage-base-unit) * 36);
+  gap: calc(var(--sailage-base-unit) / 2);
+  padding: var(--sailage-base-unit);
+}
+
+.world__chips {
+  left: 0;
+  right: 0;
+  bottom: var(--sailage-base-unit);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sailage-base-unit);
+}
+
+.world__explore {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}

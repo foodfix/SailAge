@@ -1,0 +1,68 @@
+/* S20 creation — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.creation__layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* The centered step window; the stepper body scrolls when 13 rows plus
+   the previews exceed the canvas. */
+.creation__window {
+  width: 60%;
+  max-height: 88%;
+}
+
+/* The 3×2 background-card grid. */
+.creation__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: calc(var(--sailage-button-h) * 2);
+  gap: var(--sailage-base-unit);
+  margin-top: var(--sailage-margin);
+}
+
+/* One attribute/skill stepper row: name, value, −, +. */
+.creation__stat {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.creation__stat_name {
+  flex: 1 1 auto;
+}
+
+.creation__stat_value {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+}
+
+.creation__header {
+  margin-top: var(--sailage-margin);
+}
+
+/* The spread / clear pair. */
+.creation__spread {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+  margin-top: var(--sailage-margin);
+}
+
+.creation__spread > * {
+  flex: 1 1 0;
+}
+
+.creation__hint {
+  margin-top: var(--sailage-base-unit);
+}
+
+.creation__preview {
+  margin-top: calc(var(--sailage-base-unit) / 2);
+}
+
+.creation__footer {
+  margin-top: var(--sailage-margin);
+}

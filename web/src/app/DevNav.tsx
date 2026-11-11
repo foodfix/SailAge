@@ -2,7 +2,7 @@
  * Dev-only screen index (?dev=1). Renders the technical screen ids (never
  * game copy) so every one of the 32 routes is reachable while M3 lands.
  */
-import { SCREEN_IDS, type ScreenId } from "../layout";
+import { SCREEN_IDS, type ScreenId } from "../screens/ids";
 import { isRealScreen } from "../screens";
 import { navigate } from "./router";
 

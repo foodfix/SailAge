@@ -1,0 +1,84 @@
+/* S5 market — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.market__page {
+  gap: var(--sailage-margin);
+  height: 100%;
+  padding: var(--sailage-margin);
+}
+
+.market__header {
+  flex: 0 0 auto;
+  padding: var(--sailage-base-unit);
+}
+
+.market__header_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.market__content {
+  gap: var(--sailage-margin);
+}
+
+.market__window {
+  min-width: 0;
+}
+
+.market__aside {
+  display: flex;
+  flex: 0 0 28%;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+  padding: var(--sailage-base-unit);
+}
+
+.market__hero {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 6);
+  height: calc(var(--sailage-base-unit) * 6);
+}
+
+.market__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.market__invest {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.market__section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: 0;
+}
+
+.market__section_rows {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Column widths — header and data rows share the same flex-basis map. */
+.market__table > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 6%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 18%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 8%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(4) { flex: 0 0 14%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(5) { flex: 0 0 16%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(6) { flex: 0 0 8%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(7) { flex: 0 0 12%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(8) { flex: 0 0 9%; }
+.market__table > .sa-row > .sa-row__cell:nth-child(9) { flex: 0 0 9%; }
+
+.market__table_caps > .sa-row > .sa-row__cell:nth-child(1) { flex: 1 1 auto; }
+.market__table_caps > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 12%; }
+.market__table_caps > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 40%; }

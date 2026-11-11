@@ -1,0 +1,86 @@
+/* Officers roster — structural composition (80-* §4.9.1: the kit zebra
+   table + the detail page with its fixed action row and the appoint
+   post-picker over its own dim; token-only values, visuals live in
+   theme/kit). */
+
+.roster__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+  min-height: 0;
+}
+
+.roster__toggles {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.roster__table_wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.roster__card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The §4.6.2 action row stays fixed under the card (交谈 · 赠礼 · 训练 ·
+   任命 · 解雇 · [招募] · 返回). */
+.roster__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+}
+
+.roster__action {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The appoint picker: a small window over the roster's own dim. */
+.roster__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.roster__overlay_dim {
+  position: absolute;
+  inset: 0;
+}
+
+.roster__overlay_center {
+  position: relative;
+  z-index: 1;
+}
+
+.roster__appoint {
+  width: calc(var(--sailage-base-unit) * 44);
+  max-height: 90%;
+}
+
+.roster__appoint_stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: 0;
+}
+
+.roster__window {
+  width: calc(var(--sailage-base-unit) * 96);
+  height: 92%;
+}
+
+/* Roster table columns: name · post · loyalty · wage · stat cells. */
+.roster__table > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 16%; }
+.roster__table > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 16%; }
+.roster__table > .sa-row > .sa-row__cell:nth-child(3) { flex: 0 0 8%; }
+.roster__table > .sa-row > .sa-row__cell:nth-child(4) { flex: 0 0 12%; }
+.roster__table > .sa-row > .sa-row__cell:nth-child(n + 5) { flex: 1 1 0; }

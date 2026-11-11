@@ -9,7 +9,7 @@
  *   the §4.7 day-dialog queue;
  *   `<ConfirmDialog/>` / `<DialogBox/>` — the in-place modal bodies.
  */
-import type { ScreenId } from "../layout";
+import type { ScreenId } from "./ids";
 import { ChartScreen } from "./Chart";
 import { ConfirmScreen } from "./Confirm";
 import { DialogScreen } from "./DialogBox";

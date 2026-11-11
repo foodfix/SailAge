@@ -93,6 +93,8 @@ function generate() {
   }
   const colors = Object.entries(palette.colors ?? {});
   const numbers = Object.entries(palette.numbers ?? {});
+  const retiredColors = palette.retired?.colors ?? [];
+  const retiredNumbers = palette.retired?.numbers ?? [];
   for (const [name, hex] of colors) {
     if (!/^#[0-9a-f]{6}$/i.test(String(hex))) {
       throw new Error(`palette color ${name} is not a #rrggbb hex`);
@@ -103,15 +105,26 @@ function generate() {
       throw new Error(`palette size ${name} is not an integer`);
     }
   }
+  for (const name of [...retiredColors, ...retiredNumbers]) {
+    if (!(name in (palette.colors ?? {})) && !(name in (palette.numbers ?? {}))) {
+      throw new Error(`retired list names unknown key '${name}'`);
+    }
+  }
 
   const lines = [];
   lines.push("/*");
   lines.push(" * GENERATED FILE — DO NOT EDIT.");
-  lines.push(" * Source: web/src/theme/palette.json (docs/80-UI-UX.md §4.8).");
+  lines.push(" * Source: web/src/theme/palette.json (docs/80-UI-UX.md §4.8/§4.9.1).");
   lines.push(" * Regenerate: node scripts/build_tokens.mjs");
   lines.push(" * Check:      node scripts/build_tokens.mjs --check");
   lines.push(" *");
   lines.push(` * ${colors.length} color tokens + ${numbers.length} sizing tokens.`);
+  if (retiredColors.length + retiredNumbers.length > 0) {
+    lines.push(
+      ` * Retired (append-only list, 10-* §4.24 — keep, never consume): ` +
+        [...retiredColors, ...retiredNumbers].join(", "),
+    );
+  }
   lines.push(" */");
   lines.push(":root {");
   lines.push("  /* Palette colors (append-only, §4.8). */");
@@ -119,16 +132,21 @@ function generate() {
     lines.push(`  --sailage-${KEBAB(name)}: ${hex};`);
   }
   lines.push("");
-  lines.push("  /* Chrome sizing grid (§4.8: 1 tile = CHROME_TILE). */");
+  lines.push("  /* Chrome sizing grid (§4.8: base unit = BASE_UNIT; §4.9.1). */");
   for (const [name, value] of numbers) {
     lines.push(`  --sailage-${KEBAB(name)}: ${value}px;`);
   }
   lines.push("}");
   lines.push("");
-  return { text: lines.join("\n"), colors: colors.length, numbers: numbers.length };
+  return {
+    text: lines.join("\n"),
+    colors: colors.length,
+    numbers: numbers.length,
+    retired: retiredColors.length + retiredNumbers.length,
+  };
 }
 
-const { text, colors, numbers } = generate();
+const { text, colors, numbers, retired } = generate();
 
 if (process.argv.includes("--check")) {
   let current = "";

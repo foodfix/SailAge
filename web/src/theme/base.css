@@ -1,7 +1,11 @@
 /**
- * Static shell + canvas layout rules (the M3 design canvas, 80-* §4.8.9).
- * Every colour/size value is a generated token; no per-screen styling
- * lives outside the theme + kit layers (80-* §4.9).
+ * Static shell + canvas rules (the design canvas, 80-UI-UX.md §4.9.1).
+ *
+ * The chrome look is CSS-drawn from generated tokens: every colour, size
+ * and font value here is a --sailage-* token reference (the audit gate
+ * rejects literals outside theme/ + kit/). The canvas is the fixed
+ * 1920 × 1080 design surface scaled by --sa-scale; the retired 32 px
+ * chrome-tile token is no longer read anywhere.
  */
 @import "./tokens.css";
 
@@ -25,7 +29,7 @@ body,
 }
 
 body {
-  background: var(--sailage-panel-bg);
+  background: var(--sailage-sea);
   color: var(--sailage-text);
   font-family: Georgia, "Times New Roman", serif;
   overflow: hidden;
@@ -49,14 +53,14 @@ input {
 /* The scaled box reserves the transformed footprint inside the viewport. */
 .sa-frame-box {
   position: relative;
-  width: calc(var(--sailage-chrome-tile) * 60 * var(--sa-scale, 1));
-  height: calc(var(--sailage-chrome-tile) * 33.75 * var(--sa-scale, 1));
+  width: calc(1920px * var(--sa-scale, 1));
+  height: calc(1080px * var(--sa-scale, 1));
 }
 
 .sa-canvas {
   position: relative;
-  width: calc(var(--sailage-chrome-tile) * 60);
-  height: calc(var(--sailage-chrome-tile) * 33.75);
+  width: 1920px;
+  height: 1080px;
   overflow: hidden;
   background: var(--sailage-sea);
   transform: scale(var(--sa-scale, 1));
@@ -64,14 +68,8 @@ input {
   image-rendering: pixelated;
 }
 
-/*
- * A registered element is a point-anchored box. Nothing inside it is
- * flow-laid: children are absolute boxes too (no-flow rule).
- */
-.sa-el {
-  position: absolute;
-}
-
+/* A screen fills the canvas; its internals are flow-laid kit compositions
+   (80-* §4.9.1 — the absolute-tile `.sa-el` no-flow rule is retired). */
 .sa-screen {
   position: absolute;
   inset: 0;
@@ -86,7 +84,7 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--sailage-base-unit) / 2);
-  max-width: calc(var(--sailage-chrome-tile) * 30);
+  max-width: calc(var(--sailage-base-unit) * 60);
   padding: var(--sailage-base-unit);
   background: var(--sailage-panel-bg);
   border: 1px solid var(--sailage-panel-line);

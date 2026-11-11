@@ -1,0 +1,17 @@
+/* Shared confirm dialog — structural composition (80-* §4.9.1: the indigo
+   message window centred over the dim layer; token-only values, visuals
+   live in theme/kit). */
+
+.confirm__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.confirm__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.confirm__window {
+  width: var(--sailage-dialog-w);
+}

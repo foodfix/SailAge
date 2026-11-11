@@ -1,0 +1,30 @@
+/* Shared dialog box — structural composition (80-* §4.9.1: the indigo
+   message window centred over the dim layer; token-only values, visuals
+   live in theme/kit). */
+
+.dialogbox__dim {
+  position: absolute;
+  inset: 0;
+}
+
+.dialogbox__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.dialogbox__window {
+  width: var(--sailage-dialog-w);
+}
+
+.dialogbox__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  min-height: 0;
+}
+
+.dialogbox__icon {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: calc(var(--sailage-base-unit) * 4);
+}

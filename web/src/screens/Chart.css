@@ -1,0 +1,84 @@
+/* S17 chart — structural composition (80-* §4.9.1: the chart canvas grows
+   between the top bar and the bottom legend chips, the debug side legend
+   floats over it; token-only values, visuals live in theme/kit). */
+
+.chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart__top {
+  flex: 0 0 auto;
+  align-items: center;
+  padding: var(--sailage-base-unit);
+  margin: var(--sailage-margin);
+  margin-bottom: 0;
+}
+
+.chart__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chart__main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: var(--sailage-base-unit);
+}
+
+.chart__map {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.chart__map > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart__side {
+  position: absolute;
+  z-index: 1;
+  right: var(--sailage-base-unit);
+  top: var(--sailage-base-unit);
+  bottom: var(--sailage-base-unit);
+  width: calc(var(--sailage-base-unit) * 40);
+  padding: var(--sailage-base-unit);
+}
+
+.chart__legend_row {
+  display: flex;
+  align-items: center;
+  min-height: var(--sailage-row-h);
+}
+
+.chart__legend_glyph {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 2);
+  justify-content: center;
+}
+
+.chart__legend_label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chart__legend_value {
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 9);
+}
+
+.chart__legend {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sailage-base-unit);
+  padding: var(--sailage-base-unit);
+  margin: var(--sailage-margin);
+  margin-top: 0;
+}

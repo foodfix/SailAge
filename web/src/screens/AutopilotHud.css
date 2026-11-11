@@ -1,0 +1,21 @@
+/* Appointed-voyage HUD bar — structural composition (80-* §4.9.1: a
+   verb-bar plate along the bottom edge when routed standalone; token-only
+   values, visuals live in theme/kit). */
+
+.autopilot__bar {
+  align-items: center;
+  padding: var(--sailage-base-unit);
+}
+
+.autopilot__info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Standalone route: the plate hugs the bottom edge of the screen. */
+.autopilot > .autopilot__bar {
+  position: absolute;
+  left: var(--sailage-margin);
+  right: var(--sailage-margin);
+  bottom: var(--sailage-margin);
+}

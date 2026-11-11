@@ -1,0 +1,90 @@
+/* Fleet view — structural composition (80-* §4.9.1: per-ship blocks over a
+   totals plate; token-only values, visuals live in theme/kit). */
+
+.fleet__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+  min-height: 0;
+}
+
+.fleet__ships {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fleet__ship {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+  padding-bottom: var(--sailage-base-unit);
+}
+
+.fleet__ship_head {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+}
+
+.fleet__promote {
+  display: flex;
+  flex: 0 0 calc(var(--sailage-base-unit) * 8);
+  min-width: 0;
+}
+
+.fleet__statline {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+}
+
+.fleet__statline > .sa-label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.fleet__bar {
+  display: flex;
+  flex: 0 0 30%;
+  align-items: center;
+  height: var(--sailage-row-h);
+}
+
+.fleet__stacks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: 0;
+}
+
+.fleet__stack {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-width: calc(var(--sailage-base-unit) * 12);
+}
+
+.fleet__totals {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.fleet__totals_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  min-width: 0;
+}
+
+.fleet__window {
+  width: calc(var(--sailage-base-unit) * 62);
+  height: 92%;
+}

@@ -1,6 +1,6 @@
 /**
  * S20 creation — the locked two-step new-game flow (docs/80-UI-UX.md
- * §4.13; docs/50-* §4.1 steps 1–6).
+ * §4.13, §4.9.1; docs/50-* §4.1 steps 1–6).
  *
  *   ① background — the six `data/backgrounds.json` cards (name / bio /
  *     composed bonus line; each grants one attribute +3 and one skill +5).
@@ -8,8 +8,11 @@
  *     all points must be spent; the spread shortcut spends attributes +1
  *     each and the first three skills +1 each.
  *
- * Every `creation` element row of data/ui_layout.json is rendered (both
- * step groups; the inactive one is `hidden`).
+ * The composition (§4.9.1): one centered window over the scene whose title
+ * band names the active step; the body swaps the background-card grid for
+ * the stepper list (attribute header, five attribute rows, skill header,
+ * eight skill rows, the spread/cancel pair, the must-spend hint and the
+ * three pinned preview lines) with the back/confirm footer beneath.
  *
  * The screen owns the pinned UI arithmetic only (pool remaining / per-item
  * cap / button disabling). The alloc dicts are collected and submitted to
@@ -23,11 +26,12 @@ import rawBackgrounds from "../../../data/backgrounds.json";
 import type { L10nString } from "../i18n";
 import { useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
-import { Box, Element, type ScreenId } from "../layout";
-import { Button, Toast } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import type { ScreenId } from "./ids";
+import { Button, Footer, Frame, Toast } from "../kit";
+import { Label, useToastState } from "./common";
 import { navigate } from "../app/router";
 import { takePendingNation } from "./NationalitySelect";
+import "./Creation.css";
 
 const SCREEN: ScreenId = "creation";
 
@@ -75,159 +79,6 @@ interface BackgroundRaw {
 
 const NATIONS = (rawNations as { nations: NationRaw[] }).nations;
 const BACKGROUNDS = (rawBackgrounds as { backgrounds: BackgroundRaw[] }).backgrounds;
-
-interface StepperIds {
-  row: string;
-  name: string;
-  value: string;
-  sub: string;
-  add: string;
-}
-
-/** The authored stepper ids (data/ui_layout.json `creation.points.*`). */
-const ATTR_IDS: Record<AttrKey, StepperIds> = {
-  constitution: {
-    row: "points.attrs.constitution",
-    name: "points.attrs.constitution.name",
-    value: "points.attrs.constitution.value",
-    sub: "points.attrs.constitution.sub",
-    add: "points.attrs.constitution.add",
-  },
-  intellect: {
-    row: "points.attrs.intellect",
-    name: "points.attrs.intellect.name",
-    value: "points.attrs.intellect.value",
-    sub: "points.attrs.intellect.sub",
-    add: "points.attrs.intellect.add",
-  },
-  charisma: {
-    row: "points.attrs.charisma",
-    name: "points.attrs.charisma.name",
-    value: "points.attrs.charisma.value",
-    sub: "points.attrs.charisma.sub",
-    add: "points.attrs.charisma.add",
-  },
-  courage: {
-    row: "points.attrs.courage",
-    name: "points.attrs.courage.name",
-    value: "points.attrs.courage.value",
-    sub: "points.attrs.courage.sub",
-    add: "points.attrs.courage.add",
-  },
-  luck: {
-    row: "points.attrs.luck",
-    name: "points.attrs.luck.name",
-    value: "points.attrs.luck.value",
-    sub: "points.attrs.luck.sub",
-    add: "points.attrs.luck.add",
-  },
-};
-
-const SKILL_IDS: Record<SkillKey, StepperIds> = {
-  seamanship: {
-    row: "points.skills.seamanship",
-    name: "points.skills.seamanship.name",
-    value: "points.skills.seamanship.value",
-    sub: "points.skills.seamanship.sub",
-    add: "points.skills.seamanship.add",
-  },
-  navigation: {
-    row: "points.skills.navigation",
-    name: "points.skills.navigation.name",
-    value: "points.skills.navigation.value",
-    sub: "points.skills.navigation.sub",
-    add: "points.skills.navigation.add",
-  },
-  swordplay: {
-    row: "points.skills.swordplay",
-    name: "points.skills.swordplay.name",
-    value: "points.skills.swordplay.value",
-    sub: "points.skills.swordplay.sub",
-    add: "points.skills.swordplay.add",
-  },
-  gunnery: {
-    row: "points.skills.gunnery",
-    name: "points.skills.gunnery.name",
-    value: "points.skills.gunnery.value",
-    sub: "points.skills.gunnery.sub",
-    add: "points.skills.gunnery.add",
-  },
-  appraisal: {
-    row: "points.skills.appraisal",
-    name: "points.skills.appraisal.name",
-    value: "points.skills.appraisal.value",
-    sub: "points.skills.appraisal.sub",
-    add: "points.skills.appraisal.add",
-  },
-  negotiation: {
-    row: "points.skills.negotiation",
-    name: "points.skills.negotiation.name",
-    value: "points.skills.negotiation.value",
-    sub: "points.skills.negotiation.sub",
-    add: "points.skills.negotiation.add",
-  },
-  cartography: {
-    row: "points.skills.cartography",
-    name: "points.skills.cartography.name",
-    value: "points.skills.cartography.value",
-    sub: "points.skills.cartography.sub",
-    add: "points.skills.cartography.add",
-  },
-  rumour: {
-    row: "points.skills.rumour",
-    name: "points.skills.rumour.name",
-    value: "points.skills.rumour.value",
-    sub: "points.skills.rumour.sub",
-    add: "points.skills.rumour.add",
-  },
-};
-
-interface BackgroundIds {
-  card: string;
-  name: string;
-  bio: string;
-  bonus: string;
-}
-
-/** The authored background-card ids (data/ui_layout.json `creation.cards`). */
-const BACKGROUND_IDS: Record<string, BackgroundIds> = {
-  background_deckhand: {
-    card: "cards.background_deckhand",
-    name: "cards.background_deckhand.name",
-    bio: "cards.background_deckhand.bio",
-    bonus: "cards.background_deckhand.bonus",
-  },
-  background_navy_cadet: {
-    card: "cards.background_navy_cadet",
-    name: "cards.background_navy_cadet.name",
-    bio: "cards.background_navy_cadet.bio",
-    bonus: "cards.background_navy_cadet.bonus",
-  },
-  background_merchant_apprentice: {
-    card: "cards.background_merchant_apprentice",
-    name: "cards.background_merchant_apprentice.name",
-    bio: "cards.background_merchant_apprentice.bio",
-    bonus: "cards.background_merchant_apprentice.bonus",
-  },
-  background_cartographer_apprentice: {
-    card: "cards.background_cartographer_apprentice",
-    name: "cards.background_cartographer_apprentice.name",
-    bio: "cards.background_cartographer_apprentice.bio",
-    bonus: "cards.background_cartographer_apprentice.bonus",
-  },
-  background_tavern_errand: {
-    card: "cards.background_tavern_errand",
-    name: "cards.background_tavern_errand.name",
-    bio: "cards.background_tavern_errand.bio",
-    bonus: "cards.background_tavern_errand.bonus",
-  },
-  background_fencing_student: {
-    card: "cards.background_fencing_student",
-    name: "cards.background_fencing_student.name",
-    bio: "cards.background_fencing_student.bio",
-    bonus: "cards.background_fencing_student.bonus",
-  },
-};
 
 function sumAlloc(alloc: Record<string, number>): number {
   return Object.values(alloc).reduce((total, value) => total + Math.max(0, value), 0);
@@ -288,48 +139,40 @@ export function CreationScreen() {
   const draftPreview = preview(attrAlloc, skillAlloc);
 
   const stepStat = (
-    ids: StepperIds,
     key: AttrKey | SkillKey,
     isAttr: boolean,
     alloc: Record<string, number>,
     remainingForKind: number,
     base: number,
   ) => {
-    const rowId = ids.row;
     const spent = alloc[key] ?? 0;
     const atCap = spent >= ITEM_CAP;
     const canAdd = !atCap && remainingForKind > 0;
     return (
-      <Element key={key} screen={SCREEN} id={rowId} parent="points">
-        <LabelEl
-          screen={SCREEN}
-          id={ids.name}
-          parent={rowId}
+      <div key={key} className="creation__stat">
+        <Label
+          className="creation__stat_name"
           textKey={isAttr ? `attr.${key}` : `skill.${key}`}
         />
-        <LabelEl screen={SCREEN} id={ids.value} parent={rowId} textValue={String(base)} align="right" />
-        <ButtonEl
-          screen={SCREEN}
-          id={ids.sub}
-          parent={rowId}
+        <Label className="creation__stat_value" textValue={String(base)} align="right" />
+        <Button
           textKey="creation.stepper.sub"
+          compact
           disabled={spent <= 0}
           onClick={() =>
             updateAlloc(isAttr, alloc, key, -1, remainingForKind, setAttrAlloc, setSkillAlloc)
           }
         />
-        <ButtonEl
-          screen={SCREEN}
-          id={ids.add}
-          parent={rowId}
+        <Button
           textKey="creation.stepper.add"
+          compact
           disabled={!canAdd}
           titleKey={atCap ? "creation.cap_reached" : undefined}
           onClick={() =>
             updateAlloc(isAttr, alloc, key, 1, remainingForKind, setAttrAlloc, setSkillAlloc)
           }
         />
-      </Element>
+      </div>
     );
   };
 
@@ -357,179 +200,147 @@ export function CreationScreen() {
   };
 
   return (
-    <>
-      <PanelEl screen={SCREEN} id="background" skin="backdrop" />
-      <LabelEl
-        screen={SCREEN}
-        id="title"
-        textKey={step === 1 ? "creation.step.background" : "creation.step.points"}
-        title
-        align="center"
-      />
-      <LabelEl
-        screen={SCREEN}
-        id="prompt"
-        textValue={
-          step === 1
-            ? background
-              ? t(background.bio)
-              : ""
-            : fmt("creation.points.left", { count: remaining })
-        }
-        tone="dim"
-        align="center"
-      />
+    <div className="sa-screen creation" data-screen={SCREEN}>
+      <div className="sa-scene" aria-hidden="true" />
 
-      <Element screen={SCREEN} id="cards" hidden={step !== 1}>
-        {BACKGROUNDS.map((entry) => {
-          const ids = BACKGROUND_IDS[entry.id];
-          if (!ids) return null;
-          return (
-            <Element
-              key={entry.id}
-              screen={SCREEN}
-              id={ids.card}
-              parent="cards"
-              as="button"
-              skin={backgroundId === entry.id ? "button_focus" : "panel"}
-              className="sa-card-button"
-              onClick={() => setBackgroundId(entry.id)}
-            >
-              <LabelEl screen={SCREEN} id={ids.name} parent={ids.card} text={entry.name} heading />
-              <LabelEl
-                screen={SCREEN}
-                id={ids.bio}
-                parent={ids.card}
-                textValue={t(entry.bio)}
+      <div className="sa-fill-center creation__layer">
+        <Frame
+          titleKey={step === 1 ? "creation.step.background" : "creation.step.points"}
+          className="creation__window"
+          scroll
+        >
+          <Label
+            textValue={
+              step === 1
+                ? background
+                  ? t(background.bio)
+                  : ""
+                : fmt("creation.points.left", { count: remaining })
+            }
+            tone="dim"
+            align="center"
+          />
+
+          {step === 1 ? (
+            <div className="creation__cards">
+              {BACKGROUNDS.map((entry) => (
+                <Button
+                  key={entry.id}
+                  fill
+                  kind={backgroundId === entry.id ? "primary" : "default"}
+                  onClick={() => setBackgroundId(entry.id)}
+                >
+                  <span className="sa-button__stack">
+                    <Label text={entry.name} heading />
+                    <Label textValue={t(entry.bio)} tone="dim" />
+                    <Label textValue={bonusLine(entry, tKey, fmt)} />
+                  </span>
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <>
+              <Label
+                className="creation__header"
+                textKey="creation.points.attributes"
+                values={{ count: remainingAttr }}
+                heading
+              />
+              {ATTRS.map((key) =>
+                stepStat(key, true, attrAlloc, remainingAttr, attrValue(key, attrAlloc)),
+              )}
+
+              <Label
+                className="creation__header"
+                textKey="creation.points.skills"
+                values={{ count: remainingSkill }}
+                heading
+              />
+              {SKILLS.map((key) =>
+                stepStat(key, false, skillAlloc, remainingSkill, skillValue(key, skillAlloc)),
+              )}
+
+              <div className="creation__spread">
+                <Button
+                  textKey="creation.spread"
+                  onClick={() => {
+                    const attrs: Record<string, number> = {};
+                    for (const key of ATTRS) attrs[key] = 1;
+                    const skills: Record<string, number> = {};
+                    for (const key of SKILLS.slice(0, 3)) skills[key] = 1;
+                    setAttrAlloc(attrs);
+                    setSkillAlloc(skills);
+                  }}
+                />
+                <Button
+                  textKey="ui.cancel"
+                  kind="quiet"
+                  onClick={() => {
+                    setAttrAlloc({});
+                    setSkillAlloc({});
+                  }}
+                />
+              </div>
+
+              {remaining > 0 ? (
+                <Label className="creation__hint" textKey="creation.points.must_spend" tone="warn" />
+              ) : null}
+
+              <Label
+                className="creation__preview"
+                textValue={previewLine(
+                  "creation.preview.sighting",
+                  String(basePreview.sighting),
+                  String(draftPreview.sighting),
+                )}
                 tone="dim"
               />
-              <LabelEl
-                screen={SCREEN}
-                id={ids.bonus}
-                parent={ids.card}
-                textValue={bonusLine(entry, tKey, fmt)}
+              <Label
+                className="creation__preview"
+                textValue={previewLine(
+                  "creation.preview.speed",
+                  percent(basePreview.speed),
+                  percent(draftPreview.speed),
+                )}
+                tone="dim"
               />
-            </Element>
-          );
-        })}
-      </Element>
+              <Label
+                className="creation__preview"
+                textValue={previewLine(
+                  "creation.preview.duel",
+                  String(basePreview.duel),
+                  String(draftPreview.duel),
+                )}
+                tone="dim"
+              />
+            </>
+          )}
 
-      <Element screen={SCREEN} id="points" hidden={step !== 2}>
-        <LabelEl
-          screen={SCREEN}
-          id="points.attr_header"
-          parent="points"
-          textKey="creation.points.attributes"
-          values={{ count: remainingAttr }}
-          heading
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="points.skill_header"
-          parent="points"
-          textKey="creation.points.skills"
-          values={{ count: remainingSkill }}
-          heading
-        />
-
-        {ATTRS.map((key) =>
-          stepStat(ATTR_IDS[key], key, true, attrAlloc, remainingAttr, attrValue(key, attrAlloc)),
-        )}
-        {SKILLS.map((key) =>
-          stepStat(SKILL_IDS[key], key, false, skillAlloc, remainingSkill, skillValue(key, skillAlloc)),
-        )}
-
-        <Element screen={SCREEN} id="points.spread" parent="points">
-          <Box rect={{ x: 0, y: 0, w: 3, h: 2 }}>
-            <Button
-              textKey="creation.spread"
-              fill
-              onClick={() => {
-                const attrs: Record<string, number> = {};
-                for (const key of ATTRS) attrs[key] = 1;
-                const skills: Record<string, number> = {};
-                for (const key of SKILLS.slice(0, 3)) skills[key] = 1;
-                setAttrAlloc(attrs);
-                setSkillAlloc(skills);
-              }}
+          <div className="creation__footer">
+            <Footer
+              buttons={[
+                <Button
+                  key="back"
+                  textKey="ui.back"
+                  onClick={() => (step === 1 ? navigate("nationality_select") : setStep(1))}
+                />,
+                <Button
+                  key="confirm"
+                  textKey={step === 1 ? "creation.next" : "creation.confirm"}
+                  kind="primary"
+                  disabled={(step === 2 && remaining > 0) || submitting}
+                  onClick={() => (step === 1 ? setStep(2) : submit())}
+                />,
+              ]}
             />
-          </Box>
-          <Box rect={{ x: 3, y: 0, w: 3, h: 2 }}>
-            <Button
-              textKey="ui.cancel"
-              kind="quiet"
-              fill
-              onClick={() => {
-                setAttrAlloc({});
-                setSkillAlloc({});
-              }}
-            />
-          </Box>
-        </Element>
-
-        <LabelEl
-          screen={SCREEN}
-          id="points.spend_hint"
-          parent="points"
-          textKey="creation.points.must_spend"
-          tone="warn"
-          hidden={remaining <= 0}
-        />
-
-        <LabelEl
-          screen={SCREEN}
-          id="points.preview.sighting"
-          parent="points"
-          textValue={previewLine(
-            "creation.preview.sighting",
-            String(basePreview.sighting),
-            String(draftPreview.sighting),
-          )}
-          tone="dim"
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="points.preview.speed"
-          parent="points"
-          textValue={previewLine(
-            "creation.preview.speed",
-            percent(basePreview.speed),
-            percent(draftPreview.speed),
-          )}
-          tone="dim"
-        />
-        <LabelEl
-          screen={SCREEN}
-          id="points.preview.duel"
-          parent="points"
-          textValue={previewLine(
-            "creation.preview.duel",
-            String(basePreview.duel),
-            String(draftPreview.duel),
-          )}
-          tone="dim"
-        />
-      </Element>
-
-      <ButtonEl
-        screen={SCREEN}
-        id="back"
-        textKey="ui.back"
-        onClick={() => (step === 1 ? navigate("nationality_select") : setStep(1))}
-      />
-      <ButtonEl
-        screen={SCREEN}
-        id="confirm"
-        textKey={step === 1 ? "creation.next" : "creation.confirm"}
-        kind="primary"
-        disabled={(step === 2 && remaining > 0) || submitting}
-        onClick={() => (step === 1 ? setStep(2) : submit())}
-      />
+          </div>
+        </Frame>
+      </div>
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />
       ) : null}
-    </>
+    </div>
   );
 }
 

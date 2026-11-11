@@ -1,7 +1,8 @@
 /**
- * button atom (80-* §4.9): kind ∈ default/primary/danger/quiet, optional
- * icon, min 2×2 tiles for standalone use. Inside an authored layout row
- * pass `fill` so the data rect is applied exactly (rule 2).
+ * button atom (80-* §4.9.1): kind ∈ default/primary/danger/quiet, cream
+ * beveled plate, the 4-state matrix in CSS. `compact` is the 32px dense
+ * variant for table-row actions. Children (a `.sa-button__stack` or a
+ * custom composition) replace the plain label.
  */
 import { useI18n } from "../i18n";
 import type { SpriteId } from "../assets/sprites";
@@ -19,7 +20,10 @@ export interface ButtonProps {
   onClick?: () => void;
   disabled?: boolean;
   fill?: boolean;
+  compact?: boolean;
   titleKey?: string;
+  /** Full custom content (e.g. the verb-bar icon/name/status stack). */
+  children?: React.ReactNode;
 }
 
 export function Button({
@@ -30,20 +34,33 @@ export function Button({
   onClick,
   disabled,
   fill,
+  compact,
   titleKey,
+  children,
 }: ButtonProps) {
   const { tKey } = useI18n();
-  const label = text ?? (textKey ? tKey(textKey) : "");
+  const classes = [
+    "sa-button",
+    `sa-button--${kind}`,
+    fill ? "sa-button--fill" : "",
+    compact ? "sa-button--compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
       type="button"
-      className={`sa-button sa-button--${kind}${fill ? " sa-button--fill" : ""}`}
+      className={classes}
       onClick={onClick}
       disabled={disabled}
       title={titleKey ? tKey(titleKey) : undefined}
     >
-      {icon ? <Icon id={icon} className="sa-button__icon" /> : null}
-      <span className="sa-button__label">{label}</span>
+      {children ?? (
+        <>
+          {icon ? <Icon id={icon} className="sa-button__icon" /> : null}
+          <span className="sa-button__label">{text ?? (textKey ? tKey(textKey) : "")}</span>
+        </>
+      )}
     </button>
   );
 }

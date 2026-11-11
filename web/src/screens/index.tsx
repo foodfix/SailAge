@@ -3,7 +3,7 @@
  * S3 sailing screen in M4 and the S10 battle screen in M5; the remaining 22
  * render the stub panel (the M6 backlog).
  */
-import { SCREEN_IDS, type ScreenId } from "../layout";
+import { SCREEN_IDS, type ScreenId } from "./ids";
 import { PortScreen } from "./PortScreen";
 import { MarketScreen } from "./MarketScreen";
 import { ProvisionsScreen } from "./ProvisionsScreen";

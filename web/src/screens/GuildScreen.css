@@ -1,0 +1,70 @@
+/* S12 guild — structural composition (80-* §4.9.1: token-only values;
+   visuals live in theme/kit). */
+
+.guild__page {
+  gap: var(--sailage-margin);
+  height: 100%;
+  padding: var(--sailage-margin);
+}
+
+.guild__header {
+  flex: 0 0 auto;
+  padding: var(--sailage-base-unit);
+}
+
+.guild__header_line {
+  display: flex;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+}
+
+.guild__content {
+  gap: var(--sailage-margin);
+}
+
+.guild__offers {
+  flex: 1 1 62%;
+  min-width: 0;
+}
+
+.guild__reports {
+  flex: 1 1 38%;
+  min-width: 0;
+}
+
+.guild__offers_body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.guild__offers_rows {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.guild__offer {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+  height: 100%;
+}
+
+.guild__offer_line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+}
+
+.guild__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(var(--sailage-base-unit) * 4);
+  height: 100%;
+}
+
+.guild__table_reports > .sa-row > .sa-row__cell:nth-child(1) { flex: 0 0 40%; }
+.guild__table_reports > .sa-row > .sa-row__cell:nth-child(2) { flex: 0 0 34%; }
+.guild__table_reports > .sa-row > .sa-row__cell:nth-child(3) { flex: 1 1 auto; }

@@ -1,0 +1,155 @@
+/* S21 naval-battle sandbox — structural composition (80-* §4.9.1:
+   token-only values; visuals live in theme/kit). */
+
+.sandbox {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Content stacks above the scene backdrop (the PortScreen pattern). */
+.sandbox__head,
+.sandbox__actions,
+.sandbox__field,
+.sandbox__editor {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header plate: title + zero-write notice, the Esc hint at the right. */
+.sandbox__head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sailage-base-unit);
+  margin: var(--sailage-base-unit);
+  padding: calc(var(--sailage-base-unit) / 2) var(--sailage-base-unit);
+}
+
+.sandbox__head_names {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The four verbs: the top row and the conditions-strip footer row. */
+.sandbox__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
+}
+
+.sandbox__actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The canvas mount in preview mode. */
+.sandbox__field {
+  position: relative;
+  display: flex;
+  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
+}
+
+.sandbox__field > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The editor: one scrolling column of kit windows. */
+.sandbox__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
+}
+
+.sandbox__panel {
+  flex: 0 0 auto;
+}
+
+.sandbox__panel_body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sailage-base-unit);
+}
+
+.sandbox__rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+/* Editor rows: label + control cells on one line per ship / profile. */
+.sandbox__grid {
+  display: grid;
+  align-items: stretch;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+/* five attributes · weapon · armor · morale · add/remove steppers */
+.sandbox__stats {
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr))
+    minmax(0, 1.2fr)
+    minmax(0, 1.2fr)
+    minmax(0, 1fr)
+    calc(var(--sailage-base-unit) * 7)
+    calc(var(--sailage-base-unit) * 7);
+}
+
+/* kind · compose · flagship · ai_level · archetype · formation · morale · steppers */
+.sandbox__profile {
+  grid-template-columns:
+    minmax(0, 1.2fr)
+    minmax(0, 1fr)
+    minmax(0, 1.2fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    calc(var(--sailage-base-unit) * 7)
+    calc(var(--sailage-base-unit) * 7);
+}
+
+/* day · seed mode · seed value · weather · wind · current · strength · deployment */
+.sandbox__conditions {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1.2fr)
+    minmax(0, 0.8fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1.2fr);
+}
+
+/* One ship = one line: number · type · cannons · crew · durability ·
+   captain (expanding) · figurehead · sail (80-* §4.7.16). */
+.sandbox__shiprow {
+  display: grid;
+  align-items: stretch;
+  gap: calc(var(--sailage-base-unit) / 2);
+  grid-template-columns:
+    calc(var(--sailage-base-unit) * 4)
+    minmax(0, 2fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 2fr)
+    minmax(0, 1.5fr)
+    minmax(0, 1.5fr);
+}
+
+.sandbox__shipnum {
+  align-self: center;
+}
+
+.sandbox__cell {
+  display: flex;
+  min-width: 0;
+  min-height: var(--sailage-row-h);
+}

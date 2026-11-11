@@ -1,58 +1,12 @@
 /*
- * The shared widget kit + chrome skins (80-UI-UX.md §4.9).
+ * The shared widget kit — the CSS-drawn UW2 chrome (80-UI-UX.md §4.9.1).
  *
- * This file (with theme/tokens.css and theme/base.css) is the ONLY CSS
- * authoring point in the SPA: screen TSX may position elements but never
- * declare colours, radii, padding, borders or other visual styles. The
- * M3 audit gate enforces the empty allowlist.
- *
- * Nine-patch mapping: each 96 × 96 sheet is a 3 × 3 grid of 32 px chrome
- * tiles; slicing 32 px and `round`-repeating the middle is the CSS
- * transplant of AXIS_STRETCH_MODE_TILE.
+ * This file (with theme/tokens.css and theme/base.css) is the ONLY place
+ * that authors *visual* CSS. Screens compose these atoms and may author
+ * structural CSS modules (flex/grid/geometry) whose colours, fonts and
+ * px values are still token references — the audit gate enforces the
+ * boundary. There are no chrome bitmaps: every rule below is drawn.
  */
-
-/* --- The 7 assignable nine-patch sheets (10-* §4.23) --------------------- */
-
-.sa-sheet--panel {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_panel.png");
-}
-
-.sa-sheet--button {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button.png");
-}
-
-.sa-sheet--button-hover {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_hover.png");
-}
-
-.sa-sheet--button-pressed {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
-}
-
-.sa-sheet--button-focus {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
-}
-
-.sa-sheet--field {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_field.png");
-}
-
-.sa-sheet--backdrop {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_backdrop.png");
-}
-
-/* --- The panel skin overlay --------------------------------------------- */
-
-.sa-skin {
-  position: absolute;
-  inset: 0;
-  border-style: solid;
-  border-width: var(--sailage-chrome-tile);
-  border-image-slice: 32 fill;
-  border-image-width: var(--sailage-chrome-tile);
-  border-image-repeat: round;
-  pointer-events: none;
-}
 
 /* --- Typography ---------------------------------------------------------- */
 
@@ -74,7 +28,6 @@
 }
 
 .sa-label--heading {
-  color: var(--sailage-ink-warm);
   font-size: calc(var(--sailage-base-unit) * 2.5);
 }
 
@@ -98,6 +51,11 @@
   color: var(--sailage-bad);
 }
 
+/* Light ink for indigo / sea surfaces (dialogs, scene captions). */
+.sa-label--light {
+  color: var(--sailage-text);
+}
+
 .sa-label--right {
   justify-content: flex-end;
   text-align: right;
@@ -108,62 +66,132 @@
   text-align: center;
 }
 
-/* --- Frame atom ---------------------------------------------------------- */
+.sa-label--wrap {
+  white-space: normal;
+}
 
-.sa-frame {
+/* --- Window frame (the parchment plate; 80-* §4.9.1) ---------------------- */
+
+.sa-window {
   position: relative;
-  width: 100%;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--sailage-parch);
+  border: 3px solid var(--sailage-accent-lo);
+}
+
+/* The inner brown rule, 2px inside the outer gold rule. */
+.sa-window::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--sailage-ink-warm);
+  pointer-events: none;
+}
+
+.sa-window__title {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  flex: 0 0 auto;
+  min-height: var(--sailage-row-h);
+  padding: 0 var(--sailage-margin);
+  overflow: hidden;
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 2.5);
+}
+
+.sa-window__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: var(--sailage-margin);
   overflow: hidden;
 }
 
-.sa-frame__title {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: var(--sailage-row-h);
+/* A titled window hides its double rule under the title band seam. */
+.sa-window--titled .sa-window__title {
+  border-bottom: 1px solid var(--sailage-ink-warm);
 }
 
-.sa-frame__body {
-  position: absolute;
-  inset: var(--sailage-margin);
+/* --- Dialog plate (the indigo message window) ----------------------------- */
+
+.sa-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  background: var(--sailage-dialog-field);
+  border: 3px solid var(--sailage-accent);
+  color: var(--sailage-text);
 }
 
-/* --- Button atom --------------------------------------------------------- */
+.sa-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--sailage-accent-lo);
+  pointer-events: none;
+}
+
+.sa-dialog__title {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: var(--sailage-row-h);
+  padding: 0 var(--sailage-margin);
+  overflow: hidden;
+  color: var(--sailage-accent-hi);
+  font-size: calc(var(--sailage-base-unit) * 2.5);
+}
+
+.sa-dialog__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: var(--sailage-margin);
+  overflow: hidden;
+  color: var(--sailage-text);
+}
+
+/* The dim layer under modals. */
+.sa-dim {
+  background: color-mix(in srgb, var(--sailage-panel-bg) 78%, transparent);
+}
+
+/* --- Button atom (cream plate + bevel; the 4-state matrix) ---------------- */
 
 .sa-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--sailage-button-h);
+  min-width: var(--sailage-row-h);
   min-height: var(--sailage-button-h);
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 0 var(--sailage-margin);
+  border: 1px solid var(--sailage-ink-warm);
+  background:
+    linear-gradient(
+      to bottom right,
+      color-mix(in srgb, var(--sailage-button-hover) 45%, transparent) 0 2px,
+      transparent 2px
+    ),
+    var(--sailage-parch-hi);
+  box-shadow:
+    inset 0 2px 0 0 var(--sailage-button-hover),
+    inset 2px 0 0 0 var(--sailage-button-hover),
+    inset 0 -2px 0 0 var(--sailage-parch-lo),
+    inset -2px 0 0 0 var(--sailage-parch-lo);
   color: var(--sailage-ink-warm);
   cursor: pointer;
 }
 
-/* The nine-patch lives on a pseudo-element so the label's containing block
-   is the full button box (a 32 px border would zero it on 2-tile plates). */
-.sa-button::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-style: solid;
-  border-width: var(--sailage-chrome-tile);
-  border-image-slice: 32 fill;
-  border-image-width: var(--sailage-chrome-tile);
-  border-image-repeat: round;
-  pointer-events: none;
-}
-
 .sa-button:disabled {
   cursor: default;
+  background: var(--sailage-parch);
+  border-color: var(--sailage-parch-lo);
+  box-shadow: none;
   color: color-mix(in srgb, var(--sailage-ink-warm) 55%, transparent);
 }
 
@@ -174,14 +202,16 @@
   min-height: 0;
 }
 
+.sa-button--compact {
+  min-height: var(--sailage-row-h);
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+}
+
 .sa-button__label {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: calc(var(--sailage-base-unit) / 2);
-  padding: 0 var(--sailage-margin);
   overflow: hidden;
   font-size: calc(var(--sailage-base-unit) * 2);
   line-height: 1.1;
@@ -189,66 +219,151 @@
   text-overflow: ellipsis;
 }
 
+.sa-button--compact .sa-button__label {
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+}
+
+/* A stacked verb-bar button: icon over a name + status line. */
+.sa-button__stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  overflow: hidden;
+  font-size: calc(var(--sailage-base-unit) * 2);
+  line-height: 1.15;
+}
+
 .sa-button__icon {
   width: calc(var(--sailage-base-unit) * 3);
   height: calc(var(--sailage-base-unit) * 3);
+  flex: 0 0 auto;
 }
 
-/* State matrix (80-* §4.9): sheet swap, never a layout change. */
-.sa-button::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button.png");
-}
-
-.sa-button--primary::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
-}
-
-.sa-button--danger::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
-  filter: sepia(1) saturate(3) hue-rotate(320deg);
-}
-
-.sa-button--quiet::before {
-  border-image-source: none;
-}
-
-.sa-button:not(:disabled):hover::before,
-.sa-button:not(:disabled):focus-visible::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_hover.png");
+/* State matrix: hover / focus brighten + gold border; pressed sinks. */
+.sa-button:not(:disabled):hover {
+  border-color: var(--sailage-accent);
 }
 
 .sa-button:not(:disabled):focus-visible {
-  outline: none;
+  z-index: 1;
+  border-color: var(--sailage-accent);
+  outline: 2px solid var(--sailage-accent);
+  outline-offset: 1px;
 }
 
-.sa-button--primary:not(:disabled):hover::before,
-.sa-button--primary:not(:disabled):focus-visible::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
+.sa-button:not(:disabled):active {
+  background: var(--sailage-parch);
+  box-shadow:
+    inset 0 2px 0 0 var(--sailage-parch-lo),
+    inset 2px 0 0 0 var(--sailage-parch-lo),
+    inset 0 -2px 0 0 var(--sailage-button-hover),
+    inset -2px 0 0 0 var(--sailage-button-hover);
 }
 
-.sa-button:not(:disabled):active::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
+/* Kinds: primary = the gold rule; danger = the red pair; quiet = flat. */
+.sa-button--primary {
+  border-color: var(--sailage-accent-lo);
 }
 
-.sa-button--quiet:not(:disabled):hover::before,
-.sa-button--quiet:not(:disabled):active::before {
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
+.sa-button--primary:not(:disabled):hover,
+.sa-button--primary:not(:disabled):focus-visible {
+  border-color: var(--sailage-accent);
 }
 
-/* --- Row / Footer / FieldRow -------------------------------------------- */
+.sa-button--danger {
+  border-color: var(--sailage-bad);
+}
+
+.sa-button--danger:not(:disabled):hover,
+.sa-button--danger:not(:disabled):focus-visible {
+  border-color: var(--sailage-bad-hi);
+}
+
+.sa-button--quiet {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sa-button--quiet:not(:disabled):hover,
+.sa-button--quiet:not(:disabled):active {
+  border-color: var(--sailage-ink-warm);
+}
+
+/* --- Table chrome (header band + zebra rows) ------------------------------ */
+
+.sa-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
 
 .sa-row {
   display: flex;
+  flex: 0 0 auto;
   align-items: stretch;
   width: 100%;
   height: var(--sailage-row-h);
 }
 
 .sa-row__cell {
+  display: flex;
   flex: 1 1 0;
+  align-items: center;
   min-width: 0;
   height: 100%;
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  overflow: hidden;
 }
+
+.sa-row--head {
+  background: var(--sailage-panel-wood);
+  color: var(--sailage-parch-hi);
+}
+
+.sa-table > .sa-row:not(.sa-row--head):nth-child(odd) {
+  background: var(--sailage-parch);
+}
+
+.sa-table > .sa-row:not(.sa-row--head):nth-child(even) {
+  background: var(--sailage-table-zebra);
+}
+
+.sa-table > .sa-row:not(.sa-row--head):hover {
+  box-shadow: inset 0 0 0 1px var(--sailage-accent-lo);
+}
+
+.sa-table > .sa-row[data-selected="true"] {
+  box-shadow: inset 0 0 0 2px var(--sailage-accent);
+}
+
+.sa-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  overflow: hidden;
+  color: inherit;
+  font-size: calc(var(--sailage-base-unit) * 2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sa-cell--right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.sa-cell--center {
+  justify-content: center;
+  text-align: center;
+}
+
+/* --- Footer / FieldRow ---------------------------------------------------- */
 
 .sa-footer {
   display: flex;
@@ -256,7 +371,6 @@
   justify-content: flex-end;
   gap: var(--sailage-base-unit);
   width: 100%;
-  height: 100%;
 }
 
 .sa-field-row {
@@ -264,7 +378,7 @@
   align-items: center;
   gap: calc(var(--sailage-base-unit) / 2);
   width: 100%;
-  height: var(--sailage-row-h);
+  min-height: var(--sailage-row-h);
 }
 
 .sa-field-row__label {
@@ -272,41 +386,30 @@
 }
 
 .sa-field-row__control {
+  display: flex;
   flex: 1 1 auto;
+  align-items: center;
   min-width: 0;
-  height: 100%;
+  min-height: var(--sailage-row-h);
 }
 
-/* --- Field --------------------------------------------------------------- */
+/* --- Field (the recessed input plate) ------------------------------------- */
 
 .sa-field {
   position: relative;
-  display: block;
+  display: flex;
   width: 100%;
   height: 100%;
-  border: 0;
-  background: color-mix(in srgb, var(--sailage-panel-bg) 62%, transparent);
-}
-
-.sa-field::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-style: solid;
-  border-width: var(--sailage-chrome-tile);
-  border-image-slice: 32 fill;
-  border-image-width: var(--sailage-chrome-tile);
-  border-image-repeat: round;
-  border-image-source: url("../../../assets/ui/chrome/ninepatch_field.png");
-  pointer-events: none;
+  min-height: var(--sailage-row-h);
+  background: color-mix(in srgb, var(--sailage-parch-lo) 55%, var(--sailage-parch));
+  border: 1px solid var(--sailage-ink-warm);
+  box-shadow: inset 0 1px 0 0 var(--sailage-parch-lo);
 }
 
 .sa-field__input {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
-  padding: 0 var(--sailage-margin);
+  padding: 0 var(--sailage-base-unit);
   border: 0;
   outline: none;
   background: transparent;
@@ -316,18 +419,19 @@
 }
 
 .sa-field:focus-within {
-  box-shadow: inset 0 0 0 2px var(--sailage-accent);
+  border-color: var(--sailage-accent);
+  box-shadow: inset 0 0 0 1px var(--sailage-accent);
 }
 
-/* --- ValueBar ------------------------------------------------------------ */
+/* --- ValueBar -------------------------------------------------------------- */
 
 .sa-value-bar {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border: 2px solid var(--sailage-panel-line);
-  background: color-mix(in srgb, var(--sailage-panel-bg) 85%, transparent);
+  border: 1px solid var(--sailage-ink-warm);
+  background: var(--sailage-panel-bg);
 }
 
 .sa-value-bar__fill {
@@ -347,7 +451,7 @@
   background: var(--sailage-bad);
 }
 
-/* --- Icons --------------------------------------------------------------- */
+/* --- Icons ------------------------------------------------------------------ */
 
 .sa-icon {
   display: block;
@@ -362,12 +466,12 @@
   border: 1px solid var(--sailage-icon-line-hi);
 }
 
-/* --- Lists (clipped viewports; absolute rows) --------------------------- */
+/* --- Scrolling --------------------------------------------------------------- */
 
 .sa-scroll {
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-color: var(--sailage-panel-line) transparent;
+  scrollbar-color: var(--sailage-panel-wood-hi) transparent;
   scrollbar-width: thin;
 }
 
@@ -376,43 +480,111 @@
 }
 
 .sa-scroll::-webkit-scrollbar-thumb {
-  background: var(--sailage-panel-line);
+  background: var(--sailage-panel-wood-hi);
 }
 
-.sa-list-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
+/* --- Scene backdrop (the port-hub composition) -------------------------------- */
 
-.sa-list-row {
+.sa-scene {
   position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      to bottom,
+      var(--sailage-sea) 0 55%,
+      var(--sailage-coast-sea) 55% 62%,
+      var(--sailage-land) 62% 100%
+    );
 }
 
-.sa-cell {
+/* --- HUD plates, chips, tabs, verb bar ---------------------------------------- */
+
+.sa-plate {
+  position: relative;
   display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 0 calc(var(--sailage-base-unit) / 2);
-  overflow: hidden;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--sailage-parch) 92%, transparent);
+  border: 2px solid var(--sailage-accent-lo);
+  box-shadow: inset 0 0 0 1px var(--sailage-ink-warm);
   color: var(--sailage-ink-warm);
+}
+
+.sa-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  min-height: var(--sailage-row-h);
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  background: var(--sailage-parch);
+  border: 2px solid var(--sailage-accent-lo);
+  box-shadow: inset 0 0 0 1px var(--sailage-ink-warm);
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+  white-space: nowrap;
+}
+
+.sa-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.sa-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--sailage-base-unit) * 12);
+  min-height: var(--sailage-row-h);
+  padding: 0 var(--sailage-base-unit);
+  border: 1px solid var(--sailage-ink-warm);
+  background: var(--sailage-parch-hi);
+  box-shadow:
+    inset 0 2px 0 0 var(--sailage-button-hover),
+    inset 0 -2px 0 0 var(--sailage-parch-lo);
+  color: var(--sailage-ink-warm);
+  cursor: pointer;
   font-size: calc(var(--sailage-base-unit) * 2);
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-/* --- Toast atom ---------------------------------------------------------- */
+.sa-tab[data-active="true"] {
+  background: var(--sailage-parch);
+  box-shadow:
+    inset 0 2px 0 0 var(--sailage-parch-lo),
+    inset 0 -2px 0 0 var(--sailage-button-hover);
+}
+
+.sa-tab:disabled {
+  cursor: default;
+  color: color-mix(in srgb, var(--sailage-ink-warm) 55%, transparent);
+}
+
+.sa-verb-bar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sailage-base-unit);
+  background: color-mix(in srgb, var(--sailage-parch) 92%, transparent);
+  border: 2px solid var(--sailage-accent-lo);
+  box-shadow: inset 0 0 0 1px var(--sailage-ink-warm);
+}
+
+/* --- Toast atom ----------------------------------------------------------------- */
 
 .sa-toast {
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: calc(var(--sailage-chrome-tile) * 2);
-  max-width: calc(var(--sailage-chrome-tile) * 24);
+  bottom: calc(var(--sailage-base-unit) * 3);
+  max-width: calc(var(--sailage-base-unit) * 96);
   padding: var(--sailage-base-unit) var(--sailage-margin);
-  border: 2px solid var(--sailage-panel-line);
-  background: var(--sailage-panel-bg);
-  color: var(--sailage-text);
+  border: 2px solid var(--sailage-accent-lo);
+  box-shadow: inset 0 0 0 1px var(--sailage-ink-warm);
+  background: var(--sailage-parch);
+  color: var(--sailage-ink-warm);
   font-size: calc(var(--sailage-base-unit) * 2);
   transform: translateX(-50%);
 }
@@ -425,26 +597,24 @@
   border-color: var(--sailage-bad);
 }
 
-/* --- Badge / chip -------------------------------------------------------- */
+/* --- Badge / nation swatch -------------------------------------------------------- */
 
 .sa-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0 calc(var(--sailage-base-unit) / 2);
-  background: var(--sailage-panel-line);
-  color: var(--sailage-text);
+  background: var(--sailage-panel-wood);
+  color: var(--sailage-parch-hi);
   font-size: calc(var(--sailage-base-unit) * 1.5);
   white-space: nowrap;
 }
-
-/* --- Nation swatch (port header; palette constants, not screen styling) -- */
 
 .sa-nation-swatch {
   display: block;
   width: 100%;
   height: 100%;
-  border: 1px solid var(--sailage-panel-line);
+  border: 1px solid var(--sailage-panel-wood);
   background: var(--sailage-port-neutral);
 }
 
@@ -471,32 +641,3 @@
 .sa-nation-swatch--italy {
   background: var(--sailage-port-italy);
 }
-
-/* --- Modal dim layer ----------------------------------------------------- */
-
-.sa-dim {
-  background: color-mix(in srgb, var(--sailage-panel-bg) 78%, transparent);
-}
-
-/* --- Facility card (a whole element is the clickable plate) -------------- */
-
-.sa-card-button {
-  display: block;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.sa-card-button:disabled {
-  cursor: default;
-  opacity: 55%;
-}
-
-.sa-card-button:focus-visible {
-  outline: 2px solid var(--sailage-accent);
-  outline-offset: -2px;
-}
-

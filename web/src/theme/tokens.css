@@ -1,10 +1,11 @@
 /*
  * GENERATED FILE — DO NOT EDIT.
- * Source: web/src/theme/palette.json (docs/80-UI-UX.md §4.8).
+ * Source: web/src/theme/palette.json (docs/80-UI-UX.md §4.8/§4.9.1).
  * Regenerate: node scripts/build_tokens.mjs
  * Check:      node scripts/build_tokens.mjs --check
  *
- * 129 color tokens + 8 sizing tokens.
+ * 132 color tokens + 8 sizing tokens.
+ * Retired (append-only list, 10-* §4.24 — keep, never consume): CHROME_TILE
  */
 :root {
   /* Palette colors (append-only, §4.8). */
@@ -137,8 +138,11 @@
   --sailage-cloth-holland: #d97b1e;
   --sailage-cloth-ottoman: #6a3d9a;
   --sailage-cloth-italy: #c9a227;
+  --sailage-button-hover: #fff7e2;
+  --sailage-dialog-field: #232a52;
+  --sailage-table-zebra: #ecdcb4;
 
-  /* Chrome sizing grid (§4.8: 1 tile = CHROME_TILE). */
+  /* Chrome sizing grid (§4.8: base unit = BASE_UNIT; §4.9.1). */
   --sailage-chrome-tile: 32px;
   --sailage-base-unit: 8px;
   --sailage-margin: 16px;
