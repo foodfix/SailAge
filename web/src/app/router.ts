@@ -7,7 +7,14 @@ import { isScreenId, type ScreenId } from "../layout";
 
 export function parseHash(hash: string): ScreenId {
   const raw = hash.replace(/^#\/?/, "").replace(/\/$/, "");
-  return isScreenId(raw) ? raw : "port";
+  if (isScreenId(raw)) return raw;
+  // Dev seam: `?screen=world` opens a screen directly when no hash route is
+  // present (the navigation gates use it); a hash route always wins.
+  if (!raw) {
+    const screen = new URLSearchParams(window.location.search).get("screen");
+    if (screen && isScreenId(screen)) return screen;
+  }
+  return "port";
 }
 
 export function navigate(screen: ScreenId): void {

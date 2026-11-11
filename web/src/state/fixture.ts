@@ -9,7 +9,7 @@
  * reasons, open/closed status) — M2 must supply the same projections.
  */
 import { content } from "../i18n";
-import type { GameSnapshot, ScreenViews } from "./types";
+import type { GameSnapshot, NpcMarkerState, ScreenViews, SailingView } from "./types";
 
 const LISBON = "lisbon";
 const PORTUGAL = "portugal";
@@ -409,3 +409,115 @@ export const fixtureViews: ScreenViews = {
     spar: { stake: 100, step: 10, winPct: 45 },
   },
 };
+
+/* ---------------------------------------------------------------------- */
+/* M4 sailing scenario (fixture only)                                      */
+/*                                                                         */
+/* A second snapshot beside the docked-at-Lisbon port fixture: the player  */
+/* is at sea just off Lisbon's berth, with a handful of NPC markers, a      */
+/* wreck and a known explored band so the canvas + minimap are demoable     */
+/* before the M2 live stream lands. The port fixture above is untouched —  */
+/* this object is what the fixture GameClient streams while the `world`     */
+/* screen runs. Every number is a fixture value, not a game rule.           */
+/* ---------------------------------------------------------------------- */
+
+/** Encode the §8.1 `explored_tiles` runs (base64, 6-byte LE runs). */
+function encodeExploredRows(rows: { y: number; x0: number; len: number }[]): string {
+  const bytes = new Uint8Array(rows.length * 6);
+  rows.forEach((row, index) => {
+    const offset = index * 6;
+    const length = row.len - 1;
+    bytes[offset] = row.y & 0xff;
+    bytes[offset + 1] = (row.y >> 8) & 0xff;
+    bytes[offset + 2] = row.x0 & 0xff;
+    bytes[offset + 3] = (row.x0 >> 8) & 0xff;
+    bytes[offset + 4] = length & 0xff;
+    bytes[offset + 5] = (length >> 8) & 0xff;
+  });
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+const EXPLORED_ROWS: { y: number; x0: number; len: number }[] = [];
+for (let y = 560; y <= 655; y += 1) {
+  EXPLORED_ROWS.push({ y, x0: 1985, len: 100 });
+}
+
+/** The fixture sailing save (at sea off Lisbon; `current_port` is null). */
+export const fixtureSailingSnapshot: GameSnapshot = {
+  ...fixtureState,
+  world: {
+    ...fixtureState.world,
+    position: { x: 2043, y: 608 },
+    weather: "fair",
+    sail_trim: "normal",
+    heading: "E",
+    wind_dir: "E",
+  },
+  current_port: null,
+  known_ports: [LISBON, "madeira", "cadiz", "seville", "london"],
+  explored_tiles: encodeExploredRows(EXPLORED_ROWS),
+  npc_fleets: [],
+  wrecks: [{ id: "wreck_lisbon_1", position: { x: 2043, y: 618 }, kind: "salvage" }],
+};
+
+/** §4.5.2 marker rows for the sailing scenario (letters ride the state). */
+export const fixtureSailingMarkers: NpcMarkerState[] = [
+  {
+    id: "npc_trader_lisbon",
+    role: "trader",
+    nation_id: PORTUGAL,
+    position: { x: 2045, y: 600 },
+    heading: "SW",
+    marker_letter: "T",
+    wake: [
+      { x: 2046, y: 599 },
+      { x: 2047, y: 598 },
+    ],
+  },
+  {
+    id: "npc_pirate_1",
+    role: "pirate",
+    nation_id: "",
+    position: { x: 2038, y: 605 },
+    heading: "E",
+    wake: [
+      { x: 2037, y: 605 },
+      { x: 2036, y: 605 },
+    ],
+  },
+  {
+    id: "npc_patrol_1",
+    role: "patrol",
+    nation_id: SPAIN,
+    position: { x: 2049, y: 619 },
+    heading: "N",
+    marker_letter: "P",
+  },
+  {
+    id: "npc_coaster_1",
+    role: "coaster",
+    nation_id: "holland",
+    position: { x: 2032, y: 612 },
+    heading: "NE",
+    marker_letter: "c",
+    wake: [{ x: 2031, y: 613 }],
+  },
+];
+
+export const fixtureSailingView: SailingView = {
+  npc_markers: fixtureSailingMarkers,
+};
+
+/** Scenario constants the fixture client and the screen share. */
+export const fixtureSailing = {
+  snapshot: fixtureSailingSnapshot,
+  view: fixtureSailingView,
+  /** Day 12, 08:30 — the same wall clock the port fixture shows. */
+  clock_min: 510,
+  /** Fixture display speed (knots); M2's tick carries the real number. */
+  speed: 4.2,
+  /** Lisbon's committed berth tile — the fixture's one docking target. */
+  dock: { port_id: LISBON, x: 2050, y: 615 },
+} as const;

@@ -1,6 +1,7 @@
 /**
- * ScreenHost — the 32-screen switch. Eight port screens are real in M3;
- * the remaining 24 render the stub panel (the M6 backlog).
+ * ScreenHost — the 32-screen switch. Eight port screens are real in M3 and the
+ * S3 sailing screen is real in M4; the remaining 23 render the stub panel
+ * (the M6 backlog).
  */
 import { SCREEN_IDS, type ScreenId } from "../layout";
 import { PortScreen } from "./PortScreen";
@@ -11,6 +12,7 @@ import { InnScreen } from "./InnScreen";
 import { GuildScreen } from "./GuildScreen";
 import { PalaceScreen } from "./PalaceScreen";
 import { TavernScreen } from "./TavernScreen";
+import { WorldScreen } from "./World";
 import { StubScreen } from "./StubScreen";
 
 const REAL: Partial<Record<ScreenId, () => JSX.Element>> = {
@@ -22,6 +24,7 @@ const REAL: Partial<Record<ScreenId, () => JSX.Element>> = {
   guild: GuildScreen,
   palace: PalaceScreen,
   tavern: TavernScreen,
+  world: WorldScreen,
 };
 
 export function isRealScreen(screen: ScreenId): boolean {

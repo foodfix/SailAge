@@ -103,6 +103,42 @@ export interface Wreck {
   [key: string]: unknown;
 }
 
+/* ---------------------------------------------------------------------- */
+/* World / sailing view types (M4, additive)                               */
+/*                                                                         */
+/* The tick frame is the authoritative sailing slice (client/types.ts).    */
+/* NPC fleet markers and wrecks are state projections: the M2 server must  */
+/* supply the same §4.5.2 marker rows the oracle's NpcFleets.markers()     */
+/* exposes (role, nation, letter, wake). The fixture supplies them here.   */
+/* ---------------------------------------------------------------------- */
+
+export interface WorldCell {
+  x: number;
+  y: number;
+}
+
+/** One §4.5.2 world-map marker (nation square + role letter + wake trail). */
+export interface NpcMarkerState {
+  id: string;
+  role: string;
+  nation_id: string;
+  position: WorldCell;
+  heading: Direction8;
+  /** §4.5.2 role letter from the state (absent = no letter, e.g. pirate). */
+  marker_letter?: string;
+  /** Recent walked cells, newest first; §4.5.2 draws a 5-tile dashed wake. */
+  wake?: WorldCell[];
+  /** Docked markers draw no wake and sit on the port's berth tile. */
+  docked?: boolean;
+  /** Convoy member count beside the shared marker (§4.5.2). */
+  convoy?: number;
+}
+
+/** The world-screen projection: NPC markers (wrecks ride `GameState.wrecks`). */
+export interface SailingView {
+  npc_markers: NpcMarkerState[];
+}
+
 export interface MarketEvent {
   id: string;
   good_id: string;

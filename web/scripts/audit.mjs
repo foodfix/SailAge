@@ -49,6 +49,7 @@ const REAL_SCREENS = {
   guild: "GuildScreen.tsx",
   palace: "PalaceScreen.tsx",
   tavern: "TavernScreen.tsx",
+  world: "World.tsx",
 };
 
 const STYLE_ALLOWED_PREFIXES = ["theme" + sep, "kit" + sep];
@@ -228,5 +229,5 @@ if (violations.length > 0) {
 
 console.log(
   `audit: OK — i18n allowlist empty (0 hardcoded strings), styling boundary clean, ` +
-    `layout coverage ${realCount}/${totalScreens} screens (8 real, ${totalScreens - realCount} stubs)`,
+    `layout coverage ${realCount}/${totalScreens} screens (${realCount} real, ${totalScreens - realCount} stubs)`,
 );
