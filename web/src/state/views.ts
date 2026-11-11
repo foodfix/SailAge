@@ -447,3 +447,47 @@ export type ScreenViewOf<S extends ScreenViewId> = ScreenViews[S];
 export type ViewEnvelope<S extends ScreenViewId> =
   | { ok: true; screen: S; views: ScreenViewOf<S> }
   | { ok: false; error: ApiErrorBody };
+
+/* ---------------------------------------------------------------------- */
+/* M6-a front door / bookends — additive read-only types                   */
+/*                                                                         */
+/* The M2 server rides a few transient keys on the `state` frame that the  */
+/* frozen state/types.ts does not model (90-* §0.3 "the transient keys").  */
+/* The bookend screens read them through these optional shapes; nothing    */
+/* here changes a game rule or the save contract.                          */
+/* ---------------------------------------------------------------------- */
+
+export interface GameSnapshotExtras {
+  /** Docked state marker the server adds to every state payload. */
+  in_port?: boolean;
+  /** The `game_over` cause (`starvation|scurvy|sunk|captured`). */
+  game_over_reason?: string;
+  pending_levelup?: boolean;
+  pending_raise?: boolean;
+}
+
+/** The save v9 `captain_states` block is richer than state/types.ts's
+ *  presentation subset (docs/70-* §4.7's retirement segment reads wins). */
+export interface CaptainStateExtras {
+  wins?: number;
+  tier_now?: number;
+  stance?: number;
+}
+
+/** `GET /api/state`'s `hello` companion (90-* §0.4, the boot probe). */
+export interface BootstrapHello {
+  save_version: number;
+  tick_hz: number;
+  broadcast_hz: number;
+  locale: "zh" | "en";
+  has_run: boolean;
+  current_screen: string;
+  saves: Array<{
+    slot: number;
+    day: number;
+    nation_id: string;
+    port_id: string;
+    gold: number;
+    saved_at: number;
+  }>;
+}
