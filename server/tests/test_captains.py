@@ -1185,15 +1185,21 @@ class TestEncounterDescriptor:
         encounter = interactions.attack_encounter(store, run, fleet, 100)
         assert encounter["kind"] == kind
 
-    def test_compose_seam_is_marked(self, store: DataStore) -> None:
+    def test_compose_seam_is_live(self, store: DataStore) -> None:
         """A fleet without ships draws its composition from the ecology
-        port's seeded stream — the module is not landed yet, so the seam
-        must raise a LOUD marked error, never a silent wrong composition."""
+        port's seeded stream. The ecology module has landed: the seam must
+        delegate to ``npc_fleets.compose_fleet_ships`` — same fleet, same
+        day, same ships (never a silent wrong composition)."""
         run = make_run(pos=OPEN_CELL, known=[])
         fleet = make_fleet(run, "pirate", "", OPEN_CELL, "fx_no_ships",
                            PIRATE_ID)
-        with pytest.raises(Exception, match="npc_fleets"):
-            interactions.attack_encounter(store, run, fleet, 100)
+        encounter = interactions.attack_encounter(store, run, fleet, 100)
+        from server.sim.world import npc_fleets
+        expected = npc_fleets.compose_fleet_ships(fleet, 100)
+        assert expected, "the ecology composition is non-empty"
+        assert encounter["ships"] == expected
+        assert encounter["kind"] == "pirate"
+        assert encounter["encounter_id"] == "fx_no_ships"
 
 
 class TestSeededReplay:

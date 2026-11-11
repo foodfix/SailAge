@@ -1943,14 +1943,24 @@ class TestDayTickOrdering:
 
     def test_ecology_tick_is_the_caller_hook(self) -> None:
         # The 90-§5.4 step-5 listener seam: the day_advanced hook carries
-        # the post-drift day, and sailing.py imports no ecology module.
+        # the post-drift day, and sailing.py imports no ecology module
+        # (asserted statically against the module source — a whole-process
+        # sys.modules probe would trip over other suites' imports).
         run = make_run(day=5)
         seen: list[int] = []
         run.state.on_day_advanced = seen.append
         run.advance(2.0)
         assert seen == [6, 7]
-        import sys
-        assert "server.sim.world.npc_fleets" not in sys.modules
+        import ast
+        from pathlib import Path
+        tree = ast.parse(Path(sim.__file__).read_text(encoding="utf-8"))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+            elif isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+        assert not any("npc_fleets" in name for name in imported)
         assert not hasattr(sim, "npc_fleets")
 
 
