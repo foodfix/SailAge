@@ -21,6 +21,7 @@ import type { ReactNode } from "react";
 import { content, useI18n } from "../i18n";
 import type { L10nString } from "../i18n";
 import { useGameState } from "../state/context";
+import { useGameClient } from "../client/context";
 import type { GameSnapshot } from "../state/types";
 import type { PersonKind } from "../state/views";
 import { Box, Element, ListRows, tile, type ScreenId } from "../layout";
@@ -297,6 +298,7 @@ export function CharacterCard({
   standalone = false,
 }: CharacterCardProps) {
   const { state } = useGameState();
+  const client = useGameClient();
   const { t, tKey, fmt } = useI18n();
   const data = useMemo(() => buildCard(kind, personId, state), [kind, personId, state]);
   const [draft, setDraft] = useState<Record<string, number>>({});
@@ -583,7 +585,19 @@ export function CharacterCard({
         </Element>
         <Element screen={SCREEN} id="allocation.buttons" parent="allocation">
           <Element screen={SCREEN} id="allocation.confirm" parent="allocation.buttons">
-            <Button textKey="ui.confirm" kind="primary" disabled titleKey="ui.not_available" fill />
+            <Button
+              textKey="ui.confirm"
+              kind="primary"
+              disabled={Object.keys(draft).length === 0}
+              onClick={() => {
+                void client
+                  .action("people", "allocate", { draft })
+                  .then((result) => {
+                    if (result.ok) setDraft({});
+                  });
+              }}
+              fill
+            />
           </Element>
           <Element screen={SCREEN} id="allocation.cancel" parent="allocation.buttons">
             <Button textKey="ui.cancel" onClick={() => setDraft({})} fill />

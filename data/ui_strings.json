@@ -4239,5 +4239,45 @@
   "chart.legend.fog": {
     "zh": "已探索海域",
     "en": "Explored waters"
+  },
+  "interact.no_target": {
+    "zh": "没有可交互的目标",
+    "en": "No interaction target"
+  },
+  "char.reputation.hint": {
+    "zh": "与各国的声望",
+    "en": "Standing with each nation"
+  },
+  "fleet.kind.provisions": {
+    "zh": "补给",
+    "en": "Provisions"
+  },
+  "fleet.kind.water": {
+    "zh": "淡水",
+    "en": "Fresh water"
+  },
+  "char.card.stance": {
+    "zh": "立场",
+    "en": "Stance"
+  },
+  "char.card.familiarity": {
+    "zh": "熟识",
+    "en": "Familiarity"
+  },
+  "char.alloc.clamp_note": {
+    "zh": "单项上限 +3，点数必须用完",
+    "en": "Per-item cap +3; all points must be spent"
+  },
+  "autopilot.empty": {
+    "zh": "未委任航行",
+    "en": "No appointed voyage"
+  },
+  "char.alloc.refused": {
+    "zh": "无法分配点数",
+    "en": "Allocation refused"
+  },
+  "char.train.refused": {
+    "zh": "无法训练",
+    "en": "Training refused"
   }
 }

@@ -45,7 +45,7 @@ EXPECTED_INVENTORY: dict[str, tuple[str, ...]] = {
                "retire"),
     "provisions": ("set_sail", "buy_supplies", "fill", "jettison"),
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
-               "appoint"),
+               "appoint", "allocate"),
     "fleet": ("jettison", "promote"),
     "settings": ("npc_preset", "input_mode", "current_mode"),
 }

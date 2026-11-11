@@ -140,7 +140,7 @@ FACILITY_INVENTORY: Final[dict[str, tuple[str, ...]]] = {
                "retire"),
     "provisions": ("set_sail", "buy_supplies", "fill", "jettison"),
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
-               "appoint"),
+               "appoint", "allocate"),
     "fleet": ("jettison", "promote"),
     "settings": ("npc_preset", "input_mode", "current_mode"),
 }
@@ -1796,6 +1796,26 @@ class Session:
                               ship_id):
             self._refuse("tavern.appoint_refused")
         return {"ok": True, "officer_id": officer_id, "post_id": post_id}
+
+    def _people_allocate(self, body: dict[str, Any]) -> dict[str, Any]:
+        """§4.4 level-up allocation: ``{draft: {attribute: +n}}`` — the
+        whole draft is refused when it overflows any attribute or the
+        pending counter (points are never partially spent)."""
+        self._guard_run()
+        draft = body.get("draft")
+        if not isinstance(draft, dict) or not draft:
+            self._refuse("error.bad_request", "bad_request")
+        intent: dict[str, int] = {}
+        for key, raw in draft.items():
+            try:
+                intent[str(key)] = int(raw)
+            except (TypeError, ValueError):
+                self._refuse("error.bad_request", "bad_request")
+        if not character.allocate(self.gs, intent):
+            self._refuse("char.alloc.refused")
+        self.queue_state()
+        return {"ok": True,
+                "alloc_pending": character.alloc_pending(self.gs)}
 
     # =====================================================================
     # fleet
