@@ -276,11 +276,38 @@ deliberately superseded by a doc-pinned closed form.
   canon today; a `GET /api/view` entry per screen is the tidy follow-up).
 - The battle canvas's `battle_tick` extras (acting unit, log stream,
   cannon counts, per-ship maxima, nation colour, current vector).
-- The model studio's layout editor is vestigial (its `ui_layout.json`
-  target retired); the model/art re-roll bench stays.
+- ~~The model studio's layout editor is vestigial~~ — deleted at M7 (see
+  below), not a parking-lot item anymore.
 - The Phase-9/Phase-10 parking lots (per-broadside shot types, merchant
   archetype, sandbox persistence, portraits, waterline VFX/pixi, …) are
   unchanged.
+
+## 9. M7 — the UW2 UI rework (2026-11-11)
+
+Source plan: `~/.opencode/plan/uw2-ui-rework.md` (4 shape decisions
+user-locked 2026-11-11). Presentation-only: no server rule, no WS/HTTP
+protocol change, no save change, no economy/content change. Normative
+chrome + composition spec: `80-*` §4.9.1 (numbers pinned there before
+any code). Ordering: Wave 0 docs → Wave 1 theme/kit foundation →
+Wave 2 the 32-screen sweep → Wave 3 tooling surgery.
+
+| W | Deliverable | Done-when |
+|---|---|---|
+| **0** | Doc amendments: `80-*` §4.8.9 retired + §4.9.1 (normative UW2 chrome spec + compositions + styling boundary); `10-*` §4.23 retired + §4.24 palette schema (the UW2 token block + the retirement-list mechanism), group 14/§8.9 retired, §8.8 chrome block trimmed; `90-*` §0 tree/audit wording/studio scope/§5.7 retired; this M7 entry; `AGENTS.md` stack/rules/gates | no live doc requires `ui_layout.json` or the chrome nine-patches |
+| **1** | `palette.json` UW2 block + `tokens.css` regen; `base.css` px canvas math (the chrome-tile token gone); the kit re-drawn in CSS (window frame / beveled button 4-state / zebra rows / fields / ValueBar / toast / dialog plate — APIs kept); audit rule (c) dropped, rule (b) restated for structural screen CSS | `npm run build` + `npm run audit` + `build_tokens.mjs --check` green; a UW2 window/button/table renders from kit alone |
+| **2** | All 32 screens re-composed (port verb bar, framed table windows, indigo dialogs, title layout, tabbed intel window, HUD plates); `web/src/layout/` deleted; `SCREEN_IDS`/`ScreenId` re-homed; `StubScreen` layout-free; `data/ui_layout.json` + `assets/ui/chrome/**` deleted; new `ui_strings` keys where the compositions need labels | every screen renders via kit composition; zero layout reads; no `Element`/`Box`/tile-rect imports remain |
+| **3** | `build_ui_art.py` chrome class + `tools/ui_art/chrome/` deleted (survivors keep `--check`); validator group 14 removed + group 13 chrome expectations trimmed; studio Layout tab / commit serialization / chrome cards removed, README rescoped; `server/sim/data.py`'s stale `ui_layout` loader + its test pin removed (a plan-facts correction: the loader existed and pinned `len == 32`) | studio launches with art families only; no tool reads or writes `ui_layout.json` or `assets/ui/chrome` |
+
+**Gates (final acceptance):** `validate_data.py` exit 0 ·
+`pytest server/tests` green · `npm run build` + `npm run audit` +
+`build_tokens.mjs --check` · `python -m server.demo_loop_smoke` ·
+`./run.sh` manual pass (demo loop + all 32 screens via `?dev=1`) ·
+byte-identity `--check` for world, ocean, shore, distance_field,
+captains, ui_art (minus chrome), web_tiles.
+
+**Audit note (the plan's §8 risk accepted):** with rule (c) retired
+there is no static layout cross-check; arrangement correctness is
+visual + the view contracts and the i18n lint stay mechanical.
 
 ## 7. M6 cutover plan (the explicit deletion / retirement lists)
 

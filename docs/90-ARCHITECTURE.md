@@ -42,12 +42,13 @@ server/                     Python package (FastAPI) — THE sim
   save.py                   save v1 (§0.5; no migration chain)
   tests/                    pytest parity suites (M1 output)
 web/                        React + TypeScript + Vite SPA — pure presentation
-  src/screens/              port, market, inn, guild, provisions, palace,
-                            tavern, shipyard, title, creation, …
+  src/screens/              the 32-screen set — kit compositions + structural CSS
+  src/kit/                  the CSS-drawn UW2 widget atoms (80-* §4.9.1)
+  src/theme/                palette.json (10-* §4.24) → tokens.css + base.css
   src/canvas/world/         sailing view (tile consumer + RAF renderer)
   src/canvas/battle/        combat view
   src/i18n/                 loads data/ui_strings.json + content JSON dicts
-data/  tools/  assets/  docs/   unchanged owners
+data/  tools/  assets/  docs/   unchanged owners (M7 deletes assets/ui/chrome)
 ```
 
 - **State & tick.** Single-player, single session: game state lives in the
@@ -62,12 +63,26 @@ data/  tools/  assets/  docs/   unchanged owners
   `{"zh","en"}` JSON entry (`10-*` §3.3). The server serves them; TSX
   renders them. The M3 lint gate keeps TSX free of hardcoded strings,
   allowlist empty — the `test_ui_styling_audit` culture transplanted.
+  **M7 (the UW2 UI rework):** the audit is two rules — (a) the i18n lint
+  unchanged; (b) the styling boundary (only `theme/` + `kit/` author
+  visual CSS; screens may author structural CSS modules whose colors,
+  fonts and px values are still token references). The former layout
+  coverage rule (c, `ui_layout.json` ids) is retired with the file.
+- **UI chrome.** The UW2 look is CSS-drawn — the chrome nine-patch
+  tilesets (`assets/ui/chrome/**`), the `border-image` plumbing and
+  `data/ui_layout.json` are deleted at M7; screens are flow-laid kit
+  compositions (`80-*` §4.9.1 is the normative spec). The pixel sprite
+  families (icons, hulls, portraits, terrain, FX) are untouched.
 - **Tiles.** `tools/build_web_tiles.py` slices the four world rasters
   (`world.png` + `wind_regions.png` + `currents.png` + `dist_land.png`) into
   web-servable tile pyramids — spec `10-*` §6.8; two builds byte-identical
   (validator group 15). The runtime never hand-edits rasters — unchanged.
 - **The model studio stays separate** (`tools/model_studio/`): its own
   process, never merged into the game server (explicit non-blocker).
+  **M7 scope:** art families only — ships, wakes, icons, glyphs,
+  portraits, the coast tileset. The Layout tab and the
+  `ui_layout.json` commit path are deleted (the studio neither reads
+  nor writes `data/ui_layout.json`).
 
 ### 0.3 The one-client WebSocket protocol (FROZEN verbatim — amend this table, never the code first)
 
@@ -173,9 +188,13 @@ format, §9 map loader …). Their status from M0:
   (`scenes/ scripts/ autoload/ *.tscn *.import project.godot`) and the
   GDScript harnesses (`tools/*.gd`, `tools/run_tests.py`) were deleted by
   the enumerated list in `IMPLEMENT-WebMigration.md` §7/§6.
-  `data/ui_layout.json` (+ validator group 14) SURVIVES as the web-era
-  layout data, and `scripts/palette.gd`'s locked values live on in
-  `web/src/theme/palette.json` (the CSS-token source). The M5 golden-trace
+  `data/ui_layout.json` (+ validator group 14) SURVIVED the cutover as
+  the web-era layout data — then were RETIRED at M7 (2026-11-11, the
+  UW2 UI rework: the file, the group and the `web/src/layout/` loader
+  are deleted; screens are kit compositions, `80-*` §4.9.1).
+  `scripts/palette.gd`'s locked values live on in
+  `web/src/theme/palette.json` (the CSS-token source, `10-*` §4.24).
+  The M5 golden-trace
   oracle is stored at `server/tests/fixtures/battle_golden_trace.jsonl`.
   Sections §1–§13 remain as the historical record of the ported
   semantics.
@@ -592,10 +611,13 @@ marked •):
 - `replace_sim()` is the test seam (the `world_map.fleet_sim()` contract
   delegates here). Registered **last**, after SaveSystem.
 
-### 5.7 LayoutBridge (`autoload/layout_bridge.gd`) *(added 2026-11-09, Phase 11; protocol amended Phase 12 — debug-gated)*
+### 5.7 LayoutBridge (`autoload/layout_bridge.gd`) *(added 2026-11-09, Phase 11; protocol amended Phase 12 — debug-gated; FULLY RETIRED — history only)*
 
-The studio layout editor's game-side endpoint (`80-*` §4.8.9). Registered
-**last, after FleetSim**; it touches only UI trees and the network.
+**RETIRED (the M6 cutover deleted the Godot tree including the
+autoload; the M7 UW2 UI rework deleted the studio Layout tab and
+`data/ui_layout.json` — nothing implements or speaks this protocol
+anymore).** The text below is the historical record of the
+studio layout editor's game-side endpoint (`80-*` §4.8.9, retired).
 
 - **Gating:** disabled unless the game is launched with
   `-- --layout-bridge` (read from `OS.get_cmdline_user_args()`). Disabled

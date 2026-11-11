@@ -27,10 +27,13 @@ server/     THE sim — Python 3.10+, FastAPI; every game rule lives here
   sim/      world, sailing, trade, character, combat, quests
   tests/    pytest parity suites (the full ported contract)
 web/        the SPA — React 18 + TypeScript + Vite; a pure renderer
-  src/screens/  the 32-screen set (absolute tiles from ui_layout history)
+  src/screens/  the 32-screen set — kit compositions + structural CSS modules
+  src/kit/      the CSS-drawn UW2 widget atoms (docs/80-UI-UX.md §4.9.1)
+  src/theme/    palette.json → tokens.css (one generator) + base.css
   src/canvas/   world/chart/battle renderers
   src/i18n/     ui_strings + content JSON, no hardcoded strings
-data/ tools/ assets/ docs/
+data/ tools/ assets/ docs/   (no chrome bitmaps: assets/ui/chrome was
+                             deleted at M7 — the chrome look is CSS-drawn)
 ```
 
 Launch: `python -m server` (or `./run.sh`) — binds `127.0.0.1:8537`, opens
@@ -69,13 +72,20 @@ the browser. Install server deps from `server/requirements.txt` (exact pins).
   (`SAILAGE_HOME` overrides for tests); `SAVE_VERSION = 1`; **no migration
   chain** — any other version is refused (docs/90 §0.5/§8.2 discipline).
 - **No multiplayer**, no accounts, no online services.
+- **Styling boundary:** only `web/src/theme/` + `web/src/kit/` author
+  visual CSS (colors, fonts, radii, borders). Screens compose kit atoms
+  and may author **structural** CSS modules (`flex`/grid/geometry)
+  whose colors, fonts and px values are still `--sailage-*` token
+  references — `npm run audit` rule (b) rejects the rest. There is no
+  layout data file: `data/ui_layout.json` and the chrome tilesets are
+  retired (M7; `docs/80-UI-UX.md` §4.9.1 is the normative UI spec).
 
 ## Gates
 
 Every change must pass:
 
 1. `python3 tools/validate_data.py` — data + raster + art + tile groups
-   (1–13, 15).
+   (1–13, 15; 14 retired at M7 with `data/ui_layout.json`).
 2. `python -m pytest server/tests` — the ported contract suites (run from
    the repo root; `server/requirements.txt` installed).
 3. `cd web && npm run build && npm run audit && node scripts/build_tokens.mjs --check`.
