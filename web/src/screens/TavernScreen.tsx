@@ -3,14 +3,21 @@
  * captains' table + sparring row. Every `tavern` element row is rendered;
  * `recruitable` / `rumors` / `table` are the declared list blocks.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { CaptainTableRow, RecruitRow } from "../state/types";
+import type { CaptainTableRow, RecruitRow } from "../state/views";
 import { Box, Element, ListRows, StackRows, type ScreenId } from "../layout";
 import { Button, Icon, Toast, ValueBar } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "tavern";
@@ -34,13 +41,20 @@ function captainIcon(captain: CaptainTableRow): string {
 }
 
 export function TavernScreen() {
-  const { state, views } = useGameState();
-  const view = views.tavern;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("tavern");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
   const [tab, setTab] = useState<Tab>("crew");
-  const [stake, setStake] = useState<number>(view.spar.stake);
+  const [stake, setStake] = useState<number>(view?.spar.stake ?? 0);
+
+  useEffect(() => {
+    if (!view) return;
+    setStake((current) => (current > 0 ? current : view.spar.stake));
+  }, [view]);
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
 
   const portName = t(content.portName(view.portId));
 
@@ -99,7 +113,7 @@ export function TavernScreen() {
           id={ids.one}
           parent={rowId}
           text={isHire ? fmt("tavern.hire", { qty: 1 }) : fmt("tavern.fire", { qty: 1 })}
-          disabled={isHire && !view.crew.canHire}
+          disabled={isHire ? !view.crew.canHire : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.hire(1) : client.tavern.fire(1))}
         />
         <ButtonEl
@@ -107,7 +121,7 @@ export function TavernScreen() {
           id={ids.ten}
           parent={rowId}
           text={isHire ? fmt("tavern.hire", { qty: 10 }) : fmt("tavern.fire", { qty: 10 })}
-          disabled={isHire && !view.crew.canHire}
+          disabled={isHire ? !view.crew.canHire : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.hire(10) : client.tavern.fire(10))}
         />
         <ButtonEl
@@ -115,7 +129,7 @@ export function TavernScreen() {
           id={ids.third}
           parent={rowId}
           textKey={isHire ? "tavern.fill" : "tavern.down_to_min"}
-          disabled={isHire && !view.crew.fillAvailable}
+          disabled={isHire ? !view.crew.fillAvailable : view.crew.canFire === false}
           onClick={() => void (isHire ? client.tavern.fillCrew() : client.tavern.downToMin())}
         />
       </Element>
@@ -270,7 +284,7 @@ export function TavernScreen() {
                     <Box rect={{ x: 48, y: 0, w: 10, h: 1 }}>
                       <Button
                         textKey="tavern.dismiss"
-                        disabled={!row.canRecruit}
+                        disabled={!(row.canDismiss ?? row.canRecruit)}
                         fill
                         onClick={() => void client.tavern.dismiss(row.officerId)}
                       />
@@ -330,16 +344,20 @@ export function TavernScreen() {
                 return (
                   <>
                     <Box rect={{ x: 0, y: 0, w: 46, h: 2 }}>
-                      <span className="sa-cell">{t(rumor.text)}</span>
+                      <span className={rumor.purchasable === false ? "sa-cell sa-label--dim" : "sa-cell"}>
+                        {t(rumor.text)}
+                      </span>
                     </Box>
-                    <Box rect={{ x: 46, y: 0, w: 12, h: 2 }}>
-                      <Button
-                        textKey={rumor.known ? "tavern.rumor.bought" : "tavern.rumor.buy"}
-                        disabled={rumor.known}
-                        fill
-                        onClick={() => void client.tavern.buyRumor(rumor.id)}
-                      />
-                    </Box>
+                    {rumor.purchasable === false ? null : (
+                      <Box rect={{ x: 46, y: 0, w: 12, h: 2 }}>
+                        <Button
+                          textKey={rumor.known ? "tavern.rumor.bought" : "tavern.rumor.buy"}
+                          disabled={rumor.known}
+                          fill
+                          onClick={() => void client.tavern.buyRumor(rumor.id)}
+                        />
+                      </Box>
+                    )}
                   </>
                 );
               }}
@@ -425,7 +443,7 @@ export function TavernScreen() {
             parent="spar"
             textKey="tavern.spar.go"
             kind="primary"
-            disabled={stake <= 0}
+            disabled={stake <= 0 || view.spar.canSpar === false}
             onClick={() => void client.tavern.spar(stake)}
           />
         </Element>

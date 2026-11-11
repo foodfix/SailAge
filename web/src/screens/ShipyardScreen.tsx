@@ -1,16 +1,28 @@
 /**
- * S6 shipyard — catalog, fleet list, ship equipment and repair/refit/sell.
+ * S6 shipyard — catalog, fleet list, equipment slots and repair/refit/sell.
  * Every `shipyard` element row is rendered; `catalog` and `fleet` are the
  * declared list blocks.
+ *
+ * The stock list, the §4.7.12 row states, prices, block reasons, repair
+ * costs and the equipment offers are the server projection's
+ * (`GET /api/view/shipyard`, 90-* §0.4).
  */
 import { useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { FleetRow, ShipCatalogRow } from "../state/types";
+import type { EquipmentSlotRow, FleetRow, ShipCatalogRow } from "../state/views";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Field, Icon, Toast, Button } from "../kit";
-import { ButtonEl, IconBox, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  IconBox,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "shipyard";
@@ -20,12 +32,14 @@ function roleKey(role: string | undefined): string {
 }
 
 export function ShipyardScreen() {
-  const { state, views } = useGameState();
-  const view = views.shipyard;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("shipyard");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
   const [repair, setRepair] = useState<Record<number, string>>({});
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
 
   const portName = t(content.portName(view.portId));
 
@@ -42,36 +56,92 @@ export function ShipyardScreen() {
       return;
     }
     void client.shipyard.repair(row.index, points);
-    showToast("shipyard.repaired", {
-      points,
-      amount: points * row.repairCostPerPoint,
-    }, "good");
+    showToast("shipyard.repaired", { points, amount: points * row.repairCostPerPoint }, "good");
   };
 
-  const equipmentRow = (slot: "weapon" | "armor", elementId: string, id: string | undefined) => {
+  const slotFor = (slots: EquipmentSlotRow[] | undefined, slot: string, shipIndex: number) =>
+    slots?.find((entry) => entry.slot === slot && entry.shipIndex === shipIndex);
+
+  const equipmentRow = (slot: "weapon" | "armor", elementId: string, row: EquipmentSlotRow | undefined) => {
     const slotKey = slot === "weapon" ? "shipyard.slot.weapon" : "shipyard.slot.armor";
     return (
       <Element key={slot} screen={SCREEN} id={elementId} parent="player_equip.rows">
-        <Box rect={{ x: 0, y: 0, w: 8, h: 1 }}>
+        <Box rect={{ x: 0, y: 0, w: 7, h: 1 }}>
           <span className="sa-cell">{tKey(slotKey)}</span>
         </Box>
-        <Box rect={{ x: 8, y: 0, w: 13, h: 1 }}>
-          <span className="sa-cell">{id ? t(content.equipmentName(id)) : tKey("char.none")}</span>
+        <Box rect={{ x: 7, y: 0, w: 10, h: 1 }}>
+          <span className="sa-cell">{row?.worn ? t(content.equipmentName(row.worn)) : tKey("char.none")}</span>
         </Box>
-        <Box rect={{ x: 21, y: 0, w: 6, h: 1 }}>
+        <Box rect={{ x: 17, y: 0, w: 5, h: 1 }}>
           <Button
             textKey="shipyard.unequip"
-            disabled={!id}
+            disabled={!row?.worn}
             fill
             onClick={() => void client.shipyard.unequip(-1, slot)}
           />
         </Box>
+        {(row?.items ?? []).slice(0, 4).map((item, index) => (
+          <Box key={item.equipmentId} rect={{ x: index * 5, y: 1, w: 5, h: 2 }}>
+            <Button
+              text={fmt("shipyard.price", { price: item.price })}
+              kind={item.canBuy ? "primary" : "default"}
+              disabled={!item.canBuy}
+              titleKey={item.reasonKey ?? item.noteKey}
+              fill
+              onClick={() => void client.shipyard.equip(-1, slot, item.equipmentId)}
+            />
+          </Box>
+        ))}
       </Element>
     );
   };
 
+  const shipEquipmentRows = (row: FleetRow) => {
+    const slots = ["figurehead", "sail"];
+    return slots.map((slot, slotIndex) => {
+      const equip = slotFor(view.equipmentSlots, slot, row.index);
+      const top = 10 + slotIndex * 3;
+      return (
+        <Box key={slot} rect={{ x: 0, y: top, w: 27, h: 3 }}>
+          <Box rect={{ x: 0, y: 0, w: 10, h: 1 }}>
+            <span className="sa-cell sa-label--dim">
+              {`${tKey(slot === "figurehead" ? "shipyard.slot.figurehead" : "shipyard.slot.sail")}: ${
+                equip?.worn ? t(content.equipmentName(equip.worn)) : tKey("char.none")
+              }`}
+            </span>
+          </Box>
+          <Box rect={{ x: 10, y: 0, w: 4, h: 1 }}>
+            <Button
+              textKey="shipyard.unequip"
+              disabled={!equip?.worn}
+              fill
+              onClick={() => void client.shipyard.unequip(row.index, slot)}
+            />
+          </Box>
+          {(equip?.items ?? []).slice(0, 3).map((item, index) => (
+            <Box key={item.equipmentId} rect={{ x: index * 9, y: 1, w: 9, h: 2 }}>
+              <Button
+                text={fmt("shipyard.price", { price: item.price })}
+                kind={item.canBuy ? "primary" : "default"}
+                disabled={!item.canBuy}
+                titleKey={item.reasonKey ?? item.noteKey}
+                fill
+                onClick={() => void client.shipyard.equip(row.index, slot, item.equipmentId)}
+              />
+            </Box>
+          ))}
+        </Box>
+      );
+    });
+  };
+
   const catalogRow = (row: ShipCatalogRow) => {
     const ship = content.shipType(row.shipTypeId);
+    const note = row.noteKey
+      ? fmt(row.noteKey, row.noteValues ?? {})
+      : row.requirementKey && row.requirementValues
+        ? fmt(row.requirementKey, row.requirementValues)
+        : undefined;
     return (
       <>
         <IconBox rect={{ x: 0, y: 0, w: 3, h: 3 }} id={`hull_${row.shipTypeId}`} />
@@ -94,7 +164,7 @@ export function ShipyardScreen() {
           </span>
         </Box>
         <Box rect={{ x: 3, y: 2, w: 14, h: 1 }}>
-          <span className="sa-cell">{tKey(roleKey(ship?.role))}</span>
+          <span className="sa-cell">{note ?? tKey(roleKey(ship?.role))}</span>
         </Box>
         <Box rect={{ x: 17, y: 2, w: 10, h: 1 }}>
           <Button
@@ -144,10 +214,10 @@ export function ShipyardScreen() {
             {fmt("fleet.stat.guns", { cannons: row.cannons, slots: row.slots })}
           </span>
         </Box>
-        <Box rect={{ x: 1, y: 6, w: 20, h: 1 }}>
+        <Box rect={{ x: 1, y: 5, w: 20, h: 1 }}>
           <span className="sa-cell">{tKey(roleKey(ship?.role))}</span>
         </Box>
-        <Box rect={{ x: 1, y: 8, w: 3, h: 2 }}>
+        <Box rect={{ x: 1, y: 7, w: 3, h: 2 }}>
           <Field
             value={repair[row.index] ?? "1"}
             onChange={(value) => setRepair((prev) => ({ ...prev, [row.index]: value }))}
@@ -155,31 +225,31 @@ export function ShipyardScreen() {
             maxLength={3}
           />
         </Box>
-        <Box rect={{ x: 4, y: 9, w: 10, h: 1 }}>
+        <Box rect={{ x: 4, y: 8, w: 10, h: 1 }}>
           <span className="sa-cell sa-label--dim">
-            {fmt("shipyard.repair_cost", {
-              amount: (Number.parseInt(repair[row.index] ?? "1", 10) || 0) * row.repairCostPerPoint,
-            })}
+            {fmt("shipyard.repair_cost", { amount: row.repairCostPerPoint })}
           </span>
         </Box>
-        <Box rect={{ x: 14, y: 8, w: 6, h: 2 }}>
+        <Box rect={{ x: 14, y: 7, w: 6, h: 2 }}>
           <Button
             textKey="shipyard.repair"
             disabled={!row.canRepair}
+            titleKey={row.repairReasonKey}
             fill
             onClick={() => repairShip(row)}
           />
         </Box>
-        <Box rect={{ x: 20, y: 8, w: 6, h: 2 }}>
+        <Box rect={{ x: 20, y: 7, w: 6, h: 2 }}>
           <Button
             textKey="shipyard.sell"
             kind="danger"
             disabled={!row.canSell}
-            titleKey={row.canSell ? undefined : "shipyard.no_sell_flagship"}
+            titleKey={row.sellReasonKey ?? (row.canSell ? undefined : "shipyard.no_sell_flagship")}
             fill
             onClick={() => void client.shipyard.sell(row.index)}
           />
         </Box>
+        {shipEquipmentRows(row)}
       </>
     );
   };
@@ -226,8 +296,8 @@ export function ShipyardScreen() {
         <Element screen={SCREEN} id="player_equip" parent="fleet_panel">
           <LabelEl screen={SCREEN} id="player_equip.title" parent="player_equip" textKey="shipyard.equipment" heading />
           <Element screen={SCREEN} id="player_equip.rows" parent="player_equip">
-            {equipmentRow("weapon", "equip.player.weapon", view.equipment.weapon)}
-            {equipmentRow("armor", "equip.player.armor", view.equipment.armor)}
+            {equipmentRow("weapon", "equip.player.weapon", slotFor(view.equipmentSlots, "weapon", -1))}
+            {equipmentRow("armor", "equip.player.armor", slotFor(view.equipmentSlots, "armor", -1))}
           </Element>
         </Element>
         <Element screen={SCREEN} id="fleet_scroll" parent="fleet_panel" className="sa-scroll">

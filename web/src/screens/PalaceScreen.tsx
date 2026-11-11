@@ -9,18 +9,27 @@ import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Button, Frame, Icon, Toast } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "palace";
 
 export function PalaceScreen() {
-  const { state, views } = useGameState();
-  const view = views.palace;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("palace");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
   const [commendDismissed, setCommendDismissed] = useState(false);
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
 
   const portName = t(content.portName(view.portId));
   const nationName = t(content.nationName(view.nationId));
@@ -246,13 +255,14 @@ export function PalaceScreen() {
           />
         </Element>
 
-        <Element screen={SCREEN} id="rows.retire" parent="rows">
+        <Element screen={SCREEN} id="rows.retire" parent="rows" hidden={view.canRetire === false}>
           <ButtonEl
             screen={SCREEN}
             id="rows.retire.button"
             parent="rows.retire"
             textKey="palace.retire"
             kind="danger"
+            disabled={view.canRetire === false}
             onClick={() => void client.palace.retire()}
           />
         </Element>

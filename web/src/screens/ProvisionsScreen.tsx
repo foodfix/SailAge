@@ -1,6 +1,10 @@
 /**
  * S4 → S3 provisioning prompt (80-* §4.6.1). Every `provisions` element
  * row is rendered; the `stacks` list block drives the cargo viewport.
+ *
+ * The supply prices (the pinned 2/1 table), the days-of-supply readout, the
+ * hold maths and the set-sail gate are the server projection's
+ * (`GET /api/view/provisions`, 90-* §0.4) — no rule math here.
  */
 import { useState } from "react";
 import { content, useI18n } from "../i18n";
@@ -8,7 +12,14 @@ import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Field, Icon, Toast, ValueBar, type ValueTier } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "provisions";
@@ -18,12 +29,14 @@ const PLUS = String.fromCharCode(0x2b);
 type SupplyKind = "provisions" | "water";
 
 export function ProvisionsScreen() {
-  const { state, views } = useGameState();
-  const view = views.provisions;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("provisions");
   const { tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
   const [qty, setQty] = useState<Record<SupplyKind, string>>({ provisions: "5", water: "5" });
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} elementId="dim" />;
 
   const adjust = (kind: SupplyKind, delta: number) => {
     const current = Number.parseInt(qty[kind], 10) || 0;
@@ -51,14 +64,16 @@ export function ProvisionsScreen() {
     const supply = kind === "provisions" ? view.provisions : view.water;
     const labelKey = kind === "provisions" ? "world.provisions" : "world.water";
     const amount = Number.parseInt(qty[kind], 10) || 0;
+    const label = supply.days !== undefined
+      ? `${fmt(labelKey, { amount: supply.qty })} (${fmt("port.sail.days", { days: supply.days })})`
+      : fmt(labelKey, { amount: supply.qty });
     return (
       <Element key={kind} screen={SCREEN} id={rowId} parent="rows">
         <LabelEl
           screen={SCREEN}
           id={ids.label}
           parent={rowId}
-          textKey={labelKey}
-          values={{ amount: supply.qty }}
+          textValue={supply.days === undefined ? fmt(labelKey, { amount: supply.qty }) : label}
         />
         <ButtonEl
           screen={SCREEN}
@@ -189,7 +204,9 @@ export function ProvisionsScreen() {
           <ValueBar value={Math.min(view.days, view.daysBarMax)} max={view.daysBarMax} tier={tier} />
         </Element>
 
-        <LabelEl screen={SCREEN} id="hint" parent="panel" textKey="port.sail.jettison_hint" tone="dim" />
+        {view.holdFree <= 0 ? (
+          <LabelEl screen={SCREEN} id="hint" parent="panel" textKey="port.sail.jettison_hint" tone="dim" />
+        ) : null}
 
         <Element screen={SCREEN} id="cargo" parent="panel">
           <Element screen={SCREEN} id="cargo.scroll" parent="cargo" className="sa-scroll">

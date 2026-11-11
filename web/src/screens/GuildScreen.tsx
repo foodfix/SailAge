@@ -6,10 +6,17 @@
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { CommissionRow } from "../state/types";
+import type { CommissionRow } from "../state/views";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Button, Icon, Toast } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "guild";
@@ -22,11 +29,13 @@ const TYPE_ICON: Record<CommissionRow["type"], string> = {
 };
 
 export function GuildScreen() {
-  const { state, views } = useGameState();
-  const view = views.guild;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("guild");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
 
   const portName = t(content.portName(view.portId));
 
@@ -111,9 +120,11 @@ export function GuildScreen() {
                       {fmt("quest.reward", { gold: offer.rewardGold, rep: offer.rep })}
                     </span>
                   </Box>
-                  {offer.hintKey ? (
+                  {offer.hintText || offer.hintKey ? (
                     <Box rect={{ x: 12, y: 2, w: 30, h: 1 }}>
-                      <span className="sa-cell sa-label--dim">{tKey(offer.hintKey)}</span>
+                      <span className="sa-cell sa-label--dim">
+                        {offer.hintText ? t(offer.hintText) : offer.hintKey ? tKey(offer.hintKey) : ""}
+                      </span>
                     </Box>
                   ) : null}
                   <Box rect={{ x: 50, y: 1, w: 8, h: 2 }}>

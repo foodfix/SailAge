@@ -5,6 +5,12 @@
 import { useCallback, useState, type ReactNode } from "react";
 import type { L10nString, L10nValue } from "../i18n";
 import { useI18n } from "../i18n";
+import { useGameState } from "../state/context";
+import type {
+  ScreenViewId,
+  ScreenViewOf,
+  ScreenViewState,
+} from "../state/views";
 import { Box, Element, type ScreenId, type SheetId, type TileRect } from "../layout";
 import { Button, Icon, type ButtonKind, type ToastTone } from "../kit";
 import type { SpriteId } from "../assets/sprites";
@@ -151,4 +157,54 @@ export function useToastState() {
   );
   const clearToast = useCallback(() => setToast(null), []);
   return { toast, showToast, clearToast };
+}
+
+/* ---------------------------------------------------------------------- */
+/* Server projections (90-* §0.4 — the no-rules-in-TS channel)             */
+/* ---------------------------------------------------------------------- */
+
+export interface ScreenViewResult<S extends ScreenViewId> {
+  /** The projection once it has arrived; null while loading / on error. */
+  view: ScreenViewOf<S> | null;
+  status: ScreenViewState;
+}
+
+/**
+ * Reads the active screen's server projection. The shell fetches it on
+ * screen activation and on every `state` frame (`GET /api/view/<screen>`),
+ * so a screen only renders server-computed values; until the projection
+ * arrives it renders the shared fallback instead of inventing numbers.
+ */
+export function useScreenView<S extends ScreenViewId>(screen: S): ScreenViewResult<S> {
+  const { views, viewStatus } = useGameState();
+  const status: ScreenViewState = viewStatus[screen] ?? {
+    status: views[screen] ? "ready" : "idle",
+  };
+  const value = status.status === "ready" ? views[screen] : undefined;
+  return {
+    view: (value ?? null) as ScreenViewOf<S> | null,
+    status,
+  };
+}
+
+/** The loading/error state every port screen renders in place of its body. */
+export function ViewFallback({
+  screen,
+  status,
+  elementId = "background",
+}: {
+  screen: ScreenId;
+  status: ScreenViewState;
+  elementId?: string;
+}) {
+  const { tKey } = useI18n();
+  const textKey =
+    status.status === "error"
+      ? status.errorKey ?? "ui.not_available"
+      : "connection.connecting";
+  return (
+    <PanelEl screen={screen} id={elementId} skin="backdrop">
+      <div className="sa-cell">{tKey(textKey)}</div>
+    </PanelEl>
+  );
 }
