@@ -1,12 +1,8 @@
-# Godot editor cache (regenerated on open)
-.godot/
-*.translation
-
 # Python
 __pycache__/
 *.pyc
 
-# Web-stack era (M0, 2026-11-11): server venvs, node modules, build output
+# Server venv + web build output
 server/.venv/
 web/node_modules/
 web/dist/
@@ -16,23 +12,8 @@ web/tsconfig.tsbuildinfo
 .DS_Store
 *.tmp
 
-# Kilo Code local plans / scratch (user-local, not part of the repo)
+# Local scratch plans (user-local, not part of the repo)
 .kilo/plans/
-
-# Godot auto-import sidecars on non-game-texture rasters: the data/ map
-# rasters are loaded via load_png_from_buffer (no import pipeline, 90-* §9),
-# the contact sheet and engine fixtures are tool artifacts — never imported
-# (Phase-10 master reconciliation, 2026-11-04). `assets/ui/tokens/` joined
-# the same raw-bytes family (2026-11-05, 90-* §9.2): tokens load via
-# load_png_from_buffer at runtime, so a scan-regenerated sidecar there is
-# local noise — never committed.
-/data/maps/*.import
-/assets/ui/hulls/*.import
-/assets/ui/tokens64/*.import
-/assets/ui/icons64/*.import
-/assets/ui/markers64/*.import
-/tools/contact_sheet.png.import
-/tools/yoyopixel/**/*.import
 
 # thenoise/ComfyUI raw model output — never committed (90-* §9.2)
 tools/ui_art/model_raw/
@@ -42,8 +23,6 @@ tools/ui_art/model_raw/
 /tools/pixellab_config.json
 
 # art review + report captures: model-pass contact sheets and review
-# rasters are tool artifacts, never committed (90-* §9.2); engine-import
-# sidecars on review rasters are likewise never imported
-# (same rule as /tools/contact_sheet.png.import)
+# rasters are tool artifacts, never committed (90-* §9.2)
 /art_review/
 /art_report/
