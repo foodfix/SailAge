@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-13 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-15 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
@@ -46,6 +46,14 @@ skipped with an informational note; artifacts are checked only where they
 exist. Group 13 ends with its six negative probes (off-palette pixel,
 corrupted artifact, broken transform relation, out-of-band footprint,
 invalid shore code, seam violation) proven red against temp fixtures.
+Group 15 is the web tile-pyramid check (section 8.10): the
+``web/public/tiles/`` inventory is exactly the §6.8 grid (4 sources x
+4 levels, edge tiles cropped, no strays), ``tools/build_web_tiles.py
+--check`` rebuilds every level in memory and byte-compares (the validator
+never re-slices the rasters itself), and a fixed five-tile sample per
+source/level decodes as a valid PNG of the pinned geometry, family colour
+type (and palette) and spot-equal pixel content. It is staged: without the
+tool the group prints ``SKIP web tiles (tool not present)`` and passes.
 
 Usage (from the repo root):
 
@@ -76,6 +84,10 @@ Exit codes:
         backgrounds / ui_strings Phase-8 families)
     13  generated-art failure (assets/ui manifests+artifacts / world_shore.png
         / art_prompts.json / group-13 probe harness)
+    14  layout failure (data/ui_layout.json v2: element ids, rects,
+        canvas bounds, list blocks, serialization bytes)
+    15  web tile-pyramid failure (web/public/tiles inventory / rebuild drift
+        / decode spot-probes — §8.10)
 
 On the first failure a single line is printed to stdout:
 
@@ -11886,6 +11898,388 @@ def run_group14_self_test() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Check group 15 — Web tile pyramids
+# ---------------------------------------------------------------------------
+
+WEB_TOOL = ART_ROOT / "tools" / "build_web_tiles.py"
+WEB_TILES = ART_ROOT / "web" / "public" / "tiles"
+WEB_TILES_LABEL = "web/public/tiles"
+WEB_TILE_PX = 256     # §6.8 frozen tile size
+WEB_LEVELS = 4        # z 0-3
+# (tile-tree source dir, source raster label, PNG colour type) — §6.8.
+WEB_SOURCES = (
+    ("world", "data/maps/world.png", 3),
+    ("wind", "data/maps/wind_regions.png", 3),
+    ("currents", "data/maps/currents.png", 3),
+    ("dist_land", "data/maps/dist_land.png", 2),
+)
+# Fixed in-tile pixel sample (§8.10 item 3: bounded, never a raster walk).
+# Edge-clipped against the tile's own cropped size before use.
+_G15_PIXEL_OFFSETS = (
+    (0, 0), (1, 0), (0, 1), (3, 5), (7, 11), (17, 43), (64, 32), (200, 100),
+)
+
+
+def _g15_level_dims(z: int) -> tuple[int, int]:
+    """Level z at 1/2^z: 4320x2160, 2160x1080, 1080x540, 540x270 (§6.8)."""
+    return MAP_WIDTH >> z, MAP_HEIGHT >> z
+
+
+def _g15_tile_grid(z: int) -> tuple[int, int]:
+    lw, lh = _g15_level_dims(z)
+    return ((lw + WEB_TILE_PX - 1) // WEB_TILE_PX,
+            (lh + WEB_TILE_PX - 1) // WEB_TILE_PX)
+
+
+def _g15_expected_inventory() -> set[str]:
+    """The exact §6.8 file set: 4 sources x (17x9 + 9x5 + 5x3 + 3x2) tiles."""
+    expected: set[str] = set()
+    for source, _label, _colour in WEB_SOURCES:
+        for z in range(WEB_LEVELS):
+            gx, gy = _g15_tile_grid(z)
+            for ty in range(gy):
+                for tx in range(gx):
+                    expected.add(f"{source}/{z}/{tx}_{ty}.png")
+    return expected
+
+
+def _g15_check_inventory(verbose: bool) -> int:
+    """§8.10 item 1: exactly the grid — no missing, no extra, nothing stray."""
+    expected = _g15_expected_inventory()
+    if not WEB_TILES.is_dir():
+        fail(
+            "web-tiles-tree",
+            WEB_TILES_LABEL,
+            f"the committed tile tree is missing entirely ({len(expected)} "
+            "tiles expected) — run tools/build_web_tiles.py (§6.8: the "
+            "pyramids are committed, tool-owned; §8.10 item 1)",
+            15,
+        )
+    committed: set[str] = set()
+    for entry in WEB_TILES.rglob("*"):
+        if entry.is_file():
+            committed.add(entry.relative_to(WEB_TILES).as_posix())
+    missing = sorted(expected - committed)
+    if missing:
+        shown = ", ".join(missing[:5])
+        more = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+        fail(
+            "web-tiles-inventory",
+            WEB_TILES_LABEL,
+            f"{len(missing)} tile(s) missing from the §6.8 grid: {shown}"
+            f"{more} — the tree is tool-owned; regenerate with "
+            "tools/build_web_tiles.py (§8.10 item 1)",
+            15,
+        )
+    extra = sorted(committed - expected)
+    if extra:
+        shown = ", ".join(extra[:5])
+        more = f" (+{len(extra) - 5} more)" if len(extra) > 5 else ""
+        fail(
+            "web-tiles-inventory",
+            WEB_TILES_LABEL,
+            f"{len(extra)} stray file(s) outside the §6.8 grid: {shown}"
+            f"{more} — a hand-edit or a stale tile (the grid is exactly "
+            "17x9/9x5/5x3/3x2 per source, edge tiles cropped); regenerate "
+            "with tools/build_web_tiles.py (§8.10 item 1)",
+            15,
+        )
+    if verbose:
+        print(f"PASS group 15 inventory ({len(expected)} tiles = 4 sources x "
+              "4 levels, exact grid)")
+    return len(expected)
+
+
+def _g15_check_rebuild(verbose: bool) -> None:
+    """§8.10 item 2: the tool recomputes in memory and byte-compares.
+
+    The validator never re-slices the rasters itself (the expensive-
+    re-derivation rule) — it delegates to ``--check`` exactly like groups
+    8/11/13 delegate to their builders.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(WEB_TOOL), "--check"],
+            capture_output=True, text=True, cwd=str(ART_ROOT), timeout=900)
+    except subprocess.TimeoutExpired:
+        fail(
+            "web-tiles-rebuild",
+            WEB_TILES_LABEL,
+            "tools/build_web_tiles.py --check exceeded the 900s budget "
+            "(§8.10 item 2)",
+            15,
+        )
+    if verbose and result.stdout:
+        for line in result.stdout.strip().splitlines()[-2:]:
+            print(f"INFO group 15 {line}")
+    if result.returncode == 0:
+        return
+    tail = (result.stderr or result.stdout or "").strip().splitlines()
+    detail = tail[-1] if tail else f"exit {result.returncode}"
+    if result.returncode == 2:
+        fail(
+            "web-tiles-tree",
+            WEB_TILES_LABEL,
+            f"the committed tile tree is missing or unreadable: {detail} "
+            "(§6.8: the pyramids are committed, tool-owned; run "
+            "tools/build_web_tiles.py)",
+            15,
+        )
+    fail(
+        "web-tiles-rebuild",
+        WEB_TILES_LABEL,
+        f"rebuild drift: {detail} (tools/build_web_tiles.py --check exited "
+        f"{result.returncode}; §8.10 item 2 — the double-run is the hand-edit "
+        "detector, regenerate, never hand-edit the tiles)",
+        15,
+    )
+
+
+def _g15_png_meta(data: bytes, label: str):
+    """Minimal IHDR/PLTE read of one committed tile (geometry + colour type)."""
+    if not data.startswith(_PNG_SIGNATURE):
+        fail("web-tiles-decode", label, "not a PNG (bad signature)", 15)
+    pos = len(_PNG_SIGNATURE)
+    header = None
+    palette = None
+    saw_iend = False
+    while pos < len(data):
+        if pos + 8 > len(data):
+            fail("web-tiles-decode", label, "truncated chunk header", 15)
+        length = struct.unpack(">I", data[pos:pos + 4])[0]
+        tag = data[pos + 4:pos + 8]
+        if pos + 12 + length > len(data):
+            fail("web-tiles-decode", label, f"truncated {tag!r} chunk", 15)
+        payload = data[pos + 8:pos + 8 + length]
+        crc = struct.unpack(
+            ">I", data[pos + 8 + length:pos + 12 + length])[0]
+        if crc != (zlib.crc32(tag + payload) & 0xFFFFFFFF):
+            fail("web-tiles-decode", label, f"bad CRC in chunk {tag!r}", 15)
+        pos += 12 + length
+        if tag == b"IHDR":
+            header = struct.unpack(">IIBBBBB", payload)
+        elif tag == b"PLTE":
+            palette = payload
+        elif tag == b"IEND":
+            saw_iend = True
+            break
+    if header is None:
+        fail("web-tiles-decode", label, "no IHDR chunk", 15)
+    if not saw_iend:
+        fail("web-tiles-decode", label, "no IEND chunk (truncated file)", 15)
+    width, height, depth, colour, compression, filt, interlace = header
+    if compression != 0 or filt != 0 or interlace != 0:
+        fail(
+            "web-tiles-decode",
+            label,
+            f"unsupported compression/filter/interlace "
+            f"{compression}/{filt}/{interlace}",
+            15,
+        )
+    return width, height, depth, colour, palette
+
+
+def _g15_load_source(source: str, label: str, colour: int):
+    """Decode one §6 source raster for the spot-probe comparison."""
+    path = ART_ROOT / label
+    if not path.is_file():
+        fail(
+            "web-tiles-probe",
+            label,
+            f"source raster missing — cannot spot-probe the {source} pyramid "
+            "(§6.8/§8.10 item 3; generate it with the §6.x family tool first)",
+            15,
+        )
+    data = path.read_bytes()
+    try:
+        if colour == 3:
+            width, height, pixels = decode_indexed_png(data)
+            _, _, _, got_colour, palette = _g15_png_meta(data, label)
+        else:
+            width, height, _, got_colour, palette = _g15_png_meta(data, label)
+            pixels = _decode_rgb_png(data, MAP_WIDTH, MAP_HEIGHT)
+    except (PngFormatError, ValueError) as exc:
+        fail("web-tiles-probe", label, f"source raster decode failed: {exc}",
+             15)
+    if (width, height) != (MAP_WIDTH, MAP_HEIGHT):
+        fail(
+            "web-tiles-probe",
+            label,
+            f"source raster is {width}x{height}, the §6.8 pyramid assumes "
+            f"{MAP_WIDTH}x{MAP_HEIGHT}",
+            15,
+        )
+    if got_colour != colour:
+        fail(
+            "web-tiles-probe",
+            label,
+            f"source colour type {got_colour}, the {source} family is "
+            f"{colour} (§6.8)",
+            15,
+        )
+    return width, height, pixels, palette or b""
+
+
+def _g15_fmt(blob) -> str:
+    if len(blob) == 1:
+        return str(blob[0])
+    return "#{:02x}{:02x}{:02x}".format(*blob)
+
+
+def _g15_probe_tiles(z: int) -> list[tuple[int, int]]:
+    """The fixed tile sample per level: both full corners, both edge strips
+    (the cropped right column / bottom row), and the middle tile."""
+    gx, gy = _g15_tile_grid(z)
+    picks = ((0, 0), (gx - 1, gy - 1), (gx - 1, 0), (0, gy - 1),
+             (gx // 2, gy // 2))
+    seen: list[tuple[int, int]] = []
+    for tile in picks:
+        if tile not in seen:
+            seen.append(tile)
+    return seen
+
+
+def _g15_check_probes(verbose: bool) -> int:
+    """§8.10 item 3: bounded decode spot-probes of the committed tiles.
+
+    Per source and level a fixed five-tile sample (both corners, both
+    cropped edge strips, the middle) is decoded and asserted against the
+    §6.8 contract: 256x256 geometry except the cropped edge tiles, the
+    family's colour type (and palette for the indexed families), and a
+    fixed handful of pixels that must equal the nearest-neighbour source
+    pixel ``(x·2^z, y·2^z)``.
+    """
+    probes = 0
+    for source, label, colour in WEB_SOURCES:
+        src_w, _src_h, src_pixels, src_palette = _g15_load_source(
+            source, label, colour)
+        bpp = 3 if colour == 2 else 1
+        for z in range(WEB_LEVELS):
+            lw, lh = _g15_level_dims(z)
+            step = 1 << z
+            for tx, ty in _g15_probe_tiles(z):
+                want_w = min(WEB_TILE_PX, lw - tx * WEB_TILE_PX)
+                want_h = min(WEB_TILE_PX, lh - ty * WEB_TILE_PX)
+                relpath = f"{source}/{z}/{tx}_{ty}.png"
+                tile_label = f"{WEB_TILES_LABEL}/{relpath}"
+                path = WEB_TILES / relpath
+                if not path.is_file():
+                    fail(
+                        "web-tiles-decode",
+                        tile_label,
+                        "probe tile is missing from the committed tree "
+                        "(§8.10 item 3)",
+                        15,
+                    )
+                data = path.read_bytes()
+                width, height, depth, got_colour, palette = _g15_png_meta(
+                    data, tile_label)
+                if got_colour != colour:
+                    fail(
+                        "web-tiles-decode",
+                        tile_label,
+                        f"colour type {got_colour}, the {source} family is "
+                        f"{colour} (§6.8: the pyramids are resized copies, "
+                        "never re-encodings)",
+                        15,
+                    )
+                if depth != 8:
+                    fail(
+                        "web-tiles-decode",
+                        tile_label,
+                        f"bit depth {depth}, expected 8 (§6.8)",
+                        15,
+                    )
+                if (width, height) != (want_w, want_h):
+                    fail(
+                        "web-tiles-decode",
+                        tile_label,
+                        f"tile is {width}x{height}, the §6.8 cropped grid "
+                        f"wants {want_w}x{want_h} at z{z} tile "
+                        f"({tx}, {ty}) (edge tiles are cropped, never "
+                        "padded)",
+                        15,
+                    )
+                if colour == 3:
+                    if palette != src_palette:
+                        fail(
+                            "web-tiles-decode",
+                            tile_label,
+                            "palette differs from its source raster (§6.8: "
+                            "an indexed source keeps its own palette at "
+                            "every level)",
+                            15,
+                        )
+                    try:
+                        _, _, pixels = decode_indexed_png(data)
+                    except PngFormatError as exc:
+                        fail("web-tiles-decode", tile_label,
+                             f"tile decode failed: {exc}", 15)
+                else:
+                    try:
+                        pixels = _decode_rgb_png(data, width, height)
+                    except ValueError as exc:
+                        fail("web-tiles-decode", tile_label,
+                             f"tile decode failed: {exc}", 15)
+
+                for px, py in _G15_PIXEL_OFFSETS:
+                    px = min(px, width - 1)
+                    py = min(py, height - 1)
+                    level_x = tx * WEB_TILE_PX + px
+                    level_y = ty * WEB_TILE_PX + py
+                    src_x = level_x * step
+                    src_y = level_y * step
+                    got = pixels[(py * width + px) * bpp:
+                                 (py * width + px) * bpp + bpp]
+                    want = src_pixels[(src_y * src_w + src_x) * bpp:
+                                      (src_y * src_w + src_x) * bpp + bpp]
+                    if got != want:
+                        fail(
+                            "web-tiles-probe",
+                            tile_label,
+                            f"pixel ({px}, {py}) is {_g15_fmt(got)} but the "
+                            f"§6.8 downsample rule wants source "
+                            f"({src_x}, {src_y}) = {_g15_fmt(want)}",
+                            15,
+                        )
+                probes += 1
+    if verbose:
+        print(f"PASS group 15 decode probes ({probes} tiles, geometry + "
+              "colour type + palette + pixel spot-equals)")
+    return probes
+
+
+def check_group15(docs: dict[str, object], verbose: bool) -> None:
+    """Web tile pyramids: docs/10-DATA-SCHEMA.md §8.10 (§6.8 governance).
+
+    Staged activation (§8.10 item 0): without ``tools/build_web_tiles.py``
+    the group is a no-op that prints the SKIP line (M0-M3); from M4 the
+    tool must exist and the group runs inventory + byte-identical rebuild +
+    bounded decode spot-probes. It survives the M6 cutover.
+    """
+    global _verbose_flag
+    _verbose_flag = verbose
+
+    if not WEB_TOOL.is_file():
+        print("SKIP web tiles (tool not present)")
+        return
+
+    tiles = _g15_check_inventory(verbose)
+    _g15_check_rebuild(verbose)
+    probes = _g15_check_probes(verbose)
+
+    if verbose:
+        print(
+            f"PASS group 15 web tile pyramids ({tiles} tiles across 4 "
+            f"sources x 4 levels, inventory exact, "
+            f"tools/build_web_tiles.py --check byte-identical, {probes} "
+            "decode spot-probes ok)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -11963,6 +12357,7 @@ def main(argv: list[str]) -> int:
         ("12", check_group12),
         ("13", check_group13),
         ("14", check_group14),
+        ("15", check_group15),
     )
 
     for group_id, check in groups:
