@@ -153,7 +153,7 @@ data/  tools/  assets/  docs/   unchanged owners
 |---|---|---|
 | `SIM_TICK_HZ` | **10** | server advances sim time at 10 Hz; the day cadence and every rule constant are unchanged (`20-*`). Confirmed against sailing feel in M4, then frozen verbatim here |
 | `WS_BROADCAST_HZ` | **10** | one `tick`/`battle_tick` per sim tick (§0.3 backpressure coalesces) |
-| Server bind / port | `127.0.0.1` : **8000** | default port 8000, `--port` override; `python -m server` (or `run.sh`) starts uvicorn and opens the browser |
+| Server bind / port | `127.0.0.1` : **8537** | default port **8537** (re-pointed 2026-11-11: 8000/8001 are routinely occupied on dev hosts; the port is not part of any protocol contract), `--port` override; `python -m server` (or `run.sh`) starts uvicorn and opens the browser |
 | Save profile dir | **`~/.sailage/`** | XDG-style profile root; the `SAILAGE_HOME` env var overrides it (test seam). Saves at `~/.sailage/saves/save_{1..3}.json` — 3 slots, the Godot UX count |
 | `SAVE_VERSION` | **1** | the web era restarts the counter; **no migration chain** — a payload whose `save_version ≠ 1` is refused (the §8.2 discipline carries over verbatim; Godot-era v1–v9 payloads are all "pre-release saves") |
 | Day-tick budget | ≤ **75 ms** | **Measured (M1, 2026-11-11): mean 45.7 ms · median 44.8 · p95 60.8 · max 84.7 ms** (single spawn-day spike) at **334 fleets** — above the Phase-8 318-fleet count — via `python -m server.perf_day_tick` (deterministic seeds, full §5.4 chain: ledger → economy → month → day_advanced → ecology → quests → captains). numpy **not** needed; the Godot-era record (72 ms @ 318) is history |

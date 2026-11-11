@@ -33,7 +33,7 @@ web/        the SPA — React 18 + TypeScript + Vite; a pure renderer
 data/ tools/ assets/ docs/
 ```
 
-Launch: `python -m server` (or `./run.sh`) — binds `127.0.0.1:8000`, opens
+Launch: `python -m server` (or `./run.sh`) — binds `127.0.0.1:8537`, opens
 the browser. Install server deps from `server/requirements.txt` (exact pins).
 
 ## Hard rules (violations = rework)

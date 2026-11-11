@@ -82,7 +82,8 @@ file-disjoint after M0.
   FROZEN WS protocol table (§0.3), the HTTP action shape (§0.4), the
   frozen numbers (§0.5: `SIM_TICK_HZ` = 10, `WS_BROADCAST_HZ` = 10 —
   confirmed against sailing feel in M4 then frozen verbatim; server bind
-  `127.0.0.1:8000`; save profile dir `~/.sailage/` with the
+  `127.0.0.1:8537` (8000 at M0; re-pointed 2026-11-11 because 8000 is
+  routinely occupied on dev hosts); save profile dir `~/.sailage/` with the
   `SAILAGE_HOME` test override; `SAVE_VERSION` = 1, no migration chain;
   day-tick budget ≤ 75 ms placeholder until the M1 measurement amends it;
   the `server/requirements.txt` == -pin policy), and §0.6 — the

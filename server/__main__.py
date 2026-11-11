@@ -1,6 +1,6 @@
 """``python -m server`` — the single-command launch (90-ARCHITECTURE.md §0.5).
 
-Frozen contract: bind ``127.0.0.1`` (default port **8000**, ``--port``
+Frozen contract: bind ``127.0.0.1`` (default port **8537**, ``--port``
 override), serve ``server.app:app`` through uvicorn, and open the browser at
 ``http://127.0.0.1:{port}/``. ``--help`` prints the usage and exits without
 starting anything; ``--no-browser`` is the headless/CI switch.
@@ -16,9 +16,11 @@ import uvicorn
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "build_parser", "main"]
 
-#: The frozen bind (docs/90-* §0.5).
+#: The frozen bind (docs/90-* §0.5). 8537 rather than 8000/8001: those are
+#: routinely taken by other local services, and nothing in the protocol
+#: depends on the port.
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 8537
 #: Seconds to wait before opening the browser (uvicorn needs to be listening).
 BROWSER_DELAY_SECONDS = 0.8
 

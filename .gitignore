@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 
 # Server venv + web build output
+.venv/
 server/.venv/
 web/node_modules/
 web/dist/
@@ -11,6 +12,11 @@ web/tsconfig.tsbuildinfo
 # OS / editor noise
 .DS_Store
 *.tmp
+
+# Pre-cutover Godot leftovers (the runtime retired at M6): editor caches and
+# auto-import sidecars may still sit on an old working copy — never committed.
+.godot/
+*.import
 
 # Local scratch plans (user-local, not part of the repo)
 .kilo/plans/
