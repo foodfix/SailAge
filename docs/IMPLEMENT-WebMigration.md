@@ -114,4 +114,36 @@ file-disjoint after M0.
   (`npm install` + `vite build` verified).
 - WS protocol table frozen verbatim at `90-ARCHITECTURE.md` §0.3.
 
-*(M1+ records append below as each milestone closes.)*
+### M1 — 2026-11-11
+
+**Delivered:** every Godot-era sim system ported to `server/sim/` with pytest
+parity suites (port the guarantee, not the method), plus save v1 and the
+frozen perf number:
+
+| Area | Modules | Parity evidence |
+|---|---|---|
+| Foundation | `rng.py` (Godot PCG32, bit-exact) · `data.py` (DataLoader) · `world/raster.py` (world/ocean/ice/dist_land decode + harbors) | RNG truth tables captured from the live Godot 4.7 oracle; raster lookups pinned against builder reports |
+| World | `sailing.py` (ledger/weather/morale/mutiny/movement/trim/currents/ice/docking/port hours) · `sail_path.py` (A*, dateline shift) · `npc_fleets.py` + `npc_intel.py` (8-role ecology, lanes, convoys, wrecks, hunters) · `captains.py` · `interactions.py` · `hail_options.py` · `autopilot.py` · `discovery.py` · `advice.py` · `arrow_field.py` · `fleet_path.py` | Seeded replays; weather strength→direction order pinned; 319-fleet tick measured |
+| Port/economy | `trade.py` · `economy.py` · `allegiance.py` · `shipyard.py` · `tavern.py` · `inn.py` · `palace.py` | Doc-table prices (300-unit London sale 5,170g); golden 360-day event replay + month-31/61 counter-investment replayed from the oracle |
+| Person/fleet | `player/character.py` · `skills.py` · `fame.py` · `fleet/fleet.py` | Closed-form XP/loyalty/title boundaries; hold maths |
+| Quests | `quest_gen.py` · `bounty.py` · `phase3_hooks.py` | Offer lists cross-checked row-for-row against the live oracle |
+| Combat | `battle_sim.py` · `battle_result.py` · `battle_rewards.py` · `ai_fleet.py` · `ai_search.py` (θ verbatim) · `fleet_commander.py` · `duel.py` | Decompose/duel/log/surrender traces byte-identical to the oracle incl. final `rng.state` |
+| Integration | `state.py` (the §5.4 GameState + new_game + pinned tick chain) · `save.py` (v1, profile dir, explored-RLE) | Round-trip green; refusal matrix (no migration chain) |
+
+**Perf (week-1 spike, amended into `90-ARCHITECTURE.md` §0.5):** the full
+day tick at **334 fleets** (above the Phase-8 318 count) — **mean 45.7 ms ·
+median 44.8 · p95 60.8 · max 84.7** (a spawn-day spike), deterministic
+seeds, `python -m server.perf_day_tick`. Inside the frozen ≤ 75 ms budget;
+numpy was not needed.
+
+**Gates:** `server/tests` 957 passed · `tools/validate_data.py` groups 1–15
+green, including group 15 (web tile pyramids, pulled forward from M4:
+876 committed tiles, byte-identical double rebuild).
+
+**Reported doc ambiguities (resolved in code per the oracle; no doc edits
+needed yet):** the §5 worked cannon example predates the broadside split;
+`30-*` §4.7's `< 100` relief row is stale vs the amended `10-*` §5
+(`< 1200`); `60-*` §4.9b prose says `assigned_target` is a unit while the
+oracle/consumer carry the fleet index; the `phase` payload stamp is `"web"`
+for the web era (state.py keeps the Godot `PHASE = 9` constant unused by
+`save.py`).
