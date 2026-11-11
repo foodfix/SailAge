@@ -143,9 +143,12 @@ def run() -> int:
     sess.set_locale("en")
     _ok("8 locale en", gs.locale == "en")
 
-    # 9. Explored set exists (the Chart's data source).
-    _ok("9 explored set", isinstance(gs.explored_tiles, set),
-        f"n={len(gs.explored_tiles)}")
+    # 9. The explored set grew while sailing (the Chart's data source; the
+    #    sighting pass runs on Set Sail and every tick — M6-b's gap).
+    _ok("9 explored set", isinstance(gs.explored_tiles, set)
+        and len(gs.explored_tiles) > 0, f"n={len(gs.explored_tiles)}")
+    _ok("9 sighting grew known ports", len(gs.known_ports) >= 6,
+        f"known={len(gs.known_ports)}")
 
     print(f"demo loop: ALL PASS ({len(CHECKS)} checks; "
           f"storm_observed={storm}; weathers={sorted(weathers)})")

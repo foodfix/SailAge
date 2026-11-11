@@ -4211,5 +4211,33 @@
   "world.ice_blocked": {
     "zh": "海冰阻挡了航路",
     "en": "Sea ice blocks the way"
+  },
+  "title.game_title": {
+    "zh": "帆海纪元",
+    "en": "SailAge"
+  },
+  "title.phase_tag": {
+    "zh": "版本 {version} · 存档 {saves}/{slots}",
+    "en": "Version {version} · saves {saves}/{slots}"
+  },
+  "title.quit_notice": {
+    "zh": "此演示版无法关闭浏览器窗口。",
+    "en": "This demo cannot close the browser window."
+  },
+  "creation.reset": {
+    "zh": "重置",
+    "en": "Reset"
+  },
+  "settings.save": {
+    "zh": "保存",
+    "en": "Save"
+  },
+  "settings.disabled.needs_server": {
+    "zh": "需服务端操作，暂不可更改。",
+    "en": "Not changeable yet (needs a server action)."
+  },
+  "chart.legend.fog": {
+    "zh": "已探索海域",
+    "en": "Explored waters"
   }
 }

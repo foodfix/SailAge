@@ -638,6 +638,7 @@ class Session:
         self.intercept = {}
         self._autopilot_elapsed = 0.0
         self._ensure_ecology()
+        self._reveal_now()
         return {"ok": True, "slot": int(slot),
                 "saves": save.list_saves()}
 
@@ -1539,6 +1540,7 @@ class Session:
             self._refuse(reason or "provisions.blocked")
         self.intercept = {}
         self.rt = autopilot.AutopilotRuntime()
+        self._reveal_now()
         return {"ok": True, "gold": int(self.gs.gold),
                 "position": {"x": self.gs.world_tile()[0],
                              "y": self.gs.world_tile()[1]}}
@@ -2271,6 +2273,7 @@ class Session:
             allegiance_state=self.gs)
         self._tick_autopilot(seconds)
         self._accrue()
+        self._reveal_now()
         after = self.gs.world_tile()
         if self.in_port():
             # Docking inside the cadence ends the sea slice for this tick.
@@ -2285,6 +2288,18 @@ class Session:
             return
         if self.client is not None:
             self.client.enqueue_tick(self.tick_frame())
+
+    def _reveal_now(self) -> None:
+        """§4.11/§4.12: the sighting/exploration pass — the oracle's
+        ``world_map._reveal`` (scene ready, after every step, after the day
+        tick). Reveals ports inside the sighting radius and marks the
+        explored square; a newly sighted port refreshes the client state."""
+        if not self.has_run() or self.in_port() or self.game_over() \
+                or self.retired():
+            return
+        newly = sailing.reveal(self.gs, self.gs, self.store)
+        if newly:
+            self.queue_state()
 
     def _tick_autopilot(self, seconds: float) -> None:
         if not autopilot.appointed(self.gs):

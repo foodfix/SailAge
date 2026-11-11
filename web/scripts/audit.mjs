@@ -51,6 +51,16 @@ const REAL_SCREENS = {
   tavern: "TavernScreen.tsx",
   world: "World.tsx",
   battle: "Battle.tsx",
+  title: "Title.tsx",
+  nationality_select: "NationalitySelect.tsx",
+  creation: "Creation.tsx",
+  save_slot: "SaveSlot.tsx",
+  gameover: "GameOver.tsx",
+  ending: "Ending.tsx",
+  chart: "Chart.tsx",
+  settings: "Settings.tsx",
+  confirm: "Confirm.tsx",
+  dialog_box: "DialogBox.tsx",
 };
 
 const STYLE_ALLOWED_PREFIXES = ["theme" + sep, "kit" + sep];
