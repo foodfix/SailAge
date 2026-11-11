@@ -25,18 +25,25 @@ from starlette.websockets import WebSocketDisconnect
 from server import save
 from server.app import create_app
 from server.session import FACILITY_INVENTORY, SIM_TICK_HZ, WS_BROADCAST_HZ
+from server.sim import fleet as fleet_lib
+from server.sim.player import fame
+from server.sim.port import shipyard, trade
+from server.sim.quests import bounty
 
-#: The frozen facility inventory (the M2 record's table, §0.4).
+#: The frozen facility inventory (the M2 record's table, §0.4; the M3
+#: wiring appended the screen verbs that had no adapter yet).
 EXPECTED_INVENTORY: dict[str, tuple[str, ...]] = {
     "market": ("buy", "sell", "invest"),
     "shipyard": ("buy", "repair", "sell", "refit", "equip", "unequip",
                  "promote"),
-    "tavern": ("hire", "fire", "spar", "hint"),
+    "tavern": ("hire", "fire", "spar", "hint", "fill_crew", "down_to_min",
+               "dismiss"),
     "inn": ("rest", "odd_job"),
     "guild": ("offers", "accept", "complete", "abandon", "report"),
     "palace": ("mission", "ceremony", "permit", "commend",
-               "tournament_enter"),
-    "provisions": ("set_sail", "buy_supplies"),
+               "tournament_enter", "repair_fleet", "pay_bounty", "inform",
+               "retire"),
+    "provisions": ("set_sail", "buy_supplies", "fill", "jettison"),
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
                "appoint"),
     "fleet": ("jettison", "promote"),
@@ -117,6 +124,22 @@ def _refusal(response: Any) -> dict[str, Any]:
     assert isinstance(body["error"]["code"], str) and body["error"]["code"]
     assert isinstance(body["error"]["msg"], str) and body["error"]["msg"]
     return body
+
+
+def _at_hour(client: TestClient, hour: int, minute: int = 0) -> None:
+    """Pins the wall clock (a test fixture, not a rule re-derivation): the
+    facility windows are the only reader of ``world.clock_fraction``."""
+    _session(client).gs.world["clock_fraction"] = \
+        (hour * 60 + minute) / 1440.0
+
+
+def _view(client: TestClient, screen: str) -> dict[str, Any]:
+    response = client.get(f"/api/view/{screen}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is True, body
+    assert body["screen"] == screen
+    return body["views"]
 
 
 def _receive_until(ws: Any, frame_type: str, limit: int = 200
@@ -399,7 +422,239 @@ def test_refusal_paths_never_500(client: TestClient) -> None:
                                                   "qty": 1}))
 
 
-# --- Static mounts -----------------------------------------------------------
+# --- (g) the M3 screen verbs (the M2 inventory, wired) ----------------------
+
+
+def test_provisions_fill_executes_the_auto_fill_plan(client: TestClient
+                                                     ) -> None:
+    _new_game(client)
+    _at_hour(client, 8)
+    before = client.get("/api/state").json()["state"]
+    response = client.post("/api/provisions/fill", json={})
+    body = response.json()
+    assert response.status_code == 200 and body["ok"] is True, body
+    plan = body["plan"]
+    # Empty hold, 120 t capacity, 5 000g: T = (120 + 0 + 0) // 2 = 60.
+    assert plan["target"] == 60
+    assert plan["buy_provisions"] == plan["buy_water"] == 60
+    assert plan["discard_provisions"] == plan["discard_water"] == 0
+    assert body["bought"] == {"provisions": 60, "water": 60}
+    assert plan["cost"] == (60 * trade.PROVISIONS_PRICE
+                            + 60 * trade.WATER_PRICE)
+    state = client.get("/api/state").json()["state"]
+    assert state["fleet"][0]["provisions"] == 60
+    assert state["fleet"][0]["water"] == 60
+    assert state["gold"] == before["gold"] - plan["cost"]
+    # Nothing left to plan: the prompt's own disabled-reason key.
+    empty = _refusal(client.post("/api/provisions/fill", json={}))
+    assert empty["error"]["msg"] == "port.sail.fill.done"
+
+
+def test_provisions_jettison_removes_pooled_supplies(client: TestClient
+                                                     ) -> None:
+    _new_game(client)
+    _buy_supplies(client)  # 10 provisions + 10 water, one hour each
+    body = client.post("/api/provisions/jettison",
+                       json={"kind": "provisions", "qty": 4}).json()
+    assert body["ok"] is True and body["removed"] == 4
+    state = client.get("/api/state").json()["state"]
+    assert state["fleet"][0]["provisions"] == 6
+    assert state["fleet"][0]["water"] == 10
+    # A zero quantity is the market's invalid-quantity refusal.
+    zero = _refusal(client.post("/api/provisions/jettison",
+                                json={"kind": "provisions", "qty": 0}))
+    assert zero["error"]["msg"] == "market.invalid_qty"
+
+
+def test_tavern_fill_crew_and_down_to_min(client: TestClient) -> None:
+    _new_game(client)
+    _at_hour(client, 10)
+    filled = client.post("/api/tavern/fill_crew", json={}).json()
+    assert filled["ok"] is True
+    # fill_heads = min(crew_max 45 − crew 15, gold // 20) = 30.
+    assert filled["heads"] == 30 and filled["crew"] == 45
+    # At the cap the Fill plan is empty: the crew row's own reason key.
+    full = _refusal(client.post("/api/tavern/fill_crew", json={}))
+    assert full["error"]["msg"] == "tavern.crew_full"
+    down = client.post("/api/tavern/down_to_min", json={}).json()
+    assert down["ok"] is True and down["fired"] == 30 and down["crew"] == 15
+    # At the floor the fire path refuses.
+    floor = _refusal(client.post("/api/tavern/down_to_min", json={}))
+    assert floor["error"]["msg"] == "tavern.fire_refused"
+
+
+def test_tavern_dismiss_officer(client: TestClient) -> None:
+    _new_game(client)
+    _at_hour(client, 10)
+    officer_id = _view(client, "tavern")["recruitable"][0]["officerId"]
+    assert client.post("/api/tavern/hire",
+                       json={"officer_id": officer_id}).json()["ok"] is True
+    assert officer_id in _session(client).gs.player["officers"]
+    body = client.post("/api/tavern/dismiss",
+                       json={"officer_id": officer_id}).json()
+    assert body["ok"] is True
+    assert officer_id not in _session(client).gs.player["officers"]
+    assert officer_id not in _session(client).gs.officer_states
+    again = _refusal(client.post("/api/tavern/dismiss",
+                                 json={"officer_id": officer_id}))
+    assert again["error"]["msg"] == "tavern.fire_refused"
+
+
+def test_palace_repair_fleet_charges_the_bay_visit_once(client: TestClient
+                                                        ) -> None:
+    _new_game(client)
+    session = _session(client)
+    session.gs.fleet[0]["durability"] = 40
+    _at_hour(client, 9)
+    gold_before = int(session.gs.gold)
+    body = client.post("/api/palace/repair_fleet", json={}).json()
+    assert body["ok"] is True and body["restored"] == 50
+    cost = 50 * shipyard.repair_cost_per_point("caravel")
+    assert body["gold"] == gold_before - cost
+    state = client.get("/api/state").json()["state"]
+    assert state["fleet"][0]["durability"] == 90
+    # An undamaged fleet has nothing to repair.
+    clean = _refusal(client.post("/api/palace/repair_fleet", json={}))
+    assert clean["error"]["msg"] == "shipyard.no_damage"
+
+
+def test_palace_pay_bounty_resets_reputation(client: TestClient) -> None:
+    _new_game(client)
+    session = _session(client)
+    _at_hour(client, 9)
+    session.gs.player["reputation"]["portugal"] = -55
+    session.gs.bounties["portugal"] = {"amount": 500, "day": 1}
+    # The pay-off must name the port's nation.
+    wrong = _refusal(client.post("/api/palace/pay_bounty",
+                                 json={"nation_id": "spain"}))
+    assert wrong["error"]["msg"] == "bounty.none"
+    body = client.post("/api/palace/pay_bounty",
+                       json={"nation_id": "portugal"}).json()
+    assert body["ok"] is True
+    assert body["reputation"] == bounty.CLEARED_REPUTATION == -10
+    assert session.gs.bounties == {}
+    assert session.gs.player["reputation"]["portugal"] == -10
+    gone = _refusal(client.post("/api/palace/pay_bounty",
+                                json={"nation_id": "portugal"}))
+    assert gone["error"]["msg"] == "bounty.none"
+
+
+def test_palace_inform_reveals_a_wanted_captain(client: TestClient) -> None:
+    _new_game(client)
+    _at_hour(client, 9)
+    inform = _view(client, "palace")["inform"]
+    assert inform, "Lisbon should post at least one wanted captain"
+    row = inform[0]
+    gold_before = int(_session(client).gs.gold)
+    body = client.post("/api/palace/inform",
+                       json={"captain_id": row["captainId"]}).json()
+    assert body["ok"] is True, body
+    assert body["gold"] == gold_before - 500
+    reveal = body["reveal"]
+    assert reveal["id"] and len(reveal["cell"]) == 2
+    assert reveal["nearest_port"]
+    unknown = _refusal(client.post("/api/palace/inform",
+                                   json={"captain_id": "cap_nope"}))
+    assert unknown["error"]["msg"] == "ui.not_available"
+
+
+def test_palace_retire_marks_the_win_state(client: TestClient) -> None:
+    _new_game(client)
+    _at_hour(client, 9)
+    locked = _refusal(client.post("/api/palace/retire", json={}))
+    assert locked["error"]["msg"] == "ui.not_available"
+    _session(client).gs.titles["portugal"] = fame.RANK_DUKE
+    body = client.post("/api/palace/retire", json={}).json()
+    assert body["ok"] is True and body["retired_at"] > 0
+    state = client.get("/api/state").json()["state"]
+    assert state["retired"] is True
+    # A retired run refuses every further action (§4.7).
+    after = _refusal(client.post("/api/palace/retire", json={}))
+    assert after["error"]["msg"] == "error.retired"
+
+
+def test_guild_complete_and_abandon(client: TestClient) -> None:
+    _new_game(client)
+    _rest(client)  # day + 3, 08:00: the guild window is open
+    offers = _view(client, "guild")["offers"]
+    assert len(offers) >= 2
+    delivery = offers[0]
+    assert delivery["type"] == "delivery"  # slot 0 is always a delivery
+    accepted = client.post("/api/guild/accept",
+                           json={"instance_id": delivery["id"]}).json()
+    assert accepted["ok"] is True
+    session = _session(client)
+    quest = session.gs.active_quests[0]
+    requirements = quest["requirements"]
+    # Turn the commission in at the docked port (the fixture redirects the
+    # destination; accept() already moved the cargo into the hold).
+    requirements["dest_port_id"] = "lisbon"
+    good_id = str(requirements["good_id"])
+    quantity = int(requirements["quantity"])
+    assert fleet_lib.held(session.gs.fleet, good_id) >= quantity
+    gold_before = int(session.gs.gold)
+    turned = client.post("/api/guild/complete",
+                         json={"instance_id": delivery["id"]}).json()
+    assert turned["ok"] is True and turned["completed"], turned
+    assert fleet_lib.held(session.gs.fleet, good_id) == 0
+    assert int(session.gs.gold) > gold_before
+    repeat = _refusal(client.post("/api/guild/complete",
+                                  json={"instance_id": delivery["id"]}))
+    assert repeat["error"]["msg"] == "quest.not_completable"
+    # Abandon the second offer: the same failure path (status failed).
+    second = client.post("/api/guild/accept",
+                         json={"instance_id": offers[1]["id"]}).json()
+    assert second["ok"] is True
+    abandoned = client.post("/api/guild/abandon",
+                            json={"instance_id": offers[1]["id"]}).json()
+    assert abandoned["ok"] is True
+    repeat = _refusal(client.post("/api/guild/abandon",
+                                  json={"instance_id": offers[1]["id"]}))
+    assert repeat["error"]["msg"] == "quest.not_completable"
+
+
+def test_bounty_closed_port_refuses_the_hub_actions(client: TestClient
+                                                    ) -> None:
+    """The M3 wiring gap 4: the action gate mirrors the hub projection —
+    ``port.closed_bounty`` first, then the hours window (§4.9.6)."""
+    _new_game(client)
+    _rest(client)  # day + 3, 08:00 — hub windows otherwise open
+    session = _session(client)
+    session.gs.player["reputation"]["portugal"] = bounty.BOUNTY_THRESHOLD - 10
+    assert bounty.evaluate_all(session.gs, session.gs) == ["portugal"]
+    assert bounty.is_port_closed(session.gs, "lisbon") is True
+    _at_hour(client, 9, 30)  # inside every hub window except the tavern's
+
+    hub = {row["id"]: row for row in _view(client, "port")["facilities"]}
+    for facility in ("market", "shipyard", "tavern", "inn", "guild"):
+        assert hub[facility]["enabled"] is False, facility
+        assert hub[facility]["status"]["reasonKey"] == "port.closed_bounty"
+    # §4.9.6: the bountied nation's capital palace stays open (Pay bounty).
+    assert hub["palace"]["enabled"] is True
+
+    for path, payload in (
+        ("/api/market/buy", {"good_id": "wheat", "qty": 1}),
+        ("/api/shipyard/repair", {"index": 0, "points": 1}),
+        ("/api/tavern/hire", {"heads": 1}),
+        ("/api/inn/rest", {}),
+        ("/api/guild/offers", {}),
+        ("/api/palace/ceremony", {}),
+        ("/api/palace/inform", {"captain_id": "cap_nope"}),
+    ):
+        response = client.post(path, json=payload)
+        assert response.status_code == 200, (path, response.text)
+        refusal = _refusal(response)
+        assert refusal["error"]["msg"] == "port.closed_bounty", path
+
+    # §4.9.6: Set Sail (and its provisioning prompt) always works.
+    for kind in ("provisions", "water"):
+        assert client.post("/api/provisions/buy_supplies",
+                           json={"kind": kind, "qty": 10}).json()["ok"] is True
+    assert client.post("/api/provisions/set_sail",
+                       json={}).json()["ok"] is True
+
+
+
 
 
 def test_static_mounts_and_spa_fallback(client: TestClient) -> None:
