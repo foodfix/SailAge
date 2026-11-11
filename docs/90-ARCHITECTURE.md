@@ -121,14 +121,21 @@ data/  tools/  assets/  docs/   unchanged owners
   background_id, attr_alloc, skill_alloc}` · `POST /api/load {slot}` ·
   `POST /api/save {slot}` · `GET /api/saves` · `GET /api/state` (returns
   `{ok, state, hello}`) · `POST /api/locale {locale}`.
-- **Facility inventory (frozen at M2, 2026-11-11):**
+- **Facility inventory (frozen at M2 + completed with the M3 wiring,
+  2026-11-11):**
   `market: buy|sell|invest` · `shipyard: buy|repair|sell|refit|equip|
-  unequip|promote` · `tavern: hire|fire|spar|hint` · `inn: rest|odd_job` ·
-  `guild: offers|accept|complete|abandon|report` · `palace: mission|
-  ceremony|permit|commend|tournament_enter` · `provisions:
-  set_sail|buy_supplies` · `people: inspect|talk|gift|befriend|attack|
-  hail|appoint` · `fleet: jettison|promote`. Every action is a thin
-  adapter over a `server/sim` function — no rules in the API layer.
+  unequip|promote` · `tavern: hire|fire|spar|hint|fill_crew|down_to_min|
+  dismiss` · `inn: rest|odd_job` · `guild: offers|accept|complete|
+  abandon|report` · `palace: mission|ceremony|permit|commend|
+  tournament_enter|repair_fleet|pay_bounty|inform|retire` · `provisions:
+  set_sail|buy_supplies|fill|jettison` · `people: inspect|talk|gift|
+  befriend|attack|hail|appoint` · `fleet: jettison|promote`. Every action
+  is a thin adapter over a `server/sim` function — no rules in the API
+  layer. Port-facility actions pass the gate order **live run → docked →
+  `bounty.can_open_facility` → §4.1b hours** (the same precedence the hub
+  projection shows; `provisions`/`people`/`fleet` never gate, so docking,
+  Save, Set Sail and sea verbs survive a bounty closure; at the bountied
+  nation's capital only Pay bounty passes the palace audience gate).
 - **Screen projections (the no-rules-in-TS channel):** `GET
   /api/view/<screen_id>` → `{ok: true, screen, views}` where `views` is
   the server-computed projection the screen renders (prices, tax badges,
