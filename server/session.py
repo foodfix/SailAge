@@ -2075,6 +2075,10 @@ class Session:
                 "wind_dir", gs.world.get("wind_dir", "E"))),
             "captain_id": str(encounter.get("captain_id", "")),
             "officer_states": copy.deepcopy(gs.officer_states),
+            # §4.8a: the live path feeds the run's morale as the player-side
+            # start (the goldens' M5 diff caught the no-autoload default of 0
+            # under-reporting the writeback by the pre-battle morale).
+            "player_morale": int(gs.morale),
         }
         current = encounter.get("current")
         if isinstance(current, dict):
