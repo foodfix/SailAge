@@ -6,6 +6,12 @@
 __pycache__/
 *.pyc
 
+# Web-stack era (M0, 2026-11-11): server venvs, node modules, build output
+server/.venv/
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+
 # OS / editor noise
 .DS_Store
 *.tmp

@@ -3595,6 +3595,19 @@ data.
   retired on 2026-11-11 (the file is the one artifact — the studio
   owns it, dev changes are data-only edits), and restyle happens in
   the studio, visually.
+- **React realization (web era, M0 note — design content unchanged).**
+  From M3 the React screens consume the same contract: each element id
+  becomes a component id, `{x, y, w, h}` tiles become absolute CSS
+  placement on the same 60 × 33.75 canvas (`left/top/width/height` =
+  tiles × 32 px, point anchors, nothing stretched), the two layout rules
+  carry over (clamp inside the parent; parents apply committed rects
+  exactly), and the `lists` blocks drive the scroll viewports (a
+  clipped viewport div whose content is absolutely stacked rows —
+  `base.y + i·row_h`). No CSS flow layout under a registered element,
+  matching the no-flow rule above; the M3 lint gate rejects hardcoded
+  strings in TSX with an empty allowlist. Until M6 this file stays the
+  single source (`10-*` §4.23 disposition); the studio remains the
+  writer.
 
 ### 4.9 Shared theme & widget kit (Phase 10)
 
@@ -3704,6 +3717,22 @@ starts EMPTY and gains entries only by master-ledger adjudication.
 `good_{id}`, `eq_{id}`, `role_{id}`, `facility_{id}`, and the `ui` icons
 per the A.2 inventory of `IMPLEMENT-Phase10.md` — resolved through the
 W3 texture registry; an absent id ⇒ flat fallback (no crash).
+
+**React realization (web era, M0 note — design content unchanged).**
+From M3 the theme layer becomes CSS custom properties generated from
+the same locked constants: every `palette.gd` hex (`80-*` §4.8) maps to
+a token of the same name in `web/src/theme/tokens.css` (the CSS
+transplant of the palette blocks; one generator, no hand transcription),
+the 7 nine-patch sheets map to CSS `border-image` classes (the
+`AXIS_STRETCH_MODE_TILE` middle rule becomes `border-image-repeat:
+round`), and the state matrix maps to class state selectors
+(`:hover`, `:active`, `:disabled`, `:focus-visible`). The six widget
+atoms become shared TSX components with the same contracts (button
+kinds, `frame`, `row`, `footer`, `value_bar`, `field_row`, `toast` —
+same pins, same min 2×2-tile floor, same 16 px content pad). The
+no-per-screen-styling rule carries over: no hardcoded colors, radii or
+box styles outside the tokens file + the kit components — allowlist
+empty, enforced by the M3 audit gate alongside the i18n lint.
 
 ### 4.16 W3/W4 symbol contracts (Phase 7 — the launch condition; §4.9 before Phase 10)
 

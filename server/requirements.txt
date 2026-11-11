@@ -1,0 +1,9 @@
+# SailAge web-era server dependencies — the FastAPI domain.
+# Policy (90-ARCHITECTURE.md §0.5): exact == pins only, installed and
+# verified on Python 3.14 at M0 (2026-11-11). This file is a SEPARATE
+# dependency domain from the stdlib-purist tools/ (which stays stdlib-only).
+# numpy joins here only if the M1 perf spike demands it (pre-approved).
+fastapi==0.162.4
+uvicorn==0.54.0
+pytest==9.2.0
+httpx==0.28.1

@@ -92,6 +92,8 @@ are fully specified here; each data file ships when its owning phase lands.
 | `tools/assets/` | Vendored public-domain shapefiles (Natural Earth 10 m land + minor islands + lakes) and `LICENSE-NOTES.md` with per-file SHA-256 | this doc |
 | `data/ui_strings.json` | UI-frame L10n strings | `80-UI-UX.md` |
 | `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route/captain-canon/RPG-data validator (groups 1–12, §8) | this doc |
+| `tools/build_web_tiles.py` | Web tile-pyramid slicer: the four §6 rasters → `web/public/tiles/` (§6.8); `--check` verifies byte-identical rebuilds; stdlib-only, the §6.3 family pattern | this doc (web era) |
+| `web/public/tiles/` | The committed tile-pyramid output — tool-owned, never hand-edited (§6.8); group 15 (§8.10) | this doc (web era) |
 
 ## 3. Shared Conventions
 
@@ -1483,6 +1485,22 @@ screen's settled look).
 }
 ```
 
+**Web-era disposition (M0, 2026-11-11).** With the stack migration
+(`90-ARCHITECTURE.md` §0) this file's role changes in place — the bytes,
+the 32-screen set and the group-14 checks are untouched:
+
+- Through **M0–M2** it stays what it is: the Godot runtime's layout table
+  (the frozen oracle keeps consuming it).
+- In **M3** it becomes the **port spec**: the React screens are built to
+  these rects (element id ↔ component id, absolute tile placement on the
+  60 × 33.75 canvas, list blocks drive the scroll viewports — `80-*`
+  §4.8.9's React realization note).
+- At **M6** it retires with the Godot tree (the React components own
+  layout from then on; the file's retirement is on the enumerated M6
+  deletion list in `IMPLEMENT-WebMigration.md`). Until then the single
+  writer stays the studio, and the file is never hand-edited into
+  divergence from the running game.
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in
@@ -1824,6 +1842,46 @@ distance; the user direction "pixel level of darker, not tile level"):
   `tools/build_distance_field.py --check` (an acceptance-time gate; the
   2026-11-06 acceptance run reported `--check OK: rebuild
   byte-identical`).
+
+### 6.8 Web tile pyramids — `web/public/tiles/` *(web era, M0 spec; the tool + the check land in M4)*
+
+One tool-owned, committed tile-pyramid family serves the four 4320×2160
+world rasters to the browser SPA (`90-ARCHITECTURE.md` §0.2) — the canvas
+renderer cannot ship a 4320×2160 bitmap per layer, so the pyramids are the
+web era's rendering source. Spec (frozen in M0 with the migration plan;
+`tools/build_web_tiles.py` and validator group 15 land together in M4):
+
+- **Sources (exactly four):** `data/maps/world.png` (§6.3),
+  `data/maps/wind_regions.png` + `data/maps/currents.png` (§6.5),
+  `data/maps/dist_land.png` (§6.7). Each keeps its own encoding unchanged —
+  the pyramids are resized copies, never re-encodings of semantics.
+- **Output layout (frozen):** `web/public/tiles/<source>/<z>/<x>_<y>.png`
+  with `<source>` ∈ `world` · `wind` · `currents` · `dist_land`,
+  `<z>` ∈ 0–3, `<x>`/`<y>` plain decimal tile coordinates, origin top-left.
+- **Tile size 256×256 px (frozen).** Zoom level *z* holds the raster at
+  scale `1/2^z`: z0 = 4320×2160 (17×9 tiles), z1 = 2160×1080 (9×5),
+  z2 = 1080×540 (5×3), z3 = 540×270 (3×2). Edge tiles are **cropped** to
+  the raster extent — never padded — so a level's tile grid exactly covers
+  `[0, 4320) × [0, 2160)` in source pixels.
+- **Downsample (frozen):** nearest-neighbour pixel picking — level *z*
+  pixel `(x, y)` copies source pixel `(x·2^z, y·2^z)`. Deterministic,
+  palette-preserving (an indexed source re-encodes with its own palette),
+  and identical for `dist_land.png`'s RGB8.
+- **Encoding (frozen):** the same stdlib PNG writer family as the other
+  raster tools (colour type per source, filter 0, zlib default) — two
+  consecutive builds are **byte-identical**; `--check` is the fixture
+  command (the §6.3 amendment-family pattern: written only by the tool,
+  **never hand-edited**, committed).
+- **Wrap:** tiles never duplicate wrap content — the x seam stays inside
+  the raster (`x` tiles cover `[0, 4320)`); the client renders the seam by
+  sampling across the level edge, the same wrap-aware rule the runtime
+  camera uses (`90-*` §9).
+- **Consumers:** the M4 canvas world view (terrain tiles) and the overlay
+  layers (wind/current/depth) chosen by canvas scale; only `world` carries
+  gameplay semantics — passability always decodes from the §6.2 indices of
+  the `world` pyramid, never from the lookup rasters.
+- **Validator:** group 15 (§8.10) — activates in M4 with the tool; until
+  then the group is specified but not run.
 
 ## 7. Locked Content Lists
 
@@ -2550,6 +2608,7 @@ the code below. All checks run in order.
 | 12 | RPG data | officers v2 shape (96 = 24 + 72, 11 skill keys, wage & main-skill bands, specialty coverage ≥ 10 per skill at ≥ 20, captain-qualified ≥ 12, recruit-port rules); `skill_gates.json` rows incl. `sail.autopilot`; `officer_posts.json` exactly 7 with the locked prereqs; `backgrounds.json` exactly 6 with the key/range rules; ui_strings Phase-8 family presence — normative spec §8.7 |
 | 13 | Generated UI art & shore raster | `assets/ui/` inventory == manifest ids for every contract class (`IMPLEMENT-Phase10.md` A.1–A.7); per-sprite palette-block membership + color budgets; 8-direction transform relations; hull ingest audit (raw dedupe: 16 × 8 shared grid + provenance ledger, owner ids resolved by the runtime fallback — classic: 16 × 9 × 8 remap coverage); tier footprint bands (waived for the raw family); seam checks; `world_shore.png` integrity (§6.6); `art_prompts.json` coverage; byte-identical `build_ui_art.py` / `build_shore.py` rebuilds — normative spec §8.8; PixelLab coast family: `assets/ui/terrain/terrain_coast_wang_*.png` inventory via the §4.8 2026-11-06 ledger (`tools/assets/pixellab_raw/pixellab_coast_ledger.json`), palette/budget/ring waived (raw-pixellab ruling), `build_ui_art --check` copies the committed tiles); PixelLab waterline VFX family (2026-11-07): `assets/ui/fx/fx_waterline_{back,front}_{dir}.png` (8 dirs × 2) + `fx_waterline.json` inventory via the `tools/assets/pixellab_raw/pixellab_vfx_ledger.json` (raw-pixellab ruling — palette/budget waived; canvas fit + anchor bounds + sheet sha256 match enforced), `build_ui_art --check` copies the committed family |
 | 14 | Layout file | `data/ui_layout.json` v2 shape (version + screens), the 32-screen set, element/list rect shapes, canvas bounds, serialization bytes — normative spec §8.9 (Phase 12) |
+| 15 | Web tile pyramids | `web/public/tiles/` inventory + byte-identical `tools/build_web_tiles.py` rebuild + decode spot-probes — normative spec §8.10 (web era; specified M0, activates M4 with the tool) |
 
 ### 8.1 Group 6 — world map, normative spec
 
@@ -3093,6 +3152,34 @@ no migration, the capture regenerates the file). It checks:
    `json.dumps(parsed, sort_keys=True, indent=2) + "\n"` — sorted keys,
    2-space indent, exactly one trailing newline (byte-stable commits;
    the studio serializes this way).
+
+### 8.10 Group 15 — web tile pyramids, normative spec *(web era, M0; the check activates in M4 with the tool)*
+
+Group 15 exits 15. It runs after groups 1–14 in the single
+`validate_data.py` pass and implements the §6.8 governance — the same
+byte-identical-rebuild family rule as groups 9/11/13, one level cheaper:
+the tool recomputes in memory and byte-compares, the validator never
+re-slices the rasters itself (the expensive-re-derivation rule). Spec,
+frozen at M0:
+
+0. **Activation.** When `tools/build_web_tiles.py` is absent (M0–M3) the
+   group is a no-op that prints `SKIP web tiles (tool not present)`. From
+   M4 the tool must exist and the group runs its checks — the M6 cutover
+   does **not** retire this group (the pyramids serve the web era, which
+   survives the Godot deletion).
+1. **Inventory.** For each of the four sources (`world`, `wind`,
+   `currents`, `dist_land`) the committed `web/public/tiles/<source>/`
+   tree contains exactly the §6.8 grid — z ∈ 0–3 with the tile counts
+   17×9 / 9×5 / 5×3 / 3×2, edge tiles cropped, no extra or missing files,
+   nothing hand-edited (any stray file fails).
+2. **Rebuild determinism.** `tools/build_web_tiles.py --check` rebuilds
+   every level in memory and byte-compares against the committed tree —
+   a single differing byte fails the group.
+3. **Decode spot-probes.** A fixed small sample of tiles per level decodes
+   as valid PNGs of the pinned geometry (256×256 except the cropped edge
+   tiles; colour type matches its source family) and spot-equal-in-memory
+   the pixel content implied by the §6.8 downsample rule — bounded, never
+   a full-raster walk.
 
 ## 9. Edge Cases & Fail States
 

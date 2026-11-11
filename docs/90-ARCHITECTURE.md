@@ -1,4 +1,157 @@
-# 90 — Architecture (Godot Project)
+# 90 — Architecture
+
+## 0. Stack transition — the web-stack era (2026-11-11, user-locked; FROZEN in M0)
+
+**This section is the normative architecture from M0 onward.** The delivery
+target moved from the Godot runtime to a Python/FastAPI server sim plus a
+React/TypeScript SPA (the full program and its acceptance records live in
+`docs/IMPLEMENT-WebMigration.md`). It does **not** change any game-design
+content: world, sailing, economy, combat and quest rules stay exactly as
+their owning system docs specify — the rewrite is a translation exercise
+with the Godot tree as oracle, not a re-design.
+
+### 0.1 Locked direction (user, 2026-11-11)
+
+1. **Full rewrite, not strangler.** One clean cut; the Godot tree is frozen
+   read-only as the parity oracle until the M6 cutover, then deleted
+   (scenes/ scripts/ autoload/ *.tscn *.import project.godot, plus the
+   GDScript test harnesses). No incremental dual-stack shipping.
+2. **Frontend = SPA.** React + TypeScript (React over Vue: sample density is
+   the entire motivation for the migration). canvas 2D first; pixi.js/WebGL
+   is deferred to the parking-lot waterline-VFX phase.
+3. **Keep the Phase-10 UI PNGs** (317 files, `tools/build_ui_art.py` output)
+   as plain static assets. What is discarded is the Godot *wrapper*
+   (theme/tres, `palette.gd`/`ui_kit.gd` runtime), not the bitmaps.
+4. **Deployment = local uvicorn + browser.** Server binds `127.0.0.1`,
+   single command (`python -m server`, or `run.sh`) opens the game.
+   Multiplayer remains out of scope (`00-*` §5 stands).
+5. **Server-authoritative.** ALL game rules live in Python under pytest.
+   The TS client is a pure renderer + intent sender: no movement rules, no
+   economy math, no AI in TS. State streams over one WebSocket; menu/port
+   interactions use plain HTTP actions. (Precedent: the §5.7 layout-bridge
+   protocol was frozen before either end was written — same discipline.)
+
+### 0.2 Target project layout
+
+```
+server/                     Python package (FastAPI) — THE sim
+  app.py                    127.0.0.1 bind, static mount for web/ build + assets/
+  sim/                      world, sailing, trade, character, combat, quests
+  api/                      REST actions (menus, port screens)
+  ws.py                     one-client WebSocket: state stream + intents
+  save.py                   save v1 (§0.5; no migration chain)
+  tests/                    pytest parity suites (M1 output)
+web/                        React + TypeScript + Vite SPA — pure presentation
+  src/screens/              port, market, inn, guild, provisions, palace,
+                            tavern, shipyard, title, creation, …
+  src/canvas/world/         sailing view (tile consumer + RAF renderer)
+  src/canvas/battle/        combat view
+  src/i18n/                 loads data/ui_strings.json + content JSON dicts
+data/  tools/  assets/  docs/   unchanged owners
+```
+
+- **State & tick.** Single-player, single session: game state lives in the
+  server process. A fixed-rate sim tick advances sailing/battle frames;
+  state frames broadcast over WS (rates frozen in §0.5). Day cadence and
+  every rule constant stay owned by `20-*`/`40-*`/`30-*`/`50-*`/`60-*` —
+  no invented numbers.
+- **Intent vs action.** Real-time intents (helm, sail setting, battle
+  orders) go over WS (§0.3); discrete actions (buy, sell, talk, board,
+  save) are HTTP POSTs (§0.4) returning the new authoritative state.
+- **i18n.** Unchanged rule, wider reach: every player-facing string stays a
+  `{"zh","en"}` JSON entry (`10-*` §3.3). The server serves them; TSX
+  renders them. The M3 lint gate keeps TSX free of hardcoded strings,
+  allowlist empty — the `test_ui_styling_audit` culture transplanted.
+- **Tiles.** `tools/build_web_tiles.py` slices the four world rasters
+  (`world.png` + `wind_regions.png` + `currents.png` + `dist_land.png`) into
+  web-servable tile pyramids — spec `10-*` §6.8; two builds byte-identical
+  (validator group 15). The runtime never hand-edits rasters — unchanged.
+- **The model studio stays separate** (`tools/model_studio/`): its own
+  process, never merged into the game server (explicit non-blocker).
+
+### 0.3 The one-client WebSocket protocol (FROZEN verbatim — amend this table, never the code first)
+
+**Transport (frozen):**
+
+- URL `ws://127.0.0.1:{port}/ws` — same port as the HTTP server (§0.5).
+  One WebSocket per session.
+- Frames are JSON text, one object per frame: `{"type": "<name>", …}` —
+  payload keys inlined at the top level (the §5.7 LayoutBridge convention).
+- **One client:** a second concurrent WebSocket connection is refused —
+  the server closes it with close code `4001`. The first connection is
+  authoritative; a reconnect re-handshakes (`hello` is re-sent).
+- **Backpressure:** at most one `tick`/`battle_tick` frame per sim tick;
+  if a client falls behind, queued tick frames are coalesced (the newest
+  wins) — `state`/`event` frames are never dropped.
+
+**Server → client (frozen):**
+
+| type | Payload (frozen keys) | When |
+|---|---|---|
+| `hello` | `{save_version, tick_hz, broadcast_hz, locale, has_run, current_screen, saves:[{slot, day, nation_id, port_id, gold, saved_at}]}` | first frame on connect |
+| `state` | the full authoritative snapshot — the §8.1-shaped save payload plus the transient keys (`pending_encounter`, `npc_port_log`, levelup toast state); replaces client state wholesale | on connect, after every HTTP action, after new_game/load/locale change |
+| `tick` | `{day, clock_min, position:{x,y}, heading, sail_trim, wind_dir, weather, speed, gold, morale, autopilot, contact_hint}` — the sailing slice | every sim tick while a run is live at sea (10 Hz) |
+| `battle_tick` | `{round, phase, ships:[{id, side, kind, position, velocity, heading8, hull, crew, morale, reload:{port, starboard}}], wind, weather, orders_due}` — the battle slice | every sim tick during a battle (10 Hz) |
+| `event` | `{name, args}` — `name` mirrors the §5.1 EventBus table verbatim (`day_advanced`, `gold_changed`, `port_entered`, `game_over`, `battle_started`, `battle_finished`, `quests_changed`, …) | on the corresponding server-side transition |
+| `error` | `{code, msg}` | refused/unknown/malformed intent — never a crash; the run continues |
+
+**Client → server intents (frozen; every one is server-validated):**
+
+| type | Payload (frozen keys) | Gate |
+|---|---|---|
+| `helm` | `{dir: "N"\|"NE"\|"E"\|"SE"\|"S"\|"SW"\|"W"\|"NW"\|"stop"}` | at sea; `input_mode` per `control_prefs` |
+| `sail_trim` | `{trim: "furled"\|"reefed"\|"normal"\|"full"}` | at sea |
+| `sail_to` | `{x, y}` — target tile | at sea; the server computes the path and walks it (click-to-sail, `20-*` §4.2) |
+| `wait` | `{}` | at sea (wait-at-sea, `20-*` §4.17) |
+| `intercept` | `{fleet_id}` or `{cancel: true}` | at sea; target inside sighting radius |
+| `autopilot` | `{dest_port_id}` or `{cancel: true}` | at sea; known port + in-post pilot (`20-*`) |
+| `battle_order` | `{station, desired_heading8, desired_speed_band, assigned_target, discipline}` — the per-round order five-tuple (`60-*` §4.9b) | in battle, inside the orders window |
+| `battle_action` | `{verb: "broadside"\|"hook"\|"retreat"\|"surrender", side: "port"\|"starboard", shot: "round"\|"chain"\|"armor_piercing"\|"grape"}` — `side`/`shot` only on `broadside` | in battle |
+| `locale` | `{locale: "zh"\|"en"}` | anytime |
+
+### 0.4 HTTP action shape (frozen; the endpoint inventory freezes at M2)
+
+- Discrete actions are `POST /api/<facility>/<action>` with a JSON body in
+  and JSON out: success `{"ok": true, …}` (the fresh authoritative snapshot
+  rides the next `state` frame); refusal `{"ok": false, "error":
+  {"code", "msg"}}`. Reads are `GET`.
+- Fixed endpoints, frozen now: `POST /api/new_game {nation_id,
+  background_id, attr_alloc, skill_alloc}` · `POST /api/load {slot}` ·
+  `POST /api/save {slot}` · `GET /api/saves` · `GET /api/state` ·
+  `POST /api/locale {locale}`. The facility inventory (market, shipyard,
+  tavern, inn, guild, palace, provisions, people verbs) is enumerated and
+  frozen in the M2 acceptance record before the first screen consumes it.
+
+### 0.5 Frozen numbers
+
+| Number | Value | Notes |
+|---|---|---|
+| `SIM_TICK_HZ` | **10** | server advances sim time at 10 Hz; the day cadence and every rule constant are unchanged (`20-*`). Confirmed against sailing feel in M4, then frozen verbatim here |
+| `WS_BROADCAST_HZ` | **10** | one `tick`/`battle_tick` per sim tick (§0.3 backpressure coalesces) |
+| Server bind / port | `127.0.0.1` : **8000** | default port 8000, `--port` override; `python -m server` (or `run.sh`) starts uvicorn and opens the browser |
+| Save profile dir | **`~/.sailage/`** | XDG-style profile root; the `SAILAGE_HOME` env var overrides it (test seam). Saves at `~/.sailage/saves/save_{1..3}.json` — 3 slots, the Godot UX count |
+| `SAVE_VERSION` | **1** | the web era restarts the counter; **no migration chain** — a payload whose `save_version ≠ 1` is refused (the §8.2 discipline carries over verbatim; Godot-era v1–v9 payloads are all "pre-release saves") |
+| Day-tick budget | ≤ **75 ms** | frozen from the Godot era (its measured record: 72 ms @ 318 fleets). **Placeholder until M1:** the M1 spike measures the Python figure and amends the measured number into this row (concrete-numbers rule) |
+| Python dependency pinning | exact `==` pins | `server/requirements.txt` is the FastAPI domain (fastapi, uvicorn, pytest, httpx; numpy joins only if the M1 perf spike demands it — pre-approved, §0.1) — a **separate dependency domain** from the stdlib-purist `tools/`, which stays stdlib-only |
+| Web dependency pinning | exact semver pins | `web/package.json` (React 18 + TypeScript + Vite); the lockfile is committed |
+
+### 0.6 Status of the Godot-era sections (§1–§13)
+
+Sections §1–§13 below describe the **Godot runtime**; they keep their
+numbers because every system doc cites them (`90-*` §5.1 signals, §8 save
+format, §9 map loader …). Their status from M0:
+
+- **Frozen read-only** as the parity oracle until the M6 cutover — the
+  runtime stays runnable for oracle diffs (the §8.1 v9 payload, the
+  §5.1 signal names and the §9 loader semantics are what M1–M5 port).
+- **Retired at M6** together with the tree they describe, by the explicit
+  enumerated list in the M6 acceptance record (`IMPLEMENT-WebMigration.md`);
+  semantic doc pins are re-homed to §0 + the system docs first, per the
+  check-count-drift agreement.
+- Godot file paths in the system docs (`scripts/…`, `autoload/…`, `*.tscn`)
+  stay the oracle pointers until M6; the Python/TS realizations cite
+  `90-*` §0 plus their owning system doc. `95-DEBUG-HOVER.md` is
+  Godot-only and retires at M6 with them.
 
 ## 1. Purpose & Phase
 
