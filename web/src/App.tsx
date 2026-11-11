@@ -86,15 +86,22 @@ function LocaleHotkey() {
 /**
  * Run-end routing (M6-a integration gap): a `game_over` event or a retired
  * snapshot lands on its bookend screen once. Port/world screens never
- * navigate themselves, so this is the one global handler.
+ * navigate themselves, so this is the one global handler. The §4.2 dock
+ * edge rides here too: `port_entered` on the sailing screen auto-routes to
+ * the port hub (M7.1 — the pinned S3→S4 edge; Esc keeps the manual route).
  */
 function RunEndRouter({ screen }: { screen: ScreenId }) {
   const { state, lastEvent } = useGameState();
   useEffect(() => {
     if (!state) return;
     const over = lastEvent?.type === "event" && lastEvent.name === "game_over";
+    const docked = lastEvent?.type === "event" && lastEvent.name === "port_entered";
     if (over && screen !== "gameover") {
       navigate("gameover");
+      return;
+    }
+    if (docked && screen === "world") {
+      navigate("port");
       return;
     }
     if (state.retired && screen !== "ending" && screen !== "title") {

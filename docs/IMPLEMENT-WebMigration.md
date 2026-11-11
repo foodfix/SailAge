@@ -403,6 +403,51 @@ by M7 — the governed gate is `build_ui_art --check`); the ingest
 ledger's stale `chrome{}` sections are inert (both readers removed;
 dropped on the next family import).
 
+### M7.1 — the world-screen hotfixes (2026-11-11)
+
+Three live-world defects reported right after the M7 sweep, fixed as
+one hotfix wave (the §4.5/§4.8 web-realization pins landed first per
+the docs-before-code rule):
+
+1. **The sailing map draws the §9.2 terrain tileset.** The web canvas
+   had only ever drawn the flat `world.png` raster pyramid — the
+   Phase-10 terrain-art pipeline (Godot §9.2: generated terrain tiles,
+   coast program, water depth, port sprites) was never ported, so the
+   sailing screen rendered flat colour blocks ("the tileset is not
+   rendered"). M7.1 adds `web/src/canvas/world/terrain.ts`: per the
+   §4.8 PixelLab coast program — `terrain_coast_wang_0` painted water
+   under every cell; land cells stamp their coast tile by the
+   water-flanking rule (index = non-flanked corners) or the wang_15
+   dihedral variant pool by the §9.2 cell hash; water cells carry the
+   §6.7 depth wash (factor 1.0 @ ≤6 tiles → 0.6 @ ≥10, realized as a
+   per-cell `PANEL_BG` wash); reef/ice variants by hash; the port
+   markers render `terrain_port_{owner}` sprites (markers.ts) under the
+   name labels. Kinds + distances decode from the committed **z0
+   pyramids** (`world`/`dist_land`, the §6.7 `(R·256+G)/4096` decode)
+   once per 256-tile chunk — no new data artifact; chart + minimap stay
+   flat raster (pinned). Pixel-verified in headless Chrome (textured
+   coasts, wash bands around real distance structure, port sprites).
+2. **The docked camera no longer seeds from the fixture.** The world
+   screen's renderer tick seeded from `fixtureSailing` and only ever
+   followed WS tick frames — which stop when docking — so a docked
+   world view centred on a stale position (Lisbon off-screen; the "view
+   not centred" report). M7.1 seeds the camera from the live `state`
+   frame's fleet position whenever no sea tick has arrived or the frame
+   says docked (`80-*` §4.5 camera bullet, amended). Verified: the
+   docked reload centres the berth (Lisbon sprite beside the centre).
+3. **Docking auto-routes to the port hub.** The §4.2 edge
+   `S3 ──dock──► S4` was never wired on the web client (only Esc→port
+   existed since M4): docking left the player on the sailing screen.
+   M7.1 extends App's `RunEndRouter` — a `port_entered` event while on
+   the world screen navigates to `port` (the dock edge's server event
+   verified deterministic at session level: sail onto the shore tile ⇒
+   `port_entered`). The §4.2 nav-graph row notes the web route.
+
+Also fixed en route: the M7 audit-script header's `*/` glob self-close
+(SyntaxError caught by the first wave-2 agent), and the master-owned
+`common.tsx` inline-style violations (moved to the structural CSS
+classes).
+
 ## 7. M6 cutover plan (the explicit deletion / retirement lists)
 
 Executed only after every M6 screen lands and the full demo loop passes in

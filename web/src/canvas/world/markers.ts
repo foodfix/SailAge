@@ -15,10 +15,29 @@ import { HEADING_DEGREES, WAKE_TILES } from "./constants";
 import { worldToScreen, type CameraView, type Vec2 } from "./geometry";
 import { nationColor, PORT_MARKERS } from "./ports";
 import { palette } from "./tokens";
+import { portSpriteId } from "./terrain";
 import type { NpcMarkerState } from "../../state/types";
 
 const hullCache = new Map<string, HTMLImageElement | null>();
 const reportedMissing = new Set<string>();
+
+/** Terrain-sprite image cache (the §9.2 port sprites; terrain.ts owns land/water). */
+const terrainSprites = new Map<string, HTMLImageElement | null>();
+
+function portSprite(id: string): HTMLImageElement | null {
+  const hit = terrainSprites.get(id);
+  if (hit !== undefined) return hit && hit.complete && hit.naturalWidth > 0 ? hit : null;
+  const url = spriteUrl(id);
+  if (!url) {
+    terrainSprites.set(id, null);
+    return null;
+  }
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+  terrainSprites.set(id, image);
+  return null;
+}
 
 function hullImage(shipTypeId: string): HTMLImageElement | null {
   const hit = hullCache.get(shipTypeId);
@@ -154,7 +173,11 @@ export function drawWrecks(
   ctx.restore();
 }
 
-/** Port overlay: a shore-tile square in the nation colour + the i18n name. */
+/**
+ * Port overlay: the §9.2 `terrain_port_{owner}` sprite on the shore tile
+ * plus the i18n name (the flat nation square is the sprite-missing
+ * fallback).
+ */
 export function drawPorts(ctx: CanvasRenderingContext2D, camera: CameraView, locale: Locale): void {
   const fontPx = Math.max(10, Math.round(camera.tilePx * 0.19));
   ctx.save();
@@ -164,19 +187,25 @@ export function drawPorts(ctx: CanvasRenderingContext2D, camera: CameraView, loc
   for (const port of PORT_MARKERS) {
     const point = worldToScreen(camera, port.shore);
     if (offscreen(camera, point, camera.tilePx * 4)) continue;
-    const side = Math.max(4, camera.tilePx * 0.3);
-    ctx.fillStyle = port.nationId ? (nationColor(port.nationId) ?? palette.portNeutral()) : palette.portNeutral();
-    ctx.strokeStyle = palette.portInk();
-    ctx.lineWidth = Math.max(1, camera.tilePx * 0.03);
-    ctx.fillRect(point.x - side / 2, point.y - side / 2, side, side);
-    ctx.strokeRect(point.x - side / 2, point.y - side / 2, side, side);
+    const side = camera.tilePx;
+    const spriteImage = portSprite(portSpriteId(port.nationId));
+    if (spriteImage) {
+      ctx.drawImage(spriteImage, point.x - side / 2, point.y - side / 2, side, side);
+    } else {
+      const small = Math.max(4, camera.tilePx * 0.3);
+      ctx.fillStyle = port.nationId ? (nationColor(port.nationId) ?? palette.portNeutral()) : palette.portNeutral();
+      ctx.strokeStyle = palette.portInk();
+      ctx.lineWidth = Math.max(1, camera.tilePx * 0.03);
+      ctx.fillRect(point.x - small / 2, point.y - small / 2, small, small);
+      ctx.strokeRect(point.x - small / 2, point.y - small / 2, small, small);
+    }
 
     const label = t(port.name, locale);
     ctx.lineWidth = Math.max(2, fontPx * 0.22);
     ctx.strokeStyle = palette.panelBg();
-    ctx.strokeText(label, point.x, point.y - side);
+    ctx.strokeText(label, point.x, point.y - side * 0.45);
     ctx.fillStyle = palette.text();
-    ctx.fillText(label, point.x, point.y - side);
+    ctx.fillText(label, point.x, point.y - side * 0.45);
   }
   ctx.restore();
 }

@@ -96,7 +96,9 @@ S1 ──New Game──► S2 ──confirm──► S20 ──confirm──► 
     (S20 = creation, background → free points; Phase 8, §4.13)
 S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependent)
 S1 ──Load retired slot──► S16 (summary only)
-S3 ──dock: head into shore tile──► S4
+S3 ──dock: head into shore tile──► S4   (web era: the `port_entered`
+        event auto-routes to S4 — M7.1; Esc on a docked S3 keeps the
+        manual dock route)
 S4 ──Set Sail──► S3
 S3 ──Tab──► S17 ──Esc/Tab──► back (S3)
 S4 ──Tab──► S17 ──Esc/Tab──► back (S4)   (amended 2026-11-01)
@@ -333,7 +335,36 @@ Layout (1920×1080; tile viewport is the space below the top bar):
   (no clamp at the dateline; the seam shows no void) and `y` is clamped to the
   2160-tile height (Phase-6 grid; minimap box/crop numbers unchanged per
   `IMPLEMENT-Phase6.md` §2.0); zoom locked at 1.0. Only live chunks are drawn
-  (`90-*` §9).
+  (`90-*` §9). **Web era (M7.1):** the camera also seeds from the live
+  `state` frame's fleet position whenever no sea tick has arrived — docked
+  there are no tick frames, and the stale fixture seed left the view
+  off-centre after docking/reload.
+- **Web realization — the S3 map draws the §4.8 coast program** (added
+  M7.1, 2026-11-11; the §4.8 PixelLab coast amendment + §9.2 are the
+  design source). The sailing canvas renders the terrain tileset, not
+  the flat raster pyramid: every visible cell stamps
+  `terrain_coast_wang_0` (painted water) as the base; land cells stamp
+  their coast tile per the §4.8 water-flanking rule (index bits =
+  non-flanked corners, `NW·8 + NE·4 + SW·2 + SE·1` — N→wang_3,
+  S→wang_12, W→wang_5, E→wang_10, corners→carats, lone diagonals→the
+  concave wedges; index 15 interior = wang_15 through its 8 dihedral
+  transforms as the §9.2 cell-hash variant pool `(x·31+y·17)%8`; index
+  0 never occurs in the built world and falls back to the interior
+  variant); water cells carry the depth wash — factor 1.0 at ≤ 6 tiles
+  to 0.6 at ≥ 10 tiles of distance-to-land (`10-*` §6.7), realized on
+  the web as a per-cell `PANEL_BG` wash at alpha `(1−factor)·0.75` (the
+  Godot pipeline bakes a per-pixel multiply; the per-cell wash reads
+  the same and costs one fillRect); reef/ice cells stamp
+  `terrain_reef_0` / `terrain_polar_ice_{hash%2}` over the water base;
+  port markers render the `terrain_port_{owner}` sprites (§9.2) under
+  the existing name labels. The cell kinds and distances read from the
+  committed **z0 pyramids** (`/tiles/world/0` — 1 px per tile;
+  `/tiles/dist_land/0` — decoded per `10-*` §6.7's
+  `d = (R·256+G)/4096`), decoded once per 256-tile chunk into cached
+  arrays — no new data artifact. Water cells never stamp corner tiles
+  and the §6.6 shore strips are unused on the world map (both per the
+  2026-11-06 supersede); the Chart (S17) and the minimap stay flat
+  raster (pinned).
 - Minimap: the 256×192 px box shows a **wrap-aware 128×96-tile crop** around
   the fleet at 2 px/tile, drawn from the explored bitset (`20-*` §4.12).
 - The full world is the separate **Chart screen (S17, §4.6)**, opened with

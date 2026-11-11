@@ -10,7 +10,7 @@
  * arithmetic (sums, calendar readout, supply days per the locked §4.10
  * formula); no movement or economy rule lives here.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGameClient } from "../client/context";
 import type { TickFrame } from "../client/types";
 import { content, useI18n } from "../i18n";
@@ -99,12 +99,27 @@ export function WorldScreen() {
   const [zoom, setZoom] = useState(ZOOM_NEAR);
   const { toast, showToast, clearToast } = useToastState();
 
+  // Sea ticks own the camera; while docked none flow, so the §4.5 web-era
+  // seed keeps the view centred on the live fleet position (M7.1).
+  const gotSeaTick = useRef(false);
+
   useEffect(
     () =>
       client.connect({
         onFrame: (frame) => {
-          if (frame.type === "tick") setTick(frame);
-          else if (frame.type === "state") setSnapshot(frame);
+          if (frame.type === "tick") {
+            gotSeaTick.current = true;
+            setTick(frame);
+          } else if (frame.type === "state") {
+            setSnapshot(frame);
+            if (!gotSeaTick.current || frame.current_port) {
+              setTick((current) =>
+                current.position.x === frame.world.position.x && current.position.y === frame.world.position.y
+                  ? current
+                  : initialTick(frame),
+              );
+            }
+          }
         },
       }),
     [client],

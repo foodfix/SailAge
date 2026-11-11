@@ -11,16 +11,13 @@ import type { GameSnapshot, NpcMarkerState } from "../../state/types";
 import type { TickFrame } from "../../client/types";
 import type { Locale } from "../../i18n";
 import {
-  selectTileLevel,
   WORLD_TILE_PX,
   ZOOM_NEAR,
   ZOOM_WIDE,
 } from "./constants";
 import { clamp, makeCamera, sameCell, screenToTile, wrapDeltaX, type CameraView, type Vec2 } from "./geometry";
 import { drawNpcMarkers, drawPlayerToken, drawPorts, drawWrecks } from "./markers";
-import { pyramid } from "./pyramid";
-import { drawTileLayer } from "./tiles";
-import { palette } from "./tokens";
+import { drawTerrain } from "./terrain";
 
 /** The 1920×1080 design surface (docs/80-UI-UX.md §4.8.9). */
 const VIEW_W = 1920;
@@ -152,8 +149,7 @@ export class WorldRenderer {
 
     const camera = this.cameraAt(now);
     const fleet = this.positionAt(now);
-    const level = selectTileLevel(camera.tilePx, dpr);
-    drawTileLayer(ctx, pyramid("world"), camera, level, palette.sea());
+    drawTerrain(ctx, camera);
     drawWrecks(ctx, camera, this.scene.snapshot.wrecks);
     drawPorts(ctx, camera, this.locale);
     drawNpcMarkers(ctx, camera, this.scene.npcMarkers);
