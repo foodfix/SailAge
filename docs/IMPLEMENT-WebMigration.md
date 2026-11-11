@@ -182,6 +182,105 @@ protocol), `server/__main__.py` + `run.sh` (the frozen launch contract).
   screen-projection channel `GET /api/view/<screen_id>` (amended into
   `90-*` §0.4 with the M3 wiring).
 
+### M3 — 2026-11-11
+
+**Delivered:** the React foundation + live wiring.
+- Foundation: a deterministic palette→CSS-token generator (129 colours +
+  8 sizing tokens, `--check` byte-stable), the i18n layer (both locales,
+  loud `<key>` misses, persisted toggle), the `ui_layout` rect loader +
+  six kit atoms + sprite registry, and the 8 port screens.
+- Wiring: `GET /api/view/<screen_id>` server projections (the §0.4
+  no-rules-in-TS channel), the live WS/REST `GameClient` (reconnect with
+  backoff; 4001 terminal), every port screen on authoritative state.
+- The audit gates shipped with the first screen and stay green: **0
+  hardcoded strings (empty allowlist)**, styling boundary clean, and layout
+  coverage growing to **32/32** screens by M6.
+- Browser-verified: all 8 screens render live state; market buy + inn rest
+  update through the `state` frame.
+
+### M4 — 2026-11-11
+
+- `tools/build_web_tiles.py` + `web/public/tiles/**`: **876 committed
+  tiles** (4 sources × z0–3), byte-identical double rebuild, validator
+  **group 15** (inventory + rebuild + 80 decode probes).
+- The canvas world view: pyramid renderer (zoom levels, wrap seam, camera,
+  RAF glide), the full 25-id `world` HUD, step/helm/click-to-sail/trim/wait
+  intents, fleet/port/wreck markers, minimap with the explored mask, and a
+  clearly-marked fixture 10 Hz loop. Headless-probed (sail, dock, trim,
+  Esc→port).
+
+### M5 — 2026-11-11
+
+- **Golden-trace gate:** `tools/battle_golden_trace.gd` records a pinned
+  18-line trace (scenario + 16 rounds + final, incl. `rng_state`); the
+  Python replay is **field-identical**, and the trace is stored at
+  `server/tests/fixtures/battle_golden_trace.jsonl` so the gate survives
+  the cutover. The diff found the real §4.8a morale-start bug on the live
+  path (fixed: `session._open_battle` passes the run morale).
+- The battle canvas: 48×30 renderer (hulls by heading8, broadside arcs,
+  reload pips, minimap, storm wash), **42/42** `battle` layout ids, the
+  order five-tuple UI, broadside/hook/retreat/surrender intents, the
+  outcome overlay; fixture-driven for offline demos.
+
+### M6 — 2026-11-11 (cutover)
+
+**Screens:** the remaining 22 built (front door: title/nationality/creation/
+save-slot; bookends: gameover/ending; chart with explored fog + ports;
+settings/confirm/dialog_box; the people surfaces: intel window + four tabs,
+character card, dossier, captain view, fleet view, officer roster,
+reputation; hail, fleet picker, autopilot HUD, duel, S21 sandbox).
+**32/32 screens real**; every `ui_layout.json` element id is rendered
+(list-member ids verified in-DOM).
+
+**Integration closed:** run-end routing (`game_over`/retired → bookend),
+Tab→Chart, the live S19 settings rows (`settings/*`), the level-up
+allocation verb (`people/allocate`), the full facility inventory (incl.
+provisions fill/jettison, tavern bulk crew, palace repair/bounty/inform/
+retire, guild complete/abandon), the bounty-closure gate on dispatch, the
+sighting-pass reveal on the live path (fresh runs no longer stay fogged),
+and 68 emitted-but-missing `ui_strings` keys added across M3–M6.
+
+**Cutover executed** (the §7 lists): deleted the Godot runtime
+(`scenes/` 109 files, `scripts/` 98, `autoload/` 14, `project.godot`,
+112 `*.tscn`, 179 `*.import`), the GDScript harnesses (`tools/*.gd` 80
+files + `tools/run_tests.py` + their fixtures), `data/ui_layout.json`, and
+`AGENTS.md` rewritten for the web era, and `scripts/palette.gd`'s values
+extracted to `web/src/theme/palette.json` (the CSS-token source). **Kept
+deliberately:** `data/ui_layout.json` + validator group 14 — the React
+screens consume its rects as data (the file is the web-era layout data,
+not a Godot artifact); plus `data/**`, `assets/**`, `tools/*.py`, the
+art/tiling pipelines, the model studio, `docs/`.
+
+**Final gates:** `validate_data.py` groups 1–13 + 15 green ·
+`pytest server/tests` **993 passed, 1 skipped** (the harness cross-check
+skips now that the Godot tree is gone) · `npm run build` · `npm run audit`
+(32/32, empty i18n allowlist) · `build_tokens.mjs --check` ·
+`python -m server.demo_loop_smoke` **25 checks** (storm observed in the
+sample run).
+
+**Suite-count note:** the Godot era ran 59 GDScript suites / ~10k checks;
+the web era runs 994 pytest cases. The shrinkage is the port-the-guarantee
+rule (closed forms + one deterministic observation), not lost coverage;
+every unique-behaviour pin from the 80 GDScript harnesses was ported or
+deliberately superseded by a doc-pinned closed form.
+
+## 8. Parking lot (explicit non-blockers after M6)
+
+- Officer training verb (needs the persisted `skill_deltas` design
+  decision — the roster renders it disabled).
+- Duel start/advance intents + the duel modal transcript; the at-sea
+  `explore` intent; mutiny resolution as a WS intent; at-sea minor repair
+  action.
+- Server projections for the 12 people surfaces (they render from state +
+  canon today; a `GET /api/view` entry per screen is the tidy follow-up).
+- The battle canvas's `battle_tick` extras (acting unit, log stream,
+  cannon counts, per-ship maxima, nation colour, current vector).
+- The model studio's layout editor is vestigial (its `ui_layout.json`
+  target retired); the model/art re-roll bench stays.
+- The Phase-9/Phase-10 parking lots (per-broadside shot types, merchant
+  archetype, sandbox persistence, portraits, waterline VFX/pixi, …) are
+  unchanged.
+
 ## 7. M6 cutover plan (the explicit deletion / retirement lists)
 
 Executed only after every M6 screen lands and the full demo loop passes in
@@ -193,17 +292,16 @@ the browser. One commit set; the gates are the final run of everything.
 - `tools/*.gd` (all 67 `test_*.gd` suites + `battle_ai_harness.gd` +
   `battle_tune_runner.gd` and their `.tscn` fixtures)
 - `tools/run_tests.py` (the Godot suite runner — pytest is the gate now)
-- `data/ui_layout.json` (retired with the tree that was its spec;
-  `10-*` §4.23 disposition)
 - the Godot-era `AGENTS.md` content (replaced below)
+- **KEPT, not deleted:** `data/ui_layout.json` (+ validator group 14) — the
+  React screens consume its rects as data (`10-*` §4.23 final disposition);
+  `scripts/palette.gd`'s values were extracted to
+  `web/src/theme/palette.json` before deletion (the CSS-token source)
 - `.godot/` (already gitignored; delete locally)
 
-**Retire validator groups** (explicit list; the validator itself stays):
-- **Group 14** (the layout file) — its artifact retires; `10-*` §8.9
-  becomes historical, the §4.23 disposition records it.
-- Groups 1–13 and 15 **survive** (data/i18n/rasters/UI art/tiles are all
-  still shipped). No other group references a `.gd`, `.tscn` or
-  `project.godot`.
+**Validator groups:** **none retire** — group 14 survives because its
+artifact does (the web layout data); groups 1–13 and 15 were already
+artifact-based. No group references a `.gd`, `.tscn` or `project.godot`.
 
 **Keep unchanged:** `data/**`, `assets/**` (317+ PNGs), `tools/*.py`
 (stdlib build/validate tools), `tools/model_studio/`, `tools/ui_art/`

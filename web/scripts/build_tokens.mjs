@@ -2,8 +2,9 @@
 /**
  * build_tokens.mjs — deterministic CSS-token generator for the M3 shell.
  *
- * Source of truth: scripts/palette.gd (docs/80-UI-UX.md §4.8, the locked
- * palette + chrome sizing grid). Output: web/src/theme/tokens.css.
+ * Source of truth: web/src/theme/palette.json (extracted from the retired
+ * scripts/palette.gd at the M6 cutover; docs/80-UI-UX.md §4.8 remains the
+ * locked design source). Output: web/src/theme/tokens.css.
  *
  *   node scripts/build_tokens.mjs            # write the file
  *   node scripts/build_tokens.mjs --check    # byte-compare, exit 1 on drift
@@ -15,14 +16,14 @@
  *   * every numeric `const NAME := <expr>` becomes
  *     `--sailage-<name-kebab>: <value>px;` (the chrome grid is the only
  *     chrome pixel source, 80-* §4.8);
- *   * output bytes depend only on palette.gd — two runs are byte-identical.
+ *   * output bytes depend only on palette.json — two runs are byte-identical.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PALETTE = join(HERE, "..", "..", "scripts", "palette.gd");
+const PALETTE = join(HERE, "..", "src", "theme", "palette.json");
 const OUT = join(HERE, "..", "src", "theme", "tokens.css");
 
 const KEBAB = (name) => name.toLowerCase().replace(/_/g, "-");
@@ -86,41 +87,27 @@ function evalNumeric(expr, consts) {
 }
 
 function generate() {
-  const source = readFileSync(PALETTE, "utf8");
-  const colors = [];
-  const numbers = [];
-  const consts = {};
-  const seen = new Set();
-
-  for (const rawLine of source.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line.startsWith("const ")) continue;
-    const m = /^const\s+([A-Z0-9_]+)\s*:=\s*(.+)$/.exec(line);
-    if (!m) continue;
-    const [, name, rhs] = m;
-    if (seen.has(name)) throw new Error(`duplicate palette constant ${name}`);
-    seen.add(name);
-
-    const color = /^Color\("(#[0-9a-fA-F]{6})"\)$/.exec(rhs);
-    if (color) {
-      colors.push([name, color[1].toLowerCase()]);
-      continue;
+  const palette = JSON.parse(readFileSync(PALETTE, "utf8"));
+  if (palette.version !== 1) {
+    throw new Error(`unsupported palette.json version ${palette.version}`);
+  }
+  const colors = Object.entries(palette.colors ?? {});
+  const numbers = Object.entries(palette.numbers ?? {});
+  for (const [name, hex] of colors) {
+    if (!/^#[0-9a-f]{6}$/i.test(String(hex))) {
+      throw new Error(`palette color ${name} is not a #rrggbb hex`);
     }
-    if (/^[0-9A-Za-z_+\-*/().\s]+$/.test(rhs)) {
-      const value = evalNumeric(rhs, consts);
-      consts[name] = value;
-      numbers.push([name, value]);
-      continue;
+  }
+  for (const [name, value] of numbers) {
+    if (!Number.isInteger(value)) {
+      throw new Error(`palette size ${name} is not an integer`);
     }
-    // Anything else is an unsupported const form — fail loudly rather than
-    // silently dropping a locked palette value.
-    throw new Error(`unsupported palette constant form: ${line}`);
   }
 
   const lines = [];
   lines.push("/*");
   lines.push(" * GENERATED FILE — DO NOT EDIT.");
-  lines.push(" * Source: scripts/palette.gd (docs/80-UI-UX.md §4.8).");
+  lines.push(" * Source: web/src/theme/palette.json (docs/80-UI-UX.md §4.8).");
   lines.push(" * Regenerate: node scripts/build_tokens.mjs");
   lines.push(" * Check:      node scripts/build_tokens.mjs --check");
   lines.push(" *");

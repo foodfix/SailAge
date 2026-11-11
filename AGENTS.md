@@ -1,104 +1,96 @@
 # SailAge — Agent Guide
 
-Single-player 2D sailing/trade/adventure game (Uncharted Waters 2-like),
-Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
-**read the docs before writing any code or data.**
+Single-player 2D sailing/trade/adventure game (Uncharted Waters 2-like), now a
+**web-stack app**: a Python/FastAPI server sim + a React/TypeScript SPA.
+Design is fully specified in `docs/` — **read the docs before writing any code
+or data.**
 
 ## Doc reading order
 
 1. `docs/00-OVERVIEW.md` — vision, phases, conventions, glossary, demo loop
-2. `docs/10-DATA-SCHEMA.md` — JSON contract, i18n rule, locked content lists
-3. `docs/90-ARCHITECTURE.md` — project layout, autoloads, save format
+2. `docs/10-DATA-SCHEMA.md` — JSON contract, i18n rule, locked content lists,
+   world + web-tile artifacts
+3. `docs/90-ARCHITECTURE.md` — **§0 is the normative web-era architecture**
+   (server/client split, the frozen WS protocol, HTTP shape, frozen numbers,
+   save v1); §1–§13 are the retired Godot era kept as history
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
-   `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3),
-   `95`-debug-hover (how to read the fleet debug floating window)
-5. Task backlogs: `docs/IMPLEMENT-Phase10.md` (**complete** — UI element
-   kit & generated pixel art; acceptance record in the doc's W6 block:
-   validator groups 1–13, `build_ui_art`/`build_shore` rebuilds
-   byte-identical (1 374 + shore raster), 59 suites green incl. the
-   `test_ui_styling_audit` sweep guard (allowlist empty), user
-   contact-sheet review APPROVED, day tick 72 ms ≤ 75 @ the measured
-   fleet count; execution protocol: ≤ 4 background sub-agents per
-   wave, one worktree + branch each, master merges A → B → C → D with
-   validator + suite gates; reviewed 2026-11-04 against the live tree and
-   corrected: no audio-phase prerequisite (audio is future work), validator
-   **group 13**, 7 role badges, 61 tier-3 pool, S3/S13 corrections,
-   append-only `palette.gd` restructure, node v24.16.0), then
-   `docs/IMPLEMENT-Phase9.md` (complete — acceptance record
-   in the doc's W6 block: validator groups 1–12, rebuilds byte-identical,
-   54 suites green, harness + tune reports final, T3 adopted at
-   `ai_level = 1` for aggressive/balanced kinds with the CEM-finalized θ,
-   pacing amendments 14/15, day tick 72 ms ≤ 75 @ the measured fleet
-   count), then `docs/IMPLEMENT-Phase8.md` (complete — acceptance record
-   `tools/demo_check_phase8.md`: validator groups 1–12, rebuilds
-   byte-identical, 50 suites / 10 071 checks, probe 9 scenarios ALL PASS,
-   day tick 68 ms ≤ 75 @ 318 fleets, sim_trade gates 1–10 PASS at the
-   +0.30 clamp, save v9), then `docs/IMPLEMENT-Phase7.md` (complete —
-   `tools/demo_check_phase7.md`), `docs/IMPLEMENT-Phase6.md` (complete)
-   and Phase1–Phase5 for history. Phase-10's parking lot lives in
-   `docs/IMPLEMENT-Phase10.md` §7 (officer portraits (96), tier-3
-   promotion (61 manifest edits), the runtime ComfyUI-style portrait
-   generation plan + `user://portraits/` cache + offline-lock amendment,
-   discovery reveal pics ×30 (model pass via `tools/art_prompts.json`),
-   sail-state hull variants, named-pirate ship variant, world-map wake
-   (claimed 2026-11-07 — the PixelLab waterline VFX family, 80-* §4.8),
-   animations beyond the pinned set). Phase-9's parking lot lives in
-   `docs/IMPLEMENT-Phase9.md` (per-broadside pre-loaded shot types, the
-   merchant fourth archetype, sandbox preset persistence, Phase-7
-   economic leftovers, NPC-captain recruitment, titles/traits, officer
-   quests, chronicle screen).
+   `50`-character, `80`-UI/UX, `60`-combat, `70`-quests/endgame
+5. Migration ledger: `docs/IMPLEMENT-WebMigration.md` (M0–M6; the M0–M6
+   acceptance records and the cutover list). Phase 1–12 records live in the
+   `IMPLEMENT-PhaseN.md` docs (Godot-era history).
+
+## Stack
+
+```
+server/     THE sim — Python 3.10+, FastAPI; every game rule lives here
+  app.py, session.py, api/, ws.py, save.py
+  sim/      world, sailing, trade, character, combat, quests
+  tests/    pytest parity suites (the full ported contract)
+web/        the SPA — React 18 + TypeScript + Vite; a pure renderer
+  src/screens/  the 32-screen set (absolute tiles from ui_layout history)
+  src/canvas/   world/chart/battle renderers
+  src/i18n/     ui_strings + content JSON, no hardcoded strings
+data/ tools/ assets/ docs/
+```
+
+Launch: `python -m server` (or `./run.sh`) — binds `127.0.0.1:8000`, opens
+the browser. Install server deps from `server/requirements.txt` (exact pins).
 
 ## Hard rules (violations = rework)
 
 - **i18n:** every player-facing string is `{"zh": "...", "en": "..."}` in a
   JSON data file (`data/*.json`), never hardcoded, never Godot `.po`. Both
-  locales required. UI-frame strings live in `data/ui_strings.json`.
+  locales required. UI-frame strings live in `data/ui_strings.json`. TSX
+  renders through the i18n layer — `npm run audit` fails on a hardcoded
+  string (allowlist empty).
 - **Data-first:** game content (ports, goods, ships, officers, quests,
   discoveries, equipment) is JSON under `data/`. Adding content must be a
   data-only change. After editing `data/`, run
   `python3 tools/validate_data.py` — it must exit 0.
+- **Server-authoritative:** ALL game rules live in Python under pytest. The
+  TS client is a pure renderer + intent sender — no movement rules, no
+  economy math, no AI in TS. State streams over one WebSocket
+  (`server/ws.py`, the frozen `docs/90-§0.3` table); discrete actions are
+  HTTP POSTs (`docs/90-§0.4`). Amend the protocol doc before changing either
+  end.
 - **Concrete numbers only:** if a mechanic needs a number not in the docs,
   the doc is amended first; never invent values in code (see
   `docs/00-OVERVIEW.md` §11).
-- **Placeholder art:** colored shapes + default font only; palette constants
-  in `docs/80-UI-UX.md` §4.8 (via `scripts/palette.gd`). No imported textures
-  in Phase 1.
-- **Architecture:** autoloads, scene flow, and save format follow
-  `docs/90-ARCHITECTURE.md` exactly (EventBus signal names, autoload order,
-  save versioning — `SAVE_VERSION` with no migration chain; older payloads
-  refused).
-- **World map** is a generated, tool-owned raster family:
-  `data/maps/world.png` (indexed PNG, 1 px = 1 tile, 4320 × 2160 at
-  12 tiles/degree, palette `~ . # ^ I`; spec in `docs/10-DATA-SCHEMA.md`
-  §6.3) and, since Phase 6, the ocean rasters `data/maps/wind_regions.png` +
-  `data/maps/currents.png` (spec in `docs/10-DATA-SCHEMA.md` §6.5) and,
-  since the 2026-11-06 PixelLab terrain amendment, the land-distance
-  raster `data/maps/dist_land.png` (spec in `docs/10-DATA-SCHEMA.md`
-  §6.7 — the water depth-patch factor source (2026-11-07: baked per chunk
-  on the CPU, multiplied over the water; the shader sampling path was
-  fp16-quantized and is retired — 80-* §4.8).
-  `world.png` is built by `tools/build_world.py` from vendored public-domain
-  shorelines plus `tools/map_overrides.json`; the ocean rasters are built by
-  `tools/build_ocean.py` from the ocean JSON sources; `dist_land.png` is
-  built by `tools/build_distance_field.py` from `world.png`; ASCII exports are
-  debug outputs of those tools only. `build_world.py` also persists every
-  port's berth + shore tiles to `data/maps/harbors.json` (unified-movement
-  amendment — the runtime reads the table instead of re-snapping). **Never
-  hand-edit** any of the rasters
-  or the ASCII. Port coordinates live as `lat`/`lon` in `data/ports.json`,
-  and the validator enforces that the harbor tiles derived from them agree
-  with the builder's report.
-- **Trade-route artifact** `data/trade_routes_built.json` is generated by
-  `tools/build_routes.py` from `data/trade_routes.json` plus
-  `tools/route_overrides.json` (spec in `docs/10-DATA-SCHEMA.md` §4.14;
-  lanes may carry month `variants` — the sources remain the single truth).
-  **Never hand-edit** the built file — fix the sources and regenerate
-  (two builds must stay byte-identical; validator group 8 enforces it).
+- **World map + tiles are tool-owned rasters:** `data/maps/*.png` are built
+  by `tools/build_*.py`; `web/public/tiles/**` by
+  `tools/build_web_tiles.py`; ASCII exports are debug only. **Never
+  hand-edit** a raster or the generated tile tree. Two builds must stay
+  byte-identical (validator groups 9/13/15).
+- **Trade routes:** `data/trade_routes_built.json` is generated by
+  `tools/build_routes.py` from `data/trade_routes.json` +
+  `tools/route_overrides.json` — fix the sources and regenerate (validator
+  group 8 enforces byte-identity).
+- **Save:** server-owned files under `~/.sailage/saves/save_{1..3}.json`
+  (`SAILAGE_HOME` overrides for tests); `SAVE_VERSION = 1`; **no migration
+  chain** — any other version is refused (docs/90 §0.5/§8.2 discipline).
+- **No multiplayer**, no accounts, no online services.
+
+## Gates
+
+Every change must pass:
+
+1. `python3 tools/validate_data.py` — data + raster + art + tile groups
+   (1–13, 15).
+2. `python -m pytest server/tests` — the ported contract suites (run from
+   the repo root; `server/requirements.txt` installed).
+3. `cd web && npm run build && npm run audit && node scripts/build_tokens.mjs --check`.
+4. `python -m server.demo_loop_smoke` — the headless §7 demo loop.
+
+Byte-identical rebuild checks when you touch a tool-built artifact:
+`tools/build_world.py --check`, `tools/build_ocean.py --check`,
+`tools/build_shore.py --check`, `tools/build_distance_field.py --check`,
+`tools/build_captains.py --check`, `tools/build_ui_art.py --check`,
+`tools/build_web_tiles.py --check`.
 
 ## Working agreements
 
-- Tasks come from `docs/IMPLEMENT-PhaseN.md`; each task names its docs and
-  "done-when" criteria — implement to those, not to taste.
+- Tasks come from the design docs + the migration ledger; each names its
+  docs and "done-when" criteria — implement to those, not to taste.
 - Design questions discovered during a task are answered in the owning
   system doc first (`docs/00-OVERVIEW.md` §13), then the task proceeds.
 - Doc short-hands: `20-*` = `docs/20-WORLD-AND-SAILING.md`, etc.
@@ -106,10 +98,6 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 - **Test discipline — no overkill tests:** tests verify contracts directly.
   Assert the constant, the closed form, or the pinned formula; never
   re-derive a known result by Monte Carlo, seeded-trial sweeps, brute-force
-  soaks (full-map BFS / pixel walks over facts the build-time validator
-  already computes and stores in `data/maps/world_report.json`), or
-  repeated expensive scene boots where one boot + re-fixture would do.
-  One small deterministic integration observation (fixed seed) is enough
-  to prove a roll/rule actually fires. When trimming, cut the method, not
-  the guarantee: every unique-behavior pin survives; check-count drift in
-  `tools/demo_check_*.md` is accepted, semantic doc pins are amended first.
+  soaks, or repeated expensive boots where one boot + re-fixture would do.
+  One small deterministic integration observation (fixed seed) is enough to
+  prove a roll/rule actually fires. Port the guarantee, not the method.

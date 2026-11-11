@@ -41,7 +41,7 @@ _ID_KEYED: tuple[str, ...] = (
 )
 _RAW_TABLES: tuple[str, ...] = (
     "trade_routes_built", "facility_hours", "captain_name_parts",
-    "ui_strings", "map_legend", "npc_config", "ui_layout",
+    "ui_strings", "map_legend", "npc_config",
 )
 
 
@@ -84,7 +84,9 @@ def test_locked_content_counts() -> None:
     assert len(store.named_pirates) == 4
     assert len(store.backgrounds) == 6
     assert len(store.equipment) == 24
-    assert len(store.ui_layout) == 32  # 10-* §4.23 screen set
+    # data/ui_layout.json survives the M6 cutover as the web-era layout
+    # data (10-* §4.23 final disposition) — the 32-screen set stays loaded.
+    assert len(store.ui_layout) == 32
 
 
 def test_get_port_round_trips_json_bytes() -> None:
@@ -203,14 +205,14 @@ def test_missing_file_raises_data_error(tmp_path: Path) -> None:
 
 def test_shape_violation_raises_data_error(tmp_path: Path) -> None:
     """Valid JSON that fails a shape check refuses the same way (the
-    ui_layout v2 gate — no migration chain, 10-* §4.23)."""
+    map-index single-entry gate — no fallback ladder, 90-* §9.1)."""
     root = _temp_data_root(tmp_path)
-    bad = root / "data" / "ui_layout.json"
-    bad.unlink()
-    bad.write_bytes(b'{"version": 1, "screens": {}}')
+    bad = root / "data" / "maps" / "maps.json"
+    bad.unlink()  # replace the symlink, never write through to data/
+    bad.write_bytes(b'{"version": 1, "maps": []}')
     with pytest.raises(DataError) as excinfo:
         DataStore(root / "data").load_all()
-    assert "'version' must be 2" in str(excinfo.value)
+    assert "maps" in str(excinfo.value).lower()
 
 
 def test_reload_is_idempotent() -> None:

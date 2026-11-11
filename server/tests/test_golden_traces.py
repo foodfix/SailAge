@@ -4,7 +4,12 @@ docs/IMPLEMENT-WebMigration.md §3 M5 ("golden traces recorded from the
 GDScript harness act as oracle") and docs/90-ARCHITECTURE.md §0.1 (the
 Godot tree is the parity oracle until the M6 cutover).
 
-The gate is a REAL diff, never a re-derivation: ``tools/battle_golden_trace.gd``
+The gate is a REAL diff, never a re-derivation. The oracle trace is stored
+at ``server/tests/fixtures/battle_golden_trace.jsonl`` — captured from the
+frozen Godot 4.7 runtime via ``tools/battle_golden_trace.gd`` before the M6
+cutover (when the harness still exists, ``test_oracle_fixture_matches_harness``
+re-verifies the stored bytes against a fresh run). The gate itself needs no
+Godot: the stored trace is the oracle. Original harness: ``tools/battle_golden_trace.gd``
 runs one pinned battle through the frozen GDScript oracle
 (``battle_sim.gd`` + ``ai_fleet.gd`` + ``fleet_commander.gd`` +
 ``ai_search.gd`` via the ``ai_level = 1`` dispatch) and prints JSON lines;
@@ -47,6 +52,8 @@ from server.sim.rng import GodotRng
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HARNESS = REPO_ROOT / "tools" / "battle_golden_trace.gd"
+ORACLE_FIXTURE = (REPO_ROOT / "server" / "tests" / "fixtures"
+                  / "battle_golden_trace.jsonl")
 
 # --- The frozen scenario (mirrors the harness constants verbatim) -----------
 
@@ -407,22 +414,36 @@ def _first_difference(actual: dict[str, Any],
     return "records differ (unknown field)"
 
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("godot") is None,
-    reason="godot not on PATH — the frozen GDScript oracle is unavailable",
+def load_oracle_trace() -> tuple[str, list[dict[str, Any]]]:
+    """The stored oracle trace (captured from the frozen Godot runtime)."""
+    text = ORACLE_FIXTURE.read_text(encoding="utf-8")
+    records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    assert records, "the stored oracle trace is empty"
+    return text, records
+
+
+@pytest.mark.skipif(
+    shutil.which("godot") is None or not HARNESS.exists(),
+    reason="the frozen Godot oracle/harness is gone (post-cutover) — the "
+           "stored fixture is the oracle",
 )
+def test_oracle_fixture_matches_harness() -> None:
+    """While the Godot tree exists, the stored fixture must be its output."""
+    stdout_one, fresh = run_harness()
+    stdout_two, fresh_two = run_harness()
+    assert stdout_one == stdout_two, "battle_golden_trace.gd is not deterministic"
+    assert fresh == fresh_two
+    _stored_text, stored = load_oracle_trace()
+    assert fresh == stored, (
+        "the stored oracle trace drifted from a fresh harness run:\n"
+        + _first_difference(fresh[0], stored[0])
+    )
 
 
 def test_golden_trace_matches_python_port() -> None:
-    stdout_one, harness_records = run_harness()
-    stdout_two, harness_records_two = run_harness()
+    _oracle_text, harness_records = load_oracle_trace()
 
-    # 1. The oracle itself is byte-stable across runs (same scenario ⇒ same
-    #    trace; no timestamps/hash order in the harness).
-    assert stdout_one == stdout_two, "battle_golden_trace.gd is not deterministic"
-    assert harness_records == harness_records_two
-
-    # 2. The harness scenario is the frozen contract (no silent edits).
+    # 1. The stored oracle trace carries the frozen scenario contract.
     assert harness_records[0]["type"] == "scenario"
     assert harness_records[0] == scenario_record(), (
         "harness scenario drifted from the pinned contract:\n"

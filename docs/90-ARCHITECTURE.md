@@ -167,12 +167,18 @@ numbers because every system doc cites them (`90-*` §5.1 signals, §8 save
 format, §9 map loader …). Their status from M0:
 
 - **Frozen read-only** as the parity oracle until the M6 cutover — the
-  runtime stays runnable for oracle diffs (the §8.1 v9 payload, the
-  §5.1 signal names and the §9 loader semantics are what M1–M5 port).
-- **Retired at M6** together with the tree they describe, by the explicit
-  enumerated list in the M6 acceptance record (`IMPLEMENT-WebMigration.md`);
-  semantic doc pins are re-homed to §0 + the system docs first, per the
-  check-count-drift agreement.
+  runtime stayed runnable for oracle diffs (the §8.1 v9 payload, the §5.1
+  signal names and the §9 loader semantics are what M1–M5 ported).
+- **RETIRED at the M6 cutover (2026-11-11):** the Godot runtime tree
+  (`scenes/ scripts/ autoload/ *.tscn *.import project.godot`) and the
+  GDScript harnesses (`tools/*.gd`, `tools/run_tests.py`) were deleted by
+  the enumerated list in `IMPLEMENT-WebMigration.md` §7/§6.
+  `data/ui_layout.json` (+ validator group 14) SURVIVES as the web-era
+  layout data, and `scripts/palette.gd`'s locked values live on in
+  `web/src/theme/palette.json` (the CSS-token source). The M5 golden-trace
+  oracle is stored at `server/tests/fixtures/battle_golden_trace.jsonl`.
+  Sections §1–§13 remain as the historical record of the ported
+  semantics.
 - Godot file paths in the system docs (`scripts/…`, `autoload/…`, `*.tscn`)
   stay the oracle pointers until M6; the Python/TS realizations cite
   `90-*` §0 plus their owning system doc. `95-DEBUG-HOVER.md` is

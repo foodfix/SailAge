@@ -136,7 +136,7 @@ Read in this order. Each doc follows the Doc Template (§10).
 |---|---|---|---|
 | 1 | `docs/00-OVERVIEW.md` | This file: vision, conventions, glossary, demo loop | all |
 | 2 | `docs/10-DATA-SCHEMA.md` | JSON schemas, i18n rule, validator spec, locked content lists, world artifact | all |
-| 3 | `docs/90-ARCHITECTURE.md` | Godot project layout, autoloads, save format, scene/data split | all |
+| 3 | `docs/90-ARCHITECTURE.md` | Web-era architecture (`§0`: server/client split, WS protocol, save v1); `§1–§13` = the retired Godot era (history) | all |
 | 4 | `docs/20-WORLD-AND-SAILING.md` | Tile grid, movement, clock, consumption, morale, weather, fail states | 1, 4, 5 |
 | 5 | `docs/30-PORTS-AND-TRADE.md` | Port facilities, price formulas, trade UI flows | 1, 5 |
 | 6 | `docs/40-SHIPS-AND-FLEET.md` | Ship stats, buy/repair/refit, fleet & cargo maths | 1, 4 |

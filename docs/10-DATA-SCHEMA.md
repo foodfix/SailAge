@@ -1394,7 +1394,12 @@ that section's numbers, not this file's.)
 }
 ```
 
-### 4.23 UILayout — `data/ui_layout.json` *(Phase 12 — rewrites the Phase-11 override table)*
+### 4.23 UILayout — `data/ui_layout.json` *(Phase 12 — rewrites the Phase-11 override table; **survives the M6 cutover as the web-era layout data**)*
+
+> **Web-era disposition (final).** The file survives the cutover: the React
+> screens own the element STRUCTURE while this file remains the rect/
+> list-block data they render (`80-*` §4.8.9's React realization note). The
+> single writer stays the studio; validator group 14 keeps governing it.
 
 **The data file IS the layout** (`80-*` §4.8.9): every static element's
 absolute rect in **tile units** (1 tile = `Palette.CHROME_TILE` = 32 px),
@@ -2607,7 +2612,7 @@ the code below. All checks run in order.
 | 11 | Captain canon | `npc_captains.json` **absent**; `captains.json` + `officers.json` rebuild determinism (`tools/build_captains.py --check`); canon coverage ≥ the computed extreme-preset total; the artifact `quota_table` matches the roster; name uniqueness across all captains + officers; `named_pirates.json` v2 ≡ its canon copies with the `drop` → rare pin; generated-card formula conformance — normative spec §8.6 |
 | 12 | RPG data | officers v2 shape (96 = 24 + 72, 11 skill keys, wage & main-skill bands, specialty coverage ≥ 10 per skill at ≥ 20, captain-qualified ≥ 12, recruit-port rules); `skill_gates.json` rows incl. `sail.autopilot`; `officer_posts.json` exactly 7 with the locked prereqs; `backgrounds.json` exactly 6 with the key/range rules; ui_strings Phase-8 family presence — normative spec §8.7 |
 | 13 | Generated UI art & shore raster | `assets/ui/` inventory == manifest ids for every contract class (`IMPLEMENT-Phase10.md` A.1–A.7); per-sprite palette-block membership + color budgets; 8-direction transform relations; hull ingest audit (raw dedupe: 16 × 8 shared grid + provenance ledger, owner ids resolved by the runtime fallback — classic: 16 × 9 × 8 remap coverage); tier footprint bands (waived for the raw family); seam checks; `world_shore.png` integrity (§6.6); `art_prompts.json` coverage; byte-identical `build_ui_art.py` / `build_shore.py` rebuilds — normative spec §8.8; PixelLab coast family: `assets/ui/terrain/terrain_coast_wang_*.png` inventory via the §4.8 2026-11-06 ledger (`tools/assets/pixellab_raw/pixellab_coast_ledger.json`), palette/budget/ring waived (raw-pixellab ruling), `build_ui_art --check` copies the committed tiles); PixelLab waterline VFX family (2026-11-07): `assets/ui/fx/fx_waterline_{back,front}_{dir}.png` (8 dirs × 2) + `fx_waterline.json` inventory via the `tools/assets/pixellab_raw/pixellab_vfx_ledger.json` (raw-pixellab ruling — palette/budget waived; canvas fit + anchor bounds + sheet sha256 match enforced), `build_ui_art --check` copies the committed family |
-| 14 | Layout file | `data/ui_layout.json` v2 shape (version + screens), the 32-screen set, element/list rect shapes, canvas bounds, serialization bytes — normative spec §8.9 (Phase 12) |
+| 14 | Layout file | `data/ui_layout.json` v2 shape (version + screens), the 32-screen set, element/list rect shapes, canvas bounds, serialization bytes — normative spec §8.9 (Phase 12; survives the cutover as the web layout data) |
 | 15 | Web tile pyramids | `web/public/tiles/` inventory + byte-identical `tools/build_web_tiles.py` rebuild + decode spot-probes — normative spec §8.10 (web era; specified M0, activates M4 with the tool) |
 
 ### 8.1 Group 6 — world map, normative spec
@@ -3113,7 +3118,7 @@ mismatch / a non-torus edge tile).
 own `--check` modes: `python3 tools/build_ui_art.py --check` and
 `python3 tools/build_shore.py --check`.
 
-### 8.9 Group 14 — the absolute layout file, normative spec *(Phase 12 — rewrites the Phase-11 override rules)*
+### 8.9 Group 14 — the absolute layout file, normative spec *(Phase 12 — rewrites the Phase-11 override rules; survives the cutover)*
 
 Group 14 exits 14. It runs after groups 1–13 in the single
 `validate_data.py` pass and reads only `data/ui_layout.json` (§4.23).
