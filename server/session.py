@@ -142,6 +142,7 @@ FACILITY_INVENTORY: Final[dict[str, tuple[str, ...]]] = {
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
                "appoint"),
     "fleet": ("jettison", "promote"),
+    "settings": ("npc_preset", "input_mode", "current_mode"),
 }
 
 #: The six facilities the port hub renders (``server.api.views._port_view``)
@@ -753,6 +754,39 @@ class Session:
 
     def _refuse(self, msg: str, code: str = "refused") -> None:
         raise ApiError(code, msg)
+
+    # =====================================================================
+    # settings (S19 rows, docs/80-* §4.6.3 — pre-game S1 and in-run S4)
+    # =====================================================================
+
+    def _settings_npc_preset(self, body: dict[str, Any]) -> dict[str, Any]:
+        preset = _require_str(body, "preset")
+        presets = (self.store.npc_config or {}).get("presets") or {}
+        if preset not in presets:
+            self._refuse("error.bad_request", "bad_request")
+        self.gs.npc_preset = preset
+        if self.has_run():
+            # The ecology adopts the density dial (raise trickles, lower
+            # never culls — docs/10-* §4.10 / 60-* §4.1.2).
+            self._ensure_ecology().set_preset(preset)
+        self.queue_state()
+        return {"ok": True, "preset": preset}
+
+    def _settings_input_mode(self, body: dict[str, Any]) -> dict[str, Any]:
+        mode = _require_str(body, "mode")
+        if mode not in ("step", "helm"):
+            self._refuse("error.bad_request", "bad_request")
+        self.gs.control_prefs["input_mode"] = mode
+        self.queue_state()
+        return {"ok": True, "input_mode": mode}
+
+    def _settings_current_mode(self, body: dict[str, Any]) -> dict[str, Any]:
+        mode = _require_str(body, "mode")
+        if mode not in ("modifier", "drift"):
+            self._refuse("error.bad_request", "bad_request")
+        self.gs.control_prefs["current_mode"] = mode
+        self.queue_state()
+        return {"ok": True, "current_mode": mode}
 
     # =====================================================================
     # market

@@ -47,6 +47,7 @@ EXPECTED_INVENTORY: dict[str, tuple[str, ...]] = {
     "people": ("inspect", "talk", "gift", "befriend", "attack", "hail",
                "appoint"),
     "fleet": ("jettison", "promote"),
+    "settings": ("npc_preset", "input_mode", "current_mode"),
 }
 
 #: The §0.3 hello frame keys, verbatim.

@@ -24,6 +24,7 @@ import { navigate } from "../app/router";
 import { useI18n } from "../i18n";
 import { Element, type ScreenId } from "../layout";
 import { useGameState } from "../state/context";
+import { useGameClient } from "../client/context";
 import { setDebugOverlays, useChartView } from "../canvas/chart";
 import { ConfirmDialog } from "./Confirm";
 import { ButtonEl, LabelEl, PanelEl } from "./common";
@@ -74,9 +75,22 @@ export function SettingsScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [close, confirmReturn]);
 
+  const client = useGameClient();
   const preset = state.npc_preset;
   const inputMode = state.control_prefs.input_mode;
   const currentMode = state.control_prefs.current_mode;
+  // §4.6.3: the three GameState rows are live through the frozen
+  // `settings/*` verbs (§0.4); the server is authoritative and the next
+  // `state` frame re-renders the current-value labels.
+  const applyPreset = useCallback((next: string) => {
+    void client.action("settings", "npc_preset", { preset: next });
+  }, [client]);
+  const applyInputMode = useCallback((next: string) => {
+    void client.action("settings", "input_mode", { mode: next });
+  }, [client]);
+  const applyCurrentMode = useCallback((next: string) => {
+    void client.action("settings", "current_mode", { mode: next });
+  }, [client]);
 
   return (
     <div className="sa-screen" data-settings-screen="settings">
@@ -101,8 +115,7 @@ export function SettingsScreen() {
               parent="panel.presets"
               textKey={`settings.density.${entry.id}`}
               kind={preset === entry.id ? "primary" : "default"}
-              disabled
-              titleKey="ui.not_available"
+              onClick={() => applyPreset(entry.id)}
             />
           ))}
         </Element>
@@ -137,8 +150,7 @@ export function SettingsScreen() {
               parent="panel.input_buttons"
               textKey={`settings.input.${entry.id}`}
               kind={inputMode === entry.id ? "primary" : "default"}
-              disabled
-              titleKey="ui.not_available"
+              onClick={() => applyInputMode(entry.id)}
             />
           ))}
         </Element>
@@ -167,8 +179,7 @@ export function SettingsScreen() {
               parent="panel.current_mode_buttons"
               textKey={`settings.current.${entry.id}`}
               kind={currentMode === entry.id ? "primary" : "default"}
-              disabled
-              titleKey="ui.not_available"
+              onClick={() => applyCurrentMode(entry.id)}
             />
           ))}
         </Element>

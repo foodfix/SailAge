@@ -215,7 +215,7 @@ export type FrozenEndpoint =
  * the first screen consumes it (§0.4); these are the M3 proposal used by
  * the eight screens (one route per verb: POST /api/<facility>/<verb>).
  */
-export type ActionFacility = FacilityId | "port" | "provisions";
+export type ActionFacility = FacilityId | "port" | "provisions" | "settings";
 
 /* ---------------------------------------------------------------------- */
 /* The screen-facing client                                                */

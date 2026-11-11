@@ -129,7 +129,9 @@ data/  tools/  assets/  docs/   unchanged owners
   abandon|report` · `palace: mission|ceremony|permit|commend|
   tournament_enter|repair_fleet|pay_bounty|inform|retire` · `provisions:
   set_sail|buy_supplies|fill|jettison` · `people: inspect|talk|gift|
-  befriend|attack|hail|appoint` · `fleet: jettison|promote`. Every action
+  befriend|attack|hail|appoint` · `fleet: jettison|promote` · `settings:
+  npc_preset|input_mode|current_mode` (the S19 rows, pre-game and
+  in-run). Every action
   is a thin adapter over a `server/sim` function — no rules in the API
   layer. Port-facility actions pass the gate order **live run → docked →
   `bounty.can_open_facility` → §4.1b hours** (the same precedence the hub

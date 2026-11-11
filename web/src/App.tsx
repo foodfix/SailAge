@@ -32,13 +32,13 @@ import type {
   ServerFrame,
   TickFrame,
 } from "./client/types";import { fixtureState, fixtureViews } from "./state/fixture";
-import { GameStateProvider, type GameStateValue } from "./state/context";
+import { GameStateProvider, useGameState, type GameStateValue } from "./state/context";
 import type { GameSnapshot } from "./state/types";
 import { isScreenViewId, type ScreenViewId, type ScreenViews, type ScreenViewState } from "./state/views";
 import { I18nProvider, useI18n } from "./i18n";
 import { Toast } from "./kit";
 import { ScreenHost } from "./screens";
-import { useScreenRoute } from "./app/router";
+import { navigate, useScreenRoute } from "./app/router";
 import { DevNav } from "./app/DevNav";
 import type { ScreenId } from "./layout";
 
@@ -80,6 +80,46 @@ function LocaleHotkey() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleLocale]);
+  return null;
+}
+
+/**
+ * Run-end routing (M6-a integration gap): a `game_over` event or a retired
+ * snapshot lands on its bookend screen once. Port/world screens never
+ * navigate themselves, so this is the one global handler.
+ */
+function RunEndRouter({ screen }: { screen: ScreenId }) {
+  const { state, lastEvent } = useGameState();
+  useEffect(() => {
+    if (!state) return;
+    const over = lastEvent?.type === "event" && lastEvent.name === "game_over";
+    if (over && screen !== "gameover") {
+      navigate("gameover");
+      return;
+    }
+    if (state.retired && screen !== "ending" && screen !== "title") {
+      navigate("ending");
+    }
+  }, [state, lastEvent, screen]);
+  return null;
+}
+
+/** 80-* §4.2/§4.6: `Tab` opens the Chart from the world/port and closes back. */
+function ChartHotkey({ screen }: { screen: ScreenId }) {
+  const { state } = useGameState();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      event.preventDefault();
+      if (screen === "chart") {
+        navigate(state?.current_port != null ? "port" : "world");
+        return;
+      }
+      if (screen === "world" || screen === "port") navigate("chart");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, state]);
   return null;
 }
 
@@ -151,6 +191,8 @@ function FixtureApp({ screen }: { screen: ScreenId }) {
       <GameStateProvider value={value}>
         <I18nProvider onLocaleChange={(locale) => void fixtureClient.setLocale(locale)}>
           <LocaleHotkey />
+          <RunEndRouter screen={screen} />
+          <ChartHotkey screen={screen} />
           <Shell screen={screen}>
             <ScreenHost screen={screen} />
           </Shell>
@@ -305,6 +347,8 @@ function LiveApp({ screen }: { screen: ScreenId }) {
         <LocaleHotkey />
         {value ? (
           <GameStateProvider value={value}>
+            <RunEndRouter screen={screen} />
+            <ChartHotkey screen={screen} />
             {body}
             {live.toastKey ? (
               <Toast messageKey={live.toastKey} onDismiss={live.dismissToast} tone="bad" />
