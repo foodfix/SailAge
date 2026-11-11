@@ -11,12 +11,15 @@ import type { GameSnapshot, NpcMarkerState } from "../../state/types";
 import type { TickFrame } from "../../client/types";
 import type { Locale } from "../../i18n";
 import {
+  selectTileLevel,
   WORLD_TILE_PX,
   ZOOM_NEAR,
   ZOOM_WIDE,
 } from "./constants";
 import { clamp, makeCamera, sameCell, screenToTile, wrapDeltaX, type CameraView, type Vec2 } from "./geometry";
 import { drawNpcMarkers, drawPlayerToken, drawPorts, drawWrecks } from "./markers";
+import { pyramid } from "./pyramid";
+import { drawTileLayer } from "./tiles";
 import { drawTerrain } from "./terrain";
 
 /** The 1920×1080 design surface (docs/80-UI-UX.md §4.8.9). */
@@ -134,6 +137,20 @@ export class WorldRenderer {
     this.raf = 0;
   }
 
+  /** Run one overlay pass; a throw is logged once and the RAF loop lives. */
+  private readonly safe = (pass: () => void): void => {
+    try {
+      pass();
+    } catch (err) {
+      if (!this.overlayFailureLogged) {
+        this.overlayFailureLogged = true;
+        console.error(`World: overlay pass failed — skipped (${String(err)})`);
+      }
+    }
+  };
+
+  private overlayFailureLogged = false;
+
   private readonly frame = (now: number): void => {
     if (!this.running) return;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -149,16 +166,27 @@ export class WorldRenderer {
 
     const camera = this.cameraAt(now);
     const fleet = this.positionAt(now);
-    drawTerrain(ctx, camera);
-    drawWrecks(ctx, camera, this.scene.snapshot.wrecks);
-    drawPorts(ctx, camera, this.locale);
-    drawNpcMarkers(ctx, camera, this.scene.npcMarkers);
-    drawPlayerToken(
-      ctx,
-      camera,
-      fleet,
-      this.tick.heading,
-      this.scene.snapshot.fleet[0]?.ship_type_id ?? "",
+    const terrain = drawTerrain(ctx, camera);
+    if (!terrain.ready) {
+      // Warm-up (or layer failure): the flat raster underneath — the exact
+      // pre-M7.1 view — until every sampled chunk decodes.
+      const level = selectTileLevel(camera.tilePx, dpr);
+      drawTileLayer(ctx, pyramid("world"), camera, level, "");
+    }
+    // Each overlay pass is contained: one bad row (a projection shape the
+    // renderer did not expect) may skip that pass, never kill the RAF loop
+    // — a dead loop froze the whole view blank (the M7.1 live report).
+    this.safe(() => drawWrecks(ctx, camera, this.scene.snapshot.wrecks));
+    this.safe(() => drawPorts(ctx, camera, this.locale));
+    this.safe(() => drawNpcMarkers(ctx, camera, this.scene.npcMarkers));
+    this.safe(() =>
+      drawPlayerToken(
+        ctx,
+        camera,
+        fleet,
+        this.tick.heading,
+        this.scene.snapshot.fleet[0]?.ship_type_id ?? "",
+      ),
     );
 
     this.raf = requestAnimationFrame(this.frame);

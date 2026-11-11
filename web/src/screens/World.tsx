@@ -33,7 +33,9 @@ import type { Direction8, GameSnapshot } from "../state/types";
 import { fixtureSailing } from "../state/fixture";
 import { navigate } from "../app/router";
 import { Button, Toast } from "../kit";
-import { Label, useToastState } from "./common";
+import { Label, useToastState, ViewFallback } from "./common";
+import { terrainStats } from "../canvas/world/terrain";
+import { wsDebugInfo, CLOSE_OTHER_CLIENT } from "../client/http";
 import type { ScreenId } from "./ids";
 import "./World.css";
 
@@ -49,6 +51,44 @@ const WIND_GLYPHS: Record<Direction8, string> = {
   W: "←",
   NW: "↖",
 };
+
+/**
+ * Dev-only transport/render status (?dev=1): what the page actually
+ * receives vs renders — the fastest way to see why a view is stale.
+ * Captures the last uncaught client error too (rendered in the chip).
+ */
+let lastClientError = "";
+if (typeof window !== "undefined") {
+  window.addEventListener("error", (e) => {
+    lastClientError = String((e.error && e.error.stack) || e.message).slice(0, 300);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    lastClientError = "REJ: " + String(e.reason).slice(0, 280);
+  });
+}
+
+function DevStatusChip({ tickAgeMs }: { tickAgeMs: number }) {
+  const [text, setText] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const ws = wsDebugInfo();
+      const terrain = terrainStats();
+      const terrErr = (window as unknown as { __saTerrainErr?: string }).__saTerrainErr;
+      const head =
+        `ws=${ws.ws} state=${ws.states} tick=${ws.ticks} ` +
+        `age=${Number.isFinite(tickAgeMs) ? Math.round(tickAgeMs / 100) / 10 : "?"}s ` +
+        `pos=${ws.lastTickPos ?? "?"} terrain=${terrain.ready ? "ok" : "warm"} chunks=${terrain.chunks}` +
+        (terrErr ? ` ERR ${terrErr}` : "");
+      setText(lastClientError ? `${head} ERR ${lastClientError}` : head);
+    };
+    update();
+    const timer = window.setInterval(update, 500);
+    return () => window.clearInterval(timer);
+  }, [tickAgeMs]);
+  return (
+    <Label textValue={text} tone="bad" className="sa-chip" wrap />
+  );
+}
 
 /** The HUD's first paint before the first tick frame lands. */
 function initialTick(snapshot: GameSnapshot): TickFrame {
@@ -96,12 +136,23 @@ export function WorldScreen() {
   const { locale, t, tKey, fmt } = useI18n();
   const [snapshot, setSnapshot] = useState<GameSnapshot>(fixtureSailing.snapshot);
   const [tick, setTick] = useState<TickFrame>(() => initialTick(fixtureSailing.snapshot));
+  const [tickAtMs, setTickAtMs] = useState(() => Date.now());
   const [zoom, setZoom] = useState(ZOOM_NEAR);
   const { toast, showToast, clearToast } = useToastState();
+  const devMode = useMemo(
+    () => new URLSearchParams(window.location.search).has("dev"),
+    [],
+  );
 
   // Sea ticks own the camera; while docked none flow, so the §4.5 web-era
   // seed keeps the view centred on the live fleet position (M7.1).
   const gotSeaTick = useRef(false);
+  // Live-transport gate: the fixture seed is presentation for `?fixture=1`
+  // only. A refused/stale live connection must never render the fixture
+  // view as if it were the player's run (the "no ship, wrong map" report).
+  const [liveStateArrived, setLiveStateArrived] = useState(false);
+  const [liveRefused, setLiveRefused] = useState(false);
+  const isFixtureTransport = client.transport === "fixture";
 
   useEffect(
     () =>
@@ -109,17 +160,23 @@ export function WorldScreen() {
         onFrame: (frame) => {
           if (frame.type === "tick") {
             gotSeaTick.current = true;
+            setTickAtMs(Date.now());
             setTick(frame);
           } else if (frame.type === "state") {
+            setLiveStateArrived(true);
             setSnapshot(frame);
             if (!gotSeaTick.current || frame.current_port) {
               setTick((current) =>
                 current.position.x === frame.world.position.x && current.position.y === frame.world.position.y
                   ? current
-                  : initialTick(frame),
+                  : (setTickAtMs(Date.now()), initialTick(frame)),
               );
             }
           }
+        },
+        onClose: (code, reason) => {
+          if (code === CLOSE_OTHER_CLIENT) setLiveRefused(true);
+          else if (reason) setLiveRefused(true);
         },
       }),
     [client],
@@ -179,6 +236,17 @@ export function WorldScreen() {
 
   const moraleTier = MORALE_TIERS.find((entry) => tick.morale >= entry.min)?.tier ?? "mutinous";
   const moraleTone: SupplyTone | "default" = tick.morale < 20 ? "bad" : tick.morale < 40 ? "warn" : "good";
+
+  // The live-transport gate: no real state yet means this view would be the
+  // fixture seed pretending to be the run — show the connecting/refusal
+  // plate instead (never the fake map).
+  if (!isFixtureTransport && !liveStateArrived) {
+    return (
+      <ViewFallback
+        status={liveRefused ? { status: "error", errorKey: "connection.other_client" } : { status: "loading" }}
+      />
+    );
+  }
   const trimmed = tick.sail_trim !== "normal";
   const areaId = snapshot.current_port ?? nearestKnownPort(tick.position, snapshot.known_ports);
   const areaText = areaId ? t(content.portName(areaId)) : tKey("world.open_sea");
@@ -248,6 +316,7 @@ export function WorldScreen() {
         <div hidden>
           <Label textKey="world.current.label" tone="accent" className="sa-chip" />
         </div>
+        {devMode ? <DevStatusChip tickAgeMs={Date.now() - tickAtMs} /> : null}
       </div>
 
       {/* Discovery seam: hidden until the M2 hint projection lands. */}

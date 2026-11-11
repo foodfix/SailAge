@@ -38,7 +38,12 @@ export class TilePyramid {
     image.decoding = "async";
     image.onerror = () => {
       entry.failed = true;
-      console.error(`Tiles: missing ${this.source} tile ${key}`);
+      console.error(`Tiles: missing ${this.source} tile ${key} — retrying in 5s`);
+      // A dropped response over a slow link must not kill the chunk for the
+      // session: drop the entry so the next frame retries the load.
+      window.setTimeout(() => {
+        if (this.entries.get(key) === entry) this.entries.delete(key);
+      }, 5000);
     };
     image.src = `${import.meta.env.BASE_URL}tiles/${this.source}/${level}/${tx}_${ty}.png`;
     this.entries.set(key, entry);

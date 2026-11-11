@@ -448,6 +448,28 @@ Also fixed en route: the M7 audit-script header's `*/` glob self-close
 `common.tsx` inline-style violations (moved to the structural CSS
 classes).
 
+**M7.1 addendum (the live-world blank-view root cause, 2026-11-12).**
+A VPN user report ("no ship, no tiles at all") traced to an uncaught
+`TypeError: reading 'x'` in the RAF loop: the live `state` frame's
+`npc_fleets` rows carry the **save-payload shape** (`cell`, no
+`marker_letter`), while `drawNpcMarkers` read the §4.5.2 marker shape
+(`position`) — the throw killed the RAF loop on the first frame with
+NPC rows in view, freezing the canvas blank. All fixture-mode tests had
+passed because the fixture rows carry `position` (the refused/stale
+live pages rendered the fixture seed — which also masked the crash
+behind "wrong map, no ship" symptom reports). Fixes: markers accept
+both row shapes (`position` ?? `cell`, letters derived per the fixture
+scheme T/P/c for roles without one), every renderer overlay pass is
+wrapped (a bad row skips the pass, never kills the loop), the terrain
+layer paints the sea fallback and reports failures on-screen, failed
+tile loads retry after 5 s, a refused live connection shows the
+honest "another client" plate instead of the fixture view, and a
+`?dev=1` status chip surfaces the transport/tick/terrain state. The
+environment's auto-preview browser (which races for the one-client WS
+session on every local port) was identified and disabled with the
+user's leave — it had been stealing the session from the real tab,
+amplifying every symptom above.
+
 ## 7. M6 cutover plan (the explicit deletion / retirement lists)
 
 Executed only after every M6 screen lands and the full demo loop passes in

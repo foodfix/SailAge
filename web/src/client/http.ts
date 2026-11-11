@@ -27,6 +27,7 @@ import type {
   ServerFrame,
 } from "./types";
 import type { GameSnapshot, FacilityId, Locale } from "../state/types";
+import type { TickFrame } from "../client/types";
 import type { ScreenViewId, ViewEnvelope } from "../state/views";
 
 /** The frozen GameClient plus the M3 projection channel. */
@@ -48,6 +49,30 @@ export interface HttpClientOptions {
 
 /** Close code the server uses to refuse a second concurrent client (§0.3). */
 export const CLOSE_OTHER_CLIENT = 4001;
+
+/**
+ * Dev-only transport counters (`?dev=1` world chip reads them). A plain
+ * window-scoped record — never read by game code.
+ */
+export interface WsDebugInfo {
+  ws: "open" | "closed" | "refused" | "idle";
+  states: number;
+  ticks: number;
+  lastTickAt?: number;
+  lastTickPos?: string;
+}
+
+const debugStore: WsDebugInfo = { ws: "idle", states: 0, ticks: 0 };
+
+function debugNote(patch: Partial<WsDebugInfo>): void {
+  Object.assign(debugStore, patch);
+  (window as unknown as { __saWsDebug?: WsDebugInfo }).__saWsDebug = debugStore;
+}
+
+/** The live transport counters (dev diagnostics only). */
+export function wsDebugInfo(): WsDebugInfo {
+  return { ...debugStore };
+}
 
 const RETRY_BASE_MS = 500;
 const RETRY_MAX_MS = 8000;
@@ -148,6 +173,7 @@ export class HttpClient implements LiveGameClient {
 
     socket.onopen = () => {
       this.attempt = 0;
+      debugNote({ ws: "open" });
     };
     socket.onmessage = (event: MessageEvent) => {
       if (typeof event.data !== "string") return;
@@ -158,6 +184,15 @@ export class HttpClient implements LiveGameClient {
         return; // a malformed frame is never allowed to crash the shell
       }
       if (frame && typeof (frame as { type?: unknown }).type === "string") {
+        if (frame.type === "state") debugNote({ states: wsDebugInfo().states + 1 });
+        if (frame.type === "tick") {
+          const tick = frame as TickFrame;
+          debugNote({
+            ticks: wsDebugInfo().ticks + 1,
+            lastTickAt: Date.now(),
+            lastTickPos: `${tick.position.x},${tick.position.y}`,
+          });
+        }
         this.handlers?.onFrame(frame);
       }
     };
@@ -166,6 +201,7 @@ export class HttpClient implements LiveGameClient {
     };
     socket.onclose = (event: CloseEvent) => {
       if (this.socket === socket) this.socket = null;
+      debugNote({ ws: event.code === CLOSE_OTHER_CLIENT ? "refused" : "closed" });
       this.handlers?.onClose?.(event.code, event.reason ?? "");
       if (event.code === CLOSE_OTHER_CLIENT) {
         this.stopped = true; // one client only: never fight for the socket

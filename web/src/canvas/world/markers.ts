@@ -21,6 +21,26 @@ import type { NpcMarkerState } from "../../state/types";
 const hullCache = new Map<string, HTMLImageElement | null>();
 const reportedMissing = new Set<string>();
 
+/**
+ * Live fleet rows carry the save payload's `cell` (`90-*` §0.3 state
+ * frame = the §8.1 payload) while the fixture rows carry the §4.5.2
+ * `position`. Accept either — a marker without either is skipped, never
+ * a crash (one bad row may not blank the sailing view).
+ */
+function markerCell(marker: NpcMarkerState): Vec2 | undefined {
+  const withCell = marker as NpcMarkerState & { cell?: Vec2 | null };
+  if (marker.position && typeof marker.position.x === "number") return marker.position;
+  if (withCell.cell && typeof withCell.cell.x === "number") return withCell.cell;
+  return undefined;
+}
+
+/** §4.5.2 role letter: the fixture pins T/P/c; others derive from the role. */
+const ROLE_LETTERS: Record<string, string> = { trader: "T", patrol: "P", coaster: "c" };
+
+function roleLetter(role: string): string {
+  return ROLE_LETTERS[role] ?? role.charAt(0).toUpperCase();
+}
+
 /** Terrain-sprite image cache (the §9.2 port sprites; terrain.ts owns land/water). */
 const terrainSprites = new Map<string, HTMLImageElement | null>();
 
@@ -100,9 +120,10 @@ export function drawPlayerToken(
 /** §4.5.2: a moving marker drags a 5-tile dashed, fading trail. */
 function drawWake(ctx: CanvasRenderingContext2D, camera: CameraView, marker: NpcMarkerState): void {
   const wake = marker.wake ?? [];
-  if (marker.docked || wake.length === 0) return;
+  const headCell = markerCell(marker);
+  if (marker.docked || wake.length === 0 || !headCell) return;
   const points = wake.slice(0, WAKE_TILES).map((cell) => worldToScreen(camera, cell));
-  const head = worldToScreen(camera, marker.position);
+  const head = worldToScreen(camera, headCell);
   ctx.save();
   ctx.strokeStyle = palette.panelLine();
   ctx.lineWidth = Math.max(1, camera.tilePx * 0.02);
@@ -128,7 +149,9 @@ export function drawNpcMarkers(
 ): void {
   for (const marker of markers) {
     drawWake(ctx, camera, marker);
-    const point = worldToScreen(camera, marker.position);
+    const cell = markerCell(marker);
+    if (!cell) continue;
+    const point = worldToScreen(camera, cell);
     if (offscreen(camera, point, camera.tilePx * 2)) continue;
 
     const side = Math.max(6, camera.tilePx * 0.78);
@@ -140,12 +163,13 @@ export function drawNpcMarkers(
     ctx.fillRect(point.x - side / 2, point.y - side / 2, side, side);
     ctx.strokeRect(point.x - side / 2, point.y - side / 2, side, side);
 
-    if (marker.marker_letter) {
+    const letter = marker.marker_letter ?? roleLetter(marker.role);
+    if (letter) {
       ctx.fillStyle = palette.portInk();
       ctx.font = `${Math.round(camera.tilePx * 0.46)}px Georgia, serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(marker.marker_letter, point.x, point.y);
+      ctx.fillText(letter, point.x, point.y);
     }
   }
 }

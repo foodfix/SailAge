@@ -69,6 +69,14 @@ interface ChunkArrays {
 const chunkCache = new Map<string, ChunkArrays | null>();
 /** ~two screens of chunks per source pair; evicts the oldest decodes. */
 const MAX_CACHED_CHUNKS = 96;
+
+/** Last draw's warm-up state (the ?dev=1 world chip reads it). */
+const terrainStatsInfo = { ready: false, chunks: 0, sprites: 0 };
+
+/** Dev diagnostics for the terrain layer. */
+export function terrainStats(): { ready: boolean; chunks: number; sprites: number } {
+  return { ...terrainStatsInfo };
+}
 const scratch = document.createElement("canvas");
 scratch.width = PYRAMID_TILE_PX;
 scratch.height = PYRAMID_TILE_PX;
@@ -259,11 +267,44 @@ export interface TerrainDrawResult {
   ready: boolean;
 }
 
+const seaFallback = () => palette.sea();
+
 /**
  * Draw the terrain layer for the camera window (the world-map base; the
  * marker/port overlays render on top per markers.ts).
+ *
+ * Always paints the sea colour first, so a cold cache (or a chunk that
+ * never decodes) shows water instead of a void. Any throw is contained:
+ * the layer logs once and reports not-ready, and the renderer falls back
+ * to the flat raster for that frame (the pre-M7.1 look) — the sailing
+ * screen can never end up blank because of this layer.
  */
 export function drawTerrain(
+  ctx: CanvasRenderingContext2D,
+  camera: CameraView,
+): TerrainDrawResult {
+  ctx.fillStyle = seaFallback();
+  ctx.fillRect(0, 0, camera.width, camera.height);
+  try {
+    const result = drawTerrainInner(ctx, camera);
+    terrainStatsInfo.ready = result.ready;
+    terrainStatsInfo.chunks = chunkCache.size;
+    terrainStatsInfo.sprites = sprites.size;
+    return result;
+  } catch (err) {
+    if (!terrainFailureLogged) {
+      terrainFailureLogged = true;
+      console.error(`Terrain: layer draw failed — flat raster fallback (${String(err)})`);
+    }
+    (window as unknown as { __saTerrainErr?: string }).__saTerrainErr = String(err).slice(0, 220);
+    terrainStatsInfo.ready = false;
+    return { ready: false };
+  }
+}
+
+let terrainFailureLogged = false;
+
+function drawTerrainInner(
   ctx: CanvasRenderingContext2D,
   camera: CameraView,
 ): TerrainDrawResult {
