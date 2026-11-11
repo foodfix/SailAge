@@ -5,10 +5,17 @@
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { CaptainTableRow } from "../state/types";
+import type { CaptainTableRow } from "../state/views";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Icon, Toast, ValueBar } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "inn";
@@ -21,11 +28,13 @@ function captainRoleIcon(captain: CaptainTableRow): string {
 }
 
 export function InnScreen() {
-  const { state, views } = useGameState();
-  const view = views.inn;
+  const { state } = useGameState();
+  const { view, status } = useScreenView("inn");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
+
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
 
   const portName = t(content.portName(view.portId));
 

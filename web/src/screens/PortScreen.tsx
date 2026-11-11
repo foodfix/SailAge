@@ -1,14 +1,25 @@
 /**
  * S4 port hub — the facility cards + Set Sail (80-* §4.8.1, 4.8.9).
  * Every element row of data/ui_layout.json's `port` screen is rendered.
+ *
+ * The card state (present / activation phase / bounty-closed / hours-open)
+ * is the server projection's (`GET /api/view/port`, 90-* §0.4); this
+ * screen only renders it and routes.
  */
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { PortFacilityStatus } from "../state/types";
+import type { PortFacilityStatus } from "../state/views";
 import { Box, Element, type ScreenId } from "../layout";
 import { Icon, Toast } from "../kit";
-import { ButtonEl, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "port";
@@ -40,14 +51,17 @@ function useStatusText() {
 }
 
 export function PortScreen() {
-  const { state, views } = useGameState();
+  const { state } = useGameState();
+  const { view, status } = useScreenView("port");
   const client = useGameClient();
   const { toast, clearToast } = useToastState();
   const statusText = useStatusText();
 
-  const portId = state.current_port ?? views.market.portId;
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
+
+  const portId = view.portId ?? state.current_port ?? "";
   const port = content.port(portId);
-  const nationId = port?.nation_id ?? state.player.nation_id;
+  const nationId = view.nationId ?? port?.nation_id ?? state.player.nation_id;
 
   const openFacility = (facility: PortFacilityStatus) => {
     void client.port.enter(facility.id);
@@ -84,7 +98,7 @@ export function PortScreen() {
 
       <Element screen={SCREEN} id="facility_grid">
         {CARD_IDS.map((card) => {
-          const facility = views.port.facilities.find((entry) => entry.id === card.id);
+          const facility = view.facilities.find((entry) => entry.id === card.id);
           if (!facility) return null;
           return (
             <Element

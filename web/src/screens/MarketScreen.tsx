@@ -3,15 +3,26 @@
  * investment footer. Every `market` element row from data/ui_layout.json is
  * rendered; dynamic rows come from the `rows` / `captains` / `intel` list
  * blocks (10-* §4.23).
+ *
+ * Prices, the tax badge, ownership, trend and the invest gate all come from
+ * `GET /api/view/market` (90-* §0.4) — this screen performs no rule math.
  */
 import { useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
-import type { MarketGoodRow } from "../state/types";
+import type { MarketGoodRow } from "../state/views";
 import { Box, Element, ListRows, type ScreenId } from "../layout";
 import { Field, Icon, Toast } from "../kit";
-import { ButtonEl, IconBox, LabelEl, PanelEl, useToastState } from "./common";
+import {
+  ButtonEl,
+  IconBox,
+  LabelEl,
+  PanelEl,
+  useScreenView,
+  useToastState,
+  ViewFallback,
+} from "./common";
 import { navigate } from "../app/router";
 
 const SCREEN: ScreenId = "market";
@@ -20,7 +31,7 @@ const COL = {
   good: { x: 2, y: 0, w: 6, h: 2 },
   stock: { x: 8, y: 0, w: 2, h: 2 },
   trend: { x: 10, y: 0, w: 4, h: 2 },
-  marginal: { x: 15, y: 0, w: 5, h: 2 },
+  marginal: { x: 14, y: 0, w: 6, h: 2 },
   owned: { x: 20, y: 0, w: 2, h: 2 },
   qty: { x: 22, y: 0, w: 6, h: 2 },
   buy: { x: 32, y: 0, w: 3, h: 2 },
@@ -29,14 +40,16 @@ const COL = {
 
 export function MarketScreen() {
   const { state, views } = useGameState();
-  const view = views.market;
+  const { view, status } = useScreenView("market");
   const { t, tKey, fmt } = useI18n();
   const client = useGameClient();
   const { toast, showToast, clearToast } = useToastState();
   const [qty, setQty] = useState<Record<string, string>>({});
 
-  const portName = t(content.portName(view.portId));
-  const specialtyNames = view.specialtyGoodIds.map((id) => t(content.goodName(id))).join(", ");
+  if (!view) return <ViewFallback screen={SCREEN} status={status} />;
+
+  const hold = views.provisions;
+  const portName = t(content.portName(view.portId));  const specialtyNames = view.specialtyGoodIds.map((id) => t(content.goodName(id))).join(", ");
   const firstRow = view.rows[0];
   const firstGood = firstRow ? content.goodName(firstRow.goodId) : content.goodName(view.specialtyGoodIds[0]);
   const freeIntelPort = view.freeIntelPortId ? content.portName(view.freeIntelPortId) : content.portName(view.portId);
@@ -55,24 +68,30 @@ export function MarketScreen() {
   };
 
   const trendText = (row: MarketGoodRow): string => {
-    if (row.trend === "up") return tKey("market.stock.trend_up");
-    if (row.trend === "down") return tKey("market.stock.trend_down");
-    return "";
+    const arrow = row.profitArrow === "up" ? "\u2191" : row.profitArrow === "down" ? "\u2193" : "";
+    const trend = row.trend === "up"
+      ? tKey("market.stock.trend_up")
+      : row.trend === "down"
+        ? tKey("market.stock.trend_down")
+        : "";
+    return [arrow, trend].filter(Boolean).join(" ");
   };
 
   const investStatus = (): string => {
     switch (view.investGate.kind) {
       case "exhausted":
         return tKey("market.invest_gate.exhausted");
-      case "blocked":
-        return fmt("market.invest_gate.blocked", {
-          nation: content.nationName(view.investGate.nationId ?? state.player.nation_id),
-        });
       case "allowance":
         return fmt("market.invest_gate.allowance", {
           invested: view.investedGold,
           cap: view.investAmount,
         });
+      case "blocked":
+        return fmt("market.invest_gate.blocked", {
+          nation: content.nationName(view.investGate.nationId ?? state.player.nation_id),
+        });
+      case "no_gold":
+        return tKey("market.no_gold");
       case "ok":
         return fmt("market.invested_here", {
           gold: view.investedGold,
@@ -80,6 +99,9 @@ export function MarketScreen() {
         });
     }
   };
+
+  const intelRows = view.intel ?? [];
+  const hasIntel = intelRows.length > 0;
 
   return (
     <>
@@ -108,9 +130,9 @@ export function MarketScreen() {
           parent="header"
           textKey="fleet.stat.cargo"
           values={{
-            used: views.provisions.holdUsed,
-            capacity: views.provisions.holdCapacity,
-            free: views.provisions.holdFree,
+            used: view.holdUsed ?? hold?.holdUsed ?? 0,
+            capacity: view.holdCapacity ?? hold?.holdCapacity ?? 0,
+            free: view.holdFree ?? hold?.holdFree ?? 0,
           }}
           align="right"
         />
@@ -186,7 +208,9 @@ export function MarketScreen() {
                       <span className="sa-cell">{trendText(row)}</span>
                     </Box>
                     <Box rect={COL.marginal}>
-                      <span className="sa-cell">{row.marginal}</span>
+                      <span className="sa-cell">
+                        {`${row.buyPrice ?? row.unitPrice ?? row.marginal} / ${row.sellPrice ?? row.marginal}`}
+                      </span>
                     </Box>
                     <Box rect={COL.owned}>
                       <span className="sa-cell">{row.owned}</span>
@@ -213,7 +237,8 @@ export function MarketScreen() {
                       <button
                         type="button"
                         className="sa-button sa-button--fill"
-                        disabled={row.owned <= 0}
+                        disabled={row.owned <= 0 || row.notBought}
+                        title={row.notBought ? tKey("market.not_bought") : undefined}
                         onClick={() => trade("sell", row)}
                       >
                         <span className="sa-button__label">{tKey("market.sell")}</span>
@@ -233,7 +258,7 @@ export function MarketScreen() {
             id="info_strip"
             parent="table"
             textKey="market.total.buy"
-            values={{ qty: 1, name: firstGood, gold: firstRow?.unitPrice ?? 0 }}
+            values={{ qty: 1, name: firstGood, gold: firstRow?.buyPrice ?? firstRow?.unitPrice ?? 0 }}
             tone="dim"
           />
         </Element>
@@ -247,7 +272,7 @@ export function MarketScreen() {
           textKey="market.invest"
           text={fmt("market.invest", { amount: view.investAmount })}
           kind="primary"
-          disabled={view.investGate.kind === "exhausted" || view.investGate.kind === "blocked"}
+          disabled={view.investGate.kind !== "ok"}
           onClick={() => void client.market.invest(view.investAmount)}
         />
         <LabelEl
@@ -289,12 +314,27 @@ export function MarketScreen() {
         <ListRows
           screen={SCREEN}
           listId="intel"
-          count={1}
-          renderRow={() => (
-            <Box rect={{ x: 0, y: 0, w: 50, h: 2 }}>
-              <span className="sa-cell">{fmt("market.intel.free", { port: freeIntelPort })}</span>
-            </Box>
-          )}
+          count={hasIntel ? intelRows.length : 1}
+          renderRow={(index) => {
+            if (!hasIntel) {
+              return (
+                <Box rect={{ x: 0, y: 0, w: 50, h: 2 }}>
+                  <span className="sa-cell">{fmt("market.intel.free", { port: freeIntelPort })}</span>
+                </Box>
+              );
+            }
+            const row = intelRows[index];
+            const line = row.free && row.destPortId
+              ? fmt("market.intel.free", { port: content.portName(row.destPortId) })
+              : tKey(row.roleKey);
+            return (
+              <Box rect={{ x: 0, y: 0, w: 50, h: 2 }}>
+                <span className={`sa-cell${row.free ? " sa-label--accent" : ""}`}>
+                  {`${t(row.name)} · ${line}`}
+                </span>
+              </Box>
+            );
+          }}
         />
       </PanelEl>
 

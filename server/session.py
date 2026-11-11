@@ -560,6 +560,27 @@ class Session:
             "saves": save.list_saves(),
         }
 
+    # --- Screen projections (90-* §0.4, M3) --------------------------------
+
+    def view(self, screen_id: str) -> dict[str, Any]:
+        """The ``GET /api/view/<screen_id>`` projection (90-* §0.4).
+
+        The no-rules-in-TS channel: :mod:`server.api.views` computes every
+        value the screen renders from the ported sim; this method only
+        guards the request (live run, docked, known screen id) and wraps
+        the projection in the frozen envelope. Always a pure read — a view
+        refresh never mutates the run.
+        """
+        from server.api import views as views_module
+
+        if screen_id not in views_module.SCREENS:
+            raise ApiError("unknown_screen", "error.unknown_screen", 404)
+        self._guard_run()
+        if not self.in_port():
+            raise ApiError("not_in_port", "error.not_in_port")
+        return {"ok": True, "screen": screen_id,
+                "views": views_module.project(self, screen_id)}
+
     # --- WS client registry (one, §0.3) ------------------------------------
 
     def attach_client(self, connection: ClientConnection) -> bool:

@@ -30,6 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from server.api import build_api_router
+from server.api.views import build_views_router
 from server.session import ApiError, Session
 from server.ws import build_ws_router
 
@@ -42,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS_DIR = REPO_ROOT / "assets"
 DATA_DIR = REPO_ROOT / "data"
 WEB_DIST = REPO_ROOT / "web" / "dist"
+WEB_DIST_ASSETS = WEB_DIST / "assets"
 WEB_TILES = REPO_ROOT / "web" / "public" / "tiles"
 
 
@@ -61,12 +63,27 @@ def create_app(session: Session | None = None) -> FastAPI:
                   openapi_url="/api/openapi.json", lifespan=lifespan)
     app.state.session = live
     app.include_router(build_api_router())
+    # The M3 screen-projection channel (90-* §0.4): GET /api/view/<id>.
+    app.include_router(build_views_router(), prefix="/api")
     app.include_router(build_ws_router())
 
     # --- Static mounts -----------------------------------------------------
-    if ASSETS_DIR.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)),
-                  name="assets")
+    # `/assets` hosts the SPA's Vite-emitted, content-hashed bundle
+    # (`web/dist/assets/*`) *and* the Phase-10 UI art (`assets/**`). The M3
+    # build's assets must win; an explicit resolver keeps both under the one
+    # frozen path (a StaticFiles mount here would shadow the bundle).
+    if ASSETS_DIR.is_dir() or WEB_DIST_ASSETS.is_dir():
+        @app.get("/assets/{path:path}")
+        async def assets(path: str) -> Any:
+            for root in (WEB_DIST_ASSETS, ASSETS_DIR):
+                root_resolved = root.resolve()
+                candidate = (root / path).resolve()
+                if root_resolved in candidate.parents and candidate.is_file():
+                    return FileResponse(candidate)
+            return JSONResponse(status_code=404, content={
+                "ok": False,
+                "error": {"code": "not_found", "msg": "error.not_found"},
+            })
     if WEB_TILES.is_dir():
         app.mount("/tiles", StaticFiles(directory=str(WEB_TILES)),
                   name="tiles")
