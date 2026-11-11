@@ -12,6 +12,10 @@ export default defineConfig({
   // disk and the build emits content-hashed files.
   build: { assetsInlineLimit: 0 },
   server: {
+    // The 317 UI PNGs live beside the app (repo `assets/ui/**`), not under
+    // web/; allow the repo root in dev so the sprite imports serve instead
+    // of 403ing through Vite's default fs allowlist (M4 report).
+    fs: { allow: [".."] },
     proxy: {
       "/api": "http://127.0.0.1:8000",
       "/ws": { target: "ws://127.0.0.1:8000", ws: true },
