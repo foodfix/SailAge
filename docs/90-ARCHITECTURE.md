@@ -131,7 +131,7 @@ data/  tools/  assets/  docs/   unchanged owners
 | Server bind / port | `127.0.0.1` : **8000** | default port 8000, `--port` override; `python -m server` (or `run.sh`) starts uvicorn and opens the browser |
 | Save profile dir | **`~/.sailage/`** | XDG-style profile root; the `SAILAGE_HOME` env var overrides it (test seam). Saves at `~/.sailage/saves/save_{1..3}.json` — 3 slots, the Godot UX count |
 | `SAVE_VERSION` | **1** | the web era restarts the counter; **no migration chain** — a payload whose `save_version ≠ 1` is refused (the §8.2 discipline carries over verbatim; Godot-era v1–v9 payloads are all "pre-release saves") |
-| Day-tick budget | ≤ **75 ms** | frozen from the Godot era (its measured record: 72 ms @ 318 fleets). **Placeholder until M1:** the M1 spike measures the Python figure and amends the measured number into this row (concrete-numbers rule) |
+| Day-tick budget | ≤ **75 ms** | **Measured (M1, 2026-11-11): mean 45.7 ms · median 44.8 · p95 60.8 · max 84.7 ms** (single spawn-day spike) at **334 fleets** — above the Phase-8 318-fleet count — via `python -m server.perf_day_tick` (deterministic seeds, full §5.4 chain: ledger → economy → month → day_advanced → ecology → quests → captains). numpy **not** needed; the Godot-era record (72 ms @ 318) is history |
 | Python dependency pinning | exact `==` pins | `server/requirements.txt` is the FastAPI domain (fastapi, uvicorn, pytest, httpx; numpy joins only if the M1 perf spike demands it — pre-approved, §0.1) — a **separate dependency domain** from the stdlib-purist `tools/`, which stays stdlib-only |
 | Web dependency pinning | exact semver pins | `web/package.json` (React 18 + TypeScript + Vite); the lockfile is committed |
 
