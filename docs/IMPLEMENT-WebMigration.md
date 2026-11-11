@@ -181,3 +181,47 @@ protocol), `server/__main__.py` + `run.sh` (the frozen launch contract).
   `error.msg` is a ui_strings key, `tick` fires at sea only, and the
   screen-projection channel `GET /api/view/<screen_id>` (amended into
   `90-*` §0.4 with the M3 wiring).
+
+## 7. M6 cutover plan (the explicit deletion / retirement lists)
+
+Executed only after every M6 screen lands and the full demo loop passes in
+the browser. One commit set; the gates are the final run of everything.
+
+**Delete (the Godot runtime + its harnesses):**
+- `scenes/**`, `scripts/**`, `autoload/**`, `project.godot`, every `*.tscn`
+  and every `*.import`
+- `tools/*.gd` (all 67 `test_*.gd` suites + `battle_ai_harness.gd` +
+  `battle_tune_runner.gd` and their `.tscn` fixtures)
+- `tools/run_tests.py` (the Godot suite runner — pytest is the gate now)
+- `data/ui_layout.json` (retired with the tree that was its spec;
+  `10-*` §4.23 disposition)
+- the Godot-era `AGENTS.md` content (replaced below)
+- `.godot/` (already gitignored; delete locally)
+
+**Retire validator groups** (explicit list; the validator itself stays):
+- **Group 14** (the layout file) — its artifact retires; `10-*` §8.9
+  becomes historical, the §4.23 disposition records it.
+- Groups 1–13 and 15 **survive** (data/i18n/rasters/UI art/tiles are all
+  still shipped). No other group references a `.gd`, `.tscn` or
+  `project.godot`.
+
+**Keep unchanged:** `data/**`, `assets/**` (317+ PNGs), `tools/*.py`
+(stdlib build/validate tools), `tools/model_studio/`, `tools/ui_art/`
+manifests, `tools/yoyopixel/`, `docs/` game-design content, `server/`,
+`web/`, `run.sh`.
+
+**`AGENTS.md` rewrite (web era):** point at `docs/` in the same order,
+restate i18n/data-first/concrete-numbers/byte-identical rasters/no
+multiplayer; replace the Godot tree rules with: `server/` is THE sim
+(Python, pytest-gated), `web/` is the pure renderer (TS, i18n/styling
+audits with an empty allowlist), `python -m server` / `run.sh` is the
+launch, `python -m pytest server/tests` + `tools/validate_data.py` +
+`npm run build/audit` + `build_tokens.mjs --check` are the gates, the
+world rasters and `web/public/tiles` stay tool-owned, and the migration
+ledger is this doc.
+
+**Final gates (cutover commit):** `python3 tools/validate_data.py`
+(groups 1–13, 15 — 14 retired), `python -m pytest server/tests`, `npm run
+build`, `npm run audit`, `node scripts/build_tokens.mjs --check`,
+`python -m server.demo_loop_smoke`, and the browser demo loop.
+
