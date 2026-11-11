@@ -1,0 +1,107 @@
+/**
+ * Static shell + canvas layout rules (the M3 design canvas, 80-* §4.8.9).
+ * Every colour/size value is a generated token; no per-screen styling
+ * lives outside the theme + kit layers (80-* §4.9).
+ */
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--sailage-panel-bg);
+  color: var(--sailage-text);
+  font-family: Georgia, "Times New Roman", serif;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+.sa-viewport {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--sailage-sea);
+}
+
+/* The scaled box reserves the transformed footprint inside the viewport. */
+.sa-frame-box {
+  position: relative;
+  width: calc(var(--sailage-chrome-tile) * 60 * var(--sa-scale, 1));
+  height: calc(var(--sailage-chrome-tile) * 33.75 * var(--sa-scale, 1));
+}
+
+.sa-canvas {
+  position: relative;
+  width: calc(var(--sailage-chrome-tile) * 60);
+  height: calc(var(--sailage-chrome-tile) * 33.75);
+  overflow: hidden;
+  background: var(--sailage-sea);
+  transform: scale(var(--sa-scale, 1));
+  transform-origin: left top;
+  image-rendering: pixelated;
+}
+
+/*
+ * A registered element is a point-anchored box. Nothing inside it is
+ * flow-laid: children are absolute boxes too (no-flow rule).
+ */
+.sa-el {
+  position: absolute;
+}
+
+.sa-screen {
+  position: absolute;
+  inset: 0;
+}
+
+/* The dev-only screen index (?dev=1); technical ids, never game copy. */
+.sa-devnav {
+  position: fixed;
+  z-index: 10;
+  left: var(--sailage-base-unit);
+  bottom: var(--sailage-base-unit);
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--sailage-base-unit) / 2);
+  max-width: calc(var(--sailage-chrome-tile) * 30);
+  padding: var(--sailage-base-unit);
+  background: var(--sailage-panel-bg);
+  border: 1px solid var(--sailage-panel-line);
+}
+
+.sa-devnav__btn {
+  padding: 0 var(--sailage-base-unit);
+  background: var(--sailage-panel-line);
+  border: 1px solid var(--sailage-panel-line);
+  color: var(--sailage-text);
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+  cursor: pointer;
+}
+
+.sa-devnav__btn[data-active="true"] {
+  background: var(--sailage-accent);
+  color: var(--sailage-panel-bg);
+}

@@ -7,6 +7,10 @@ import react from "@vitejs/plugin-react";
 // proxy only matters for `npm run dev`.
 export default defineConfig({
   plugins: [react()],
+  // The 317 Phase-10 UI PNGs stay plain static assets (90-* §0.1);
+  // the sprite registry imports them through Vite so dev serves them from
+  // disk and the build emits content-hashed files.
+  build: { assetsInlineLimit: 0 },
   server: {
     proxy: {
       "/api": "http://127.0.0.1:8000",

@@ -1,0 +1,502 @@
+/*
+ * The shared widget kit + chrome skins (80-UI-UX.md §4.9).
+ *
+ * This file (with theme/tokens.css and theme/base.css) is the ONLY CSS
+ * authoring point in the SPA: screen TSX may position elements but never
+ * declare colours, radii, padding, borders or other visual styles. The
+ * M3 audit gate enforces the empty allowlist.
+ *
+ * Nine-patch mapping: each 96 × 96 sheet is a 3 × 3 grid of 32 px chrome
+ * tiles; slicing 32 px and `round`-repeating the middle is the CSS
+ * transplant of AXIS_STRETCH_MODE_TILE.
+ */
+
+/* --- The 7 assignable nine-patch sheets (10-* §4.23) --------------------- */
+
+.sa-sheet--panel {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_panel.png");
+}
+
+.sa-sheet--button {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button.png");
+}
+
+.sa-sheet--button-hover {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_hover.png");
+}
+
+.sa-sheet--button-pressed {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
+}
+
+.sa-sheet--button-focus {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
+}
+
+.sa-sheet--field {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_field.png");
+}
+
+.sa-sheet--backdrop {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_backdrop.png");
+}
+
+/* --- The panel skin overlay --------------------------------------------- */
+
+.sa-skin {
+  position: absolute;
+  inset: 0;
+  border-style: solid;
+  border-width: var(--sailage-chrome-tile);
+  border-image-slice: 32 fill;
+  border-image-width: var(--sailage-chrome-tile);
+  border-image-repeat: round;
+  pointer-events: none;
+}
+
+/* --- Typography ---------------------------------------------------------- */
+
+.sa-label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  overflow: hidden;
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 2);
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sa-label--title {
+  font-size: calc(var(--sailage-base-unit) * 3);
+}
+
+.sa-label--heading {
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 2.5);
+}
+
+.sa-label--dim {
+  color: color-mix(in srgb, var(--sailage-ink-warm) 75%, transparent);
+}
+
+.sa-label--accent {
+  color: var(--sailage-accent-lo);
+}
+
+.sa-label--warn {
+  color: var(--sailage-accent-lo);
+}
+
+.sa-label--good {
+  color: var(--sailage-good);
+}
+
+.sa-label--bad {
+  color: var(--sailage-bad);
+}
+
+.sa-label--right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.sa-label--center {
+  justify-content: center;
+  text-align: center;
+}
+
+/* --- Frame atom ---------------------------------------------------------- */
+
+.sa-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sa-frame__title {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--sailage-row-h);
+}
+
+.sa-frame__body {
+  position: absolute;
+  inset: var(--sailage-margin);
+  overflow: hidden;
+}
+
+/* --- Button atom --------------------------------------------------------- */
+
+.sa-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--sailage-button-h);
+  min-height: var(--sailage-button-h);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sailage-ink-warm);
+  cursor: pointer;
+}
+
+/* The nine-patch lives on a pseudo-element so the label's containing block
+   is the full button box (a 32 px border would zero it on 2-tile plates). */
+.sa-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-style: solid;
+  border-width: var(--sailage-chrome-tile);
+  border-image-slice: 32 fill;
+  border-image-width: var(--sailage-chrome-tile);
+  border-image-repeat: round;
+  pointer-events: none;
+}
+
+.sa-button:disabled {
+  cursor: default;
+  color: color-mix(in srgb, var(--sailage-ink-warm) 55%, transparent);
+}
+
+.sa-button--fill {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sa-button__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  padding: 0 var(--sailage-margin);
+  overflow: hidden;
+  font-size: calc(var(--sailage-base-unit) * 2);
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sa-button__icon {
+  width: calc(var(--sailage-base-unit) * 3);
+  height: calc(var(--sailage-base-unit) * 3);
+}
+
+/* State matrix (80-* §4.9): sheet swap, never a layout change. */
+.sa-button::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button.png");
+}
+
+.sa-button--primary::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
+}
+
+.sa-button--danger::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
+  filter: sepia(1) saturate(3) hue-rotate(320deg);
+}
+
+.sa-button--quiet::before {
+  border-image-source: none;
+}
+
+.sa-button:not(:disabled):hover::before,
+.sa-button:not(:disabled):focus-visible::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_hover.png");
+}
+
+.sa-button:not(:disabled):focus-visible {
+  outline: none;
+}
+
+.sa-button--primary:not(:disabled):hover::before,
+.sa-button--primary:not(:disabled):focus-visible::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_focus.png");
+}
+
+.sa-button:not(:disabled):active::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
+}
+
+.sa-button--quiet:not(:disabled):hover::before,
+.sa-button--quiet:not(:disabled):active::before {
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_button_pressed.png");
+}
+
+/* --- Row / Footer / FieldRow -------------------------------------------- */
+
+.sa-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: var(--sailage-row-h);
+}
+
+.sa-row__cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.sa-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sailage-base-unit);
+  width: 100%;
+  height: 100%;
+}
+
+.sa-field-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--sailage-base-unit) / 2);
+  width: 100%;
+  height: var(--sailage-row-h);
+}
+
+.sa-field-row__label {
+  flex: 0 0 auto;
+}
+
+.sa-field-row__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+/* --- Field --------------------------------------------------------------- */
+
+.sa-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: color-mix(in srgb, var(--sailage-panel-bg) 62%, transparent);
+}
+
+.sa-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-style: solid;
+  border-width: var(--sailage-chrome-tile);
+  border-image-slice: 32 fill;
+  border-image-width: var(--sailage-chrome-tile);
+  border-image-repeat: round;
+  border-image-source: url("../../../assets/ui/chrome/ninepatch_field.png");
+  pointer-events: none;
+}
+
+.sa-field__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--sailage-margin);
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 2);
+  text-align: center;
+}
+
+.sa-field:focus-within {
+  box-shadow: inset 0 0 0 2px var(--sailage-accent);
+}
+
+/* --- ValueBar ------------------------------------------------------------ */
+
+.sa-value-bar {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 2px solid var(--sailage-panel-line);
+  background: color-mix(in srgb, var(--sailage-panel-bg) 85%, transparent);
+}
+
+.sa-value-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sa-fill, 0%);
+  background: var(--sailage-good);
+}
+
+.sa-value-bar--warn .sa-value-bar__fill {
+  background: var(--sailage-warn);
+}
+
+.sa-value-bar--bad .sa-value-bar__fill {
+  background: var(--sailage-bad);
+}
+
+/* --- Icons --------------------------------------------------------------- */
+
+.sa-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.sa-icon--missing {
+  background: var(--sailage-icon-bg-lo);
+  border: 1px solid var(--sailage-icon-line-hi);
+}
+
+/* --- Lists (clipped viewports; absolute rows) --------------------------- */
+
+.sa-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--sailage-panel-line) transparent;
+  scrollbar-width: thin;
+}
+
+.sa-scroll::-webkit-scrollbar {
+  width: calc(var(--sailage-base-unit) / 2);
+}
+
+.sa-scroll::-webkit-scrollbar-thumb {
+  background: var(--sailage-panel-line);
+}
+
+.sa-list-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.sa-list-row {
+  position: absolute;
+}
+
+.sa-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  overflow: hidden;
+  color: var(--sailage-ink-warm);
+  font-size: calc(var(--sailage-base-unit) * 2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- Toast atom ---------------------------------------------------------- */
+
+.sa-toast {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(var(--sailage-chrome-tile) * 2);
+  max-width: calc(var(--sailage-chrome-tile) * 24);
+  padding: var(--sailage-base-unit) var(--sailage-margin);
+  border: 2px solid var(--sailage-panel-line);
+  background: var(--sailage-panel-bg);
+  color: var(--sailage-text);
+  font-size: calc(var(--sailage-base-unit) * 2);
+  transform: translateX(-50%);
+}
+
+.sa-toast--good {
+  border-color: var(--sailage-good);
+}
+
+.sa-toast--bad {
+  border-color: var(--sailage-bad);
+}
+
+/* --- Badge / chip -------------------------------------------------------- */
+
+.sa-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(var(--sailage-base-unit) / 2);
+  background: var(--sailage-panel-line);
+  color: var(--sailage-text);
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+  white-space: nowrap;
+}
+
+/* --- Nation swatch (port header; palette constants, not screen styling) -- */
+
+.sa-nation-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--sailage-panel-line);
+  background: var(--sailage-port-neutral);
+}
+
+.sa-nation-swatch--portugal {
+  background: var(--sailage-port-portugal);
+}
+
+.sa-nation-swatch--spain {
+  background: var(--sailage-port-spain);
+}
+
+.sa-nation-swatch--england {
+  background: var(--sailage-port-england);
+}
+
+.sa-nation-swatch--holland {
+  background: var(--sailage-port-holland);
+}
+
+.sa-nation-swatch--ottoman {
+  background: var(--sailage-port-ottoman);
+}
+
+.sa-nation-swatch--italy {
+  background: var(--sailage-port-italy);
+}
+
+/* --- Modal dim layer ----------------------------------------------------- */
+
+.sa-dim {
+  background: color-mix(in srgb, var(--sailage-panel-bg) 78%, transparent);
+}
+
+/* --- Facility card (a whole element is the clickable plate) -------------- */
+
+.sa-card-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sa-card-button:disabled {
+  cursor: default;
+  opacity: 55%;
+}
+
+.sa-card-button:focus-visible {
+  outline: 2px solid var(--sailage-accent);
+  outline-offset: -2px;
+}
+
