@@ -162,18 +162,13 @@ HUD_CANCEL_KEY: Final[str] = "sail.autopilot.cancel"
 #: ``WEIGHTED_CORRIDOR_RADIUS``).
 WEIGHTED_CORRIDOR_RADIUS: Final[int] = 32
 
-# --- The weighted A* core (fleet_path.gd ``find_path_weighted``) ------------
-
-#: Expansion guard of the §4.19 weighted search (a runaway guard, never a
-#: code path; ``fleet_path.gd`` ``MAX_EXPANSIONS_WEIGHTED``).
-MAX_EXPANSIONS_WEIGHTED: Final[int] = 200000
-#: Bounded-suboptimality inflation of the weighted heuristic
-#: (``fleet_path.gd`` ``HEURISTIC_WEIGHT``, Weighted A*: f = g + w·h).
-HEURISTIC_WEIGHT: Final[float] = 2.0
-#: §4.4 max propulsion factor bound used by the weighted heuristic:
-#: best §4.14 direction factor (sail downwind 1.30) × best §4.16 current
-#: factor (strength 3 aligned: 1 + 0.08 × 3 = 1.24, padded to 1.25).
-MIN_STEP_FACTOR_BOUND: Final[float] = 1.30 * 1.25
+# --- The weighted A* core — canonical home: server/sim/world/fleet_path.py ---
+from server.sim.world.fleet_path import (  # noqa: F401  (re-export)
+    HEURISTIC_WEIGHT,
+    MAX_EXPANSIONS_WEIGHTED,
+    MIN_STEP_FACTOR_BOUND,
+    find_path_weighted as _canonical_weighted_path,
+)
 
 # --- The §4.4 compass domain + §4.15 month lattice (locked doc tables) -------
 
@@ -824,110 +819,14 @@ def _find_path_weighted(from_cell: tuple[int, int],
                         h_weight: float = HEURISTIC_WEIGHT,
                         max_expansions: int = MAX_EXPANSIONS_WEIGHTED
                         ) -> list[tuple[int, int]]:
-    """The §4.19 wind/current-weighted A* — the shared walk domain.
-
-    Same 8-direction, x-wrapping, no-corner-cutting domain as
-    ``sail_path.find_path`` but each step costs ``cost_fn(from, to)`` (float,
-    > 0) instead of 1.0, so a route can trade distance for cheaper sailing
-    days. ``passable``/``cost_fn`` receive WRAPPED ``(x, y)`` tuples.
-
-    Returns ``[from, …, to]`` (empty when none: unreachable goal, guard
-    overflow, impassable endpoint). Float g/f scores compare exactly (no
-    rounding), and the heap is ordered by the same deterministic ``(f, then
-    key)`` tuple as ``fleet_path.gd`` — keys are unique per cell, so equal-f
-    ties resolve identically on every run. The heuristic is Weighted-A*
-    inflated by ``h_weight`` (bounded suboptimality, §4.19 not strict
-    optimality).
-    """
-    if width <= 0 or height <= 0:
-        return []
-    if from_cell == to_cell:
-        return [from_cell]
-    if to_cell[1] < 0 or to_cell[1] >= height:
-        return []
-    to_wrapped = (to_cell[0] % width, to_cell[1])
-    if not passable(to_wrapped):
-        return []
-    from_wrapped = (from_cell[0] % width, from_cell[1])
-    start_key = _key(from_wrapped, width)
-    gscore: dict[int, float] = {start_key: 0.0}
-    came: dict[int, int] = {}
-    open_heap: list[tuple[float, int]] = [
-        (_h_float(from_wrapped, to_wrapped, width) * min_step_cost * h_weight,
-         start_key)
-    ]
-    closed: set[int] = set()
-    expansions = 0
-    while open_heap:
-        _f, current_key = heapq.heappop(open_heap)
-        if current_key in closed:
-            continue
-        closed.add(current_key)
-        current = _cell(current_key, width)
-        expansions += 1
-        if expansions > max_expansions:
-            return []
-        if current == to_wrapped:
-            return _rebuild(came, current_key, width)
-        g_current = gscore[current_key]
-        for step_x, step_y in _NEIGHBOURS:
-            nxt = ((current[0] + step_x) % width, current[1] + step_y)
-            if nxt[1] < 0 or nxt[1] >= height:
-                continue
-            if not passable(nxt):
-                continue
-            if step_x != 0 and step_y != 0:
-                # No corner cutting (the shared walk rule).
-                if not passable(((current[0] + step_x) % width, current[1])):
-                    continue
-                if not passable((current[0], current[1] + step_y)):
-                    continue
-            next_key = _key(nxt, width)
-            if next_key in closed:
-                continue
-            tentative = g_current + float(cost_fn(current, nxt))
-            known = gscore.get(next_key)
-            if known is not None and known <= tentative:
-                continue
-            gscore[next_key] = tentative
-            came[next_key] = current_key
-            heapq.heappush(open_heap, (
-                tentative
-                + _h_float(nxt, to_wrapped, width) * min_step_cost * h_weight,
-                next_key))
-    return []
-
-
-def _h_float(a: tuple[int, int], b: tuple[int, int], width: int) -> float:
-    """Wrapped Chebyshev distance as a float (the heuristic domain)."""
-    dx = abs(a[0] - b[0]) % width
-    return float(max(min(dx, width - dx), abs(a[1] - b[1])))
-
-
-def _key(cell: tuple[int, int], width: int) -> int:
-    return int(cell[1]) * width + int(cell[0] % width)
-
-
-def _cell(key: int, width: int) -> tuple[int, int]:
-    return (key % width, key // width)
-
-
-def _rebuild(came: dict[int, int], end_key: int,
-             width: int) -> list[tuple[int, int]]:
-    out: list[tuple[int, int]] = []
-    key = end_key
-    while True:
-        out.append(_cell(key, width))
-        parent = came.get(key)
-        if parent is None:
-            break
-        key = parent
-    out.reverse()
-    return out
-
-
-# --- Storm auto-reef (§4.19; storms never cancel) ----------------------------
-
+    """Delegates to the canonical ``fleet_path.gd`` port
+    (``server/sim/world/fleet_path.py``) — same walk domain, same
+    deterministic ``(f, key)`` heap order, Weighted-A* inflation."""
+    return _canonical_weighted_path(
+        from_cell, to_cell, width, height, passable, cost_fn,
+        {"min_step_cost": min_step_cost, "h_weight": h_weight,
+         "max_expansions": max_expansions},
+    )
 def _storm_trim_tick(run: dict[str, Any], rt: AutopilotRuntime) -> None:
     """The §4.19 storm rule, scoped to the appointment: on a storm day the
     trim becomes ``reefed`` (storm damage ×0.75, the §4.17 table), the

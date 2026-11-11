@@ -198,7 +198,8 @@ def _npc_config() -> Any:
 # --- Composition (docs/60 §4.11.3) ----------------------------------------------
 
 
-def compose_enemy(kind: str, day: int, rng: Any) -> list[dict[str, Any]]:
+def compose_enemy(kind: str, day: int, rng: Any,
+                  store: Any = None) -> list[dict[str, Any]]:
     """Builds the enemy fleet exactly per §4.11.3, consuming ``rng`` in the
     pinned order: ship count → hulls → (cannon deal: no RNG) →
     (crew/durability: no RNG) → one cargo good id per ship. Same seed ⇒
@@ -210,11 +211,11 @@ def compose_enemy(kind: str, day: int, rng: Any) -> list[dict[str, Any]]:
     count = _ship_count(kind, rng)
     for _index in range(count):
         hull_id = HULL_IDS[rng.randi_range(0, len(HULL_IDS) - 1)]
-        ships.append(_base_ship(hull_id))
-    _deal_cannons(ships, cannon_budget(kind, day))
+        ships.append(_base_ship(hull_id, store))
+    _deal_cannons(ships, cannon_budget(kind, day), store)
     _write_broadside_split(ships)
     for ship in ships:
-        ship["cargo"] = _roll_cargo(ship, rng)
+        ship["cargo"] = _roll_cargo(ship, rng, store)
     return ships
 
 
@@ -236,11 +237,12 @@ def cannon_budget(kind: str, day: int) -> int:
     return base + int(math.floor(max(day, 0) / 30.0)) * CANNON_BUDGET_PER_30_DAYS
 
 
-def _base_ship(hull_id: str) -> dict[str, Any]:
+def _base_ship(hull_id: str, store: Any = None) -> dict[str, Any]:
     """§4.11.3 step 4: ``crew = crew_min``, ``durability = durability``,
     ``provisions = water = 0``, no cannons yet (§4.11.11 instance shape)."""
     from server.sim.data import data
-    ship_type = data().get_ship_type(hull_id)
+    dst = store if store is not None else data()
+    ship_type = dst.get_ship_type(hull_id)
     return {
         "ship_type_id": hull_id,
         "durability": int(ship_type.get("durability", 0)),
@@ -253,19 +255,21 @@ def _base_ship(hull_id: str) -> dict[str, Any]:
     }
 
 
-def _deal_cannons(ships: list[dict[str, Any]], budget: int) -> None:
+def _deal_cannons(ships: list[dict[str, Any]], budget: int,
+                  store: Any = None) -> None:
     """§4.11.3 step 3: one cannon at a time, round-robin in fleet order,
     skipping a hull at its ``armament_slots``, until the budget is
     exhausted or all full. A whole pass that dealt nothing means every hull
     is at its slots — the rest of the budget is dropped."""
     from server.sim.data import data
+    dst = store if store is not None else data()
     remaining = max(budget, 0)
     while remaining > 0:
         dealt = 0
         for ship in ships:
             if remaining <= 0:
                 break
-            slots = int(data().get_ship_type(
+            slots = int(dst.get_ship_type(
                 str(ship.get("ship_type_id", ""))).get("armament_slots", 0))
             if int(ship.get("cannons", 0)) >= slots:
                 continue
@@ -287,15 +291,16 @@ def _write_broadside_split(ships: list[dict[str, Any]]) -> None:
         ship["cannons_starboard"] = total - port
 
 
-def _roll_cargo(ship: dict[str, Any], rng: Any) -> dict[str, int]:
+def _roll_cargo(ship: dict[str, Any], rng: Any,
+                store: Any = None) -> dict[str, int]:
     """§4.11.3 step 5: ``max(1, floor(capacity / 10))`` units of one
     uniformly rolled good id (the 20 locked goods)."""
     from server.sim.data import data
-    store = data()
-    capacity = int(store.get_ship_type(
+    dst = store if store is not None else data()
+    capacity = int(dst.get_ship_type(
         str(ship.get("ship_type_id", ""))).get("capacity", 0))
     quantity = max(1, int(math.floor(float(capacity) / CARGO_CAPACITY_DIVISOR)))
-    goods = store.goods_list
+    goods = dst.goods_list
     if not goods:
         return {}
     index = rng.randi_range(0, len(goods) - 1)

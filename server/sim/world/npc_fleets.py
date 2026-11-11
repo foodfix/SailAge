@@ -301,323 +301,38 @@ def angle_between_dirs(a: str, b: str) -> int:
     return min(diff, 8 - diff) * 45
 
 
-# --- fleet_path.gd — the pursuit A* family (the weighted variant included) ---
-#
-# The oracle is scripts/world/fleet_path.gd. ``find_path`` is the ONLY
-# runtime pathfinding of the unit-cost pursuit (the hunter chase); the
-# lane traffic never pathfinds (§4.11.11.5 zero-A* gate). The weighted
-# variant is the §4.19 appointed-voyage search — additive, same walk
-# domain, f = g + HEURISTIC_WEIGHT × h, min_step_cost = 1/1.625.
-
-#: Hard expansion ceiling of the unit-cost pursuit search (a guard only).
-MAX_EXPANSIONS: Final[int] = 40000
-
-#: Runaway guard of the weighted search (cross-ocean appointments).
-MAX_EXPANSIONS_WEIGHTED: Final[int] = 200000
-
-#: Bounded-suboptimality inflation of the weighted heuristic (Weighted A*).
-HEURISTIC_WEIGHT: Final[float] = 2.0
-
-#: §4.4 maximum propulsion bound: best direction factor 1.30 × best current
-#: factor 1.25 (padded so the float bound can never dip under the minimum).
-MIN_STEP_FACTOR_BOUND: Final[float] = 1.30 * 1.25
-
-#: The oracle's neighbour push order (orthogonals, then diagonals).
-NEIGHBOURS: Final[tuple[tuple[int, int], ...]] = (
-    (-1, 0), (1, 0), (0, -1), (0, 1),
-    (-1, -1), (1, -1), (-1, 1), (1, 1),
+# --- fleet_path.gd — canonical home: server/sim/world/fleet_path.py ---
+from server.sim.world.fleet_path import (  # noqa: F401  (re-export)
+    HEURISTIC_WEIGHT,
+    MAX_EXPANSIONS,
+    MAX_EXPANSIONS_WEIGHTED,
+    MIN_STEP_FACTOR_BOUND,
+    NEIGHBOURS,
+    find_path,
+    find_path_weighted,
 )
 
 
-def _fp_h(a: tuple[int, int], b: tuple[int, int], width: int) -> int:
-    """Wrap-aware Chebyshev heuristic (admissible for unit step costs)."""
-    dx = abs(a[0] - b[0]) % width
-    return max(min(dx, width - dx), abs(a[1] - b[1]))
+# --- Composition — canonical home: server.sim.combat.ai_fleet (ai_fleet.gd) ---
+#
+# One implementation of the §4.11.3 composition formulas serves both the
+# battle AI and the ecology (post-wave single-owner pass): the ai_fleet
+# port carries the optional ``store`` keyword the ecology's fixtures
+# inject. ``SALVAGE_FRACTION`` stays here — ``salvage_for`` is the §4.11.10
+# single salvage implementation's ecology-side consumer.
+from server.sim.combat.ai_fleet import (  # noqa: F401  (re-export)
+    CANNON_BUDGET,
+    CANNON_BUDGET_PER_30_DAYS,
+    CARGO_CAPACITY_DIVISOR,
+    HULL_IDS,
+    _base_ship,
+    _deal_cannons,
+    cannon_budget,
+    compose_enemy,
+)
 
-
-def _fp_h_float(a: tuple[int, int], b: tuple[int, int], width: int) -> float:
-    """The weighted search's float Chebyshev (same domain as :func:`_fp_h`)."""
-    dx = abs(a[0] - b[0]) % width
-    return float(max(min(dx, width - dx), abs(a[1] - b[1])))
-
-
-def _fp_key(cell: tuple[int, int], width: int) -> int:
-    return int(cell[1]) * width + int(cell[0] % width)
-
-
-def _fp_cell(key: int, width: int) -> tuple[int, int]:
-    return (int(key % width), int(key // width))
-
-
-def _fp_rebuild(came: dict[int, int], end_key: int,
-                width: int) -> list[tuple[int, int]]:
-    out: list[tuple[int, int]] = []
-    key = end_key
-    while True:
-        out.insert(0, _fp_cell(key, width))
-        parent = came.get(key)
-        if parent is None:
-            break
-        key = parent
-    return out
-
-
-def find_path(frm: tuple[int, int], to: tuple[int, int], width: int,
-              height: int, passable: Callable[[tuple[int, int]], bool],
-              ) -> list[tuple[int, int]]:
-    """Shortest passable path ``[from, …, to]`` (empty when none).
-
-    The oracle's ``FleetPath.find_path``: 8-direction, x wraps mod
-    ``width``, y bounded, diagonals never cut corners (both orthogonals
-    must be passable). ``passable`` is injected over WRAPPED cells.
-    Deterministic open-list order ``(f, then cell key)`` — the oracle's
-    linear ``_pop_min`` made total by the unique cell key.
-    """
-    if width <= 0 or height <= 0:
-        return []
-    if frm == to:
-        return [frm]
-    to_y = to[1]
-    if to_y < 0 or to_y >= height:
-        return []
-    to_wrapped = (to[0] % width, to_y)
-    if not passable(to_wrapped):
-        return []
-    gscore: dict[int, float] = {_fp_key(frm, width): 0.0}
-    came: dict[int, int] = {}
-    open_heap: list[tuple[float, int]] = [
-        (float(_fp_h(frm, to_wrapped, width)), _fp_key(frm, width))]
-    closed: set[int] = set()
-    expansions = 0
-    while open_heap:
-        _f, current_key = heapq.heappop(open_heap)
-        if current_key in closed:
-            continue
-        closed.add(current_key)
-        current = _fp_cell(current_key, width)
-        expansions += 1
-        if expansions > MAX_EXPANSIONS:
-            return []
-        if current == to_wrapped:
-            return _fp_rebuild(came, current_key, width)
-        for step in NEIGHBOURS:
-            nxt = ((current[0] + step[0]) % width, current[1] + step[1])
-            if nxt[1] < 0 or nxt[1] >= height:
-                continue
-            if not passable(nxt):
-                continue
-            if step[0] != 0 and step[1] != 0:
-                # No corner cutting (the builder's shared walk rule).
-                if not passable(((current[0] + step[0]) % width, current[1])):
-                    continue
-                if not passable((current[0], current[1] + step[1])):
-                    continue
-            next_key = _fp_key(nxt, width)
-            if next_key in closed:
-                continue
-            tentative = gscore[_fp_key(current, width)] + 1.0
-            known = gscore.get(next_key)
-            if known is not None and known <= tentative:
-                continue
-            gscore[next_key] = tentative
-            came[next_key] = current_key
-            heapq.heappush(open_heap,
-                           (tentative + float(_fp_h(nxt, to_wrapped, width)),
-                            next_key))
-    return []
-
-
-def find_path_weighted(
-        frm: tuple[int, int], to: tuple[int, int], width: int, height: int,
-        passable: Callable[[tuple[int, int]], bool],
-        cost_fn: Callable[[tuple[int, int], tuple[int, int]], float],
-        opts: dict[str, Any] | None = None,
-) -> list[tuple[int, int]]:
-    """The §4.19 wind/current-weighted A* (Weighted A*).
-
-    Identical search domain to :func:`find_path` (8-direction, x wraps,
-    y bounded, no corner cutting) but each step costs
-    ``cost_fn(from, to) > 0`` (the caller builds it as
-    ``1 / (wind_factor × current_factor)`` — a head-wind step costs more
-    days). ``opts``: ``min_step_cost`` (default
-    ``1 / MIN_STEP_FACTOR_BOUND``), ``h_weight`` (default
-    :data:`HEURISTIC_WEIGHT`), ``max_expansions`` (default
-    :data:`MAX_EXPANSIONS_WEIGHTED`). Returns ``[from, …, to]`` or ``[]``
-    on an unreachable/impassable goal or guard overflow. The open list is
-    a binary heap ordered by the same deterministic ``(f, key)`` tuple as
-    the unit core.
-    """
-    if width <= 0 or height <= 0:
-        return []
-    if frm == to:
-        return [frm]
-    to_y = to[1]
-    if to_y < 0 or to_y >= height:
-        return []
-    to_wrapped = (to[0] % width, to_y)
-    if not passable(to_wrapped):
-        return []
-    config = opts or {}
-    min_step = float(config.get("min_step_cost", 1.0 / MIN_STEP_FACTOR_BOUND))
-    h_weight = float(config.get("h_weight", HEURISTIC_WEIGHT))
-    max_expansions = int(config.get("max_expansions", MAX_EXPANSIONS_WEIGHTED))
-    from_wrapped = (frm[0] % width, frm[1])
-    gscore: dict[int, float] = {_fp_key(from_wrapped, width): 0.0}
-    came: dict[int, int] = {}
-    open_heap: list[tuple[float, int]] = [(
-        _fp_h_float(from_wrapped, to_wrapped, width) * min_step * h_weight,
-        _fp_key(from_wrapped, width))]
-    closed: set[int] = set()
-    expansions = 0
-    while open_heap:
-        _f, current_key = heapq.heappop(open_heap)
-        if current_key in closed:
-            continue
-        closed.add(current_key)
-        current = _fp_cell(current_key, width)
-        expansions += 1
-        if expansions > max_expansions:
-            return []
-        if current == to_wrapped:
-            return _fp_rebuild(came, current_key, width)
-        g_current = gscore[current_key]
-        for step in NEIGHBOURS:
-            nxt = ((current[0] + step[0]) % width, current[1] + step[1])
-            if nxt[1] < 0 or nxt[1] >= height:
-                continue
-            if not passable(nxt):
-                continue
-            if step[0] != 0 and step[1] != 0:
-                if not passable(((current[0] + step[0]) % width, current[1])):
-                    continue
-                if not passable((current[0], current[1] + step[1])):
-                    continue
-            next_key = _fp_key(nxt, width)
-            if next_key in closed:
-                continue
-            tentative = g_current + float(cost_fn(current, nxt))
-            known = gscore.get(next_key)
-            if known is not None and float(known) <= tentative:
-                continue
-            gscore[next_key] = tentative
-            came[next_key] = current_key
-            heapq.heappush(open_heap, (
-                tentative + _fp_h_float(nxt, to_wrapped, width)
-                * min_step * h_weight, next_key))
-    return []
-
-
-# --- Composition (scripts/combat/ai_fleet.gd half, §4.11.3/§4.11.11.2) ------
-
-#: §4.11.3 step 2: the locked hull order.
-HULL_IDS: Final[tuple[str, ...]] = ("latin", "sloop", "caravel", "brigantine")
-
-#: §4.11.3 step 3 cannon budgets (the §4.11.11.2 role map + treasure 30),
-#: each ``+ floor(day / 30)``. Unknown kinds fall back to the pirate budget.
-CANNON_BUDGET: Final[dict[str, int]] = {
-    "pirate": 20, "navy": 30, "trader": 6, "coaster": 2, "courier": 0,
-    "patrol": 30, "privateer": 20, "treasure": 30,
-}
-CANNON_BUDGET_PER_30_DAYS: Final[int] = 1
-CARGO_CAPACITY_DIVISOR: Final[int] = 10
-BROADSIDE_SPLIT_DIVISOR: Final[float] = 2.0
-
-#: §4.11.10 single salvage implementation (``battle_rewards.gd``).
+#: §4.11.10 single salvage fraction (``battle_rewards.gd``).
 SALVAGE_FRACTION: Final[float] = 0.05
-
-
-def _ship_count(kind: str, rng: GodotRng) -> int:
-    """§4.11.3 step 1: 1–3 merchant / 2–4 navy-family; treasure 3–5 + escort."""
-    if kind == "treasure":
-        return 3 + rng.randi_range(0, 2) + 1
-    base = 2 if kind in ("navy", "patrol", "privateer") else 1
-    return base + rng.randi_range(0, 2)
-
-
-def cannon_budget(kind: str, day: int) -> int:
-    """§4.11.3 step 3: ``base + floor(max(day,0) / 30)``."""
-    base = int(CANNON_BUDGET.get(kind, CANNON_BUDGET["pirate"]))
-    return base + int(math.floor(float(max(day, 0)) / 30.0)) \
-        * CANNON_BUDGET_PER_30_DAYS
-
-
-def _base_ship(hull_id: str, store: DataStore | None = None) -> dict[str, Any]:
-    """§4.11.3 step 4: ``crew = crew_min``, full durability, no cannons."""
-    dst = store if store is not None else data()
-    ship_type = dst.get_ship_type(hull_id)
-    return {
-        "ship_type_id": hull_id,
-        "durability": int(ship_type.get("durability", 0)),
-        "crew": int(ship_type.get("crew_min", 0)),
-        "provisions": 0,
-        "water": 0,
-        "cannons": 0,
-        "equipment": {"figurehead": "", "sail": ""},
-        "cargo": {},
-    }
-
-
-def _deal_cannons(ships: list[dict[str, Any]], budget: int,
-                  store: DataStore | None = None) -> None:
-    """§4.11.3 step 3: round-robin one cannon per hull, skipping full slots."""
-    dst = store if store is not None else data()
-    remaining = max(int(budget), 0)
-    while remaining > 0:
-        dealt = 0
-        for ship in ships:
-            if remaining <= 0:
-                break
-            slots = int(dst.get_ship_type(str(ship.get("ship_type_id", "")))
-                        .get("armament_slots", 0))
-            if int(ship.get("cannons", 0)) >= slots:
-                continue
-            ship["cannons"] = int(ship.get("cannons", 0)) + 1
-            remaining -= 1
-            dealt += 1
-        if dealt == 0:
-            break
-
-
-def _write_broadside_split(ships: list[dict[str, Any]]) -> None:
-    """§4.4 broadside split: port = floor(cannons/2), starboard the rest."""
-    for ship in ships:
-        total = max(int(ship.get("cannons", 0)), 0)
-        port = int(math.floor(float(total) / BROADSIDE_SPLIT_DIVISOR))
-        ship["cannons_port"] = port
-        ship["cannons_starboard"] = total - port
-
-
-def _roll_cargo(ship: dict[str, Any], rng: GodotRng,
-                store: DataStore | None = None) -> dict[str, int]:
-    """§4.11.3 step 5: ``max(1, floor(capacity / 10))`` of one rolled good."""
-    dst = store if store is not None else data()
-    capacity = int(dst.get_ship_type(
-        str(ship.get("ship_type_id", ""))).get("capacity", 0))
-    quantity = max(1, int(math.floor(float(capacity) / CARGO_CAPACITY_DIVISOR)))
-    goods = dst.goods_list
-    if not goods:
-        return {}
-    index = rng.randi_range(0, len(goods) - 1)
-    entry = goods[index]
-    good_id = str(entry.get("id", "")) if isinstance(entry, dict) else ""
-    if not good_id:
-        return {}
-    return {good_id: quantity}
-
-
-def compose_enemy(kind: str, day: int, rng: GodotRng,
-                  store: DataStore | None = None) -> list[dict[str, Any]]:
-    """§4.11.3: ship count → hulls → cannons → crew → cargo (draw order)."""
-    ships: list[dict[str, Any]] = []
-    count = _ship_count(kind, rng)
-    for _index in range(count):
-        hull_id = HULL_IDS[rng.randi_range(0, len(HULL_IDS) - 1)]
-        ships.append(_base_ship(hull_id, store))
-    _deal_cannons(ships, cannon_budget(kind, day), store)
-    _write_broadside_split(ships)
-    for ship in ships:
-        ship["cargo"] = _roll_cargo(ship, rng, store)
-    return ships
 
 
 def salvage_for(sunk_ship_type_ids: list[str],
