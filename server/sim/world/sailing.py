@@ -110,7 +110,8 @@ from typing import Any, Final
 from server.sim.data import DataStore, data
 from server.sim.fleet import fleet as fleet_lib
 from server.sim.player import PersonState, character, skills
-from server.sim.port.allegiance import AllegianceState, month_tick
+from server.sim.port.allegiance import AllegianceState, dev as allegiance_dev
+from server.sim.port.allegiance import month_tick
 from server.sim.port.economy import EconomyState
 from server.sim.port.economy import day_tick as economy_day_tick
 from server.sim.port.shipyard import (
@@ -1442,8 +1443,14 @@ def advance_clock(state: SailingState, st: PersonState, store: DataStore,
                           world, ocean)
         # §4.3 order: the economy step runs after the ledger and before the
         # day_advanced listeners (docs/90 §5.4). Sea days and port
-        # day-advances share this tick path.
-        for changed_port in economy_day_tick(economy_state, store):
+        # day-advances share this tick path. The drift reads each port's
+        # development through the allegiance seam — the same dev mult the
+        # new-game stock seeding uses (dev 0 only when no allegiance state
+        # is injected, the oracle's no-module guard path).
+        dev_of = (
+            (lambda port_id: allegiance_dev(store, allegiance_state, port_id))
+            if allegiance_state is not None else None)
+        for changed_port in economy_day_tick(economy_state, store, dev_of):
             if state.on_market_changed is not None:
                 state.on_market_changed(str(changed_port))
         # Phase 7 month boundary (docs/90 §5.4 — one seam, one owner): the
