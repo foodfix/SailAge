@@ -22,19 +22,8 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
 4. Seam-ring verification (terrain class) — variants of a terrain kind must
    share a byte-identical outer 1 px ring; ``sea_pattern.png`` must be
    torus-safe (80-* §4.8.2 seam rules).  Verify only, never alters.
-5. Nine-patch assembly (chrome class) — ``assets/ui/chrome/ninepatch_
-   {panel,button,button_hover,button_pressed,button_focus,field}.png``
-   96×96 from the 32×32 PixelLab chrome tiles (the 2026-11-09 32px
-   amendment): native nine-slot assembly — each sheet cell blits from
-   ITS OWN as-authored wang tile (1 tl, 2 tr, 4 bl, 8 br, 3 top,
-   12 bottom, 5 left, 10 right, 15 fill), NO transforms (the authored-
-   era orientation math — frame_ops() — remains only for the retired
-   generator fallback), margins exactly one tile (96 = 32 + 32 + 32);
-   every sheet is pixel-exact self-verified at assembly (build FAIL on
-   any mismatch).  Bar sheet layout (authored 16px tiles, pinned):
-   ``ninepatch_bar.png`` 48×48, rows 16..31 form the horizontal midline
-   band the kit's value_bar samples — left cap tile at x 0..15, line
-   tile tiled x 16..31, right cap tile at x 32..47; the rest transparent.
+5. (retired M7 — the chrome nine-patch assembly is gone; the chrome look
+   is CSS-drawn, 80-* §4.9.1.)
 6. Hull footprint check — per hull, the §4.8.7 band is measured on the side
    view (e/w long axis, the profile that shows the ship's length; final
    outlined file): t1 28–36, t2 40–52, t3 52–60 px on the 64 canvas
@@ -170,7 +159,7 @@ ENGINE = ROOT / "tools" / "yoyopixel" / "render.js"
 MANIFESTS = ROOT / "tools" / "ui_art"
 SHIP_TYPES = ROOT / "data" / "ship_types.json"
 NODE_PIN = "v24.16.0"  # docs/IMPLEMENT-Phase10.md correction 10 (§8.8: >= pin; we refuse drift like fixture_check.py)
-CLASS_DIRS = ["chrome", "fx", "hulls", "icons", "markers", "portraits",
+CLASS_DIRS = ["fx", "hulls", "icons", "markers", "portraits",
               "terrain"]  # sorted walk order (§4.8.1; markers = A.4 follow-up)
 TOKENS_DIR = "assets/ui/hulls"
 STAGING = "build/ui_art_staging"  # transient, removed after every run
@@ -432,38 +421,20 @@ LAND_TONE_LO_FRAC = 0.06   # distribution (generator land variants: ~88%
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
 
-# ---- icon palette block (80-* §4.8: chrome tiles + A.2 semantic icons) ----
-# The three UW2 chrome-skin wood hexes appended 2026-11-04 (§4.8 amended,
-# user direction — full option B, ledgered; mirrored in scripts/palette.gd
-# and tools/validate_data.py BLOCK_ICON).
-PANEL_WOOD = "#2e2014"        # PANEL_WOOD    — walnut fill
-PANEL_WOOD_HI = "#6a4e28"     # PANEL_WOOD_HI — bevel light (TL) / trim base
-PANEL_WOOD_LO = "#14100a"     # PANEL_WOOD_LO — bevel shadow (BR) / dark line
-ICON_BG_LO = "#121724"        # ICON_BG_LO    — field recess interior
-ACCENT = "#d9a441"            # ACCENT        — gold inner line / perimeter
-ACCENT_HI = "#f0c46a"         # ACCENT_HI     — rosette center
-ACCENT_LO = "#a87a28"         # ACCENT_LO     — rosette base / field lip
+# ---- icon palette block (80-* §4.8: A.2 semantic icons) ----
 ICON_BLOCK = {
     "#1c2230", "#121724", "#465468", "#2e2014", "#6a4e28", "#14100a",
     "#5e7086", "#232c3e", "#e8e6df", "#f7f5ee", "#d9a441", "#f0c46a",
     "#a87a28", "#4e9e4e", "#74c26e", "#b3341f", "#d4573c", "#2f6f9e",
     "#9a9a9a", "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a",
     "#c9a227",
-    # UW2 parchment-chrome appends (2026-11-08, §4.8 amended, append-only):
+    # UW2 parchment appends (2026-11-08, §4.8 amended, append-only):
     # the texture-mode flat fill/highlight/shadow steps + the panel ink.
     "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",
     # Night revision (2026-11-08, blue-chart-panels amendment):
     # PANEL_BLUE — pale sky-blue chart paper, the texture-mode flat fill.
     "#b7cfe0",
 }
-CHROME_COLOR_CAP = 8  # per-tile distinct-color discipline (§4.8.3 16px tier)
-# Stretch-safety (80-* §4.8 UW2 chrome-skin note, amended 2026-11-04, master
-# adjudication): the runtime StyleBoxTexture STRETCHes the nine-patch center
-# and every edge span, so fill tiles and edge-tile interiors must stay FLAT
-# (any interior texel smears into a large block at panel scale; the
-# mirror-only FRAME_OPS make one edge tile serve all four sides, so edge
-# interiors must be flat in both axes). Grain lives ONLY in the corner
-# tiles — they never stretch.
 
 
 def derive_base_of(spec: dict) -> str | None:
@@ -484,77 +455,6 @@ PINNED_DERIVE = {
     "sw": ("ne", "rot_180"),
 }
 DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
-
-# nine-patch assembly spec (A.1 of IMPLEMENT-Phase10.md; step 5 above)
-# 2026-11-08: +button_hover / +button_pressed (the PixelLab chrome
-# amendment's derived state sheets — the 2026-11-04 dimming-only mapping
-# remains the missing-sheet fallback, §4.9).
-NINEPATCH_SETS = ("panel", "button", "button_hover", "button_pressed",
-                  "button_focus", "field", "backdrop")
-BAR_PARTS = ("left", "right", "line")  # A.1 chrome ids: bar_left/bar_right/bar_line (master reconciliation)
-SHEET = 48   # authored-bar sheet: 16px margins -> one 16px middle tile (§4.8.8)
-TILE = 16    # (chrome sheets take T/S from the tiles themselves: 96/96,
-             # the 2026-11-09 32px amendment)
-
-# ---- PixelLab chrome tileset ingestion pins (80-* §4.8, 2026-11-08) ----
-# Wang→nine-patch slot mapping (upper = plate material, bit
-# NW·8+NE·4+SW·2+SE·1): the singles stay "TOP-LEFT corner / TOP edge"
-# (the FRAME_OPS convention), so TL corner = wang_1 (material SE),
-# top edge = wang_3 (material S half), fill = wang_15 (all material,
-# self-tiling by Wang construction). The inverted-bevel sources for the
-# pressed/field rims are the opposite ring tiles (8 = BR corner,
-# 12 = bottom edge) run through rot_180 — the bevel light flips TL→BR,
-# the classic sunken plate.
-CHROME_WANG = {"corner": 1, "edge": 3, "fill": 15}
-CHROME_WANG_INV = {"corner": 8, "edge": 12}
-CHROME_GREEN_MARGIN = 32     # key: g ≥ r+32 and g ≥ b+32 → transparent
-CHROME_HOVER_RIM_BAND = 2    # band px: distance to the keyed outside ≤ 2
-CHROME_HOVER_RIM_LIFT = 0.35  # band: c' = c + round((255−c)×lift)
-CHROME_HOVER_FACE_LIFT = 0.05  # interior: faint warmth (the same lift)
-CHROME_PRESS_DARKEN = 0.80   # c' = round(c×darken), opaque px
-CHROME_FIELD_RECESS = 0.62   # field interior darken (inset parchment)
-CHROME_FOCUS_RING = "#d9a441"  # ACCENT — retired with the state ops
-# (2026-11-09 raw-plate amendment: no clean-face flatten, no lift/press/
-# ring derivations — the click families ship the raw keyed tiles).
-CHROME_RAW_DIR = ROOT / "tools" / "assets" / "pixellab_raw"
-# frame = ocean-chart panel plate; click = the parchment click plate.
-# 2026-11-09 user direction — RAW PLATES + NATIVE NINE SLOTS: every
-# family assembles from its tileset's own wang tiles AS AUTHORED — one
-# slot per sheet cell (tl/tr/bl/br/top/bottom/left/right/fill), no
-# mirror/rotate anywhere; only field still colors (fill recess). The
-# loader snaps all ring masters to one boundary depth so the plate
-# frame line is straight (§4.8 native nine-slot + ring-boundary snap).
-CHROME_SLOTS = (
-    ("tl", 1), ("tr", 2), ("bl", 4), ("br", 8),
-    ("top", 3), ("bottom", 12), ("left", 5), ("right", 10),
-    ("fill", 15),
-)
-# 2026-11-09 third-tileset amendment (80-* §4.8): `panel` ring slots come
-# from the `panel` tileset (the carved walnut rim + rosettes) while its
-# FILL slot comes from the `click` tileset's flat cream face — the three
-# 2026-11-09 panel rolls (seeds 20261117/18/19) all speckled the face at
-# panel scale (the 20261113 click precedent: marks tile into dot
-# lattices), and click's wang_15 is the proven repeat-safe face already
-# shipping under every button. Derivation entries are per-slot
-# (source, wang, op) 3-tuples — the ledger's "from" records each slot's
-# own source.
-def _chrome_ring(source: str, op: str = "base") -> dict:
-    """All nine slots of one family from one tileset."""
-    return {slot: (source, wang, op) for slot, wang in CHROME_SLOTS}
-
-
-CHROME_DERIVATIONS = {
-    "panel": {**_chrome_ring("panel"), "fill": ("click", 15, "base")},
-    "field": {**_chrome_ring("click"), "fill": ("click", 15, "recess")},
-    "button": _chrome_ring("click"),
-    "button_hover": _chrome_ring("click"),
-    "button_pressed": _chrome_ring("click"),
-    "button_focus": _chrome_ring("click"),
-    "backdrop": _chrome_ring("frame"),
-}
-# The 2026-11-09 32px amendment: every PixelLab chrome tileset is
-# 32×32 (pro Wang corner mode); the authored bar tiles stay 16px.
-CHROME_SOURCE_PX = {"frame": 32, "click": 32, "panel": 32}
 
 
 def fail(msg: str) -> None:
@@ -1037,7 +937,7 @@ def resolve_artifact_overrides(root: Path = ROOT):
     path}, "icons64": {id: path}, "markers": {id: path}, "facility": {id:
     path}, "terrain": {file name: path}}."""
     out = {"icons": {}, "icons64": {}, "markers": {}, "markers64": {},
-           "facility": {}, "facility64": {}, "terrain": {}, "chrome": {}}
+           "facility": {}, "facility64": {}, "terrain": {}}
     doc = _read_ledger("resolve_artifact_overrides")
     for iid in (doc.get("icons") or {}):
         p = root / "assets" / "ui" / "icons" / f"{iid}.png"
@@ -1060,12 +960,6 @@ def resolve_artifact_overrides(root: Path = ROOT):
         p = root / "assets" / "ui" / "terrain" / fname
         if p.is_file():
             out["terrain"][fname] = p
-    # chrome (2026-11-08): the ledger-owned singles serve their committed
-    # ingested bytes — the generator's string-map art is the fallback.
-    for sid in (_chrome_ledger().get("tiles") or {}):
-        p = root / "assets" / "ui" / "chrome" / f"{sid}.png"
-        if p.is_file():
-            out["chrome"][sid] = p
     return out
 
 
@@ -1237,7 +1131,6 @@ _GLYPH_SECTIONS = _GLYPH_FAMILY_SECTIONS["markers"] \
     + _GLYPH_FAMILY_SECTIONS["facility"]
 _TERRAIN_SECTIONS = ("terrain_generated_by", "terrain_rejected", "terrain",
                      "terrain_note")
-_CHROME_SECTIONS = ("chrome_generated_by", "chrome_rejected", "chrome")
 
 
 def _read_ledger(where: str) -> dict:
@@ -1259,8 +1152,7 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
     values; every other family's sections pass through untouched; counts
     merge per family sub-object."""
     owned = {"ships": _SHIP_SECTIONS, "icons": _ICON_SECTIONS,
-             "terrain": _TERRAIN_SECTIONS, "glyphs": _GLYPH_SECTIONS,
-             "chrome": _CHROME_SECTIONS}[family]
+             "terrain": _TERRAIN_SECTIONS, "glyphs": _GLYPH_SECTIONS}[family]
     counts = dict(prev.get("counts") or {})
     counts.update(sections.get("counts", {}))
     doc = {"version": INGEST_VERSION, "contract": INGEST_CONTRACT,
@@ -1270,7 +1162,6 @@ def _write_ledger(prev: dict, family: str, sections: dict) -> None:
             continue
         if any(key in own for own in
                (_SHIP_SECTIONS, _ICON_SECTIONS, _TERRAIN_SECTIONS,
-                _CHROME_SECTIONS,
                 *_GLYPH_FAMILY_SECTIONS.values())) \
                 and key not in owned:
             doc[key] = val  # another family's section — preserve verbatim
@@ -2213,7 +2104,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
     counts = {"rendered": 0, "derived": 0, "outlined": 0,
               "icons_ingested": 0, "icons64_ingested": 0,
               "markers64_ingested": 0, "facility64_ingested": 0,
-              "terrain_ingested": 0, "chrome_ingested": 0}
+              "terrain_ingested": 0}
     # The full build writes into the same tree the committed ingested
     # artifacts live in (override == dest) — the render passes below would
     # clobber them.  Stash the ingested bytes first; the ladder restores
@@ -2224,8 +2115,7 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
                                    ("icons64", ICON_HERO_DIR, True),
                                    ("markers64", "markers64", True),
                                    ("facility64", "tokens64", True),
-                                   ("terrain", "terrain", False),
-                                   ("chrome", "chrome", True)):
+                                   ("terrain", "terrain", False)):
         for key, override in sorted(((artifacts or {}).get(family) or {}).items()):
             fname = key if not keyed else f"{key}.png"
             if family in ("markers64", "facility64"):
@@ -2367,32 +2257,6 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(stash[dest])
         counts["terrain_ingested"] += 1
-    # chrome ladder (2026-11-08): the ledger-owned singles — the string-map
-    # generator still runs for the authored fallback, then the ingested
-    # bytes win per id. Runs before run_ninepatch, which assembles the
-    # sheets from exactly these singles. The 2026-11-09 native nine-slot
-    # amendment: render.js still renders the retired three-part plate
-    # singles (corner/edge/fill per family) from the authored manifests;
-    # the slot set replaces them wholesale — remove them so the assembly
-    # reads only the slots (the manifests stay the generator fallback).
-    chrom = (artifacts or {}).get("chrome") or {}
-    for sid in sorted(chrom):
-        override = chrom[sid]
-        dest = outroot / "assets" / "ui" / "chrome" / f"{sid}.png"
-        if override.is_file() and override != dest:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(override, dest)
-        elif dest in stash:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(stash[dest])
-        counts["chrome_ingested"] += 1
-    if chrom:
-        for fam in CHROME_DERIVATIONS:
-            for part in ("corner", "edge"):
-                stale = outroot / "assets" / "ui" / "chrome" / f"{fam}_{part}.png"
-                if stale.is_file():
-                    stale.unlink()
-                    counts["chrome_retired"] = counts.get("chrome_retired", 0) + 1
     return counts
 
 
@@ -2452,398 +2316,6 @@ def run_seam_ring(m: Manifests, outroot: Path, report: dict):
                  "— the repeating tile would band at the wrap (§4.8.2 torus "
                  "rule)")
         report["seam_kinds"] = report.get("seam_kinds", []) + [("sea_pattern", 1)]
-
-
-def find_tile(adir: Path, name: str) -> Path | None:
-    for prefix in ("", "tile_"):
-        p = adir / f"{prefix}{name}.png"
-        if p.is_file():
-            return p
-    return None
-
-
-def _oriented_px(px, op, T=TILE):
-    """Independent orientation math for the nine-patch self-verify: new(x, y)
-    for a square TILExTILE tile.  Deliberately a re-derivation, NOT a
-    ``_transform`` call — a regression there must not be able to confirm its
-    own output (``_verify_transforms`` pins ``_transform`` separately)."""
-    if op is None:
-        return list(px)
-    if op == "mirror_x":
-        f = lambda x, y: px[(T - 1 - x) + y * T]
-    elif op == "mirror_y":
-        f = lambda x, y: px[x + (T - 1 - y) * T]
-    elif op == "mirror_xy":
-        f = lambda x, y: px[(T - 1 - x) + (T - 1 - y) * T]
-    elif op == "rot_ccw":
-        f = lambda x, y: px[(T - 1 - y) + x * T]
-    elif op == "rot_cw":
-        f = lambda x, y: px[y + (T - 1 - x) * T]
-    else:
-        fail(f"ninepatch self-verify: unknown orientation {op!r}")
-    return [f(x, y) for y in range(T) for x in range(T)]
-
-
-def frame_ops(T):
-    """Per-position cell -> (source part, orientation op), computed for a
-    T-px tile on a 3T x 3T sheet. The chrome tiles are authored as the
-    TOP-LEFT corner / TOP edge only; every other frame cell is a lossless
-    orientation of those (2026-11-04 chrome fix: blitting the raw TL tiles
-    into all nine cells put TL-shaped corners and horizontal border lines
-    into the TR/BL/BR and left/right/bottom cells — the assembled sheet
-    sampled broken regions and every themed Button rendered as scattered
-    corner-bracket fragments). The 2026-11-09 32px amendment: T comes from
-    the tiles themselves (32 for both PixelLab chrome tilesets, 16 for the
-    authored bar)."""
-    return {
-        (0, 0): ("corner", None),                      # TL — as authored
-        (2 * T, 0): ("corner", "mirror_x"),            # TR
-        (0, 2 * T): ("corner", "mirror_y"),            # BL
-        (2 * T, 2 * T): ("corner", "mirror_xy"),       # BR
-        (T, 0): ("edge", None),                        # top — as authored
-        (T, 2 * T): ("edge", "mirror_y"),              # bottom
-        (0, T): ("edge", "rot_ccw"),                   # left — border col 0
-        (2 * T, T): ("edge", "rot_cw"),                # right — border col 15
-        (T, T): ("fill", None),                        # center
-    }
-
-
-def _cell_pixels(sheet, dx, dy, T=TILE, S=SHEET):
-    """A TxT cell of `sheet` at tile offset (dx, dy), row-major."""
-    return [sheet[(dx + x) + (dy + y) * S]
-            for y in range(T) for x in range(T)]
-
-
-def _hex_px(h: str):
-    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
-
-
-# Gold-pixel map (rule 5 below; the title-screen bracket regression,
-# 2026-11-04): under margin-16 nine-patch slicing a corner tile's INNER 1px
-# is the band boundary mid-edge of every control — the button corner tiles
-# used to carry a 14px gold "tick" there and every menu button rendered
-# crisp ⊢-brackets at ~1/3 and ~2/3 of its height. Gold may exist only
-# where the design pins it: NOWHERE on `button`; perimeter + corner
-# rosettes on `button_focus`; the inset trim + rosettes on `panel`; the
-# lip inset on `field`.
-GOLD_FAMILY = {ACCENT, ACCENT_HI, ACCENT_LO}
-
-
-def _in_rosette(x, y):
-    return ((2 <= x <= 4) or (43 <= x <= 45)) \
-        and ((2 <= y <= 4) or (43 <= y <= 45))
-
-
-def _gold_allowed(name, x, y):
-    if name == "button":
-        return False
-    if name == "field":
-        return x in (1, 46) or y in (1, 46)
-    if name == "panel":
-        return x in (3, 44) or y in (3, 44) or _in_rosette(x, y)
-    return x in (0, 47) or y in (0, 47) or _in_rosette(x, y)  # button_focus
-
-
-def _verify_gold_map(name, sheet) -> None:
-    gold = [(x, y) for y in range(SHEET) for x in range(SHEET)
-            if sheet[x + y * SHEET][3]
-            and ("#%02x%02x%02x" % sheet[x + y * SHEET][:3]) in GOLD_FAMILY]
-    bad = [(x, y) for x, y in gold if not _gold_allowed(name, x, y)]
-    if bad:
-        fail(f"ninepatch {name}: self-verify — gold pixel(s) outside the "
-             f"pinned gold map (mid-edge bracket class): {bad[:8]}")
-    if name != "button" and not gold:
-        fail(f"ninepatch {name}: self-verify — the sheet lost its gold "
-             "trim/rosette/lip pixels entirely (gold map)")
-    if name == "button" and gold:
-        fail(f"ninepatch {name}: self-verify — the plain button sheet must "
-             f"carry no gold at all, found {len(gold)} px (gold map)")
-
-
-# UW2 chrome-skin semantic pins (80-* §4.8 amended 2026-11-04, ledgered):
-# per sheet, the explicit anchor hexes the assembled 48x48 must carry. Rule 3
-# below pins frame POSITIONS tile-derivatively; these pin the SKIN's colors —
-# a re-author that loses the gold inner line, the bevel line or a rosette
-# fails the build. Anchors sit in the top-left cell / top edge cell (their
-# mirrors cover the rest of the sheet by rule 1).
-SKIN_PINS = {
-    "panel": [
-        (24, 0, PANEL_WOOD_LO, "frame dark outline"),
-        (24, 1, PANEL_WOOD_HI, "bevel light line"),
-        (24, 3, ACCENT, "gold inner line (inset 3px)"),
-        (3, 3, ACCENT_HI, "brass rosette center"),
-        (2, 2, ACCENT_LO, "brass rosette base"),
-    ],
-    "button": [
-        (24, 0, PANEL_WOOD_HI, "raised-block bevel light (top)"),
-        (24, 1, PANEL_WOOD, "walnut fill under the bevel"),
-    ],
-    "button_focus": [
-        (24, 0, ACCENT, "full gold perimeter (selected/hover ring)"),
-        (24, 1, PANEL_WOOD, "walnut fill under the ring"),
-        (3, 3, ACCENT_HI, "gold rosette center"),
-    ],
-    "field": [
-        (24, 0, PANEL_WOOD_LO, "recess frame"),
-        (24, 1, ACCENT_LO, "recess inner lip"),
-    ],
-}
-
-
-def _audit_chrome_tile(label: str, w, h, px) -> None:
-    """Chrome tile color audit (§4.8.4 membership + the per-tile color
-    discipline; parity with the hull color audit, step 7). The PixelLab
-    chrome families (2026-11-08) are ship-as-drawn — the ledger-owned
-    ids are waived here (group 13 audits their provenance instead), the
-    authored bar tiles stay audited."""
-    if label in _chrome_ledger_tile_ids():
-        return
-    colors = {("#%02x%02x%02x" % p[:3]) for p in px if p[3]}
-    off = sorted(c for c in colors if c not in ICON_BLOCK)
-    if off:
-        fail(f"ninepatch: chrome tile {label} hexes outside the icon block "
-             f"(§4.8.4): {off}")
-    if len(colors) > CHROME_COLOR_CAP:
-        fail(f"ninepatch: chrome tile {label} carries {len(colors)} distinct "
-             f"colors > the {CHROME_COLOR_CAP} per-tile cap")
-
-
-def _verify_ninepatch_sheet(name, tiles, sheet, T=TILE, S=SHEET, ops=None,
-                            pixellab: bool = False) -> None:
-    """Pixel-exact self-verification of one assembled sheet — any mismatch
-    is a build FAIL (§4.8.8; makes the misaligned-sheet class of bug
-    impossible to ship: the committed 04373ef sheets failed rules 1, 3).
-    `ops` maps cell position -> (tile key, orientation op): the native
-    nine-slot mapping (each slot at its own position, op None) for the
-    ledger-owned PixelLab families, frame_ops(T) for the retired
-    authored fallback. pixellab=True (the 2026-11-08 chrome amendment):
-    rule 1 stays (every cell byte-equals its source tile — the
-    anti-misalignment guarantee), and the authored flat-art pins
-    (rules 2–5: opaque content areas, the border/fill hex anchors, the
-    SKIN_PINS, the gold map) are replaced by the keyed-plate alpha
-    geometry — the fill cell fully opaque, the ring cells carrying
-    their keyed transparent outside, and the sheet's far corners
-    transparent (the plate silhouette). The 2026-11-09 32px amendment:
-    T/S come from the tiles (96/96 chrome)."""
-    if ops is None:
-        ops = frame_ops(T)
-    # 1. every T×T cell byte-equals its oriented source tile.
-    for (dx, dy), (part, op) in ops.items():
-        want = _oriented_px(tiles[part][2], op, T)
-        got = _cell_pixels(sheet, dx, dy, T, S)
-        for i, (g, w) in enumerate(zip(got, want)):
-            if g != w:
-                x, y = i % T, i // T
-                fail(f"ninepatch {name}: self-verify — cell ({dx},{dy}) pixel "
-                     f"({dx + x},{dy + y}) = {g} != oriented {part}"
-                     f"{' ' + op if op else ''} {w}")
-    if pixellab:
-        _, _, fill_px = tiles["fill"]
-        if any(p[3] != 255 for p in fill_px):
-            fail(f"ninepatch {name}: self-verify — the fill tile carries "
-                 "transparent pixels (the keyed plate interior must be "
-                 "fully opaque)")
-        for (dx, dy), (part, _) in ops.items():
-            cell = _cell_pixels(sheet, dx, dy, T, S)
-            if part != "fill" and all(p[3] == 255 for p in cell):
-                fail(f"ninepatch {name}: self-verify — the {part} cell at "
-                     f"({dx},{dy}) carries no keyed transparent pixels "
-                     "(a ring tile without the plate silhouette outside)")
-        for (dx, dy) in ((0, 0), (S - 1, 0),
-                         (0, S - 1), (S - 1, S - 1)):
-            if sheet[dx + dy * S][3] != 0:
-                fail(f"ninepatch {name}: self-verify — the sheet corner "
-                     f"({dx},{dy}) is not transparent (the plate "
-                     "silhouette must stay outside the control corners)")
-        return
-    # 2. content areas (edge + fill cells) fully opaque — transparent pixels
-    #    live ONLY in the corner cells, exactly where the corner tiles carry
-    #    the authored outer rounding.
-    for (dx, dy), (part, _) in ops.items():
-        if part == "corner":
-            continue
-        for y in range(T):
-            for x in range(T):
-                if sheet[(dx + x) + (dy + y) * S][3] != 255:
-                    fail(f"ninepatch {name}: self-verify — transparent pixel "
-                         f"in the {part} cell at ({dx + x},{dy + y}) "
-                         "(content areas must be opaque)")
-    # 3. semantic frame pins, tile-derived (orientation traps — a sheet
-    #    assembled from un-oriented tiles fails every one of these):
-    #    border hex on all four side centers + the corner frame anchors,
-    #    fill hex at the sheet center, transparent outer rounding at the
-    #    far corners.
-    border = tiles["edge"][2][0]      # top edge tile (0,0)
-    fill = tiles["fill"][2][0]        # fill tile (0,0)
-    for x, y, want, what in [
-            (T + T // 2, 0, border, "top side center"),
-            (0, T + T // 2, border, "left side center (border column)"),
-            (S - 1, T + T // 2, border, "right side center (border column)"),
-            (T + T // 2, S - 1, border, "bottom side center"),
-            (4, 0, border, "TL frame (past the authored rounding)"),
-            (0, 4, border, "TL frame (past the authored rounding)"),
-            (T + T // 2, T + T // 2, fill, "sheet center"),
-            (S - 1, 0, None, "TR outer rounding"),
-            (0, S - 1, None, "BL outer rounding"),
-            (S - 1, S - 1, None, "BR outer rounding"),
-    ]:
-        got = sheet[x + y * S]
-        if want is None:
-            if got[3] != 0:
-                fail(f"ninepatch {name}: self-verify — ({x},{y}) must be the "
-                     "transparent outer rounding (authored corner design)")
-        elif got != want:
-            fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
-                 f"!= {want}")
-    # 4. UW2 chrome-skin semantic pins (§4.8 amended 2026-11-04, ledgered):
-    #    the skin's own colors at their pinned anchors (48-sheet authored
-    #    coordinates — this path only runs for the retired authored
-    #    generator chrome, never the ledger-owned PixelLab families).
-    for x, y, hexs, what in SKIN_PINS.get(name, []):
-        got = sheet[x + y * S]
-        if got != _hex_px(hexs):
-            fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
-                 f"!= {_hex_px(hexs)}")
-    # 5. gold-pixel map (see GOLD_FAMILY above).
-    _verify_gold_map(name, sheet)
-
-
-def _verify_bar_sheet(caps, sheet) -> None:
-    """Pixel-exact self-verification of the bar sheet: caps byte-exact at
-    x 0 / x 32 of the rows 16..31 band, the line tile between, everything
-    outside the band transparent (the committed 04373ef bar sheet failed
-    the cap rules — `blit` never drew them)."""
-    for dx, part in ((0, "left"), (SHEET - TILE, "right")):
-        if _cell_pixels(sheet, dx, TILE) != list(caps[part][2]):
-            fail(f"ninepatch bar: self-verify — {part} cap cell at ({dx},"
-                 f"{TILE}) is not the byte-exact bar_{part} tile")
-    if _cell_pixels(sheet, TILE, TILE) != list(caps["line"][2]):
-        fail("ninepatch bar: self-verify — the line band at (16,16) is not "
-             "the byte-exact bar_line tile")
-    for y in range(SHEET):
-        if TILE <= y < 2 * TILE:
-            continue
-        for x in range(SHEET):
-            if sheet[x + y * SHEET][3] != 0:
-                fail(f"ninepatch bar: self-verify — non-transparent pixel "
-                     f"({x},{y}) outside the rows {TILE}..{2 * TILE - 1} band")
-
-
-def run_ninepatch(m: Manifests, outroot: Path, report: dict):
-    """Assemble the chrome nine-patch sheets from the chrome tiles
-    (step 5) and self-verify every sheet pixel-exactly (build FAIL on
-    any mismatch). The 2026-11-09 32px + native nine-slot amendment:
-    ledger-owned families assemble from their NINE slot singles, each
-    cell = its own as-authored wang tile — no transforms; the tile size
-    comes from the tiles themselves (96×96 sheets). The retired authored
-    generator path (3 tiles + frame_ops transforms, 48×48) remains the
-    fallback; the authored 16px bar band keeps its own 48×48 sheet."""
-    adir = outroot / "assets/ui/chrome"
-    if not adir.is_dir():
-        return "skipped (no chrome output)"
-    made = 0
-    ledger_tiles = _chrome_ledger_tile_ids()
-    for s in NINEPATCH_SETS:
-        pixellab_family = all(f"{s}_{slot}" in ledger_tiles
-                              for slot, _ in CHROME_SLOTS)
-        tiles = {}
-        if pixellab_family:
-            for slot, _ in CHROME_SLOTS:
-                p = find_tile(adir, f"{s}_{slot}")
-                if p is None:
-                    tiles = None
-                    break
-                tiles[slot] = read_png(p)
-        else:
-            for part in ("corner", "edge", "fill"):
-                p = find_tile(adir, f"{s}_{part}")
-                if p is None:
-                    tiles = None
-                    break
-                tiles[part] = read_png(p)
-        if tiles is None:
-            report.setdefault("ninepatch_notes", []).append(
-                f"{s}: tiles missing (expected chrome_{s}_"
-                + ("{tl,tr,bl,br,top,bottom,left,right,fill}.png)"
-                   if pixellab_family else
-                   "{corner,edge,fill}.png)"))
-            continue
-        key0 = "tl" if pixellab_family else "corner"
-        t = tiles[key0][0]
-        if any(img[0] != t or img[1] != t for img in tiles.values()):
-            fail(f"ninepatch {s}: chrome tiles must be square and "
-                 f"uniform ({t}x{t} expected, §4.8.8)")
-        s_size = 3 * t
-        for part, img in tiles.items():
-            _audit_chrome_tile(f"{s}_{part}", img[0], img[1], img[2])
-        sheet = [(0, 0, 0, 0)] * (s_size * s_size)
-        if pixellab_family:
-            # native nine-slot: each cell blits its own tile as authored
-            slot_pos = {"tl": (0, 0), "tr": (2 * t, 0),
-                        "bl": (0, 2 * t), "br": (2 * t, 2 * t),
-                        "top": (t, 0), "bottom": (t, 2 * t),
-                        "left": (0, t), "right": (2 * t, t),
-                        "fill": (t, t)}
-            ops = {}
-            for slot, (dx, dy) in slot_pos.items():
-                _, _, px = tiles[slot]
-                ops[(dx, dy)] = (slot, None)
-                for r in range(t):
-                    for c in range(t):
-                        sheet[(dx + c) + (dy + r) * s_size] = px[c + r * t]
-        else:
-            ops = frame_ops(t)
-            for (dx, dy), (part, op) in ops.items():
-                _, _, px = tiles[part]
-                if op is not None:
-                    _, _, px = _transform(t, t, px, op)
-                for r in range(t):
-                    for c in range(t):
-                        sheet[(dx + c) + (dy + r) * s_size] = px[c + r * t]
-        _verify_ninepatch_sheet(s, tiles, sheet, t, s_size, ops,
-                                pixellab=pixellab_family)
-        write_png(outroot / f"assets/ui/chrome/ninepatch_{s}.png",
-                  s_size, s_size, sheet)
-        made += 1
-    caps = {}
-    for part in BAR_PARTS:
-        p = find_tile(adir, f"bar_{part}")
-        if p is None:
-            caps = None
-            break
-        caps[part] = read_png(p)
-    if caps is not None:
-        for part, img in caps.items():
-            _audit_chrome_tile(f"bar_{part}", img[0], img[1], img[2])
-        sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
-
-        def blit(img, dx, dy, repeat_to=0):
-            # repeat_to = total px width to fill (0 = single blit).  The old
-            # `while x < repeat_to` loop treated the single-shot default as
-            # "draw nothing" and silently dropped both bar caps.
-            _, _, px = img
-            w = img[0]
-            x = 0
-            while True:
-                for r in range(img[1]):
-                    for c in range(w):
-                        sheet[(dx + x + c) + (dy + r) * SHEET] = px[c + r * w]
-                if repeat_to == 0 or x + w >= repeat_to:
-                    break
-                x += w
-        # bar sheet: caps at the far ends of the horizontal midline band
-        # (rows 16..31), line tile tiled between — the kit's value_bar
-        # samples this 48x16 band (step 5 comment in the docstring).
-        blit(caps["left"], 0, TILE)
-        blit(caps["line"], TILE, TILE, repeat_to=SHEET - 2 * TILE)
-        blit(caps["right"], SHEET - TILE, TILE)
-        _verify_bar_sheet(caps, sheet)
-        write_png(outroot / "assets/ui/chrome/ninepatch_bar.png", SHEET, SHEET, sheet)
-        made += 1
-    elif NINEPATCH_SETS and made:
-        report.setdefault("ninepatch_notes", []).append(
-            "bar: tiles missing (expected chrome bar_{left,right,line}.png)")
-    return f"{made} sheets (self-verified pixel-exact)"
 
 
 # ======================================================================
@@ -2952,8 +2424,7 @@ def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
             facs.blit(im[0], im[1], im[2], k * (CANVAS + 6) + 8, 18)
     sections.append(("FACILITY TOKENS (TOKEN CLASS - OUTLINED)", [facs]))
 
-    for cls, label in (("chrome", "CHROME TILES + NINE-PATCH SHEETS"),
-                       ("icons", "SEMANTIC ICONS"),
+    for cls, label in (("icons", "SEMANTIC ICONS"),
                        ("markers", "WORLD MARKERS (A.4)"),
                        ("terrain", "TERRAIN + SHORE"),
                        ("fx", "FX FRAMES"),
@@ -2962,34 +2433,16 @@ def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
         if not files:
             sections.append((label + " - (ABSENT: STAGED)", []))
             continue
-        if cls == "chrome":
-            sheets = [f for f in files if f.name.startswith("ninepatch_")]
-            tiles = [f for f in files if f not in sheets]
-            row = Sheet(min(len(tiles), 30) * 34 + 6 * 52 + 8, 54)
-            x = 4
-            for t in tiles[:30]:
+        per = 20 if cls == "icons" else 10
+        chunks = [files[i:i + per] for i in range(0, len(files), per)]
+        out_rows = []
+        for chunk in chunks:
+            row = Sheet(min(len(chunk), per) * 36 + 8, 42)
+            for k, t in enumerate(chunk[:per]):
                 im = read_png(t)
-                for sy in range(2):
-                    for sx in range(2):
-                        row.blit(im[0], im[1], im[2], x + sx * im[0], 10 + sy * im[1])
-                x += im[0] * 2 + 2
-            x += 8
-            for t in sheets[:6]:
-                im = read_png(t)
-                row.blit(im[0], im[1], im[2], x, 3)
-                x += im[0] + 4
-            sections.append((label, [row]))
-        else:
-            per = 20 if cls == "icons" else 10
-            chunks = [files[i:i + per] for i in range(0, len(files), per)]
-            out_rows = []
-            for chunk in chunks:
-                row = Sheet(min(len(chunk), per) * 36 + 8, 42)
-                for k, t in enumerate(chunk[:per]):
-                    im = read_png(t)
-                    row.blit(im[0], im[1], im[2], k * 36 + 4, 5)
-                out_rows.append(row)
-            sections.append((label + f" ({len(files)} FILES, FIRST {min(len(files), per * 5)})", out_rows))
+                row.blit(im[0], im[1], im[2], k * 36 + 4, 5)
+            out_rows.append(row)
+        sections.append((label + f" ({len(files)} FILES, FIRST {min(len(files), per * 5)})", out_rows))
 
     seam_rows = []
     terrain_files = sorted((adir / "terrain").rglob("terrain_*_*.png")) if (adir / "terrain").is_dir() else []
@@ -3079,8 +2532,6 @@ def build_into(outroot: Path, ingest_files: dict | None = None,
         report["generic"] = counts
         if m.classes.get("terrain") is not None:
             run_seam_ring(m, outroot, report)
-        if m.classes.get("chrome") is not None:
-            report["ninepatch"] = run_ninepatch(m, outroot, report)
     finally:
         shutil.rmtree(outroot / STAGING, ignore_errors=True)
     return m, report
@@ -3135,9 +2586,6 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
           f"{len(report.get('footprints', []))} hulls in band")
     for kind, n in report.get("seam_kinds", []):
         print(f"  seam ring '{kind}': {n} variant(s) byte-identical outer ring")
-    for note in report.get("ninepatch_notes", []):
-        print(f"  ninepatch note: {note}")
-    print(f"  ninepatch sheets: {report.get('ninepatch', 'skipped (no chrome output)')}")
 
 
 def run_check() -> None:
@@ -3681,464 +3129,6 @@ def run_import_fx_mode(raw_root: Path) -> None:
     print(f"build_ui_art: fx ledger -> {FX_LEDGER.relative_to(ROOT)}")
 
 
-# ---- PixelLab chrome tileset ingestion (--import-chrome-pixellab;
-# ---- 80-* §4.8, 2026-11-08 parchment amendment) -------------------------
-
-def _chrome_ledger() -> dict:
-    """The chrome{} ledger section (empty when the chrome families are
-    generator-authored — the fallback)."""
-    doc = _read_ledger("_chrome_ledger")
-    return doc.get("chrome") or {}
-
-
-def _chrome_ledger_tile_ids() -> set:
-    """The ledger-owned chrome single ids (ship-as-drawn; the authored
-    chrome audits are waived for exactly these)."""
-    return set(_chrome_ledger().get("tiles") or {})
-
-
-def _chrome_find_tileset(family: str) -> Path:
-    """The vendored tileset trio for a chrome family — exactly ONE
-    tileset_chrome_<family>_<id>.json may exist (the filename is the
-    pointer; a re-generation stages the new trio and deletes the old,
-    the coast convention)."""
-    matches = sorted(p for p in CHROME_RAW_DIR.glob(
-        f"tileset_chrome_{family}_*.json")
-        if not p.name.endswith(("_request.json", "_submit.json")))
-    if len(matches) != 1:
-        fail(f"--import-chrome-pixellab: expected exactly one vendored "
-             f"tileset_chrome_{family}_*.json under {CHROME_RAW_DIR}, "
-             f"found {len(matches)}")
-    return matches[0]
-
-
-def _chrome_green_key(px: list) -> list:
-    """The authoring-only green chroma key → alpha: a pixel goes
-    transparent iff g ≥ r+MARGIN and g ≥ b+MARGIN (GREEN_KEY_MARGIN).
-    Wood / parchment / brass are warm (r-dominant) and never
-    false-positive; the rule is deterministic on the vendored bytes.
-    Surviving pixels are forced opaque (the model ships no partial
-    alpha; crisp sheets only)."""
-    m = CHROME_GREEN_MARGIN
-    out = []
-    for p in px:
-        r, g, b = p[0], p[1], p[2]
-        if g >= r + m and g >= b + m:
-            out.append((0, 0, 0, 0))
-        else:
-            out.append((r, g, b, 255))
-    return out
-
-
-def _chrome_fill_nearest(px: list, T: int, holes: list[int]) -> None:
-    """Fill the hole pixel indices with the nearest clean opaque pixel's
-    color (4-conn multi-source BFS over the clean opaque set; first-seen
-    ties are deterministic in scan order). Shared by the ring degreen
-    pass."""
-    import collections  # noqa: PLC0415
-    if not holes:
-        return
-    clean = [i for i, p in enumerate(px) if p[3] and i not in set(holes)]
-    dist = [None] * (T * T)
-    queue = collections.deque()
-    for i in clean:
-        dist[i] = 0
-        queue.append(i)
-    while queue:
-        i = queue.popleft()
-        x, y = i % T, i // T
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < T and 0 <= ny < T:
-                j = nx + ny * T
-                if dist[j] is None:
-                    dist[j] = dist[i] + 1
-                    queue.append(j)
-    for i in holes:
-        x, y = i % T, i // T
-        best, bd = None, None
-        for j, dd in enumerate(dist):
-            if px[j][3] and (bd is None or dd < bd):
-                best, bd = px[j][:3], dd
-        if best is not None:
-            px[i] = (best[0], best[1], best[2], 255)
-
-
-def _chrome_degreen_rings(keyed: dict, T: int) -> None:
-    """The ring degreen pass (§4.8, 2026-11-09 — non-green lower terrain
-    survives the key): the chroma key only catches the promised bright
-    green; the model's lower material also survives as dark olive
-    (93,113,19 — g−r below the key margin) and dark teal (3,41,43)
-    hugging the plate edge inside the ring tiles. Each ring master
-    replaces every contaminated opaque pixel with the nearest clean
-    opaque pixel (BFS via _chrome_fill_nearest): contaminated =
-    green-dominant (g > r and g > b), plus — in WARM families (the
-    wang_15 modal face has r > b, the parchment click plate) —
-    cool-cast (b >= r). The frame family (cool ocean) only degreens
-    green-dominant pixels. The fill master passes through untouched —
-    the frame's wave texture is intended detail."""
-    fill = keyed.get(CHROME_WANG["fill"])
-    if fill is None:
-        return
-    counts: dict[tuple, int] = {}
-    for p in fill:
-        if p[3]:
-            counts[p[:3]] = counts.get(p[:3], 0) + 1
-    if not counts:
-        return
-    modal = max(counts, key=counts.get)  # stable on ties
-    warm = modal[0] > modal[2]
-
-    def contaminated(p) -> bool:
-        r, g, b = p[0], p[1], p[2]
-        if g > r and g > b:
-            return True
-        return bool(warm and b >= r)
-
-    for idx in (1, 2, 3, 4, 5, 8, 10, 12):
-        px = keyed.get(idx)
-        if px is None:
-            continue
-        holes = [i for i, p in enumerate(px)
-                 if p[3] and contaminated(p)]
-        _chrome_fill_nearest(px, T, holes)
-
-
-def _chrome_clip_junk(keyed: dict, T: int) -> None:
-    """The junk clip (§4.8, 2026-11-09, user direction — junk patterns
-    outside the frame): opaque pixels lying BEYOND a ring tile's own
-    median silhouette boundary are lower-material spill the chroma key
-    could not catch (brass/brown/olive terrain bits). For each
-    silhouette side — the keyed-outside side, i.e. the side NOT reached
-    by the tile's material bits — the median of the per-column/row
-    first-opaque profile fences the plate: every opaque pixel between
-    the tile edge and that fence goes transparent. Pure removal:
-    nothing inside the fence is touched, nothing is filled, nothing
-    shifts. Runs after degreen; the silhouette-line erosion follows on
-    the clipped tiles. The fill master passes through."""
-    for idx, bits in ((1, 1), (2, 2), (4, 4), (8, 8),
-                      (3, 3), (12, 12), (5, 5), (10, 10)):
-        px = keyed.get(idx)
-        if px is None:
-            continue
-
-        def med(vals) -> int | None:
-            s = sorted(v for v in vals if v is not None)
-            return s[(len(s) - 1) // 2] if s else None
-
-        fences = []
-        if not bits & 12:  # keyed outside at N — top profile fence
-            m = med([next((y for y in range(T) if px[x + y * T][3]), None)
-                     for x in range(T)])
-            if m is not None:
-                fences.append(("y<", m))
-        if not bits & 3:   # keyed outside at S — bottom profile fence
-            m = med([T - 1 - y for x in range(T) for y in (
-                next((y for y in range(T - 1, -1, -1)
-                      if px[x + y * T][3]), None),) if y is not None])
-            if m is not None:
-                fences.append(("y>", T - 1 - m))
-        if not bits & 10:  # keyed outside at W — left profile fence
-            m = med([next((x for x in range(T) if px[x + y * T][3]), None)
-                     for y in range(T)])
-            if m is not None:
-                fences.append(("x<", m))
-        if not bits & 5:   # keyed outside at E — right profile fence
-            m = med([T - 1 - x for y in range(T) for x in (
-                next((x for x in range(T - 1, -1, -1)
-                      if px[x + y * T][3]), None),) if x is not None])
-            if m is not None:
-                fences.append(("x>", T - 1 - m))
-        for kind, m in fences:
-            for y in range(T):
-                for x in range(T):
-                    i = x + y * T
-                    if not px[i][3]:
-                        continue
-                    if (kind == "y<" and y < m) \
-                            or (kind == "y>" and y > m) \
-                            or (kind == "x<" and x < m) \
-                            or (kind == "x>" and x > m):
-                        px[i] = (0, 0, 0, 0)
-
-
-def _chrome_erode_silhouette(keyed: dict, T: int) -> None:
-    """The silhouette erosion (§4.8, 2026-11-09, user direction — remove
-    the leftover 1px outer line): after degreen, erase the outermost
-    opaque line on each ring tile's silhouette side — the side where
-    the keyed outside sits, i.e. the side NOT reached by the tile's
-    material bits. Replace-to-transparent IN PLACE: no re-measuring,
-    no shifting, nothing filled back. Direction map (corrected
-    2026-11-09 — the keyed outside is on the side the material does
-    NOT reach): no N reach (bits&12 unset) erases the TOPMOST opaque
-    row; no S reach (bits&3) the BOTTOMMOST opaque row; no W reach
-    (bits&10) the LEFTMOST opaque column; no E reach (bits&5) the
-    RIGHTMOST opaque column. The whole extreme line goes transparent
-    (the line is organic across the span). Band tiles (wang_3/12/5/10)
-    have one silhouette side; corner tiles (wang_1/2/4/8) two. Runs
-    AFTER degreen and is the LAST chrome pass. The fill master passes
-    through."""
-    for idx, bits in ((1, 1), (2, 2), (4, 4), (8, 8),
-                      (3, 3), (12, 12), (5, 5), (10, 10)):
-        px = keyed.get(idx)
-        if px is None:
-            continue
-        if not bits & 12:  # keyed outside at N — erase the topmost line
-            top = next((y for y in range(T)
-                        if any(px[x + y * T][3] for x in range(T))), None)
-            if top is not None:
-                for x in range(T):
-                    px[x + top * T] = (0, 0, 0, 0)
-        if not bits & 3:   # keyed outside at S — erase the bottommost line
-            bot = next((y for y in range(T - 1, -1, -1)
-                        if any(px[x + y * T][3] for x in range(T))), None)
-            if bot is not None:
-                for x in range(T):
-                    px[x + bot * T] = (0, 0, 0, 0)
-        if not bits & 10:  # keyed outside at W — erase the leftmost line
-            left = next((x for x in range(T)
-                         if any(px[x + y * T][3] for y in range(T))), None)
-            if left is not None:
-                for y in range(T):
-                    px[left + y * T] = (0, 0, 0, 0)
-        if not bits & 5:   # keyed outside at E — erase the rightmost line
-            right = next((x for x in range(T - 1, -1, -1)
-                          if any(px[x + y * T][3] for y in range(T))), None)
-            if right is not None:
-                for y in range(T):
-                    px[right + y * T] = (0, 0, 0, 0)
-
-
-def _chrome_load_masters(family: str, T: int = 32) -> tuple[dict, dict]:
-    """Decode one vendored chrome tileset → ({wang_index: keyed px},
-    {wang_index: pixel_id}), verifying the name↔corners bit consistency
-    (bit = NW·8+NE·4+SW·2+SE·1, upper = 1), the T×T canvas, and the
-    green-key sanity (every ring tile carries keyed-out pixels; the
-    fill source wang_15 is fully opaque — the plate interior must never
-    leak the key). The 2026-11-09 32px amendment: both PixelLab chrome
-    tilesets are T=32 (the authored bar tiles stay 16, outside this
-    loader); ring tiles take the ring degreen pass and the silhouette
-    erosion (§4.8)."""
-    path = _chrome_find_tileset(family)
-    doc = json.loads(path.read_text())
-    tiles = (doc.get("tileset") or doc).get("tiles") or []
-    if len(tiles) != 16:
-        fail(f"{path.name}: expected 16 wang tiles, got {len(tiles)}")
-    masters: dict[int, list] = {}
-    pixel_ids: dict[int, str] = {}
-    keyed: dict[int, list] = {}
-    for tile in tiles:
-        name = str(tile.get("name", ""))
-        if not name.startswith("wang_"):
-            fail(f"{path.name}: unexpected tile name {name!r}")
-        i = int(name.split("_", 1)[1])
-        corners = tile.get("corners") or {}
-        bits = 0
-        for shift, ck in ((8, "NW"), (4, "NE"), (2, "SW"), (1, "SE")):
-            if str(corners.get(ck, "")).lower() == "upper":
-                bits |= shift
-        if bits != i:
-            fail(f"{path.name}: {name} corners {corners} != bit value "
-                 f"{i} (upper = plate material)")
-        png = base64.b64decode((tile.get("image") or {}).get("base64") or "")
-        w, h, px = decode_png(png)
-        if (w, h) != (T, T):
-            fail(f"{path.name}: {name} is {w}x{h}, expected "
-                 f"{T}x{T} (the chrome envelope pins {T}px tiles)")
-        keyed[i] = _chrome_green_key(px)
-        pixel_ids[i] = str(tile.get("id", ""))
-    _chrome_degreen_rings(keyed, T)
-    _chrome_clip_junk(keyed, T)
-    _chrome_erode_silhouette(keyed, T)
-    for i, px in keyed.items():
-        opaque = sum(1 for p in px if p[3])
-        if i == CHROME_WANG["fill"]:
-            if opaque != T * T:
-                fail(f"{path.name}: wang_15 (the fill source) is not "
-                     f"fully opaque after the green key ({opaque}/"
-                     f"{T * T}) — the lower material leaked into "
-                     "the plate interior")
-        elif i in (1, 2, 3, 4, 5, 8, 10, 12):
-            if opaque == T * T:
-                fail(f"{path.name}: wang_{i} has no green-keyed pixels — "
-                     "the lower material never appears on a ring tile; "
-                     "is this the chrome tileset?")
-        masters[i] = px
-    return masters, pixel_ids
-
-
-def _chrome_band_mask_px(px: list, radius: int, T: int = TILE) -> list[bool]:
-    """BFS distance-to-outside over the keyed TxT tile: True for opaque
-    pixels within `radius` of a transparent pixel (the keyed outside
-    wraps the silhouette). A tile with NO keyed pixels (the fill source,
-    wang_15) has no outside — all-False, so ring/clean ops treat it as
-    pure face."""
-    import collections  # noqa: PLC0415
-    band = [False] * (T * T)
-    if not any(p[3] == 0 for p in px):
-        return band
-    queue = collections.deque()
-    for y in range(T):
-        for x in range(T):
-            i = x + y * T
-            if px[i][3] == 0:
-                continue
-            near_outside = False
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                nx, ny = x + dx, y + dy
-                if not (0 <= nx < T and 0 <= ny < T) \
-                        or px[nx + ny * T][3] == 0:
-                    near_outside = True
-            if near_outside:
-                band[i] = True
-                queue.append((x, y, 0))
-    while queue:
-        x, y, d = queue.popleft()
-        if d >= radius:
-            continue
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < T and 0 <= ny < T:
-                i = nx + ny * T
-                if px[i][3] and not band[i]:
-                    band[i] = True
-                    queue.append((nx, ny, d + 1))
-    return band
-
-
-def _chrome_band_mask(px: list, T: int = TILE) -> list[bool]:
-    """The hover band: BFS distance-to-outside ≤ CHROME_HOVER_RIM_BAND
-    (the brass band flares on hover — §4.8 2026-11-08 night). Delegates
-    to the radius-parameterized mask."""
-    return _chrome_band_mask_px(px, CHROME_HOVER_RIM_BAND, T)
-
-
-def _chrome_derive(px: list, op: str, T: int = TILE) -> list:
-    """One derivation op (80-* §4.8 2026-11-08): base = as keyed;
-    invert = rot_180 (the bevel light flips TL→BR — the sunken rim);
-    press = invert + every opaque pixel ×PRESS_DARKEN; recess =
-    every opaque pixel ×FIELD_RECESS (no rotate — the inset-paper
-    interior); lift = the rim-weighted hover glow (the brass band
-    within HOVER_RIM_BAND of the keyed outside flares at 0.35, the
-    face warms at 0.05); ring = the 1px ACCENT
-    silhouette ring (opaque pixels 4-adjacent to transparent)."""
-    if op == "base":
-        return list(px)
-    if op == "invert":
-        return _transform(T, T, px, "rot_180")[2]
-    if op == "press":
-        rot = _transform(T, T, px, "rot_180")[2]
-        f = CHROME_PRESS_DARKEN
-        return [((round(p[0] * f), round(p[1] * f), round(p[2] * f), 255)
-                 if p[3] else p) for p in rot]
-    if op == "recess":
-        f = CHROME_FIELD_RECESS
-        return [((round(p[0] * f), round(p[1] * f), round(p[2] * f), 255)
-                 if p[3] else p) for p in px]
-    if op == "lift":
-        # Rim-weighted hover (§4.8, 2026-11-08 night): the brass band
-        # flares, the face warms faintly. Band membership = BFS distance
-        # to the keyed transparent outside ≤ HOVER_RIM_BAND (the band IS
-        # the silhouette-adjacent zone — no palette knowledge needed,
-        # ship-as-drawn stays honest).
-        band = _chrome_band_mask_px(px, CHROME_HOVER_RIM_BAND, T)
-        out = []
-        for i, p in enumerate(px):
-            if not p[3]:
-                out.append(p)
-                continue
-            lift = (CHROME_HOVER_RIM_LIFT if band[i]
-                    else CHROME_HOVER_FACE_LIFT)
-            out.append((round(p[0] + (255 - p[0]) * lift),
-                        round(p[1] + (255 - p[1]) * lift),
-                        round(p[2] + (255 - p[2]) * lift), 255))
-        return out
-    if op == "ring":
-        ring = _hex_px(CHROME_FOCUS_RING)
-        out = []
-        for y in range(T):
-            for x in range(T):
-                p = px[x + y * T]
-                if p[3] and any(
-                        not (0 <= x + dx < T and 0 <= y + dy < T)
-                        or px[(x + dx) + (y + dy) * T][3] == 0
-                        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
-                    out.append(ring)
-                else:
-                    out.append(p)
-        return out
-    fail(f"chrome derivation: unknown op {op!r}")
-
-
-def run_import_chrome_mode(raw_root: Path | None = None) -> None:
-    """--import-chrome-pixellab (80-* §4.8, 2026-11-08): decode the two
-    vendored chrome tilesets (frame + button), green-key the lower
-    material to alpha, derive the six chrome families' singles
-    (panel/field from the frame plate; button/hover/pressed/focus from
-    the button plate), write them to assets/ui/chrome/, and record the
-    committed chrome{} ledger section (tileset ids + per-tile pixel ids
-    + derivations + output sha). Ship-as-drawn: no quantize, no color
-    cap — group 13 waives the authored-chrome audits for these ids via
-    this ledger. Rebuilds are byte-identical from the vendored bytes;
-    the API is never contacted."""
-    del raw_root  # the vendored trios live at CHROME_RAW_DIR (the pointer)
-    masters_by_source: dict[str, tuple[dict, dict]] = {}
-    tileset_ids: dict[str, str] = {}
-    tiles_doc: dict[str, dict] = {}
-    written = 0
-    out_dir = ROOT / "assets" / "ui" / "chrome"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    def _masters_for(source: str) -> tuple[dict, dict]:
-        if source not in masters_by_source:
-            masters_by_source[source] = _chrome_load_masters(
-                source, CHROME_SOURCE_PX[source])
-            tid_path = _chrome_find_tileset(source)
-            submit_p = tid_path.with_name(tid_path.stem + "_submit.json")
-            tileset_ids[source] = \
-                json.loads(submit_p.read_text()).get("tileset_id", "?") \
-                if submit_p.is_file() else tid_path.stem.rsplit("_", 1)[-1]
-        return masters_by_source[source]
-
-    for family, parts in CHROME_DERIVATIONS.items():
-        for slot, (source, wang, op) in parts.items():
-            masters, pixel_ids = _masters_for(source)
-            t_px = CHROME_SOURCE_PX[source]
-            sid = f"{family}_{slot}"
-            px = masters[wang]
-            px = _chrome_derive(px, op, t_px)
-            out = out_dir / f"{sid}.png"
-            write_png(out, t_px, t_px, px)
-            tiles_doc[sid] = {
-                "family": family, "part": slot, "from": source,
-                "wang": wang, "derivation": op,
-                "size": t_px,
-                "pixel_id": pixel_ids[wang],
-                "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
-            }
-            written += 1
-        # the retired corner/edge singles must not linger — the nine-slot
-        # set replaces them wholesale (fill is a REAL slot: never touched)
-        for part in ("corner", "edge"):
-            stale = out_dir / f"{family}_{part}.png"
-            if stale.is_file():
-                stale.unlink()
-    prev = _read_ledger("--import-chrome-pixellab")
-    _write_ledger(prev, "chrome", {
-        "chrome_generated_by": "build_ui_art --import-chrome-pixellab",
-        "chrome_rejected": [],
-        "chrome": {
-            "tilesets": {s: {"tileset_id": t}
-                         for s, t in sorted(tileset_ids.items())},
-            "tiles": tiles_doc,
-        },
-        "counts": {"chrome_ingested": written},
-    })
-    print(f"chrome ingest: {written} singles written to assets/ui/chrome "
-          f"({', '.join(f'{s}={t[:8]}…' for s, t in sorted(tileset_ids.items()))}); "
-          "ledger chrome{} updated")
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Phase-10 UI art governor (docs/IMPLEMENT-Phase10.md decision 5/9, 80-* §4.8)")
     ap.add_argument("--check", action="store_true",
@@ -4189,28 +3179,14 @@ def main() -> None:
     ap.add_argument("--fx-legacy", action="store_true",
                     help="with --import-fx-pixellab: ingest the RETIRED "
                          "per-dir v3 waterline family instead of v5")
-    ap.add_argument("--import-chrome-pixellab", nargs="?", const="auto",
-                    metavar="RAW_ROOT",
-                    help="ingest the PixelLab chrome tilesets (80-* §4.8 "
-                         "2026-11-08): decode the vendored frame+button "
-                         "Wang sets, green-key the lower material to "
-                         "alpha, derive the six chrome families' singles "
-                         "(panel/field/button/hover/pressed/focus), "
-                         "write assets/ui/chrome/ + the committed chrome{} "
-                         "ledger; ship-as-drawn, byte-identical rebuilds "
-                         "(the vendored trios live at "
-                         "tools/assets/pixellab_raw/ — the pointer is the "
-                         "filename)")
     args = ap.parse_args()
     modes = [args.check, args.contact_sheet,
              args.import_icons, args.import_ships_north,
-             args.import_fx_pixellab, args.import_glyphs,
-             args.import_chrome_pixellab]
+             args.import_fx_pixellab, args.import_glyphs]
     if sum(1 for m in modes if m) > 1:
         fail("--check, --contact-sheet, --import-icons, "
-             "--import-ships-north, --import-fx-pixellab, "
-             "--import-glyphs and --import-chrome-pixellab are mutually "
-             "exclusive modes")
+             "--import-ships-north, --import-fx-pixellab and "
+             "--import-glyphs are mutually exclusive modes")
     if args.check:
         run_check()
         return
@@ -4244,11 +3220,6 @@ def main() -> None:
         if args.import_glyphs != "auto":
             root = Path(args.import_glyphs)
         run_import_glyphs_mode([root])
-        return
-    if args.import_chrome_pixellab:
-        run_import_chrome_mode(
-            None if args.import_chrome_pixellab == "auto"
-            else Path(args.import_chrome_pixellab))
         return
     m, report = build_into(ROOT, resolve_ingest_overrides(),
                            resolve_artifact_overrides())

@@ -2,7 +2,11 @@
 
 Local web UI so the user can re-roll model-generated art themselves:
 edit a job's prompt, re-roll it against the generation backend, inspect
-the result, and accept it into the game build.
+the result, and accept it into the game build. The studio is the
+**model-art re-roll bench — art families only** (ships, wakes, coast,
+icons, glyphs). The Layout tab and the chrome tileset family are
+RETIRED at M7 (docs/80-UI-UX.md §4.9.1, docs/90-ARCHITECTURE.md §0.2 —
+the studio keeps ONLY the model-art re-roll families).
 
 - **Server**: `server.py` — stdlib only (`http.server.ThreadingHTTPServer`),
   binds `127.0.0.1:8010`, no auth (local tool). One background worker thread
@@ -48,43 +52,6 @@ studio cache (gitignored) until **Accept + rebuild**: the vendored trio
 + ledger (byte-identical rebuild rules apply; git add/commit stays with
 the user). No depth tileset (retired — pro corner-API crash history),
 no per-tile cards; the legacy `terrain_*` texture jobs are HIDDEN entirely (2026-11-06 user direction — terrain re-rolls live on the coast tileset card; the retired texture chain is not re-rollable or visible).
-
-## Chrome tilesets family (pixellab — the §4.8 2026-11-08 path)
-
-TWO cards, one per family (`chrome_frame` = the parchment panel plate,
-`chrome_click` = the light parchment click plate — the 2026-11-08
-evening revision re-sourced the button families here and RETIRED the
-chestnut leather set; the pinned
-descriptions/seeds live in `tools/pixellab_pass.py CHROME_TILESETS` /
-80-* §4.8, seeds 20261108 / 20261110). ONE `/v2/create-tileset` pro
-tileset per re-roll via `run_chrome_tileset` **in-process**; defaults are
-read from the vendored canonical trio (tileset id + seed from the
-`_submit.json`, the three descriptions from the `_request.json`;
-fallback = the pinned spec when the trio is missing). The prompt box
-edits ONLY the free-text **style clause appended to all three
-descriptions** (the coast convention — descriptions are pinned, never
-edited); seed user-settable (blank → the pinned default seed). Re-rolls
-STAGE the fresh vendored trio into the studio cache
-(`model_raw/studio/chrome/` — the coast pattern: a discarded or failed
-re-roll never leaves a second trio in the canonical raw dir). The card
-shows the shipped vendored strip (draft), the pending re-roll strip
-(raw), and the **nine-patch mock preview** (snapped): the 16
-keyed-unaware wang tiles green-keyed and assembled through the §4.8
-mapping (upper = material; TL = wang_1, T = wang_3, fill = wang_15, the
-other cells dihedral mirrors/rotations — exactly `build_ui_art`'s
-`FRAME_OPS` relations) into the 48×48 sheet, rendered as the sheet
-itself plus a 160×64 panel rect (corners + tiled edges/fill) — the
-click family adds a 96×28 button rect — on the muted review backdrop,
-NEAREST-upscaled 3×. **Accept + rebuild**: the staged trio is copied
-into `tools/assets/pixellab_raw/` under its canonical
-`tileset_chrome_<family>_<id>{,_request,_submit}.json` names, the
-previous canonical trio for the family is deleted (the ingest requires
-exactly ONE `tileset_chrome_<family>_*.json` — `_chrome_find_tileset`),
-and `build_ui_art --import-chrome-pixellab` re-lands the 18 derived
-singles (panel/field from frame; button/hover/pressed/focus from
-click) + the `chrome{}` ledger. The gate is the fresh `chrome{}`
-section of `tools/ui_art/ingest_ledger.json` listing the new tileset id
-for the family. Git add/commit stays with the user.
 
 ## Ship family (top-down north tokens — the §4.8 2026-11-07 path)
 
@@ -188,112 +155,9 @@ registry strips the family prefix).
 | POST | `/api/reroll` | `{job, prompt?, seed?}` | persist prompt (if given), queue the job (seed omitted → random; ignored for `fx_*` — the envelope has no seed) |
 | POST | `/api/prompt` | `{job, prompt}` | persist a prompt edit without queueing (empty → revert to canonical) |
 | POST | `/api/accept` | `{job}` | mark the current result accepted in `accepted.json` |
-| GET | `/api/layout/file` | — | the committed `data/ui_layout.json` text + mtime + the last in-session commit-gate verdict (`{content: null}` 404-shape when absent) |
-| POST | `/api/layout/commit` | `{layout}` | serialize per 10-\* §4.23, gate behind a full `tools/validate_data.py` pass, write **only on validator exit 0**; answers `{ok: true, bytes}` / `{ok: false, error: <FAIL text>}` — never a 500 |
 | GET | `/thumb/<kind>/<job>.png` | — | `draft` / `raw` / `snapped` thumbnail (`raw`/`snapped` prefer the studio reroll, falling back to the canonical store); cache-busting via `?v=<mtime>` |
 | GET | `/thumb/td/<label>/<deg>.png` | — | top-down ship rotation preview (PIL NEAREST, pinned degrees) |
 | GET | `/thumb/fx/<size>/<kind>` | — | wake previews: `anim.gif` (staged API gif) / `comp.png` (staged wake under the ship) / `shipped.png` (the committed family — in game now) |
-
-## Layout tab (Phase 12 — the v2 absolute-rect editor, 80-* §4.8.9)
-
-The **Layout** tab swaps the card grid for a live UI-layout editor:
-screen list + element tree on the left, the game's real viewport frame
-with the 32 px-tile grid on the canvas, the inspector on the right, and
-the commit bar underneath.
-
-- **The v2 model** — every static element IS an absolute rect:
-  `{x, y, w, h}` in chrome tiles, **parent-relative** (a child's tiles
-  address its registered parent's rect; top-level elements address the
-  60 × 34 canvas — `hello` carries the grid, 33.75 tiles rounded up, the
-  34th row's bottom 8 px are the sliver). `data/ui_layout.json` v2
-  `{version: 2, screens: {<screen>: {elements, lists}}}` IS the layout —
-  no code defaults underneath. The tree dump's `parent` id names the
-  registered parent whose rect bounds each element.
-
-- **Selection model (2026-11-09 user direction — the list is the only
-  selection surface):** pick an element in the tree; the canvas then
-  renders that element's single box (plus the locked list blocks below —
-  nothing else). Canvas clicks never select.
-
-- **Drag/resize, one path for all** — every element drags and resizes as
-  a rect: a drag sends `move {screen, id, x, y}`, the SE handle sends
-  `resize {screen, id, w, h}` (tiles; sends coalesce to one per 150 ms
-  and the trailing send flushes on release). The clamps are client-side
-  and mirror the game: the element cannot leave its registered parent's
-  rect (the tree's `parent` chain) and cannot shrink below its
-  `min_tiles`/`kids_tiles` floors. The Phase-11 child/free/anchored kind
-  split, the min-override dance, the sibling order and the edge anchors
-  are RETIRED — the game answers `retired_field` for them and the
-  studio never sends them (`kind` survives in the dump as inspector
-  wording only).
-
-- **List members are not rows** — a tree row carrying a non-empty
-  `list` renders as part of ONE hatched viewport block (labeled
-  `<list> · row_h`) spanning the block's viewport rect: no per-row
-  boxes, no drag/resize, and the block itself is not editable (the
-  `lists` data is builder-owned; rows stack at `base + i·row_h`). The
-  block rect comes from the session's committed `lists` data; without a
-  committed block it degrades to the member rows' union extent.
-
-- **Inspector** — x/y/w/h tile integers (shown and sent
-  parent-relative, the file's address space) + the sheet picker (the 7
-  assignable nine-patches, hidden for `plain`-role elements). Typed
-  values are pre-clamped like the drags; a `move` always carries both
-  `x` and `y`, a `resize` both `w` and `h`.
-
-- **Launch contract** — the game carries the bridge; the studio never
-  launches Godot. Start the game with
-
-  ```sh
-  godot --path . -- --layout-bridge
-  ```
-
-  then open the Layout tab and hit **Connect** (the endpoint is the
-  bridge's `ws://127.0.0.1:8765`; a hint line shows the launch command
-  whenever disconnected). Without the flag the game runs no listener.
-- **Protocol** — the browser connects DIRECTLY to the game's
-  LayoutBridge; `server.py` never proxies WebSocket. The message table
-  is frozen verbatim in `docs/90-ARCHITECTURE.md` §5.7 (Phase-12
-  amendment): `hello` (`grid` 60 × 34, `tile` 32) / `screen_changed` /
-  `tree` / `frame` / `error` game→studio — tree rows carry
-  `{id, kind, role, list, rect_tiles, sheet, locked, parent, clipped,
-  min_tiles, kids_tiles?}` (`rect_tiles` is screen-relative; a non-empty
-  `list` marks a dynamic-row member) — and `get_tree` `get_frame` `move`
-  `resize` `assign_sheet` `revert` `reset_screen` `commit`
-  studio→game. Every edit is sent as its §5.7 message; the game replies
-  with a fresh `tree` + `frame` (deferred one frame) and the tab
-  re-renders. The wire discriminator rides under **both** `msg` and
-  `type` keys so either reader convention works (the frozen table names
-  messages, not envelope keys).
-- **Session** — the edit session accumulates browser-side as the FULL
-  v2 document, STARTING from the committed `data/ui_layout.json`
-  (fetched on tab open), so edits compose over what is already
-  committed; a new element row is seeded with the element's full
-  current rect so every commit writes complete `{x, y, w, h}` rows.
-  Per-element **Revert** restores that element's session row to the
-  committed row (or drops the row this session created) and tells the
-  bridge — the data rect re-applies live; **Reset screen** does the
-  same for the screen's rows. The `lists` blocks ride along untouched.
-- **Single writer** — the game and its bridge never write files. The
-  studio writes `data/ui_layout.json` and NOTHING else, and only behind
-  the validator gate: Commit POSTs the full v2 document to
-  `/api/layout/commit`, the server serializes and runs a FULL
-  `tools/validate_data.py` pass (all groups 1–14) against a staged
-  `SAILAGE_DATA_ROOT` tree holding the candidate, and writes the real
-  file ONLY on validator exit 0. A rejected commit answers
-  `{ok: false, error: <FAIL text>}` and leaves the committed file
-  byte-unchanged. Git add/commit stays with the user.
-- **Serialization rules** (10-* §4.23, deterministic bytes):
-  `json.dumps(doc, indent=2, sort_keys=True) + "\n"` — sorted keys,
-  2-space indent, trailing newline. Tile integers only; the §8.9
-  group-14 rules (the 32-screen set, dotted element ids, the
-  `{x, y, w, h, sheet}` key whitelist, canvas bounds `x + w ≤ 60`,
-  `y + h ≤ 34`, list blocks `{base, row_h, viewport}`) are enforced by
-  the validator gate and pre-clamped in the editor.
-- **Manual-suite reminder** — the studio cannot run Godot: after a
-  layout commit, run the layout suites (`zh` + `en`) — the Commit
-  banner under the bar says so too (the §4.8.9 both-locale guard: a
-  commit that clips either locale fails the suite).
 
 ## UI
 
@@ -316,8 +180,8 @@ the commit bar underneath.
   editable prompt textarea (persisted per job), seed field
   (blank → random; canonical seed shown as placeholder), Re-roll / Accept
   buttons, live status line (queued / generating Ns… / done / error).
-- Family tabs (All / Ships / Wake VFX / Coast / Icons / Flagged / In
-  game) and a **Re-roll ALL flagged** button.
+- Family tabs (All / Ships / Wake VFX / Coast / Icons / Glyphs /
+  Flagged / In game) and a **Re-roll ALL flagged** button.
 
 ## Robustness (hardened after the browser broken-thumb incident)
 

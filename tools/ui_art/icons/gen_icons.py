@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""W3-A manifest generator: chrome tiles + the 129 semantic icons.
+"""W3-A manifest generator: the semantic icons (the chrome tile
+manifests were retired at M7 — the chrome look is CSS-drawn).
 
 Emits the declarative string-map manifests consumed by the W3-B governor
 (`tools/build_ui_art.py`, rendering through the vendored YoYoPixel engine
 `tools/yoyopixel/render.js`):
 
-  tools/ui_art/chrome/*.json   15 nine-patch source tiles (16x16, A.1)
   tools/ui_art/icons/*.json   129 semantic icons (32x32, A.2)
 
 Stdlib-only, deterministic, byte-stable: no clock, no randomness, no set
@@ -320,45 +320,6 @@ def _fill(ch: str = "b") -> Canvas:
     c = Canvas(16, 16)
     c.rect(0, 0, 15, 15, ch)
     return c
-
-
-def chrome_declarations() -> list[dict]:
-    out = []
-    sets = (
-        ("panel", "o", 2),
-        ("button", "o", 2),
-        ("button_focus", "a", 2),
-        ("field", "o", 1),
-    )
-    for name, border, bw in sets:
-        tiles = (
-            ("corner", _corner(border, bw)),
-            ("edge", _edge(border, bw)),
-            ("fill", _fill("b")),
-        )
-        for tile, canvas in tiles:
-            out.append(declaration(
-                f"{name}_{tile}",
-                f"assets/ui/chrome/{name}_{tile}.png",
-                canvas,
-            ))
-    # bar: left/right caps (radius-4 rounded outer corners, like the panel
-    # corners) + line tile.
-    left = Canvas(16, 16)
-    left.rect(0, 0, 15, 15, "o")
-    left.erase_if(lambda x, y: (
-        (x < 4 and y < 4 and (4 - x) ** 2 + (4 - y) ** 2 > 16)
-        or (x < 4 and y > 11 and (4 - x) ** 2 + (y - 11) ** 2 > 16)))
-    right_c = Canvas(16, 16)
-    for y, row in enumerate(op_mirror_x(left.rows())):
-        for x, ch in enumerate(row):
-            right_c.put(x, y, ch)
-    line = Canvas(16, 16)
-    line.rect(0, 0, 15, 15, "m")  # bar line: ICON_MID tube, row-uniform
-    out.append(declaration("bar_left", "assets/ui/chrome/bar_left.png", left))
-    out.append(declaration("bar_right", "assets/ui/chrome/bar_right.png", right_c))
-    out.append(declaration("bar_line", "assets/ui/chrome/bar_line.png", line))
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -2240,14 +2201,6 @@ def _equipment_declarations() -> list[dict]:
 def all_files() -> list[tuple[Path, dict]]:
     """(absolute manifest path, JSON payload) — the full committed set."""
     files: list[tuple[Path, dict]] = []
-    chrome_sprites = chrome_declarations()
-    groups: dict[str, list[dict]] = {}
-    for decl in chrome_sprites:
-        set_name = decl["id"].rsplit("_", 1)[0]
-        groups.setdefault(set_name, []).append(decl)
-    for set_name, sprites in groups.items():
-        payload = {"sprites": sprites}
-        files.append((ICONS_DIR.parent / "chrome" / f"{set_name}.json", payload))
     for name, sprites in ICON_FILES:
         files.append((ICONS_DIR / name, {"sprites": sprites}))
     files.append((ICONS_DIR / "goods.json", {"sprites": _goods_declarations()}))
@@ -2289,8 +2242,7 @@ def main(argv: list[str]) -> int:
             path.write_bytes(blob)
             print(f"wrote {path.relative_to(REPO_ROOT)} ({len(blob)} bytes)")
         total = sum(len(payload["sprites"]) for _, payload in all_files())
-        print(f"gen_icons: {total} declarations "
-              f"(15 chrome + 129 icons)")
+        print(f"gen_icons: {total} declarations")
         return 0
 
     failures = 0
@@ -2310,8 +2262,7 @@ def main(argv: list[str]) -> int:
             print(f"CHECK-FAIL drift: {committed_path} (re-run differs from "
                   "the committed file; regenerate and commit)")
             failures += 1
-    committed = {p for p in ICONS_DIR.rglob("*.json")} | {
-        p for p in (ICONS_DIR.parent / "chrome").rglob("*.json")}
+    committed = {p for p in ICONS_DIR.rglob("*.json")}
     expected = {committed_path for _, committed_path in pairs}
     for extra in sorted(committed - expected):
         print(f"CHECK-FAIL stale committed manifest (not generated): {extra}")

@@ -37,15 +37,15 @@ advice strings, the §4.22 backgrounds, and the §7.11 ui_strings Phase-8
 family presence. Group 13 is the Phase-10 generated-art check (section
 8.8): the ``tools/ui_art/<class>/`` manifests vs the ``assets/ui/``
 artifacts (inventory equality, shape/size, palette-block membership, color
-budgets, 8-direction transform relations, chrome seam torus rules, terrain
+budgets, 8-direction transform relations, terrain
 rings, hull remap grid + tier footprint bands, shore-strip foam bands), the
 ``data/maps/world_shore.png`` §6.6 integrity, the ``art_prompts.json``
 coverage, and the byte-identical ``build_ui_art.py`` / ``build_shore.py``
 rebuilds. The class checks are staged: a contract class with no manifests is
 skipped with an informational note; artifacts are checked only where they
 exist. Group 13 ends with its six negative probes (off-palette pixel,
-corrupted artifact, broken transform relation, out-of-band footprint,
-invalid shore code, seam violation) proven red against temp fixtures.
+corrupted artifact, broken transform relation, pennant-remap leak,
+invalid shore code, invalid shore index) proven red against temp fixtures.
 Group 15 is the web tile-pyramid check (section 8.10): the
 ``web/public/tiles/`` inventory is exactly the §6.8 grid (4 sources x
 4 levels, edge tiles cropped, no strays), ``tools/build_web_tiles.py
@@ -84,8 +84,6 @@ Exit codes:
         backgrounds / ui_strings Phase-8 families)
     13  generated-art failure (assets/ui manifests+artifacts / world_shore.png
         / art_prompts.json / group-13 probe harness)
-    14  layout failure (data/ui_layout.json v2: element ids, rects,
-        canvas bounds, list blocks, serialization bytes)
     15  web tile-pyramid failure (web/public/tiles inventory / rebuild drift
         / decode spot-probes — §8.10)
 
@@ -333,11 +331,6 @@ SPECIAL_REQUIRE_VERSION.add("facility_hours.json")
 # vocabularies.
 SPECIAL_FILES.add("captain_name_parts.json")
 SPECIAL_REQUIRE_VERSION.add("captain_name_parts.json")
-# Phase 12 (§4.23, 2026-11-09): ui_layout.json is the absolute layout
-# file — `{version, screens}` with per-screen element rects + list
-# blocks; group 14 owns its shape (v2; the capture/studio are the
-# writers).
-SPECIAL_FILES.add("ui_layout.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -8552,10 +8545,10 @@ BLOCK_ICON = frozenset({
     "#f7f5ee", "#d9a441", "#f0c46a", "#a87a28", "#4e9e4e", "#74c26e",
     "#b3341f", "#d4573c", "#2f6f9e", "#9a9a9a", "#1a8c4e", "#b3191f",
     "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
-    "#2e2014", "#6a4e28", "#14100a",  # UW2 chrome skin (§4.8 amended
-    # 2026-11-04, ledgered): walnut fill + bevel wood for the nine-patch
-    # chrome tiles (PANEL_WOOD / PANEL_WOOD_HI / PANEL_WOOD_LO)
-    "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",  # UW2 parchment chrome
+    "#2e2014", "#6a4e28", "#14100a",  # UW2 wood appends (§4.8 amended
+    # 2026-11-04, ledgered; retained after the M7 chrome retirement —
+    # committed icons carry these hexes)
+    "#e3d2a4", "#f2e6c8", "#c6b183", "#3a2a16",  # UW2 parchment appends
     # (§4.8 amended 2026-11-08, append-only): PARCH / PARCH_HI / PARCH_LO /
     # INK_WARM — the texture-mode flat fill ramp + the panel ink
 })
@@ -8580,8 +8573,8 @@ BLOCK_PORTRAIT = frozenset({
     "#9cc4dc", "#d9a441", "#465468", "#2f6f9e", "#4e9e4e", "#b3341f",
     "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
 })
-# §4.8's locked palette table (the "chrome hexes already in §4.8's locked
-# table" clause of §8.8 item 3).
+# §4.8's locked palette table (joins every class's allowed set — §8.8
+# item 3).
 BLOCK_LOCKED = frozenset({
     "#16446e", "#2f6f9e", "#7a5c2e", "#3d3d3d", "#c9d6df", "#9a9a9a",
     "#1c2230", "#465468", "#e8e6df", "#d9a441", "#4e9e4e", "#b3341f",
@@ -8590,7 +8583,6 @@ BLOCK_LOCKED = frozenset({
 # Class → block (80-* §4.8.4 class→block mapping; world markers join the
 # terrain block like the port markers they render beside).
 CLASS_BLOCK = {
-    "chrome": BLOCK_ICON,
     "icons": BLOCK_ICON,
     "hulls": BLOCK_HULL,
     "terrain": BLOCK_TERRAIN,
@@ -8657,40 +8649,10 @@ G13_DERIVE_OPS = {
     "rot180_mirror_x": _g13_rot180_mirror_x,
 }
 
-# Contract id inventories (80-* §4.8.6 heading8 table + A.1/A.2 of
+# Contract id inventories (80-* §4.8.6 heading8 table + A.2 of
 # IMPLEMENT-Phase10.md). Data-driven families (goods/equipment/flags/hulls)
 # join these from the data files at machine scope.
 G13_DIR_IDS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
-# A.1 chrome tiles — two contract shapes (80-* §4.8, 2026-11-08 chrome
-# amendment): authored (the four string-map families, the fallback tree)
-# and pixellab (the chrome{} ledger tree — +button_hover/button_pressed,
-# the derived state families that have no authored manifests). Data-driven
-# families (goods/equipment/flags/hulls) join these from the data files at
-# machine scope.
-G13_CHROME_STEMS_AUTHORED = ("panel", "button", "button_focus", "field")
-G13_CHROME_STEMS_PIXELLAB = ("panel", "button", "button_hover",
-                             "button_pressed", "button_focus", "field",
-                             "backdrop")
-G13_CHROME_TILES_AUTHORED = tuple(
-    f"{stem}_{tile}"
-    for stem in G13_CHROME_STEMS_AUTHORED
-    for tile in ("corner", "edge", "fill")
-) + ("bar_left", "bar_right", "bar_line")
-G13_CHROME_TILES_PIXELLAB = tuple(
-    f"{stem}_{tile}"
-    for stem in G13_CHROME_STEMS_PIXELLAB
-    for tile in ("corner", "edge", "fill")
-) + ("bar_left", "bar_right", "bar_line")
-G13_CHROME_TILES = G13_CHROME_TILES_PIXELLAB  # legacy alias (doc references)
-G13_CHROME_SHEETS_AUTHORED = tuple(
-    f"ninepatch_{stem}.png"
-    for stem in G13_CHROME_STEMS_AUTHORED + ("bar",)
-)
-G13_CHROME_SHEETS_PIXELLAB = tuple(
-    f"ninepatch_{stem}.png"
-    for stem in G13_CHROME_STEMS_PIXELLAB + ("bar",)
-)
-G13_CHROME_SHEETS = G13_CHROME_SHEETS_PIXELLAB  # legacy alias
 G13_ICON_PINNED = (
     "coin", "crew", "provisions", "morale", "durability",
     "compass", "calm", "fair", "strong", "storm",
@@ -9282,33 +9244,6 @@ def _g13_vfx_ledger() -> dict:
     return doc
 
 
-def _g13_chrome_ledger() -> dict:
-    """The chrome ingest ledger section (80-* §4.8 2026-11-08): the
-    build_ui_art --import-chrome-pixellab output inside the committed
-    ingest ledger (tools/ui_art/ingest_ledger.json). Empty dict when
-    absent/unparseable — the chrome families are then generator-authored
-    (the string-map fallback contract shape)."""
-    path = DATA_DIR.parent / "tools" / "ui_art" / "ingest_ledger.json"
-    if not path.is_file():
-        return {}
-    try:
-        doc = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
-    chrome = doc.get("chrome")
-    if not isinstance(chrome, dict) \
-            or not isinstance(chrome.get("tiles"), dict) \
-            or not chrome["tiles"]:
-        return {}
-    return chrome
-
-
-def _g13_chrome_pixellab_mode() -> bool:
-    """True when the chrome families ship from the PixelLab tilesets (the
-    chrome{} ledger exists) — selects the pixellab contract shape."""
-    return bool(_g13_chrome_ledger())
-
-
 def _g13_fx_ship_ids() -> list[str]:
     """The 16 ship type ids (data/ship_types.json) — the per-ship wake
     family's key set (80-* §4.8 2026-11-08)."""
@@ -9565,33 +9500,6 @@ def _g13_check_relations(class_name: str, decls: dict,
             fail("art-transform", sprites[sprite_id].decl["file"],
                  f"is not {derive['op']}({base_id}) pixel-exact (§8.8 item 5)",
                  13)
-
-
-def _g13_check_chrome_seams(sprites: dict) -> None:
-    """§8.8 item 8 (chrome part): edge tiles are torus-safe along the
-    horizontal repeat axis (column 0 == column 15 pattern); bar_line also
-    wraps vertically (row 0 == row 15). Corners do not repeat. The PixelLab
-    chrome families (2026-11-08) are exempt — their edge tiles are the
-    keyed Wang straight-border tiles whose continuity is the tileset's own
-    corner-vertex geometry (the coast-family ruling), and the runtime
-    tiles the middle regions (§4.9 tile-mode amendment); the authored bar
-    stays checked."""
-    waived = _g13_chrome_ledger().get("tiles", {})
-    for sprite_id, sprite in sorted(sprites.items()):
-        if sprite_id in waived:
-            continue
-        if sprite_id.endswith("_edge"):
-            col0 = [row[0] for row in sprite.pixels]
-            col15 = [row[sprite.w - 1] for row in sprite.pixels]
-            if col0 != col15:
-                fail("art-seam", sprite.decl["file"],
-                     "edge tile is not torus-safe: column 0 != column "
-                     f"{sprite.w - 1} (80-* §4.8 seam rule)", 13)
-        if sprite_id == "bar_line":
-            if sprite.pixels[0] != sprite.pixels[sprite.h - 1]:
-                fail("art-seam", sprite.decl["file"],
-                     "bar_line is not torus-safe: row 0 != row "
-                     f"{sprite.h - 1}", 13)
 
 
 def _g13_check_terrain_rings(class_name: str, decls: dict,
@@ -10898,18 +10806,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             _g13_check_manifests(class_name, class_dir, decls, block)
 
         # Contract reconciliation where the doc pins the inventory.
-        if class_name == "chrome":
-            # The authored manifests always declare the 15 string-map tiles
-            # (the fallback source); in pixellab mode the derived state
-            # families join at the ARTIFACT level through the chrome{}
-            # ledger synthesis below (80-* §4.8 2026-11-08).
-            got = set(decls)
-            if got != set(G13_CHROME_TILES_AUTHORED):
-                fail("chrome-inventory", "tools/ui_art/chrome/",
-                     f"manifest ids != the authored A.1 tile contract "
-                     f"(missing {sorted(set(G13_CHROME_TILES_AUTHORED) - got)[:6]}…, "
-                     f"extra {sorted(got - set(G13_CHROME_TILES_AUTHORED))[:6]}…)", 13)
-        elif class_name == "icons":
+        if class_name == "icons":
             got = set(decls)
             if got != icon_expected:
                 fail("icons-inventory", "tools/ui_art/icons/",
@@ -11097,47 +10994,12 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                         check_decls.setdefault(sid_f, (decl_f, None))
                 fx_entries = declared.setdefault("assets/ui/fx", [])
                 fx_entries.extend(entries_f)
-            # §4.8 2026-11-08 — the PixelLab chrome tilesets: the six chrome
-            # families' singles enter the inventory through the ingest
-            # ledger's chrome{} section (the coast-family precedent,
-            # ship-as-drawn — palette/budget/seam waived; the committed
-            # bytes are the ledger's, the string-map generator is the
-            # fallback). Ledger decls REPLACE the authored manifest decls
-            # for the superseded ids and ADD the derived state families.
-            chrome_led = _g13_chrome_ledger() if class_name == "chrome" \
-                else {}
-            if chrome_led:
-                chrome_dir = "assets/ui/chrome"
-                manifest_c = declared.get(chrome_dir, [])
-                # §4.8.8 2026-11-09 32px + native nine-slot amendment: in
-                # pixellab mode the authored plate decls (corner/edge/fill
-                # per family) are RETIRED — the ledger's slot singles
-                # replace them wholesale; only the authored bar band
-                # remains generator-owned.
-                kept_c = [(sid, d) for sid, d in manifest_c
-                          if sid.startswith("bar_")]
-                declared[chrome_dir] = kept_c
-                entries_ch: list = []
-                for sid_ch, rec_ch in sorted(
-                        chrome_led.get("tiles", {}).items()):
-                    decl_ch = {"id": sid_ch, "class": "chrome",
-                               "file": f"{chrome_dir}/{sid_ch}.png",
-                               "width": rec_ch.get("size", 32),
-                               "height": rec_ch.get("size", 32),
-                               "pixellab": rec_ch}
-                    entries_ch.append((sid_ch, decl_ch))
-                    check_decls[sid_ch] = (decl_ch, None)
-                declared.setdefault(chrome_dir, []).extend(entries_ch)
         sprites: dict[str, _G13Sprite] = {}
         for parent, entries in sorted(declared.items()):
             dir_path = ART_ROOT / parent
             present = sorted(p.name for p in dir_path.glob("*.png")) \
                 if dir_path.is_dir() else []
             sheets = set()
-            if parent == "assets/ui/chrome":
-                sheets = set(G13_CHROME_SHEETS_PIXELLAB
-                             if _g13_chrome_pixellab_mode()
-                             else G13_CHROME_SHEETS_AUTHORED)
             if not present:
                 print(f"INFO group 13 {parent}: artifacts not generated yet "
                       f"({len(entries)} declared sprites staged)")
@@ -11167,9 +11029,6 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     elif class_name == "fx" and \
                             isinstance(decl, dict) and decl.get("pixellab"):
                         pass  # waterline family: same raw ruling
-                    elif class_name == "chrome" and \
-                            isinstance(decl, dict) and decl.get("pixellab"):
-                        pass  # chrome tilesets: same raw ruling (2026-11-08)
                     else:
                         mask = isinstance(decl, dict) and \
                             decl.get("class") == "terrain_pattern"
@@ -11177,29 +11036,10 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                                           {"#ffffff", "#000000"} | BLOCK_LOCKED
                                           if mask else block)
                 sprites[sprite_id] = sprite
-            if parent == "assets/ui/chrome":
-                for sheet in sorted(sheets & set(present)):
-                    data = (dir_path / sheet).read_bytes()
-                    try:
-                        width, height, _px = decode_ui_png(data)
-                    except PngFormatError as exc:
-                        fail("art-artifact", f"{parent}/{sheet}",
-                             f"assembled sheet does not decode: {exc}", 13)
-                    # §4.8.8 (2026-11-09 32px amendment): the six chrome
-                    # sheets assemble from 32px tiles → 96x96 (32px
-                    # margins); the authored bar band keeps 48x48/16px.
-                    want_size = (48, 48) if sheet.endswith("bar.png") \
-                        else (96, 96)
-                    if (width, height) != want_size:
-                        fail("art-size", f"{parent}/{sheet}",
-                             f"nine-patch sheet is {width}x{height}, pinned "
-                             f"{want_size[0]}x{want_size[1]} (§4.8.8)", 13)
         sprite_cache[class_name] = sprites
         if sprites:
             _g13_check_relations(class_name, check_decls, sprites)
-            if class_name == "chrome":
-                _g13_check_chrome_seams(sprites)
-            elif class_name == "terrain":
+            if class_name == "terrain":
                 _g13_check_terrain_rings(class_name, decls, sprites)
             elif class_name == "hulls":
                 _g13_check_footprints(sprites, ship_types)
@@ -11373,7 +11213,6 @@ def _g13_run_probes() -> None:
                 _g13_check_pixels("probeicons", sprite, block)
                 sprites[sid] = sprite
             _g13_check_relations("probeicons", decls, sprites)
-            _g13_check_chrome_seams(sprites)
         try:
             baseline_ok()
             print("PASS g13-probe baseline: the unmutated fixture tree "
@@ -11479,32 +11318,6 @@ def _g13_run_probes() -> None:
         results.append(_g13_expect_failure(
             "invalid-shore-index", "shore-raster", shore_check))
 
-        # (6) Seam violation: a chrome edge tile with column 0 != column 15.
-        # The fixture id is a non-ledger chrome edge (2026-11-08: the
-        # PixelLab chrome families are seam-waived via the chrome{} ledger —
-        # their continuity is the Wang corner-vertex geometry — so the
-        # authored-tree edge path is what must stay red).
-        bad_edge = []
-        for y in range(8):
-            inner = "x" if y in (2, 3) else "."
-            bad_edge.append("z" + "." * 6 + inner)  # col 0 fixed, col 7 varies
-        bad_palette = {".": "transparent", "x": _G13_PROBE_GOOD_HEX,
-                       "z": _G13_PROBE_GOOD_HEX}
-        edge_decl = decl("probe_edge", bad_edge, bad_palette)
-        write_manifest([edge_decl])
-        render_probe_png("probe_edge", bad_edge, bad_palette)
-
-        def seam_check():
-            edge_decls = _g13_load_class(icons_dir)
-            _g13_check_manifests("probeicons", icons_dir, edge_decls, block)
-            sprites = {}
-            for sid, (d, _p) in edge_decls.items():
-                sprite = _g13_decode_artifact(d, root / d["file"])
-                sprites[sid] = sprite
-            _g13_check_chrome_seams(sprites)
-        results.append(_g13_expect_failure(
-            "seam-violation", "art-seam", seam_check))
-
     if not all(results):
         fail("g13-probes", "tools/validate_data.py",
              "negative-probe harness: "
@@ -11526,375 +11339,6 @@ def _g13_manifest_then_pixels(icons_dir: Path, block: frozenset) -> None:
 
 def _g13_probe_root(icons_dir: Path) -> Path:
     return icons_dir.parents[2]  # <tmp>/tools/ui_art/<class> → <tmp>
-
-
-# ---------------------------------------------------------------------------
-# Check group 14 — Layout overrides (docs/10-DATA-SCHEMA.md §8.9; Phase 11)
-# ---------------------------------------------------------------------------
-
-
-# The 8 pilot screen ids (§4.23).
-LAYOUT_SCREENS = frozenset({
-    # The Phase-11 pilot eight.
-    "port", "market", "inn", "guild", "provisions", "palace",
-    "tavern", "shipyard",
-    # Phase 12 §4.23: the title trio, the world family, the combat trio,
-    # and the shared modals — the full 32-screen set.
-    "title", "nationality_select", "creation",
-    "world", "chart", "hail", "fleet_picker", "autopilot_hud",
-    "battle", "sandbox", "duel",
-    "confirm", "save_slot", "settings", "intel_window", "dialog_box",
-    "dossier", "character_card", "captain_view", "fleet_view",
-    "officer_roster", "reputation_view", "gameover", "ending",
-})
-
-# The legal element-object keys (§4.23 v2 — a rect + an optional sheet;
-# the Phase-11 min_w/min_h/order/anchor overrides are retired).
-LAYOUT_ELEMENT_KEYS = frozenset({"x", "y", "w", "h", "sheet"})
-
-# The 7 assignable nine-patch sheet ids (80-* §4.8.9 — the 48×16 value-bar
-# band is not assignable).
-LAYOUT_SHEETS = frozenset({
-    "panel", "button", "button_hover", "button_pressed", "button_focus",
-    "field", "backdrop",
-})
-
-# The 1920×1080 design canvas = 60 × 33.75 chrome tiles (80-* §4.8.9);
-# 34 = the rounded canvas height — a full-height element's 1080 px
-# measures roundi(1080/32) = 34 tiles, the bottom 8 px being the sliver.
-LAYOUT_GRID_W = 60
-LAYOUT_GRID_H = 34
-
-LAYOUT_ELEMENT_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
-
-# The file format version (§4.23 — a v1-shaped file fails item 0; there
-# is no migration, the capture regenerates the file).
-LAYOUT_VERSION = 2
-
-
-def _layout_rect(value: object, label: str, rule: str) -> dict:
-    """One {x,y,w,h} rect object check (§8.9 items 3/5): all four keys
-    required, non-negative ints (no floats/strings/bools). Returns the
-    dict when valid; raises CheckFailure otherwise."""
-    if not isinstance(value, dict):
-        fail("layout", "ui_layout.json", f"{label}: must be an object "
-             f"(§8.9 item {rule})", 14)
-    for key in ("x", "y", "w", "h"):
-        if key not in value:
-            fail("layout", "ui_layout.json", f"{label}: missing '{key}' "
-                 f"(§8.9 item {rule})", 14)
-        v = value[key]
-        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
-            fail("layout", "ui_layout.json", f"{label}.{key}: must be a "
-                 f"non-negative integer tile count (§8.9 item {rule})", 14)
-    x, y, w, h = value["x"], value["y"], value["w"], value["h"]
-    if x + w > LAYOUT_GRID_W:
-        fail("layout", "ui_layout.json", f"{label}: x({x}) + w({w}) exceeds "
-             f"the {LAYOUT_GRID_W}-tile grid width (§8.9 item 4)", 14)
-    if y + h > LAYOUT_GRID_H:
-        fail("layout", "ui_layout.json", f"{label}: y({y}) + h({h}) exceeds "
-             f"the {LAYOUT_GRID_H}-tile canvas height (§8.9 item 4)", 14)
-    return value
-
-
-def check_group14(docs: dict[str, object], verbose: bool) -> None:
-    """The absolute layout file: docs/10-DATA-SCHEMA.md section 8.9 —
-    the `data/ui_layout.json` v2 shape (`{version, screens}`), the
-    32-screen set, element/list rect shapes, canvas bounds and the
-    serialization byte rule. The file must exist and MUST be v2 (a
-    v1-shaped file — top level = the screen map — fails item 0; there is
-    no migration, the capture regenerates the file)."""
-    path = DATA_DIR / "ui_layout.json"
-    if not path.is_file():
-        fail("layout", "ui_layout.json", "file is absent "
-             "(group 14 requires the file)", 14)
-    raw_text = path.read_text(encoding="utf-8")
-    table = docs.get("ui_layout.json")
-    if not isinstance(table, dict):
-        fail("layout", "ui_layout.json", "top-level value must be an object "
-             "(§8.9 item 0)", 14)
-    # -- item 0: version + the exact two-key shape ------------------------
-    version = table.get("version")
-    if not isinstance(version, int) or isinstance(version, bool) \
-            or version != LAYOUT_VERSION:
-        fail("layout", "ui_layout.json", f"'version' must be the integer "
-             f"{LAYOUT_VERSION}, got {version!r} (§8.9 item 0 — a "
-             f"v1-shaped file is not migrated, regenerate via the capture)",
-             14)
-    extra = sorted(set(table) - {"version", "screens"})
-    if extra:
-        fail("layout", "ui_layout.json", f"unexpected top-level key(s) "
-             f"{extra} (§8.9 item 0)", 14)
-    if "screens" not in table:
-        fail("layout", "ui_layout.json", "missing 'screens' (§8.9 item 0)", 14)
-    screens = table["screens"]
-    if not isinstance(screens, dict):
-        fail("layout", "ui_layout.json", "'screens' must be an object "
-             "(§8.9 item 1)", 14)
-
-    elements_total = 0
-    for screen, data in screens.items():
-        # -- item 1: known screen ids, per-screen object --------------------
-        if screen not in LAYOUT_SCREENS:
-            fail("layout", "ui_layout.json",
-                 f"unknown screen '{screen}' (§8.9 item 1)", 14)
-        if not isinstance(data, dict):
-            fail("layout", "ui_layout.json",
-                 f"screens.{screen} must be an object (§8.9 item 1)", 14)
-        unknown = sorted(set(data) - {"elements", "lists"})
-        if unknown:
-            fail("layout", "ui_layout.json",
-                 f"screens.{screen}: unknown key(s) {unknown} "
-                 f"(§8.9 item 1)", 14)
-        elements = data.get("elements", {})
-        lists = data.get("lists", {})
-        if not isinstance(elements, dict) or not isinstance(lists, dict):
-            fail("layout", "ui_layout.json",
-                 f"screens.{screen}: 'elements'/'lists' must be objects "
-                 f"(§8.9 item 1)", 14)
-        # -- items 2/3/4: static element rects ------------------------------
-        for element, rect in elements.items():
-            elements_total += 1
-            label = f"{screen}.{element}"
-            if not isinstance(element, str) or not LAYOUT_ELEMENT_RE.match(element):
-                fail("layout", "ui_layout.json",
-                     f"element id '{element}' does not match the dotted-id "
-                     f"regex (§8.9 item 2)", 14)
-            if not isinstance(rect, dict):
-                fail("layout", "ui_layout.json",
-                     f"{label}: element value must be an object "
-                     f"(§8.9 item 3)", 14)
-            unknown = sorted(set(rect) - LAYOUT_ELEMENT_KEYS)
-            if unknown:
-                fail("layout", "ui_layout.json",
-                     f"{label}: unknown key(s) {unknown} — the Phase-11 "
-                     f"min_w/min_h/order/anchor overrides are retired "
-                     f"(§8.9 item 3)", 14)
-            _layout_rect(rect, label, "3")
-            if "sheet" in rect and rect["sheet"] not in LAYOUT_SHEETS:
-                fail("layout", "ui_layout.json",
-                     f"{label}.sheet: {rect['sheet']!r} is not one of "
-                     f"the 7 assignable sheets (§8.9 item 3)", 14)
-        # -- item 5: list blocks ---------------------------------------------
-        for list_id, block in lists.items():
-            blabel = f"{screen}.lists.{list_id}"
-            if not isinstance(list_id, str) or not LAYOUT_ELEMENT_RE.match(list_id):
-                fail("layout", "ui_layout.json",
-                     f"list id '{list_id}' does not match the dotted-id "
-                     f"regex (§8.9 item 5)", 14)
-            if not isinstance(block, dict):
-                fail("layout", "ui_layout.json",
-                     f"{blabel}: must be an object (§8.9 item 5)", 14)
-            unknown = sorted(set(block) - {"base", "row_h", "viewport"})
-            if unknown:
-                fail("layout", "ui_layout.json",
-                     f"{blabel}: unknown key(s) {unknown} (§8.9 item 5)", 14)
-            for key in ("base", "viewport"):
-                if key not in block:
-                    fail("layout", "ui_layout.json",
-                         f"{blabel}: missing '{key}' (§8.9 item 5)", 14)
-                _layout_rect(block[key], f"{blabel}.{key}", "5")
-            row_h = block.get("row_h")
-            if not isinstance(row_h, int) or isinstance(row_h, bool) \
-                    or row_h < 1:
-                fail("layout", "ui_layout.json",
-                     f"{blabel}.row_h: must be an integer ≥ 1 "
-                     f"(§8.9 item 5)", 14)
-
-    # -- item 6: serialization bytes ----------------------------------------
-    expected = json.dumps(table, sort_keys=True, indent=2,
-                          ensure_ascii=False) + "\n"
-    if raw_text != expected:
-        fail("layout", "ui_layout.json", "serialization drift: the file's "
-             "bytes are not sorted-keys/2-space-indent + one trailing "
-             "newline (§8.9 item 6 — byte-stable commits)", 14)
-
-    if verbose:
-        print(f"PASS group 14 layout ({elements_total} elements across "
-              f"{len(screens)} screens, v{LAYOUT_VERSION})")
-
-
-# ---------------------------------------------------------------------------
-# Group 14 mutation harness (`--self-test-g14`)
-# ---------------------------------------------------------------------------
-
-
-def run_group14_self_test() -> int:
-    """Negative harness for group 14: the interim empty screens table
-    and a well-formed populated fixture pass; every §8.9 rule has one
-    negative probe that must fail with exit 14 naming the rule."""
-    global DATA_DIR
-    results: list[bool] = []
-    saved_data_dir = DATA_DIR
-
-    def with_table(table: dict, action, text: str = None) -> None:
-        """Runs `action` with `table` as the docs entry and a tmp
-        DATA_DIR holding the serialized fixture (the check reads the
-        file bytes from DATA_DIR). `text` verbatim overrides the
-        canonical bytes (the serialization-byte probes)."""
-        global DATA_DIR
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = Path(tmp) / "data"
-            data_dir.mkdir()
-            if text is None:
-                text = json.dumps(table, indent=2, sort_keys=True) + "\n"
-            (data_dir / "ui_layout.json").write_text(text, encoding="utf-8")
-            DATA_DIR = data_dir
-            try:
-                action({"ui_layout.json": table})
-            finally:
-                DATA_DIR = saved_data_dir
-
-    def expect_green(case: str, table: dict, text: str = None) -> None:
-        def action(docs: dict) -> None:
-            check_group14(docs, False)
-        try:
-            with_table(table, action, text)
-        except CheckFailure as exc:
-            results.append(False)
-            print(f"FAIL g14-self-test {case}: fixture should pass but "
-                  f"rejected: {exc.check_id} {exc.details}")
-            return
-        except Exception as exc:
-            results.append(False)
-            print(f"FAIL g14-self-test {case}: unexpected "
-                  f"{type(exc).__name__}: {exc}")
-            return
-        results.append(True)
-        print(f"PASS g14 positive {case}")
-
-    def expect_failure(case: str, needle: str, table: dict,
-                       text: str = None) -> None:
-        def action(docs: dict) -> None:
-            check_group14(docs, False)
-        try:
-            with_table(table, action, text)
-        except CheckFailure as exc:
-            ok = (exc.code == 14
-                  and needle.lower() in f"{exc.check_id} {exc.details}".lower())
-            results.append(ok)
-            if ok:
-                print(f"PASS g14 negative {case}: rejected "
-                      f"({exc.check_id} {exc.details})")
-            else:
-                print(f"FAIL g14-self-test {case}: rejection does not name "
-                      f"{needle!r} at exit 14: {exc.check_id} "
-                      f"{exc.details}")
-            return
-        except Exception as exc:
-            results.append(False)
-            print(f"FAIL g14-self-test {case}: unexpected "
-                  f"{type(exc).__name__}: {exc}")
-            return
-        results.append(False)
-        print(f"FAIL g14-self-test {case}: group 14 stayed green; the "
-              "mutation was not detected")
-
-    # Positives: the interim empty-screens table; a well-formed v2
-    # fixture across the §4.23 shape (elements + a list block + sheet).
-    expect_green("empty-screens", {"version": 2, "screens": {}})
-    expect_green("fixture", {
-        "version": 2,
-        "screens": {
-            "market": {
-                "elements": {
-                    "background": {"x": 0, "y": 0, "w": 60, "h": 34},
-                    "header": {"x": 1, "y": 1, "w": 58, "h": 4},
-                    "header.back": {"x": 50, "y": 1, "w": 8, "h": 2,
-                                    "sheet": "button"},
-                },
-                "lists": {
-                    "rows": {"base": {"x": 1, "y": 6, "w": 58, "h": 2},
-                             "row_h": 2,
-                             "viewport": {"x": 1, "y": 6, "w": 58, "h": 24}},
-                },
-            },
-        },
-    })
-    # Rule 0a: a v1-shaped file (top level = the screen map — no
-    # version/screens envelope) must fail.
-    expect_failure("rule0-v1-shape", "version", {
-        "market": {"toolbar": {"x": 2, "y": 1}},
-    })
-    # Rule 0b: wrong version.
-    expect_failure("rule0-version", "'version' must be the integer 2",
-                   {"version": 1, "screens": {}})
-    # Rule 0c: an extra top-level key.
-    expect_failure("rule0-extra", "unexpected top-level key",
-                   {"version": 2, "screens": {}, "overrides": {}})
-    # Rule 1a: unknown screen id.
-    expect_failure("rule1-screen", "unknown screen",
-                   {"version": 2, "screens": {"market_x": {}}})
-    # Rule 1b: per-screen value not an object.
-    expect_failure("rule1-shape", "must be an object",
-                   {"version": 2, "screens": {"market": []}})
-    # Rule 1c: unknown per-screen key.
-    expect_failure("rule1-keys", "unknown key(s)",
-                   {"version": 2, "screens": {"market": {"overrides": {}}}})
-    # Rule 2: bad element id.
-    expect_failure("rule2-id", "dotted-id regex",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"Rows.Copper..qty": {
-                           "x": 0, "y": 0, "w": 1, "h": 1}}}}})
-    # Rule 3a: a retired Phase-11 key.
-    expect_failure("rule3-retired", "retired",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"header": {
-                           "x": 1, "y": 1, "w": 58, "h": 4, "min_w": 3}}}}})
-    # Rule 3b: non-integer coordinate.
-    expect_failure("rule3-int", "non-negative integer",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"header": {
-                           "x": 1.5, "y": 1, "w": 58, "h": 4}}}}})
-    # Rule 3c: a missing rect key.
-    expect_failure("rule3-missing", "missing 'w'",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"header": {
-                           "x": 1, "y": 1, "h": 4}}}}})
-    # Rule 3d: bad sheet id (the 8th sheet — the value-bar band — is
-    # not assignable, as is any invented id).
-    expect_failure("rule3-sheet", "assignable sheets",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"panel": {
-                           "x": 0, "y": 0, "w": 1, "h": 1,
-                           "sheet": "bar"}}}}})
-    # Rule 4a: width overflow.
-    expect_failure("rule4-w", "grid width",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"toolbar": {
-                           "x": 58, "y": 0, "w": 4, "h": 1}}}}})
-    # Rule 4b: height overflow past the 34-tile rounded canvas.
-    expect_failure("rule4-h", "canvas height",
-                   {"version": 2, "screens": {
-                       "market": {"elements": {"toolbar": {
-                           "x": 0, "y": 33, "w": 2, "h": 2}}}}})
-    # Rule 5a: bad row_h.
-    expect_failure("rule5-rowh", "row_h",
-                   {"version": 2, "screens": {"market": {"lists": {
-                       "rows": {"base": {"x": 1, "y": 6, "w": 58, "h": 2},
-                                "row_h": 0,
-                                "viewport": {"x": 1, "y": 6, "w": 58,
-                                             "h": 24}}}}}})
-    # Rule 5b: a missing base key.
-    expect_failure("rule5-base", "missing 'x'",
-                   {"version": 2, "screens": {"market": {"lists": {
-                       "rows": {"base": {"y": 6, "w": 58, "h": 2},
-                                "row_h": 2,
-                                "viewport": {"x": 1, "y": 6, "w": 58,
-                                             "h": 24}}}}}})
-    # Rule 6: serialization drift (valid table, indent-4 bytes).
-    expect_failure("rule6-bytes", "serialization drift",
-                   {"version": 2, "screens": {}},
-                   text=json.dumps({"version": 2, "screens": {}},
-                                   indent=4, sort_keys=True) + "\n")
-
-    if not all(results):
-        print(f"FAIL g14-self-test: {results.count(False)} of "
-              f"{len(results)} cases red")
-        return 1
-    print(f"OK g14-self-test ({len(results)} cases)")
-    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -12313,9 +11757,8 @@ def main(argv: list[str]) -> int:
     self_test = "--self-test-g6" in rest or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
     self_test_g9 = "--self-test-g9" in rest
     self_test_g10 = "--self-test-g10" in rest
-    self_test_g14 = "--self-test-g14" in rest
     known = {"--verbose", "--self-test-g6", "--self-test-g9",
-             "--self-test-g10", "--self-test-g14"}
+             "--self-test-g10"}
     unknown = [arg for arg in rest[1:] if arg not in known]
     if unknown:
         print("usage: python3 tools/validate_data.py [--verbose] "
@@ -12338,8 +11781,6 @@ def main(argv: list[str]) -> int:
         return run_group9_self_test()
     if self_test_g10:
         return run_group10_self_test()
-    if self_test_g14:
-        return run_group14_self_test()
 
     docs: dict[str, object] = {}
     groups = (
@@ -12356,7 +11797,6 @@ def main(argv: list[str]) -> int:
         ("11", check_group11),
         ("12", check_group12),
         ("13", check_group13),
-        ("14", check_group14),
         ("15", check_group15),
     )
 
@@ -12372,7 +11812,7 @@ def main(argv: list[str]) -> int:
             print(f"FAIL internal group{group_id} tools/validate_data.py {exc!r}")
             return 3
 
-    print(f"OK all check groups passed (1-{len(groups)})")
+    print(f"OK all check groups passed (1-13, 15; {len(groups)} groups)")
     return 0
 
 

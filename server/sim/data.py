@@ -68,23 +68,6 @@ HARBORS_JSON_PATH: Final[Path] = MAPS_DIR / "harbors.json"
 ## The locked map id (docs/90-* §5.4: `world.map_id` is always this value).
 DEFAULT_MAP_ID: Final[str] = "world"
 
-# ui_layout.json v2 screen whitelist + element keys, verbatim from the
-# GDScript _parse_ui_layout consts (docs/10-* §4.23; heavy validation is
-# validator group 14).
-_UI_LAYOUT_SCREENS: Final[frozenset[str]] = frozenset({
-    "port", "market", "inn", "guild", "provisions",
-    "palace", "tavern", "shipyard",
-    "title", "nationality_select", "creation",
-    "world", "chart", "hail", "fleet_picker", "autopilot_hud",
-    "battle", "sandbox", "duel",
-    "confirm", "save_slot", "settings", "intel_window",
-    "dialog_box", "dossier", "character_card", "captain_view",
-    "fleet_view", "officer_roster", "reputation_view", "gameover",
-    "ending",
-})
-_UI_LAYOUT_ELEMENT_KEYS: Final[frozenset[str]] = frozenset(
-    {"x", "y", "w", "h", "sheet"})
-
 
 class DataError(RuntimeError):
     """Raised when the data tree fails to load — the server refuses to start."""
@@ -102,7 +85,6 @@ class DataStore:
     def __init__(self, data_dir: Path | None = None) -> None:
         self._data_dir: Final[Path] = data_dir if data_dir is not None else DATA_DIR
         self._repo_root: Final[Path] = self._data_dir.parent
-        self._ui_layout_bytes: str = ""
         self.load_ok: bool = False
         self.load_errors: list[str] = []
 
@@ -157,7 +139,6 @@ class DataStore:
         self.ui_strings: dict[str, Any] = {}
         self.map_legend: dict[str, Any] = {}
         self.npc_config: dict[str, Any] = {}
-        self.ui_layout: dict[str, Any] = {}
 
         # Map index (data/maps/maps.json): exactly one entry, id "world".
         self.map_index: list[Any] = []
@@ -366,7 +347,6 @@ class DataStore:
 
         self.ui_strings = self._load_ui_strings()
         self.map_legend = self._load_map_legend()
-        self.ui_layout = self._load_ui_layout()
         self._load_map_index()
 
         self.load_ok = not self.load_errors
@@ -464,92 +444,6 @@ class DataStore:
                 if not isinstance(text, str) or not text.strip():
                     self._record(f"ui_strings.json: '{key}.{locale}' is missing or empty")
             table[key] = value
-        return table
-
-    def _load_ui_layout(self) -> dict[str, Any]:
-        """Reads ``data/ui_layout.json`` — the absolute layout file, v2
-        (docs/10-* §4.23, docs/80-* §4.8.9). Light shape checks only — key
-        whitelist, types and screen-id membership; the heavy validation is
-        group 14 (docs/10-* §8.9). Absent file ⇒ ``{}`` (NOT an error —
-        every screen runs unmanaged/flow-free authored until the capture
-        populates its table). A file that is not v2 records an error and
-        yields ``{}`` (no migration — the capture regenerates it)."""
-        path = self._data_path("ui_layout.json")
-        if not path.is_file():
-            return {}
-        text = path.read_text(encoding="utf-8")
-        self._ui_layout_bytes = text
-        return self._parse_ui_layout(text)
-
-    def reload_ui_layout_if_changed(self) -> None:
-        """Re-reads ``ui_layout.json`` when its bytes changed on disk
-        (docs/80-* §4.8.9): the studio's commit lands on the next screen
-        activation — no restart. A byte-identical file is a no-op. A
-        re-read that fails shape-check raises :class:`DataError` (the same
-        refusal contract as the boot load)."""
-        path = self._data_path("ui_layout.json")
-        if not path.is_file():
-            return
-        text = path.read_text(encoding="utf-8")
-        if text == self._ui_layout_bytes:
-            return
-        errors_before = len(self.load_errors)
-        self._ui_layout_bytes = text
-        self.ui_layout = self._parse_ui_layout(text)
-        if len(self.load_errors) > errors_before:
-            raise DataError(
-                "DataLoader: ui_layout.json re-read failed:\n  - "
-                + "\n  - ".join(self.load_errors[errors_before:]))
-
-    def _parse_ui_layout(self, text: str) -> dict[str, Any]:
-        """The v2 shape walk shared by the boot load and the drift reload."""
-        table: dict[str, Any] = {}
-        try:
-            raw = json.loads(text)
-        except json.JSONDecodeError as err:
-            self._record(f"ui_layout.json: invalid JSON ({err.msg})")
-            return table
-        if not isinstance(raw, dict):
-            self._record("ui_layout.json: top-level value must be an object")
-            return table
-        if raw.get("version", None) != 2 or isinstance(raw.get("version"), bool):
-            self._record("ui_layout.json: 'version' must be 2 (10-* §4.23)")
-            return table
-        screens = raw.get("screens")
-        if not isinstance(screens, dict):
-            self._record("ui_layout.json: 'screens' must be an object")
-            return table
-        for screen, data in screens.items():
-            if screen not in _UI_LAYOUT_SCREENS:
-                self._record(f"ui_layout.json: unknown screen '{screen}'")
-                continue
-            if not isinstance(data, dict):
-                self._record(f"ui_layout.json: screens.{screen} must be an object")
-                continue
-            screen_table: dict[str, Any] = {"elements": {}, "lists": {}}
-            elements = data.get("elements", {})
-            if isinstance(elements, dict):
-                for element, rect in elements.items():
-                    if not isinstance(rect, dict):
-                        self._record(
-                            f"ui_layout.json: screens.{screen}.{element} must be an object")
-                        continue
-                    for key in rect:
-                        if key not in _UI_LAYOUT_ELEMENT_KEYS:
-                            self._record(
-                                f"ui_layout.json: screens.{screen}.{element}: "
-                                f"unknown key '{key}'")
-                    screen_table["elements"][element] = rect
-            else:
-                self._record(
-                    f"ui_layout.json: screens.{screen}.elements must be an object")
-            lists = data.get("lists", {})
-            if isinstance(lists, dict):
-                screen_table["lists"] = lists
-            elif "lists" in data:
-                self._record(
-                    f"ui_layout.json: screens.{screen}.lists must be an object")
-            table[screen] = screen_table
         return table
 
     def _load_trade_routes_built(self) -> dict[str, Any]:

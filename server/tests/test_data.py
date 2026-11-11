@@ -84,9 +84,6 @@ def test_locked_content_counts() -> None:
     assert len(store.named_pirates) == 4
     assert len(store.backgrounds) == 6
     assert len(store.equipment) == 24
-    # data/ui_layout.json survives the M6 cutover as the web-era layout
-    # data (10-* §4.23 final disposition) — the 32-screen set stays loaded.
-    assert len(store.ui_layout) == 32
 
 
 def test_get_port_round_trips_json_bytes() -> None:
