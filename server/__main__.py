@@ -1,24 +1,52 @@
-"""`python -m server` — the single-command launch (90-ARCHITECTURE.md §0.5).
+"""``python -m server`` — the single-command launch (90-ARCHITECTURE.md §0.5).
 
-M0 scaffold: the frozen contract is — bind 127.0.0.1 (default port 8000,
-``--port`` override), start uvicorn on server.app:app, open the browser
-at http://127.0.0.1:{port}/. The implementation lands with the M2 FastAPI
-shell; until then this module refuses to start so nobody mistakes the
-shell for a runnable game.
+Frozen contract: bind ``127.0.0.1`` (default port **8000**, ``--port``
+override), serve ``server.app:app`` through uvicorn, and open the browser at
+``http://127.0.0.1:{port}/``. ``--help`` prints the usage and exits without
+starting anything; ``--no-browser`` is the headless/CI switch.
 """
 
 from __future__ import annotations
 
-import sys
+import argparse
+import threading
+import webbrowser
+
+import uvicorn
+
+__all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "build_parser", "main"]
+
+#: The frozen bind (docs/90-* §0.5).
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8000
+#: Seconds to wait before opening the browser (uvicorn needs to be listening).
+BROWSER_DELAY_SECONDS = 0.8
 
 
-def main() -> int:
-    print(
-        "server: M0 scaffold — the FastAPI shell lands in M2 "
-        "(docs/IMPLEMENT-WebMigration.md §3). Nothing to run yet.",
-        file=sys.stderr,
-    )
-    return 1
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m server",
+        description="SailAge — start the local game server and open the game.")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"TCP port to bind (default {DEFAULT_PORT})")
+    parser.add_argument("--host", default=DEFAULT_HOST,
+                        help=f"bind address (default {DEFAULT_HOST})")
+    parser.add_argument("--no-browser", action="store_true",
+                        help="do not open the browser after startup")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    url = f"http://{args.host}:{int(args.port)}/"
+    if not args.no_browser:
+        timer = threading.Timer(BROWSER_DELAY_SECONDS, webbrowser.open,
+                                args=[url])
+        timer.daemon = True
+        timer.start()
+    uvicorn.run("server.app:app", host=str(args.host),
+                port=int(args.port), log_level="info")
+    return 0
 
 
 if __name__ == "__main__":
