@@ -447,3 +447,224 @@ export type ScreenViewOf<S extends ScreenViewId> = ScreenViews[S];
 export type ViewEnvelope<S extends ScreenViewId> =
   | { ok: true; screen: S; views: ScreenViewOf<S> }
   | { ok: false; error: ApiErrorBody };
+
+/* ---------------------------------------------------------------------- */
+/* M6-c — the people surfaces + at-sea modals                              */
+/*                                                                         */
+/* These are the projections the twelve M6-c screens expect from            */
+/* `GET /api/view/<screen_id>` (90-* §0.4). The M2/M3 server currently      */
+/* freezes only the eight port screens (SCREENS in server/api/views.py), so */
+/* these shapes are the additive contract for the follow-up: the screens    */
+/* render a presentation fallback from the authoritative state until the    */
+/* projections exist, and report the gap. No client rule is introduced.     */
+/* ---------------------------------------------------------------------- */
+
+/** §4.12.1 — the unified card's data (all numbers ungated). */
+export type PersonKind = "player" | "officer" | "npc";
+
+export interface PersonCardView {
+  kind: PersonKind;
+  personId: string;
+  name: L10nString;
+  nationId: string;
+  roleKey: string;
+  tier: number;
+  level: number;
+  mainSkill: string;
+  loyalty?: number;
+  postId?: string;
+  stance?: number;
+  familiarity?: number;
+  wins?: number;
+  defeats?: number;
+  status?: "active" | "returning";
+  returnDay?: number;
+  xp?: number;
+  nextXp?: number;
+  allocPending?: number;
+  attributes: Record<string, number>;
+  /** Effective values (§4.5.3) — base + in-post officer contribution. */
+  skills: Record<string, { base: number; contribution: number; total: number; uses?: number }>;
+  personality: string[];
+  appearance: Record<string, string>;
+}
+
+/** §4.11.3 — one career-log section, familiarity-gated. */
+export interface DossierLogSection {
+  key: "dossier.log.composition" | "dossier.log.home_port" | "dossier.log.lanes";
+  threshold: 3 | 6 | 10;
+  unlocked: boolean;
+  /** Already-localized data line(s); absent while locked. */
+  lines: L10nString[];
+}
+
+export interface DossierView {
+  captainId: string;
+  card: PersonCardView;
+  familiarity: number;
+  tier: 0 | 1 | 2 | 3;
+  /** Stance ≥ +2 adds the tier/status line to the header (§4.11.3). */
+  headerStatus?: "at_sea" | "returning";
+  sections: DossierLogSection[];
+}
+
+/** §4.6.2 — the roster table + detail page. */
+export interface OfficerPostView {
+  postId: string;
+  labelKey: string;
+  met: boolean;
+  reasonKey?: string;
+  occupiedBy?: string;
+}
+
+export interface OfficerRowView {
+  officerId: string;
+  name: L10nString;
+  roleKey: string;
+  postId: string;
+  /** Captain posts name their hull. */
+  shipTypeId?: string;
+  loyalty: number;
+  /** wage_daily × the persisted wage multiplier. */
+  wage: number;
+  talkCooldownDays: number;
+  giftCooldownDays: number;
+  trainBlockedKey?: string;
+  canTalk: boolean;
+  canGift: boolean;
+  canTrain: boolean;
+  canAppoint: boolean;
+  canDismiss: boolean;
+  dismissReasonKey?: string;
+  /** Employed rows are in `player.officers`; employable rows are tavern offers. */
+  employed: boolean;
+}
+
+export interface OfficerRosterView {
+  officers: OfficerRowView[];
+  employable: OfficerRowView[];
+  used: number;
+  max: number;
+  totalWage: number;
+  atPort: boolean;
+  posts: OfficerPostView[];
+}
+
+/** §4.5.1 — one ship line and its stacks. */
+export interface FleetStackView {
+  kind: "provisions" | "water" | "cargo";
+  goodId?: string;
+  qty: number;
+  name: L10nString;
+  /** This stack's own days of supply (each kind's own, §4.10). */
+  days?: number;
+}
+
+export interface FleetShipView {
+  index: number;
+  shipTypeId: string;
+  durability: number;
+  maxDurability: number;
+  crew: number;
+  crewMax: number;
+  cannons: number;
+  slots: number;
+  cargoUsed: number;
+  cargoCapacity: number;
+  cargoFree: number;
+  /** Effective speed in knots + the hull's base max and the wind factor. */
+  speed: number;
+  maxSpeed: number;
+  windFactor: string;
+  provisions: number;
+  water: number;
+  provisionsDays?: number;
+  waterDays?: number;
+  captainOfficerId?: string;
+  isFlagship: boolean;
+  stacks: FleetStackView[];
+}
+
+export interface FleetView {
+  ships: FleetShipView[];
+  totals: {
+    provisions: number;
+    water: number;
+    days?: number;
+    speed: number;
+  };
+  atPort: boolean;
+}
+
+/** §4.6 — the per-nation reputation table. */
+export interface ReputationView {
+  rows: { nationId: string; value: number }[];
+}
+
+/** §4.10.2 — one hail option row, built server-side (role × stance × skill). */
+export interface HailOptionView {
+  id: "ask_rumours" | "buy_supplies" | "intimidate" | "befriend" | string;
+  enabled: boolean;
+  reasonKey?: string;
+  /** Additive display payloads (terms inline). */
+  intel?: boolean;
+  unitPrices?: { provisions: number; water: number };
+  maxQty?: number;
+  chance?: number;
+}
+
+export interface HailView {
+  fleetId: string;
+  captainId: string;
+  name: L10nString;
+  role: string;
+  stance: number;
+  options: HailOptionView[];
+}
+
+/** §4.10.1 — one picker row + its server-built verb gates. */
+export interface FleetPickerRowView {
+  fleetId: string;
+  captainId: string;
+  name: L10nString;
+  role: string;
+  nationId: string;
+  tier: number;
+  verbs: {
+    inspect: { enabled: boolean; reasonKey?: string };
+    talk: { enabled: boolean; reasonKey?: string };
+    attack?: { enabled: boolean; reasonKey?: string };
+  };
+}
+
+export interface FleetPickerView {
+  contact: string;
+  rows: FleetPickerRowView[];
+}
+
+/** §4.10.4 — the appointed-voyage bar payload (autopilot.hud_state). */
+export interface AutopilotView {
+  visible: boolean;
+  destPortId: string;
+  days: number;
+  cancelKey: string;
+  etaDays: number;
+}
+
+/** §4.11.6 — the read-only duel transcript (the server owns the rolls). */
+export interface DuelRoundView {
+  player: number;
+  defender: number;
+  verdict: "win" | "loss" | "tie";
+}
+
+export interface DuelView {
+  attackerName: L10nString;
+  defenderName: L10nString;
+  shipName: L10nString;
+  committed: boolean;
+  rounds: DuelRoundView[];
+  result: "capture" | "defeat";
+  playerBase: number;
+  defenderBase: number;
+}

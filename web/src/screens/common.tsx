@@ -2,7 +2,7 @@
  * Screen authoring helpers. These only compose the kit + layout layers;
  * they add no styling of their own (the audit gate would reject it).
  */
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { L10nString, L10nValue } from "../i18n";
 import { useI18n } from "../i18n";
 import { useGameState } from "../state/context";
@@ -14,6 +14,9 @@ import type {
 import { Box, Element, type ScreenId, type SheetId, type TileRect } from "../layout";
 import { Button, Icon, type ButtonKind, type ToastTone } from "../kit";
 import type { SpriteId } from "../assets/sprites";
+import { useGameClient } from "../client/context";
+import type { LiveGameClient } from "../client/http";
+import type { ActionFacility, ApiResult, GameClient } from "../client/types";
 
 export type LabelTone = "default" | "dim" | "accent" | "warn" | "good" | "bad";
 export type LabelAlign = "left" | "center" | "right";
@@ -185,6 +188,104 @@ export function useScreenView<S extends ScreenViewId>(screen: S): ScreenViewResu
     view: (value ?? null) as ScreenViewOf<S> | null,
     status,
   };
+}
+
+/**
+ * Reads a server projection for a screen that the shell does not own.
+ *
+ * The M3 shell refreshes `GET /api/view/<screen>` only for the eight port
+ * screens; the M6-c people surfaces also consume the `tavern` and
+ * `provisions` projections (recruit rows / pooled supply days). The live
+ * transport is asked for that one extra read; the fixture transport reads
+ * the in-memory table. No rule is computed here.
+ */
+export function useFetchedView<S extends ScreenViewId>(screen: S): ScreenViewResult<S> {
+  const { views, viewStatus } = useGameState();
+  const client = useGameClient();
+  const [fetched, setFetched] = useState<ScreenViewOf<S> | null>(null);
+  const [errorKey, setErrorKey] = useState<string | undefined>(undefined);
+  const shared = views[screen] as ScreenViewOf<S> | undefined;
+
+  useEffect(() => {
+    if (shared) return;
+    if (client.transport !== "http") return;
+    let live = true;
+    const liveClient = client as unknown as LiveGameClient;
+    void liveClient.getView(screen).then((envelope) => {
+      if (!live) return;
+      if (envelope.ok) setFetched(envelope.views);
+      else setErrorKey(envelope.error.msg);
+    });
+    return () => {
+      live = false;
+    };
+  }, [client, screen, shared]);
+
+  const value = shared ?? fetched;
+  const status: ScreenViewState = viewStatus[screen]
+    ?? (value ? { status: "ready" } : errorKey ? { status: "error", errorKey } : { status: "idle" });
+  return {
+    view: status.status === "ready" ? value ?? null : null,
+    status,
+  };
+}
+
+/**
+ * A standalone host for an embeddable tab body: the 60 × 33.75 backdrop
+ * plus a centered 32 × 12 page plate. The body rows keep their authored
+ * 0,0-relative coordinates.
+ */
+export function StandaloneFrame({
+  children,
+  rect = { x: 14, y: 10.5, w: 32, h: 12 },
+}: {
+  children: ReactNode;
+  rect?: TileRect;
+}) {
+  return (
+    <div className="sa-screen">
+      <Box rect={{ x: 0, y: 0, w: 60, h: 33.75 }} skin="backdrop" />
+      <Box rect={rect} skin="panel">
+        {children}
+      </Box>
+    </div>
+  );
+}
+
+/**
+ * The at-sea talk hand-off: the picker's talk verb opens the hail route, and
+ * the chosen fleet id cannot travel through the hash router. One session
+ * value carries it (never a game rule; a reload simply drops it).
+ */
+let hailFleetId: string | null = null;
+
+export function setHailFleetId(fleetId: string | null): void {
+  hailFleetId = fleetId;
+}
+
+export function getHailFleetId(): string | null {
+  return hailFleetId;
+}
+
+/**
+ * The `people` / `fleet` facility verbs are frozen in the server inventory
+ * (`90-*` §0.4) but absent from the frozen `ActionFacility` union in
+ * `client/types.ts` (M6-c report). One cast keeps the routes honest.
+ */
+export function peopleAction<T = Record<string, unknown>>(
+  client: GameClient,
+  verb: string,
+  body?: Record<string, unknown>,
+): Promise<ApiResult<T>> {
+  return client.action<T>("people" as unknown as ActionFacility, verb, body);
+}
+
+export function fleetAction<T = Record<string, unknown>>(
+  client: GameClient,
+  verb: string,
+  body?: Record<string, unknown>,
+): Promise<ApiResult<T>> {
+  return client.action<T>("fleet" as unknown as ActionFacility, verb, body);
 }
 
 /** The loading/error state every port screen renders in place of its body. */
