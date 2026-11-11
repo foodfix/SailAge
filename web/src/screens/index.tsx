@@ -15,6 +15,9 @@ import { TavernScreen } from "./TavernScreen";
 import { WorldScreen } from "./World";
 import { BattleScreen } from "./Battle";
 import { StubScreen } from "./StubScreen";
+import { M6A_SCREENS } from "./m6a";
+import { M6B_SCREENS } from "./m6b";
+import { M6C_SCREENS } from "./m6c";
 
 const REAL: Partial<Record<ScreenId, () => JSX.Element>> = {
   port: PortScreen,
@@ -27,6 +30,9 @@ const REAL: Partial<Record<ScreenId, () => JSX.Element>> = {
   tavern: TavernScreen,
   world: WorldScreen,
   battle: BattleScreen,
+  ...M6A_SCREENS,
+  ...M6B_SCREENS,
+  ...M6C_SCREENS,
 };
 
 export function isRealScreen(screen: ScreenId): boolean {
