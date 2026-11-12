@@ -100,6 +100,9 @@ SIM_TICK_HZ: Final[int] = 10
 WS_BROADCAST_HZ: Final[int] = 10
 ## Seconds of simulated time per tick.
 SIM_DT: Final[float] = 1.0 / float(SIM_TICK_HZ)
+## §0.3 ``tick.markers`` radius (Chebyshev, wrap-aware on x): the §4.8
+## wide-zoom half-view (30 tiles) + the §4.5.2 ``NPC_GLIDE_MARGIN_TILES`` (2).
+MARKER_VIEW_RADIUS_TILES: Final[int] = 32
 
 # --- §4.1b facility action hours (docs/30-* §4.1b "Action hour costs") ------
 #
@@ -412,6 +415,9 @@ class Session:
         self.intercept: dict[str, Any] = {}
         self._autopilot_elapsed = 0.0
         self._gold_events = 0
+        # The §0.3 tick.markers slice cache (rebuilt only when the sea moves).
+        self._marker_cache_key: tuple[int, int, int, int, int] | None = None
+        self._marker_cache: list[dict[str, Any]] = []
         self._tick_task: asyncio.Task[None] | None = None
         self._wire_hooks()
 
@@ -441,6 +447,8 @@ class Session:
         self.intercept = {}
         self._autopilot_elapsed = 0.0
         self._gold_events = 0
+        self._marker_cache_key = None
+        self._marker_cache = []
         self._wire_hooks()
 
     async def start(self) -> None:
@@ -2469,4 +2477,40 @@ class Session:
                 effective_speed=lambda heading="": sailing.effective_speed(
                     gs, gs, self.store, heading)),
             "contact_hint": hint,
+            "markers": self._marker_slice(),
         }
+
+    def _marker_slice(self) -> list[dict[str, Any]]:
+        """The §0.3 ``tick.markers`` slice (the §4.5.2 marker projection):
+        every living fleet within ``MARKER_VIEW_RADIUS_TILES`` of the fleet
+        tile, compacted to the frozen row shape. Cached against the sea's
+        move state (day, player cell, fleet count, ecology move counter) so
+        an idle sea costs no projection work."""
+        gs = self.gs
+        ecology = self._ensure_ecology()
+        cell = gs.world_tile()
+        key = (int(gs.day), cell[0], cell[1], len(gs.npc_fleets),
+               len(getattr(ecology, "moved_fleet_moves", ())))
+        if self._marker_cache_key == key:
+            return self._marker_cache
+        rows: list[dict[str, Any]] = []
+        for row in ecology.markers():
+            target = row.get("cell")
+            if not isinstance(target, (tuple, list)) or len(target) != 2:
+                continue
+            if npc_fleets.chebyshev((int(target[0]), int(target[1])),
+                                    cell) > MARKER_VIEW_RADIUS_TILES:
+                continue
+            wake = row.get("wake") or ()
+            rows.append({
+                "id": str(row.get("id", "")),
+                "role": str(row.get("role", "")),
+                "nation_id": str(row.get("nation_id", "")),
+                "cell": {"x": int(target[0]), "y": int(target[1])},
+                "sailing": bool(row.get("sailing", False)),
+                "wake": [{"x": int(step[0]), "y": int(step[1])}
+                         for step in wake][:int(npc_fleets.WAKE_LENGTH)],
+            })
+        self._marker_cache_key = key
+        self._marker_cache = rows
+        return rows

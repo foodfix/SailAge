@@ -15,6 +15,19 @@ import type {
   Weather,
 } from "../state/types";
 
+/**
+ * One §0.3 `tick.markers` row (the §4.5.2 marker projection, server shape):
+ * the save-payload `cell` (never `position`) and the ≤5-cell wake trail.
+ */
+export interface NpcTickMarker {
+  id: string;
+  role: string;
+  nation_id: string;
+  cell: { x: number; y: number };
+  sailing: boolean;
+  wake?: { x: number; y: number }[];
+}
+
 /* ---------------------------------------------------------------------- */
 /* Server -> client frames (§0.3, frozen)                                  */
 /* ---------------------------------------------------------------------- */
@@ -56,6 +69,8 @@ export interface TickFrame {
   morale: number;
   autopilot: { dest_port_id: string } | null;
   contact_hint: string;
+  /** §0.3 `tick.markers` — the living-sea slice within MARKER_VIEW_RADIUS_TILES. */
+  markers?: NpcTickMarker[];
 }
 
 export interface BattleShipFrame {

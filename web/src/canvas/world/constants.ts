@@ -95,6 +95,9 @@ export const AREA_RADIUS = 16;
 /** §4.5.2 wake: a 5-tile dashed trail. */
 export const WAKE_TILES = 5;
 
+/** §4.5.2: a marker pending more than this many tiles snaps, never glides. */
+export const NPC_GLIDE_SNAP_TILES = 24;
+
 /**
  * The pyramid level for a display scale (10-* §6.8).
  *

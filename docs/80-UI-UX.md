@@ -472,6 +472,17 @@ rendering is viewport-culled and never re-simulates.
   replaced a snap that read as teleporting. Docked fleets render at their
   simulated cell — the port's **sea berth tile**, the only legal docking
   tile (established pin; ships never dock on the shore tile).
+- **Web transport amendment (2026-11-12):** the live marker data rides the
+  §0.3 `tick.markers` slice (radius `MARKER_VIEW_RADIUS_TILES = 32`, the
+  rows compacted to `{id, role, nation_id, cell, sailing, wake}`). The
+  client keeps one entry per fleet id from the latest frame (a `tick`
+  slice replaces the §8.1 state rows and vice versa, arrival order); a
+  changed `cell` glides from its currently rendered position at the
+  player's glide interval, a fleet pending more than
+  `NPC_GLIDE_SNAP_TILES = 24` tiles snaps, and the dashed wake draws from
+  the slice's `wake` cells (non-sailing rows draw none). The slice is
+  viewport-supersets only — radius 32 covers the §4.8 wide-zoom
+  half-view (30 tiles) plus `NPC_GLIDE_MARGIN_TILES`.
 - **Debug chart (Phase 6):** the omniscient debug chart mode (§4.6) renders
   the **same** `NpcFleets.markers()` data un-culled — every fleet on the
   whole map, same role colors.

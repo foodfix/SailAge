@@ -11,13 +11,14 @@ import type { GameSnapshot, NpcMarkerState } from "../../state/types";
 import type { TickFrame } from "../../client/types";
 import type { Locale } from "../../i18n";
 import {
+  NPC_GLIDE_SNAP_TILES,
   selectTileLevel,
   WORLD_TILE_PX,
   ZOOM_NEAR,
   ZOOM_WIDE,
 } from "./constants";
 import { clamp, makeCamera, sameCell, screenToTile, wrapDeltaX, type CameraView, type Vec2 } from "./geometry";
-import { drawNpcMarkers, drawPlayerToken, drawPorts, drawWrecks } from "./markers";
+import { drawNpcMarkers, drawPlayerToken, drawPorts, drawWrecks, markerCell } from "./markers";
 import { pyramid } from "./pyramid";
 import { drawTileLayer } from "./tiles";
 import { drawTerrain } from "./terrain";
@@ -43,6 +44,11 @@ interface Motion {
   duration: number;
 }
 
+/** One NPC marker's render motion plus its latest slice row. */
+interface MarkerMotion extends Motion {
+  row: NpcMarkerState;
+}
+
 export class WorldRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
@@ -52,6 +58,9 @@ export class WorldRenderer {
   private zoom = ZOOM_NEAR;
   private motion: Motion;
   private lastChangeAt = 0;
+  /** The glide interval the player's last step used (§4.5.2 shared cadence). */
+  private lastGlideMs = GLIDE_DEFAULT_MS;
+  private markerMotions = new Map<string, MarkerMotion>();
   private raf = 0;
   private running = false;
 
@@ -67,6 +76,7 @@ export class WorldRenderer {
   }
 
   setScene(scene: WorldScene): void {
+    this.syncMarkers(scene.npcMarkers, performance.now());
     this.scene = scene;
   }
 
@@ -88,6 +98,7 @@ export class WorldRenderer {
     if (!sameCell(this.tick.position, tick.position)) {
       const current = this.positionAt(now);
       const interval = this.lastChangeAt > 0 ? now - this.lastChangeAt : GLIDE_DEFAULT_MS;
+      this.lastGlideMs = clamp(interval, GLIDE_MIN_MS, GLIDE_MAX_MS);
       this.motion = {
         from: current,
         to: {
@@ -95,7 +106,7 @@ export class WorldRenderer {
           y: tick.position.y,
         },
         start: now,
-        duration: clamp(interval, GLIDE_MIN_MS, GLIDE_MAX_MS),
+        duration: this.lastGlideMs,
       };
       this.lastChangeAt = now;
     }
@@ -108,6 +119,71 @@ export class WorldRenderer {
     if (duration <= 0) return { x: to.x, y: to.y };
     const t = clamp((now - start) / duration, 0, 1);
     return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+  }
+
+  /**
+   * §4.5.2 marker playback (web transport, 2026-11-12 amendment): one entry
+   * per fleet id from the latest scene rows; a changed cell glides from the
+   * currently rendered position at the player's glide cadence, a fleet
+   * pending more than `NPC_GLIDE_SNAP_TILES` snaps, ids gone from the slice
+   * are dropped (they left the §0.3 radius = already off-screen).
+   */
+  private syncMarkers(rows: readonly NpcMarkerState[], now: number): void {
+    const next = new Map<string, MarkerMotion>();
+    for (const row of rows) {
+      const cell = markerCell(row);
+      if (!cell) continue;
+      const prev = this.markerMotions.get(row.id);
+      const unchanged =
+        prev !== undefined && sameCell(prev.to, cell) && prev.duration <= 0;
+      if (unchanged && prev) {
+        next.set(row.id, { ...prev, row });
+        continue;
+      }
+      if (prev) {
+        const pending = Math.max(
+          Math.abs(wrapDeltaX(cell.x, prev.to.x)),
+          Math.abs(cell.y - prev.to.y),
+        );
+        if (pending <= NPC_GLIDE_SNAP_TILES) {
+          // Glide on from wherever the previous motion has reached.
+          const current = this.motionPositionAt(prev, now);
+          next.set(row.id, {
+            row,
+            from: current,
+            to: { x: current.x + wrapDeltaX(cell.x, current.x), y: cell.y },
+            start: now,
+            duration: this.lastGlideMs,
+          });
+          continue;
+        }
+      }
+      next.set(row.id, {
+        row,
+        from: { x: cell.x, y: cell.y },
+        to: { x: cell.x, y: cell.y },
+        start: 0,
+        duration: 0,
+      });
+    }
+    this.markerMotions = next;
+  }
+
+  /** Current render-only position of one marker motion (fractional tile). */
+  private motionPositionAt(motion: Motion, now: number): Vec2 {
+    const { from, to, start, duration } = motion;
+    if (duration <= 0) return { x: to.x, y: to.y };
+    const t = clamp((now - start) / duration, 0, 1);
+    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+  }
+
+  /** The scene's NPC markers with their interpolated render cells. */
+  private markersAt(now: number): NpcMarkerState[] {
+    const out: NpcMarkerState[] = [];
+    for (const motion of this.markerMotions.values()) {
+      out.push({ ...motion.row, position: this.motionPositionAt(motion, now) });
+    }
+    return out;
   }
 
   private cameraAt(now: number): CameraView {
@@ -178,7 +254,7 @@ export class WorldRenderer {
     // — a dead loop froze the whole view blank (the M7.1 live report).
     this.safe(() => drawWrecks(ctx, camera, this.scene.snapshot.wrecks));
     this.safe(() => drawPorts(ctx, camera, this.locale));
-    this.safe(() => drawNpcMarkers(ctx, camera, this.scene.npcMarkers));
+    this.safe(() => drawNpcMarkers(ctx, camera, this.markersAt(now)));
     this.safe(() =>
       drawPlayerToken(
         ctx,

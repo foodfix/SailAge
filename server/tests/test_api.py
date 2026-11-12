@@ -28,6 +28,7 @@ from server.session import FACILITY_INVENTORY, SIM_TICK_HZ, WS_BROADCAST_HZ
 from server.sim import fleet as fleet_lib
 from server.sim.player import fame
 from server.sim.port import shipyard, trade
+from server.sim.world import npc_fleets
 from server.sim.quests import bounty
 
 #: The frozen facility inventory (the M2 record's table, §0.4; the M3
@@ -56,7 +57,11 @@ HELLO_KEYS = {"save_version", "tick_hz", "broadcast_hz", "locale", "has_run",
 #: The §0.3 tick frame keys, verbatim.
 TICK_KEYS = {"day", "clock_min", "position", "heading", "sail_trim",
              "wind_dir", "weather", "speed", "gold", "morale", "autopilot",
-             "contact_hint"}
+             "contact_hint", "markers"}
+#: The §0.3 tick.markers row shape (the §4.5.2 marker projection slice).
+TICK_MARKER_KEYS = {"id", "role", "nation_id", "cell", "sailing", "wake"}
+#: §0.3 `tick.markers` radius (Chebyshev, wrap-aware on x).
+MARKER_VIEW_RADIUS_TILES = 32
 #: The §0.3 battle_tick frame keys, verbatim.
 BATTLE_TICK_KEYS = {"round", "phase", "ships", "wind", "weather",
                     "orders_due"}
@@ -299,6 +304,16 @@ def test_ws_hello_state_tick_helm_error(client: TestClient) -> None:
         assert TICK_KEYS <= set(tick.keys())
         assert tick["position"]["x"] == start["x"]
 
+        # §0.3 tick.markers: every row is the frozen shape, within the
+        # frozen radius of the fleet tile (the §4.5.2 marker projection).
+        for marker in tick["markers"]:
+            assert set(marker.keys()) == TICK_MARKER_KEYS
+            assert npc_fleets.chebyshev(
+                (int(marker["cell"]["x"]), int(marker["cell"]["y"])),
+                (int(start["x"]), int(start["y"])),
+            ) <= MARKER_VIEW_RADIUS_TILES
+            assert 0 <= len(marker["wake"]) <= 5
+
         # A helm intent produces motion (the next tick shows a new tile).
         from server.sim.world.raster import raster
         world = raster()
@@ -343,6 +358,57 @@ def test_ws_second_connection_closed_4001(client: TestClient) -> None:
         # The first connection is still authoritative after the refusal.
         first.send_json({"type": "locale", "locale": "en"})
         assert _receive_until(first, "state", limit=5)["type"] == "state"
+
+
+def test_tick_markers_slice(client: TestClient) -> None:
+    """§0.3 ``tick.markers`` (the 2026-11-12 amendment): the §4.5.2
+    marker projection rides the sailing tick — fleets inside the frozen
+    radius ride as compact rows, fleets outside are absent, and an idle
+    sea returns the cached slice unchanged."""
+    _new_game(client)
+    _set_sail(client)
+    session = _session(client)
+    gs = session.gs
+    cell = gs.world_tile()
+    ecology = session._ensure_ecology()
+
+    def fleet(fleet_id: str, x: int, y: int) -> dict[str, Any]:
+        # ``dwell_until_day`` pins the fixture against the live loop's
+        # accrual (the same pin the npc_fleets tests' ``_stationary`` uses).
+        return {
+            "id": fleet_id, "role": "trader", "nation_id": "portugal",
+            "cell": {"x": x % 4320, "y": y},
+            "route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+            "cargo": {}, "captain_id": "", "cooldown_until_day": 0,
+            "seed": 12345, "dest_port_id": "", "dwell_until_day": gs.day + 30,
+            "anchor_cell": None, "target_fleet_id": "", "hunter_state": "",
+            "loiter_until_day": 0, "home_port_id": "",
+        }
+
+    near = fleet("fx_near", cell[0] + 5, cell[1])
+    far = fleet("fx_far", cell[0] + 300, cell[1])
+    gs.npc_fleets.append(near)
+    gs.npc_fleets.append(far)
+
+    frame = session.tick_frame()
+    ids = [str(row["id"]) for row in frame["markers"]]
+    assert "fx_near" in ids
+    assert "fx_far" not in ids
+    row = next(row for row in frame["markers"] if row["id"] == "fx_near")
+    assert set(row.keys()) == TICK_MARKER_KEYS
+    assert row["cell"] == {"x": (cell[0] + 5) % 4320, "y": cell[1]}
+    assert row["sailing"] is False and row["wake"] == []
+
+    # The ecology move counter keys the cache: no motion ⇒ the same slice.
+    assert session.tick_frame()["markers"] == frame["markers"]
+
+    # One accrued step toward the near fleet's lane refreshes the slice key
+    # (the day/cell/fleet-count/move-count 5-tuple), the rows stay in shape.
+    ecology.moved_fleet_moves.append({"id": "fx_near"})
+    refreshed = session.tick_frame()["markers"]
+    assert [str(row["id"]) for row in refreshed] == ids
+    for row in refreshed:
+        assert set(row.keys()) == TICK_MARKER_KEYS
 
 
 def test_ws_intent_gates(client: TestClient) -> None:

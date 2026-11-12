@@ -27,7 +27,7 @@ const reportedMissing = new Set<string>();
  * `position`. Accept either — a marker without either is skipped, never
  * a crash (one bad row may not blank the sailing view).
  */
-function markerCell(marker: NpcMarkerState): Vec2 | undefined {
+export function markerCell(marker: NpcMarkerState): Vec2 | undefined {
   const withCell = marker as NpcMarkerState & { cell?: Vec2 | null };
   if (marker.position && typeof marker.position.x === "number") return marker.position;
   if (withCell.cell && typeof withCell.cell.x === "number") return withCell.cell;

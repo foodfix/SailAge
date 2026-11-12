@@ -23,7 +23,7 @@
  * draw nothing this frame — the RAF loop retries, the tiles.ts protocol.
  */
 import { GRID_HEIGHT, GRID_WIDTH, PYRAMID_TILE_PX, VIEW_TILE_MARGIN } from "./constants";
-import { wrapX, type CameraView } from "./geometry";
+import { mod, wrapX, type CameraView } from "./geometry";
 import { pyramid, type TilePyramid } from "./pyramid";
 import { spriteUrl } from "../../assets/sprites";
 import { palette } from "./tokens";
@@ -162,15 +162,19 @@ function decodeChunk(
 }
 
 function kindAt(chunk: ChunkArrays, cellX: number, cellY: number, ty: number): number {
-  const localX = ((cellX % PYRAMID_TILE_PX) + PYRAMID_TILE_PX) % PYRAMID_TILE_PX;
-  const localY = cellY - ty * PYRAMID_TILE_PX;
+  // The camera origin is fractional while the fleet glides (§4.2 render-only
+  // interpolation) — a fractional cell must sample the same tile as its
+  // floor, never a typed-array hole (which would read as "not land" and
+  // blank the whole coastline while under way, the M7.1 live report).
+  const localX = Math.floor(mod(cellX, PYRAMID_TILE_PX));
+  const localY = Math.floor(cellY - ty * PYRAMID_TILE_PX);
   if (localY < 0 || localY >= PYRAMID_TILE_PX) return KIND_SEA;
   return chunk.kinds[localY * PYRAMID_TILE_PX + localX];
 }
 
 function distAt(chunk: ChunkArrays, cellX: number, cellY: number, ty: number): number {
-  const localX = ((cellX % PYRAMID_TILE_PX) + PYRAMID_TILE_PX) % PYRAMID_TILE_PX;
-  const localY = cellY - ty * PYRAMID_TILE_PX;
+  const localX = Math.floor(mod(cellX, PYRAMID_TILE_PX));
+  const localY = Math.floor(cellY - ty * PYRAMID_TILE_PX);
   if (localY < 0 || localY >= PYRAMID_TILE_PX) return 16 * 16;
   return chunk.dist[localY * PYRAMID_TILE_PX + localX] / 16;
 }
@@ -349,7 +353,9 @@ function drawTerrainInner(
   for (const run of wrappedRuns(camera.originX, viewTilesW)) {
     for (let cellY = cellY0; cellY <= cellY1; cellY += 1) {
       for (let step = 0; step < Math.ceil(run.length); step += 1) {
-        const worldX = run.start + step;
+        // The cell this screen column shows — floored, because a gliding
+        // camera makes the run origin fractional (the sampled tile may not).
+        const worldX = Math.floor(run.start + step);
         const screenX = run.offset * tilePx + step * tilePx;
         const screenY = (cellY - originY) * tilePx;
 

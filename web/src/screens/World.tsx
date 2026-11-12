@@ -29,7 +29,8 @@ import {
   ZOOM_WIDE,
 } from "../canvas/world";
 import type { Vec2, WorldScene } from "../canvas/world";
-import type { Direction8, GameSnapshot } from "../state/types";
+import type { Direction8, GameSnapshot, NpcMarkerState } from "../state/types";
+import { useGameState } from "../state/context";
 import { fixtureSailing } from "../state/fixture";
 import { navigate } from "../app/router";
 import { Button, Toast } from "../kit";
@@ -135,7 +136,15 @@ function supplyTone(days: number): SupplyTone {
 export function WorldScreen() {
   const client = useGameClient();
   const { locale, t, tKey, fmt } = useI18n();
-  const [snapshot, setSnapshot] = useState<GameSnapshot>(fixtureSailing.snapshot);
+  const isFixtureTransport = client.transport === "fixture";
+  // The app-level snapshot (the boot `state` frame): the world screen can be
+  // routed onto mid-session — at sea no further state frame may ever arrive,
+  // so the gate below seeds from it instead of waiting for one (the live
+  // transport would otherwise sit on the loading plate forever).
+  const gameState = useGameState().state;
+  const [snapshot, setSnapshot] = useState<GameSnapshot>(() =>
+    !isFixtureTransport && gameState ? gameState : fixtureSailing.snapshot,
+  );
   const [tick, setTick] = useState<TickFrame>(() => initialTick(fixtureSailing.snapshot));
   const [tickAtMs, setTickAtMs] = useState(() => Date.now());
   const [zoom, setZoom] = useState(ZOOM_NEAR);
@@ -151,9 +160,10 @@ export function WorldScreen() {
   // Live-transport gate: the fixture seed is presentation for `?fixture=1`
   // only. A refused/stale live connection must never render the fixture
   // view as if it were the player's run (the "no ship, wrong map" report).
-  const [liveStateArrived, setLiveStateArrived] = useState(false);
+  const [liveStateArrived, setLiveStateArrived] = useState(
+    () => !isFixtureTransport && gameState !== null,
+  );
   const [liveRefused, setLiveRefused] = useState(false);
-  const isFixtureTransport = client.transport === "fixture";
 
   useEffect(
     () =>
@@ -184,14 +194,20 @@ export function WorldScreen() {
   );
 
   const scene = useMemo<WorldScene>(() => {
-    // M2 rides the §4.5.2 marker projection on `npc_fleets`; until then the
-    // fixture scenario supplies the same rows.
-    const markers =
-      snapshot.npc_fleets.length > 0
-        ? (snapshot.npc_fleets as unknown as WorldScene["npcMarkers"])
-        : fixtureSailing.view.npc_markers;
-    return { snapshot, npcMarkers: markers };
-  }, [snapshot]);
+    // The §4.5.2 marker rows: the live `tick.markers` slice (§0.3, the
+    // 2026-11-12 web transport) wins — it moves; the §8.1 state rows are
+    // the fallback while docked (no sea ticks flow there); the fixture
+    // scenario seeds `?fixture=1`.
+    const rows: WorldScene["npcMarkers"] =
+      tick.markers !== undefined
+        ? tick.markers.map(
+            (row) => ({ ...row, position: row.cell }) as unknown as NpcMarkerState,
+          )
+        : snapshot.npc_fleets.length > 0
+          ? (snapshot.npc_fleets as unknown as WorldScene["npcMarkers"])
+          : fixtureSailing.view.npc_markers;
+    return { snapshot, npcMarkers: rows };
+  }, [snapshot, tick]);
 
   const onDock = useCallback(() => navigate("port"), []);
   const onToggleZoom = useCallback(
