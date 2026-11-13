@@ -20,11 +20,12 @@
   }
 }
 
-/* The 3×2 background-card grid. */
+/* The 3×2 background-card grid. Rows hold the two-button height but grow
+   with wrapped locale text. */
 .creation__cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: calc(var(--sailage-button-h) * 2);
+  grid-auto-rows: minmax(calc(var(--sailage-button-h) * 2), auto);
   gap: var(--sailage-base-unit);
   margin-top: var(--sailage-margin);
 }

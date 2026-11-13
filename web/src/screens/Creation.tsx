@@ -219,6 +219,7 @@ export function CreationScreen() {
             }
             tone="dim"
             align="center"
+            wrap
           />
 
           {step === 1 ? (
@@ -232,8 +233,8 @@ export function CreationScreen() {
                 >
                   <span className="sa-button__stack">
                     <Label text={entry.name} heading />
-                    <Label textValue={t(entry.bio)} tone="dim" />
-                    <Label textValue={bonusLine(entry, tKey, fmt)} />
+                    <Label textValue={t(entry.bio)} tone="dim" align="center" wrap />
+                    <Label textValue={bonusLine(entry, tKey, fmt)} align="center" wrap />
                   </span>
                 </Button>
               ))}
