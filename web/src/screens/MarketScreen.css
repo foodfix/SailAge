@@ -48,6 +48,27 @@
   height: 100%;
 }
 
+/* The ★ 特产 badge slot (docs/80 §4.7.11): a fixed reserved width at the
+   Good column's left, present-but-blank on non-produce rows so every good
+   name aligns on one column. */
+.market__good {
+  gap: calc(var(--sailage-base-unit) / 2);
+}
+
+.market__badge {
+  flex: 0 0 calc(var(--sailage-base-unit) * 12);
+  color: var(--sailage-accent-lo);
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+  white-space: nowrap;
+}
+
+/* The thin divider closing the specialty group (docs/80 §4.7.11). */
+.market__divider {
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) / 4);
+  background: var(--sailage-panel-line);
+}
+
 .market__invest {
   display: flex;
   flex: 0 0 auto;

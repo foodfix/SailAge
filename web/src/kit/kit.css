@@ -336,6 +336,12 @@
   color: var(--sailage-parch-hi);
 }
 
+/* Body rows sit on the parchment/zebra bands, so they take the warm ink;
+   the light `--sailage-text` is reserved for dark surfaces. */
+.sa-table > .sa-row:not(.sa-row--head) {
+  color: var(--sailage-ink-warm);
+}
+
 .sa-table > .sa-row:not(.sa-row--head):nth-child(odd) {
   background: var(--sailage-parch);
 }

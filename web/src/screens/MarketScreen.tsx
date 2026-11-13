@@ -7,7 +7,7 @@
  * Prices, the tax badge, ownership, trend and the invest gate all come from
  * `GET /api/view/market` (90-* §0.4) — this screen performs no rule math.
  */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
@@ -125,44 +125,60 @@ export function MarketScreen() {
                   <div className="sa-cell">{tKey("market.sell")}</div>,
                 ]}
               />
-              {view.rows.map((row) => (
-                <Row
-                  key={row.goodId}
-                  cols={[
-                    <span className="market__icon">
-                      <Icon id={`good_${row.goodId}`} />
-                    </span>,
-                    <div className="sa-cell">{t(content.goodName(row.goodId))}</div>,
-                    <div className="sa-cell sa-cell--right">{row.stock}</div>,
-                    <div className="sa-cell">{trendText(row)}</div>,
-                    <div className="sa-cell sa-cell--right">
-                      {`${row.buyPrice ?? row.unitPrice ?? row.marginal} / ${row.sellPrice ?? row.marginal}`}
-                    </div>,
-                    <div className="sa-cell sa-cell--right">{row.owned}</div>,
-                    <Field
-                      value={qtyFor(row.goodId)}
-                      onChange={(value) => setQty((prev) => ({ ...prev, [row.goodId]: value }))}
-                      ariaLabelKey="market.qty"
-                      maxLength={4}
-                    />,
-                    <Button
-                      compact
-                      fill
-                      kind="primary"
-                      textKey="market.buy"
-                      disabled={row.exclusiveLocked || row.notBought}
-                      onClick={() => trade("buy", row)}
-                    />,
-                    <Button
-                      compact
-                      fill
-                      textKey="market.sell"
-                      disabled={row.owned <= 0 || row.notBought}
-                      titleKey={row.notBought ? "market.not_bought" : undefined}
-                      onClick={() => trade("sell", row)}
-                    />,
-                  ]}
-                />
+              {view.rows.map((row, index) => (
+                <Fragment key={row.goodId}>
+                  <Row
+                    cols={[
+                      <span className="market__icon">
+                        <Icon id={`good_${row.goodId}`} />
+                      </span>,
+                      <div className="sa-cell market__good">
+                        <span className="market__badge">
+                          {row.specialty ? `\u2605 ${tKey("market.specialty.badge")}` : ""}
+                        </span>
+                        {t(content.goodName(row.goodId))}
+                      </div>,
+                      <div className="sa-cell sa-cell--right">{row.stock}</div>,
+                      <div className="sa-cell">{trendText(row)}</div>,
+                      <div className="sa-cell sa-cell--right">
+                        {`${row.buyPrice ?? row.unitPrice ?? row.marginal} / ${row.sellPrice ?? row.marginal}`}
+                      </div>,
+                      <div className="sa-cell sa-cell--right">{row.owned}</div>,
+                      <Field
+                        value={qtyFor(row.goodId)}
+                        onChange={(value) => setQty((prev) => ({ ...prev, [row.goodId]: value }))}
+                        ariaLabelKey="market.qty"
+                        maxLength={4}
+                      />,
+                      <Button
+                        compact
+                        fill
+                        kind="primary"
+                        textKey="market.buy"
+                        disabled={row.exclusiveLocked}
+                        titleKey={row.exclusiveLocked ? "market.exclusive.locked" : undefined}
+                        onClick={() => trade("buy", row)}
+                      />,
+                      <Button
+                        compact
+                        fill
+                        textKey="market.sell"
+                        disabled={row.owned <= 0 || row.notBought || row.exclusiveLocked}
+                        titleKey={
+                          row.exclusiveLocked
+                            ? "market.exclusive.locked"
+                            : row.notBought
+                              ? "market.not_bought"
+                              : undefined
+                        }
+                        onClick={() => trade("sell", row)}
+                      />,
+                    ]}
+                  />
+                  {row.specialty && view.rows[index + 1]?.specialty === false ? (
+                    <div className="market__divider" />
+                  ) : null}
+                </Fragment>
               ))}
             </div>
           </Frame>
