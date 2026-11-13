@@ -40,10 +40,10 @@
   align-items: stretch;
   gap: var(--sailage-base-unit);
   margin: var(--sailage-margin);
-  margin-top: 0;
+  margin-top: auto; /* pin the footer plate to the bottom edge */
   padding: var(--sailage-base-unit);
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: calc(var(--sailage-base-unit) * 12); /* the §4.9.1 96 px plate */
 }
 
 .port__facilities {
@@ -61,6 +61,11 @@
 
 /* Small viewports (80-* §4.9.2): the six facility verbs wrap into rows. */
 @media (max-width: 900px) {
+  .port__verb_bar {
+    height: auto;
+    min-height: calc(var(--sailage-base-unit) * 12);
+  }
+
   .port__facilities {
     flex-wrap: wrap;
   }
@@ -87,10 +92,14 @@
   height: calc(var(--sailage-base-unit) * 4);
 }
 
+/* The §4.8.1 status line: the 12 px chip size under the facility name. */
+.port__verb_status {
+  font-size: calc(var(--sailage-base-unit) * 1.5);
+}
+
 .port__actions {
   display: flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  justify-content: stretch;
+  align-items: stretch;
   gap: var(--sailage-base-unit);
 }

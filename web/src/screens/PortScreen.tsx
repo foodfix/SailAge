@@ -68,7 +68,7 @@ export function PortScreen() {
           <Label text={content.portName(portId)} title />
           <Label text={content.nationName(nationId)} />
           {port?.flavor ? <Label text={port.flavor} align="center" wrap /> : null}
-          <Label textKey="port.day_greeting" values={{ port: content.portName(portId), day: state.day }} tone="dim" />
+          <Label textKey="world.day_time" values={{ day: state.day, time: view.clock ?? "" }} tone="dim" />
         </div>
       </div>
 
@@ -90,7 +90,7 @@ export function PortScreen() {
                     <Icon id={FACILITY_ICON(facility.id)} />
                   </span>
                   <Label textKey={`port.${facility.id}`} heading />
-                  <Label textValue={statusText(facility.status)} tone="dim" />
+                  <Label textValue={statusText(facility.status)} tone="dim" className="port__verb_status" />
                 </span>
               </Button>
             );

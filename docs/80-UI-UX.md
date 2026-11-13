@@ -3751,10 +3751,13 @@ and numbers of docs 30–70 stay authoritative):
 
 - **Port hub (S4).** Full-canvas scene backdrop: `SEA` fill with a
   `COAST_SEA` horizon band at 55 % height and the parchment port-name
-  plate top-left (nation swatch + port + nation name). The bottom
+  plate top-left (nation swatch + port + nation name + the day/time
+  line — `world.day_time`, printed from the port view's server-computed
+  `clock`; amended 2026-11-13). The bottom
   **verb bar**: a full-width 96 px parchment plate of six facility
   buttons (32 px facility icon + name + hours status line each), the
-  Set-Sail primary button at the right end.
+  Set-Sail primary button at the right end (Settings beside it, the
+  §4.6.2 mount).
 - **Market / shipyard (S5/S6).** A centered framed table window
   (~1440 px wide, the locked 32 px rows) with the framed side summary
   plate (~320 px; taxes/holds/plates per 30-*/40-*).

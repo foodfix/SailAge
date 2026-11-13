@@ -160,7 +160,10 @@ data/  tools/  assets/  docs/   unchanged owners (M7 deletes assets/ui/chrome)
   gate reasons, facility open/closed, recruit lists, offers, permits,
   tournament state…). The client performs no rule math; it requests the
   view for the screen it shows and refreshes it on every `state` frame.
-  Shape details are per-screen and owned by the M2/M3 acceptance records.
+  Shape details are per-screen and owned by the M2/M3 acceptance records
+  (amended 2026-11-13: the port-hub view also carries the header
+  projection — `portId`, `nationId` and the wall-clock `clock` text the
+  S4 plate prints; `80-*` §4.9.1).
 
 ### 0.5 Frozen numbers
 

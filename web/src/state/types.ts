@@ -228,6 +228,10 @@ export interface PortFacilityStatus {
 }
 
 export interface PortView {
+  portId?: string;
+  nationId?: string;
+  /** The server wall-clock text ("HH:MM") the header plate prints. */
+  clock?: string;
   facilities: PortFacilityStatus[];
 }
 

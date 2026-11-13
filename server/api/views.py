@@ -314,6 +314,7 @@ def _port_view(session: Any, port_id: str) -> dict[str, Any]:
         "portId": port_id,
         "nationId": _alignment(session, port_id)
         or str(port.get("nation_id", "")),
+        "clock": sailing.clock_text(session.gs),
         "facilities": rows,
     }
 

@@ -135,6 +135,9 @@ const captainName = (id: string) => content.officerName(id);
 
 export const fixtureViews: ScreenViews = {
   port: {
+    portId: LISBON,
+    nationId: PORTUGAL,
+    clock: "08:30",
     facilities: [
       { id: "market", phase: 1, enabled: true, status: { kind: "open", open: "08:00", close: "18:00" } },
       { id: "shipyard", phase: 1, enabled: true, status: { kind: "open", open: "08:00", close: "18:00" } },

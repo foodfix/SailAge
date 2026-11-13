@@ -83,6 +83,7 @@ def test_port_projection_facility_cards(client: TestClient) -> None:
 
     assert view["portId"] == PORT
     assert view["nationId"] == NATION
+    assert view["clock"] == "00:00"  # new games start at day 1 00:00
     ids = [row["id"] for row in view["facilities"]]
     assert ids == ["market", "shipyard", "tavern", "inn", "guild", "palace"]
     by_id = {row["id"]: row for row in view["facilities"]}
@@ -106,7 +107,9 @@ def test_port_projection_facility_cards(client: TestClient) -> None:
 
     # Rest to day 4 08:00 opens the working-day facilities.
     assert client.post("/api/inn/rest", json={}).json()["ok"] is True
-    reopened = {row["id"]: row for row in _view(client, "port")["facilities"]}
+    reopened_view = _view(client, "port")
+    assert reopened_view["clock"] == "08:00"  # the §4.7 wake hour
+    reopened = {row["id"]: row for row in reopened_view["facilities"]}
     assert reopened["market"]["enabled"] is True
     assert reopened["market"]["status"]["kind"] == "open"
     assert reopened["tavern"]["enabled"] is False  # opens at 10:00

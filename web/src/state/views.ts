@@ -84,6 +84,8 @@ export interface PortView {
   portId?: string;
   /** The port's effective alignment (falls back to its data nation). */
   nationId?: string;
+  /** The server wall-clock text ("HH:MM") the header plate prints. */
+  clock?: string;
   facilities: PortFacilityStatus[];
 }
 
