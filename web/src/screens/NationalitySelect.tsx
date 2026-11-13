@@ -93,8 +93,10 @@ export function NationalitySelectScreen() {
                   <Label
                     textValue={nation.description ? t(nation.description) : ""}
                     tone={selected === nation.id ? "default" : "dim"}
+                    align="center"
+                    wrap
                   />
-                  <Label textValue={packageText(nation)} tone="dim" />
+                  <Label textValue={packageText(nation)} tone="dim" align="center" wrap />
                 </span>
               </Button>
             ))}

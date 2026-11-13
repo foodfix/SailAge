@@ -4,6 +4,9 @@
  * render the stub panel (the M6 backlog).
  */
 import { SCREEN_IDS, type ScreenId } from "./ids";
+/* The shared structural utilities (.sa-fill-center/.sa-col/…) — every
+   screen route flows through this barrel, so the sheet loads exactly once. */
+import "./screens.css";
 import { PortScreen } from "./PortScreen";
 import { MarketScreen } from "./MarketScreen";
 import { ProvisionsScreen } from "./ProvisionsScreen";
