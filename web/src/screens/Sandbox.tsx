@@ -100,7 +100,11 @@ export function Sandbox() {
   const [preview, setPreview] = useState(false);
 
   const defaultConfig = useMemo<SandboxConfig>(() => {
-    const ships = state.fleet.slice(0, 5).map((ship) => ({
+    // The sandbox opens from the title, where the server snapshot is the
+    // no-run shell (`player` = `{}` — no attributes/equipment block, an
+    // empty fleet). Every read below tolerates that shape and falls back
+    // to the editor's own blanks; a live run seeds the real fleet instead.
+    const ships = (state.fleet ?? []).slice(0, 5).map((ship) => ({
       ship_type_id: ship.ship_type_id,
       cannons: ship.cannons,
       crew: ship.crew,
@@ -111,9 +115,9 @@ export function Sandbox() {
     return {
       player: {
         stats: {
-          ...state.player.attributes,
-          weapon: state.player.equipment.weapon,
-          armor: state.player.equipment.armor,
+          ...(state.player?.attributes ?? {}),
+          weapon: state.player?.equipment?.weapon ?? "",
+          armor: state.player?.equipment?.armor ?? "",
         },
         morale: state.morale,
         ships: ships.length > 0 ? ships : [blankShip("caravel")],
