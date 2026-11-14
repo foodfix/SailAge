@@ -96,10 +96,17 @@ export class HttpClient implements LiveGameClient {
   private readonly webSocketImpl: typeof WebSocket;
 
   private socket: WebSocket | null = null;
-  private handlers: {
+  /**
+   * Concurrent subscribers share the one socket: the app shell keeps its
+   * subscription for the whole run (it owns `state`/`event` routing), while
+   * the active screen (world/battle) subscribes on mount. A screen-level
+   * connect must never silence the shell — that was the sea→port freeze
+   * (the dropped `port_entered` event left the sailing screen stuck).
+   */
+  private handlers = new Set<{
     onFrame: (frame: ServerFrame) => void;
     onClose?: (code: number, reason: string) => void;
-  } | null = null;
+  }>();
   private stopped = false;
   private retryTimer: number | null = null;
   private closeTimer: number | null = null;
@@ -121,7 +128,7 @@ export class HttpClient implements LiveGameClient {
     onFrame: (frame: ServerFrame) => void;
     onClose?: (code: number, reason: string) => void;
   }): () => void {
-    this.handlers = handlers;
+    this.handlers.add(handlers);
     this.stopped = false;
     // A StrictMode double-mount connects, unsubscribes and connects again in
     // the same tick; reusing the live socket avoids a spurious 4001.
@@ -133,11 +140,20 @@ export class HttpClient implements LiveGameClient {
       this.socket.readyState === this.webSocketImpl.OPEN
       || this.socket.readyState === this.webSocketImpl.CONNECTING
     )) {
-      return () => this.queueClose();
+      return () => this.unsubscribe(handlers);
     }
     this.clearRetry();
     this.open();
-    return () => this.queueClose();
+    return () => this.unsubscribe(handlers);
+  }
+
+  /** Drop one subscriber; the socket closes only when the last one leaves. */
+  private unsubscribe(handlers: {
+    onFrame: (frame: ServerFrame) => void;
+    onClose?: (code: number, reason: string) => void;
+  }): void {
+    this.handlers.delete(handlers);
+    if (this.handlers.size === 0) this.queueClose();
   }
 
   private queueClose(): void {
@@ -193,7 +209,8 @@ export class HttpClient implements LiveGameClient {
             lastTickPos: `${tick.position.x},${tick.position.y}`,
           });
         }
-        this.handlers?.onFrame(frame);
+        // Snapshot: a handler may subscribe/unsubscribe mid-dispatch.
+        for (const handler of [...this.handlers]) handler.onFrame(frame);
       }
     };
     socket.onerror = () => {
@@ -202,7 +219,9 @@ export class HttpClient implements LiveGameClient {
     socket.onclose = (event: CloseEvent) => {
       if (this.socket === socket) this.socket = null;
       debugNote({ ws: event.code === CLOSE_OTHER_CLIENT ? "refused" : "closed" });
-      this.handlers?.onClose?.(event.code, event.reason ?? "");
+      for (const handler of [...this.handlers]) {
+        handler.onClose?.(event.code, event.reason ?? "");
+      }
       if (event.code === CLOSE_OTHER_CLIENT) {
         this.stopped = true; // one client only: never fight for the socket
         return;

@@ -89,18 +89,31 @@ function LocaleHotkey() {
  * navigate themselves, so this is the one global handler. The §4.2 dock
  * edge rides here too: `port_entered` on the sailing screen auto-routes to
  * the port hub (M7.1 — the pinned S3→S4 edge; Esc keeps the manual route).
+ *
+ * The dock edge is doubled on the authoritative `state` snapshot as a
+ * sea→docked *transition* (never the static fact): if the `port_entered`
+ * event is lost (a WS reconnect while the autopilot docks, say), the next
+ * state frame still routes the sailing screen to the port hub. The
+ * transition guard is what keeps this from fighting set-sail — departing
+ * keeps `current_port` set in the client snapshot until the server's state
+ * frame clears it, and that clear is no edge; loading a docked save routes
+ * itself (SaveSlot) before the world screen is ever shown.
  */
 function RunEndRouter({ screen }: { screen: ScreenId }) {
   const { state, lastEvent } = useGameState();
+  const wasDocked = useRef<boolean | null>(null);
   useEffect(() => {
     if (!state) return;
+    const docked = state.current_port != null;
+    const dockEdge = wasDocked.current === false && docked;
+    wasDocked.current = docked;
     const over = lastEvent?.type === "event" && lastEvent.name === "game_over";
-    const docked = lastEvent?.type === "event" && lastEvent.name === "port_entered";
+    const dockedEvent = lastEvent?.type === "event" && lastEvent.name === "port_entered";
     if (over && screen !== "gameover") {
       navigate("gameover");
       return;
     }
-    if (docked && screen === "world") {
+    if ((dockedEvent || dockEdge) && screen === "world") {
       navigate("port");
       return;
     }
