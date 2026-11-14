@@ -115,7 +115,13 @@ def create_app(session: Session | None = None) -> FastAPI:
         if full_path and candidate.is_file() \
                 and WEB_DIST.resolve() in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(index)
+        # The shell always revalidates (`no-cache` = store + revalidate):
+        # it names the content-hashed bundle files, so a stale cached copy
+        # points at builds the next `npm run build` deleted — the browser
+        # then 404s the bundle and shows only the page background. The
+        # hashed assets themselves keep heuristic caching (their names
+        # change with their content), so only the shell needs this.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     # --- Frozen refusal shape (§0.4) --------------------------------------
     @app.exception_handler(ApiError)
