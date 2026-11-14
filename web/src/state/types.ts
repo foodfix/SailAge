@@ -117,13 +117,15 @@ export interface WorldCell {
   y: number;
 }
 
-/** One §4.5.2 world-map marker (nation square + role letter + wake trail). */
+/** One §4.5.2 world-map marker (hull token + role chip/square + wake trail). */
 export interface NpcMarkerState {
   id: string;
   role: string;
   nation_id: string;
   position: WorldCell;
   heading: Direction8;
+  /** Flagship ship type: the 80-* NPC world-fleet token draws this hull. */
+  ship_type?: string;
   /** §4.5.2 role letter from the state (absent = no letter, e.g. pirate). */
   marker_letter?: string;
   /** Recent walked cells, newest first; §4.5.2 draws a 5-tile dashed wake. */

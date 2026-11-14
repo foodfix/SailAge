@@ -2508,6 +2508,8 @@ class Session:
                 "nation_id": str(row.get("nation_id", "")),
                 "cell": {"x": int(target[0]), "y": int(target[1])},
                 "sailing": bool(row.get("sailing", False)),
+                "heading": str(row.get("heading", "")),
+                "ship_type": str(row.get("ship_type", "")),
                 "wake": [{"x": int(step[0]), "y": int(step[1])}
                          for step in wake][:int(npc_fleets.WAKE_LENGTH)],
             })

@@ -18,6 +18,8 @@ import type {
 /**
  * One §0.3 `tick.markers` row (the §4.5.2 marker projection, server shape):
  * the save-payload `cell` (never `position`) and the ≤5-cell wake trail.
+ * `heading` (§4.4 dir id, "" docked) + flagship `ship_type` ride since the
+ * 2026-11-14 NPC hull-token amendment (`90-*` §0.3).
  */
 export interface NpcTickMarker {
   id: string;
@@ -25,6 +27,8 @@ export interface NpcTickMarker {
   nation_id: string;
   cell: { x: number; y: number };
   sailing: boolean;
+  heading?: string;
+  ship_type?: string;
   wake?: { x: number; y: number }[];
 }
 

@@ -58,8 +58,12 @@ HELLO_KEYS = {"save_version", "tick_hz", "broadcast_hz", "locale", "has_run",
 TICK_KEYS = {"day", "clock_min", "position", "heading", "sail_trim",
              "wind_dir", "weather", "speed", "gold", "morale", "autopilot",
              "contact_hint", "markers"}
-#: The §0.3 tick.markers row shape (the §4.5.2 marker projection slice).
-TICK_MARKER_KEYS = {"id", "role", "nation_id", "cell", "sailing", "wake"}
+#: The §0.3 tick.markers row shape (the §4.5.2 marker projection slice;
+#: heading + ship_type ride since the 2026-11-14 NPC hull-token amendment).
+TICK_MARKER_KEYS = {"id", "role", "nation_id", "cell", "sailing",
+                    "heading", "ship_type", "wake"}
+#: The §4.4 dir ids a marker row's ``heading`` may carry ("" when docked).
+MARKER_HEADINGS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", ""}
 #: §0.3 `tick.markers` radius (Chebyshev, wrap-aware on x).
 MARKER_VIEW_RADIUS_TILES = 32
 #: The §0.3 battle_tick frame keys, verbatim.
@@ -308,6 +312,7 @@ def test_ws_hello_state_tick_helm_error(client: TestClient) -> None:
         # frozen radius of the fleet tile (the §4.5.2 marker projection).
         for marker in tick["markers"]:
             assert set(marker.keys()) == TICK_MARKER_KEYS
+            assert marker["heading"] in MARKER_HEADINGS
             assert npc_fleets.chebyshev(
                 (int(marker["cell"]["x"]), int(marker["cell"]["y"])),
                 (int(start["x"]), int(start["y"])),
@@ -398,6 +403,8 @@ def test_tick_markers_slice(client: TestClient) -> None:
     assert set(row.keys()) == TICK_MARKER_KEYS
     assert row["cell"] == {"x": (cell[0] + 5) % 4320, "y": cell[1]}
     assert row["sailing"] is False and row["wake"] == []
+    assert row["heading"] == ""
+    assert isinstance(row["ship_type"], str)
 
     # The ecology move counter keys the cache: no motion ⇒ the same slice.
     assert session.tick_frame()["markers"] == frame["markers"]

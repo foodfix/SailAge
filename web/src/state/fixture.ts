@@ -473,6 +473,7 @@ export const fixtureSailingMarkers: NpcMarkerState[] = [
     nation_id: PORTUGAL,
     position: { x: 2045, y: 600 },
     heading: "SW",
+    ship_type: "caravel",
     marker_letter: "T",
     wake: [
       { x: 2046, y: 599 },
@@ -485,6 +486,7 @@ export const fixtureSailingMarkers: NpcMarkerState[] = [
     nation_id: "",
     position: { x: 2038, y: 605 },
     heading: "E",
+    ship_type: "sloop",
     wake: [
       { x: 2037, y: 605 },
       { x: 2036, y: 605 },
@@ -496,6 +498,7 @@ export const fixtureSailingMarkers: NpcMarkerState[] = [
     nation_id: SPAIN,
     position: { x: 2049, y: 619 },
     heading: "N",
+    ship_type: "galleon",
     marker_letter: "P",
   },
   {
@@ -504,6 +507,7 @@ export const fixtureSailingMarkers: NpcMarkerState[] = [
     nation_id: "holland",
     position: { x: 2032, y: 612 },
     heading: "NE",
+    ship_type: "fluyt",
     marker_letter: "c",
     wake: [{ x: 2031, y: 613 }],
   },

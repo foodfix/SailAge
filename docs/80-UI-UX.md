@@ -2324,7 +2324,10 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    letter + role color, ~6px) so trader/patrol/pirate stays readable
    at a glance; the bare square remains the fallback when no token
    resolves. Player-vs-NPC distinction: the player keeps the fleet
-   marker/square; NPCs show ship + role chip only.
+   marker/square; NPCs show ship + role chip only. (Web era,
+   2026-11-14: the §0.3 `tick.markers` rows carry the fleet's
+   `heading` + flagship `ship_type` so the SPA canvas draws the
+   token; docked rows keep the bare square.)
       **Skin coverage (amended 2026-11-05, user direction — UW2 style   **Skin coverage (amended 2026-11-05, user direction — UW2 style
    everywhere):** texture mode routes EVERY window/panel/HUD surface
    through the skin vocabulary — custom-drawn screens (HUD status
