@@ -23,7 +23,7 @@
  * draw nothing this frame — the RAF loop retries, the tiles.ts protocol.
  */
 import { GRID_HEIGHT, GRID_WIDTH, PYRAMID_TILE_PX, VIEW_TILE_MARGIN } from "./constants";
-import { mod, wrapX, type CameraView } from "./geometry";
+import { mod, wrapDeltaX, wrapX, type CameraView } from "./geometry";
 import { pyramid, type TilePyramid } from "./pyramid";
 import { spriteUrl } from "../../assets/sprites";
 import { palette } from "./tokens";
@@ -352,11 +352,20 @@ function drawTerrainInner(
   ctx.imageSmoothingEnabled = false;
   for (const run of wrappedRuns(camera.originX, viewTilesW)) {
     for (let cellY = cellY0; cellY <= cellY1; cellY += 1) {
-      for (let step = 0; step < Math.ceil(run.length); step += 1) {
+      // +1 column: the exact camera-space x below starts the window's first
+      // column at −frac(originX)·tilePx (partially off-screen left), so the
+      // right edge needs one more column than the wrapped-run length.
+      for (let step = 0; step <= Math.ceil(run.length); step += 1) {
         // The cell this screen column shows — floored, because a gliding
         // camera makes the run origin fractional (the sampled tile may not).
         const worldX = Math.floor(run.start + step);
-        const screenX = run.offset * tilePx + step * tilePx;
+        // Exact camera-space x — the same shortest-wrap projection the
+        // overlays' worldToScreen applies, so the terrain carries the
+        // fractional glide offset too. Painting whole-tile screen positions
+        // instead made the terrain jump a full tile per fleet tile while the
+        // port/NPC tokens glided smoothly over it — "tokens move, then snap
+        // back" while sailing east/west (the 2026-11-14 live report).
+        const screenX = wrapDeltaX(worldX, camera.originX) * tilePx;
         const screenY = (cellY - originY) * tilePx;
 
         const kind = cellKind(chunkFor, worldX, cellY);
