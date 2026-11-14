@@ -36,6 +36,12 @@
   flex: 0 0 auto;
 }
 
+.battle__top_turn {
+  flex: 0 0 auto;
+  min-width: calc(var(--sailage-base-unit) * 10);
+  text-align: right;
+}
+
 /* The canvas mount: one growing field, the canvas fills it. */
 .battle__field {
   position: relative;

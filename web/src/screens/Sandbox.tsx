@@ -10,25 +10,22 @@
  * `FieldRow` compositions; the per-ship editors keep their `data-field` /
  * `data-sandbox-row` identity hooks.
  *
- * The editor is a pure local fixture: it never calls an HTTP action or a WS
- * intent, never touches `GameState`, and never writes the save. `开战` builds
- * a local encounter and renders the existing S10 canvas (`BattleCanvas`)
- * read-only; `Esc` returns to the title.
- *
- * Reported gap: the server exposes no sandbox encounter seam (the §4.12.4
- * zero-write fixture contract exists in `server.sim.combat.battle_sim`, but
- * no endpoint drives it), so the preview is a static deployment snapshot,
- * not a simulated battle.
+ * The editor is a pure local fixture: it never touches `GameState` and
+ * never writes the save. `开战` POSTs the §4.7.16 export shape to
+ * `POST /api/sandbox/battle` (the 2026-11-14 seam, `90-*` §0.4) and routes
+ * to S10, which runs the real zero-write battle; the read-only
+ * after-action dialog returns here with the configuration kept (kept in a
+ * module store — the route round-trip remounts the screen). `Esc` returns
+ * to the title.
  */
 import { useEffect, useMemo, useState } from "react";
 import { content, useI18n } from "../i18n";
 import { shipTypes } from "../i18n/strings";
+import { useGameClient } from "../client/context";
 import { useGameState } from "../state/context";
 import type { ScreenId } from "./ids";
 import { Button, Field, FieldRow, Footer, Frame, Toast } from "../kit";
 import { Label, useToastState } from "./common";
-import { BattleCanvas, toBattleView } from "../canvas/battle";
-import type { BattleShipFrame, BattleTickFrame } from "../client/types";
 import type { Direction8, Weather } from "../state/types";
 import { navigate } from "../app/router";
 import rawEquipment from "../../../data/equipment.json";
@@ -93,11 +90,19 @@ const DIRECTIONS: Direction8[] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const WEATHERS: Weather[] = ["calm", "fair", "strong", "storm"];
 const ATTRS = ["constitution", "intellect", "charisma", "courage", "luck"] as const;
 
+/**
+ * The configuration store across the S21 → S10 → S21 round-trip (the
+ * §4.7.16 "returns to S21 with the configuration kept" rule — the route
+ * change remounts the screen, so the config lives one level up).
+ */
+let keptConfig: SandboxConfig | null = null;
+
 export function Sandbox() {
+  const client = useGameClient();
   const { state } = useGameState();
   const { t, tKey } = useI18n();
   const { toast, showToast, clearToast } = useToastState();
-  const [preview, setPreview] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const defaultConfig = useMemo<SandboxConfig>(() => {
     // The sandbox opens from the title, where the server snapshot is the
@@ -143,8 +148,12 @@ export function Sandbox() {
     };
   }, [state]);
 
-  const [config, setConfig] = useState<SandboxConfig>(defaultConfig);
+  const [config, setConfig] = useState<SandboxConfig>(() => keptConfig ?? defaultConfig);
   useEffect(() => setConfig(defaultConfig), [defaultConfig]);
+  // Keep the configuration across the battle round-trip.
+  useEffect(() => {
+    keptConfig = config;
+  }, [config]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -249,60 +258,27 @@ export function Sandbox() {
   };
 
   const start = () => {
-    update((draft) => {
-      if (draft.enemy.compose) {
-        draft.enemy.ships = [
-          blankShip("brigantine"),
-          blankShip("sloop"),
-          blankShip("brigantine"),
-        ];
-      }
-    });
-    setPreview(true);
+    if (starting) return;
+    setStarting(true);
+    // The §4.7.16 canonical export shape IS the wire body (`90-*` §0.4);
+    // the server clamps every field, so the editor never sends an invalid
+    // combination it cannot already render.
+    void client.action("sandbox", "battle", {
+      version: 1,
+      kind: "sailage_sandbox",
+      player: config.player,
+      enemy: config.enemy,
+      conditions: config.conditions,
+    })
+      .then((result) => {
+        if (result.ok) {
+          navigate("battle");
+        } else {
+          showToast(result.error.msg, undefined, "bad");
+        }
+      })
+      .finally(() => setStarting(false));
   };
-
-  const frame = useMemo<BattleTickFrame>(() => {
-    const ships: BattleShipFrame[] = [];
-    config.player.ships.forEach((ship, index) => {
-      ships.push({
-        id: `player_${index}`,
-        side: "player",
-        kind: ship.ship_type_id,
-        position: { x: 10, y: 12 + index * 2 },
-        velocity: { x: 1, y: 0 },
-        heading8: "E",
-        hull: ship.durability,
-        crew: ship.crew,
-        morale: config.player.morale,
-        reload: { port: 1, starboard: 1 },
-      });
-    });
-    config.enemy.ships.forEach((ship, index) => {
-      ships.push({
-        id: `enemy_${index}`,
-        side: "enemy",
-        kind: ship.ship_type_id,
-        position: { x: 37, y: 12 + index * 2 },
-        velocity: { x: -1, y: 0 },
-        heading8: "W",
-        hull: ship.durability,
-        crew: ship.crew,
-        morale: config.enemy.morale,
-        reload: { port: 1, starboard: 1 },
-      });
-    });
-    return {
-      type: "battle_tick",
-      round: 1,
-      phase: "player",
-      ships,
-      wind: { dir: config.conditions.wind_dir, strength: 2 },
-      weather: config.conditions.weather,
-      orders_due: false,
-    };
-  }, [config]);
-
-  const view = useMemo(() => toBattleView(frame), [frame]);
 
   const shipRow = (side: "player" | "enemy", index: number, ship: SandboxShip) => {
     const prefix = `${side}_rows.${index}`;
@@ -396,16 +372,7 @@ export function Sandbox() {
         <Button textKey="sandbox.export" onClick={exportJson} />
       </div>
 
-      {preview ? (
-        <div className="sandbox__field sa-grow">
-          <BattleCanvas
-            scene={{ view, selectedId: null, targetId: null, aiInstant: false }}
-            fitSignal={0}
-            onSelect={() => undefined}
-          />
-        </div>
-      ) : (
-        <div className="sandbox__editor sa-grow sa-scroll">
+      <div className="sandbox__editor sa-grow sa-scroll">
           <Frame titleKey="sandbox.player" className="sandbox__panel">
             <div className="sandbox__panel_body">
               <div className="sandbox__grid sandbox__stats">
@@ -618,7 +585,6 @@ export function Sandbox() {
             </div>
           </Frame>
         </div>
-      )}
 
       {toast ? (
         <Toast messageKey={toast.messageKey} values={toast.values} tone={toast.tone} onDismiss={clearToast} />

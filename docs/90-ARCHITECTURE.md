@@ -106,7 +106,7 @@ data/  tools/  assets/  docs/   unchanged owners (M7 deletes assets/ui/chrome)
 | `hello` | `{save_version, tick_hz, broadcast_hz, locale, has_run, current_screen, saves:[{slot, day, nation_id, port_id, gold, saved_at}]}` | first frame on connect |
 | `state` | the full authoritative snapshot — the §8.1-shaped save payload plus the transient keys (`pending_encounter`, `npc_port_log`, levelup toast state); replaces client state wholesale | on connect, after every HTTP action, after new_game/load/locale change |
 | `tick` | `{day, clock_min, position:{x,y}, heading, sail_trim, wind_dir, weather, speed, gold, morale, autopilot, contact_hint, markers}` — the sailing slice; `markers` is the §4.5.2 living-sea marker projection (`npc_fleets.markers()` rows, compacted to `{id, role, nation_id, cell:{x,y}, sailing, heading, ship_type, wake:[{x,y}…≤5]}` — the **2026-11-14 amendment** for the `80-*` NPC world-fleet hull tokens: `heading` is the fleet's §4.4 dir id (`""` docked/idle), `ship_type` the flagship's id (`""` unknown)) for every fleet within **`MARKER_VIEW_RADIUS_TILES = 32`** (Chebyshev, wrap-aware on x) of the fleet tile — the §4.8 wide-zoom half-view (30 tiles) plus the §4.5.2 `NPC_GLIDE_MARGIN_TILES` (2). Fleets beyond the radius are absent from the slice and the client drops them (they are already outside the camera window). Docked/camping fleets carry `sailing: false`, an empty `wake` and `heading: ""` | every sim tick while a run is live at sea (10 Hz) |
-| `battle_tick` | `{round, phase, ships:[{id, side, kind, position, velocity, heading8, hull, crew, morale, reload:{port, starboard}}], wind, weather, orders_due}` — the battle slice | every sim tick during a battle (10 Hz) |
+| `battle_tick` | `{round, phase, ships:[{id, side, kind, position, velocity, heading8, hull, crew, morale, reload:{port, starboard}}], wind, weather, orders_due}` — the battle slice. **2026-11-14 amendment (additive):** two more keys ride every frame — `acting_id` (the current actor's ship `id`, `""` when none/over; this is the §4.7.1 acting unit the camera follows and the only ship a player action may drive) and `move_range` (the acting **player** unit's `legal_velocities` endpoints as `[{x, y}…]" — absolute cells, `[]` for an enemy actor or when over; the §4.7.1 reachable-set overlay data). Additive only: clients that ignore the keys stay conformant | every sim tick during a battle (10 Hz) |
 | `event` | `{name, args}` — `name` mirrors the §5.1 EventBus table verbatim (`day_advanced`, `gold_changed`, `port_entered`, `game_over`, `battle_started`, `battle_finished`, `quests_changed`, …) | on the corresponding server-side transition |
 | `error` | `{code, msg}` | refused/unknown/malformed intent — never a crash; the run continues |
 
@@ -121,7 +121,7 @@ data/  tools/  assets/  docs/   unchanged owners (M7 deletes assets/ui/chrome)
 | `intercept` | `{fleet_id}` or `{cancel: true}` | at sea; target inside sighting radius |
 | `autopilot` | `{dest_port_id}` or `{cancel: true}` | at sea; known port + in-post pilot (`20-*`) |
 | `battle_order` | `{station, desired_heading8, desired_speed_band, assigned_target, discipline}` — the per-round order five-tuple (`60-*` §4.9b) | in battle, inside the orders window |
-| `battle_action` | `{verb: "broadside"\|"hook"\|"retreat"\|"surrender", side: "port"\|"starboard", shot: "round"\|"chain"\|"armor_piercing"\|"grape"}` — `side`/`shot` only on `broadside` | in battle |
+| `battle_action` | `{verb: "broadside"\|"hook"\|"hold"\|"retreat"\|"surrender", side: "port"\|"starboard", shot: "round"\|"chain"\|"armor_piercing"\|"grape"}` — `side`/`shot` only on `broadside`. **2026-11-14 amendment:** `hold` was added — it applies the stored order's movement (the §4.9b five-tuple), then holds and ends the turn: the pure-move verb the §4.3 "click a reachable endpoint, confirm" flow needs; the other verbs are unchanged (`hook`/`broadside` still ride the order's movement first) | in battle |
 | `locale` | `{locale: "zh"\|"en"}` | anytime |
 
 ### 0.4 HTTP action shape (frozen; inventory frozen at M2)
@@ -147,13 +147,33 @@ data/  tools/  assets/  docs/   unchanged owners (M7 deletes assets/ui/chrome)
   befriend|attack|hail|appoint|allocate` · `fleet: jettison|promote` ·
   `settings:
   npc_preset|input_mode|current_mode` (the S19 rows, pre-game and
-  in-run). Every action
+  in-run) · `sandbox: battle|leave` (the **2026-11-14 amendment** — the
+  §4.12.4 zero-write proving-ground seam, below). Every action
   is a thin adapter over a `server/sim` function — no rules in the API
   layer. Port-facility actions pass the gate order **live run → docked →
   `bounty.can_open_facility` → §4.1b hours** (the same precedence the hub
   projection shows; `provisions`/`people`/`fleet` never gate, so docking,
   Save, Set Sail and sea verbs survive a bounty closure; at the bountied
   nation's capital only Pay bounty passes the palace audience gate).
+- **The sandbox battle seam (2026-11-14, the §4.12.4 zero-write branch made
+  live):** `POST /api/sandbox/battle` takes the §4.7.16 export shape
+  (`{version: 1, kind: "sailage_sandbox", player, enemy, conditions}`) and
+  opens a `BattleSim` flagged `encounter.sandbox = true` — works with **no
+  run** (the S21 editor lives off the title). Sandbox battles stream
+  `battle_tick` like live battles and accept the `battle_order` /
+  `battle_action` intents without the run guard; the enemy side's
+  `ai_level` / `archetype` / `formation` ride the §4.9a
+  `profile_override` seam. At the end the §4.12.4 sandbox branch skips
+  steps 2/3/4 entirely (no fleet, gold, XP, reputation, morale, ecology
+  or `pending_encounter` write — zero-write), emits
+  `battle_finished` with `"sandbox": true` in its args for the read-only
+  after-action dialog, and the client returns to S21 with the
+  configuration kept (`80-*` §4.7.16). The `state` snapshot's `battle`
+  slice carries the flag as `sandbox: true` while such a battle is live.
+  `POST /api/sandbox/leave` abandons a live sandbox battle (no outcome,
+  no event). Both verbs refuse while a live battle is already open
+  (`battle_active`) and `battle` refuses a malformed config with
+  `error.sandbox_config`.
 - **Screen projections (the no-rules-in-TS channel):** `GET
   /api/view/<screen_id>` → `{ok: true, screen, views}` where `views` is
   the server-computed projection the screen renders (prices, tax badges,

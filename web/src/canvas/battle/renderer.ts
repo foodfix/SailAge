@@ -11,6 +11,7 @@
  */
 import { spriteUrl } from "../../assets/sprites";
 import {
+  ACTING_RING,
   ARC_FAN_ALPHA,
   ARC_PORT_STEPS,
   ARC_STARBOARD_STEPS,
@@ -18,6 +19,7 @@ import {
   BAR_WARN_RATIO,
   CANNON_RANGE_MAX,
   DRAG_THRESHOLD_PX,
+  ENDPOINT_HIT_CELLS,
   HEADING8,
   HEADING_DEGREES,
   HOOK_RING_RADIUS,
@@ -26,6 +28,7 @@ import {
   MINIMAP_H,
   MINIMAP_PX_PER_CELL,
   MINIMAP_W,
+  MOVE_DOT,
   SELECTION_RING,
   TILE_PX,
   TOKEN_INSET,
@@ -61,7 +64,6 @@ export interface BattleScene {
   /** Instant AI turns (the battle menu's speed switch) — no glide. */
   aiInstant: boolean;
 }
-
 interface Motion {
   from: Vec2;
   to: Vec2;
@@ -201,6 +203,24 @@ export class BattleRenderer {
     return best;
   }
 
+  /** The reachable-set endpoint under a pointer event (§4.3: click it = the
+   * move order), or null. Only meaningful while a player ship acts. */
+  endpointAt(clientX: number, clientY: number): Vec2 | null {
+    if (this.scene.view.moveRange.length === 0) return null;
+    const cell = this.cellAt(clientX, clientY);
+    if (!cell) return null;
+    let best: Vec2 | null = null;
+    let bestDistance = ENDPOINT_HIT_CELLS;
+    for (const endpoint of this.scene.view.moveRange) {
+      const distance = Math.hypot(endpoint.x - cell.x, endpoint.y - cell.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = endpoint;
+      }
+    }
+    return best;
+  }
+
   /** Design-px point inside the minimap widget (null when outside). */
   minimapPointAt(clientX: number, clientY: number): Vec2 | null {
     const point = this.designPoint(clientX, clientY);
@@ -245,9 +265,11 @@ export class BattleRenderer {
     };
   }
 
-  /** The selected ship (or the first living own ship) — the camera follows it. */
+  /** The selected ship, else the acting unit, else the first living own ship. */
   private focusShip(): BattleShip | null {
     const ships = this.scene.view.ships;
+    const acting = ships.find((ship) => ship.id === this.scene.view.actingId && ship.alive);
+    if (acting) return acting;
     const selected = ships.find((ship) => ship.id === this.scene.selectedId && ship.alive);
     if (selected) return selected;
     return ships.find((ship) => ship.side === "player" && ship.alive) ?? null;
@@ -288,6 +310,13 @@ export class BattleRenderer {
     const selected = this.scene.view.ships.find(
       (ship) => ship.id === this.scene.selectedId && ship.alive,
     );
+    const acting = this.scene.view.ships.find(
+      (ship) => ship.id === this.scene.view.actingId && ship.alive,
+    );
+    if (acting && acting.side === "player") {
+      this.drawMoveRange(acting, now);
+      this.drawActingRing(acting, now);
+    }
     if (selected) this.drawArcs(selected, now);
     this.drawHookRings(selected, now);
     this.drawTargetMark(now);
@@ -299,6 +328,51 @@ export class BattleRenderer {
     this.drawWorldBorder();
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  /** §4.7.1 acting-unit ring — the "you can move this ship" indicator. */
+  private drawActingRing(ship: BattleShip, now: number): void {
+    const ctx = this.ctx;
+    const point = worldToScreen(this.camera, this.positionAt(ship.id, now));
+    const size = TILE_PX * this.camera.zoom;
+    // A slow pulse (presentation only — never touches the sim readouts).
+    const pulse = 1 + 0.06 * Math.sin(now / 220);
+    ctx.save();
+    ctx.strokeStyle = palette.good();
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, size * ACTING_RING * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** §4.7.1 reachable-set overlay: the legal_velocities endpoints (§0.3
+   * `move_range`) as dots, with faint vectors from the acting ship. */
+  private drawMoveRange(acting: BattleShip, now: number): void {
+    const ctx = this.ctx;
+    const size = TILE_PX * this.camera.zoom;
+    const dotRadius = Math.max(2.5, size * MOVE_DOT * 0.5);
+    const from = worldToScreen(this.camera, this.positionAt(acting.id, now));
+    ctx.save();
+    for (const endpoint of this.scene.view.moveRange) {
+      if (endpoint.x === acting.position.x && endpoint.y === acting.position.y) {
+        continue; // the hold endpoint sits under the token
+      }
+      const point = worldToScreen(this.camera, endpoint);
+      ctx.globalAlpha = 0.28;
+      ctx.strokeStyle = palette.accent();
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = palette.accent();
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, dotRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   private drawSea(): void {
     const ctx = this.ctx;

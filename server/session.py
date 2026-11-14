@@ -146,6 +146,9 @@ FACILITY_INVENTORY: Final[dict[str, tuple[str, ...]]] = {
                "appoint", "allocate"),
     "fleet": ("jettison", "promote"),
     "settings": ("npc_preset", "input_mode", "current_mode"),
+    # The §4.12.4 zero-write proving-ground seam (90-* §0.4, 2026-11-14):
+    # `battle` opens the S21 fixture encounter, `leave` abandons it.
+    "sandbox": ("battle", "leave"),
 }
 
 #: The six facilities the port hub renders (``server.api.views._port_view``)
@@ -186,6 +189,17 @@ def _body_dict(body: Any) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise ApiError("bad_request", "error.bad_request", 400)
     return body
+
+
+def _body_int(value: Any, fallback: int = 0) -> int:
+    """A tolerant numeric body read (the editor fields may arrive as
+    strings); anything non-numeric falls back."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return fallback
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _require_str(body: dict[str, Any], key: str) -> str:
@@ -386,6 +400,10 @@ class BattleSession:
     idle_officer_ids: list[str] = field(default_factory=list)
     order: dict[str, Any] = field(default_factory=dict)
     rounds: int = 0
+    #: The §4.9a profile override (the S21 seam — the editor's
+    #: ``ai_level`` / ``archetype`` / ``formation``); ``None`` on the live
+    #: path (the encounter kind's own row decides, correction 8).
+    profile: dict[str, Any] | None = None
 
     def kind(self) -> str:
         return str(self.encounter.get("kind", "pirate"))
@@ -556,6 +574,10 @@ class Session:
             "active": self.battle is not None,
             "encounter_id": self.battle.encounter_id()
             if self.battle is not None else "",
+            # The §4.12.4 zero-write flag (90-* §0.4): the read-only
+            # after-action dialog routes back to S21, not S3.
+            "sandbox": bool(self.battle is not None
+                            and self.battle.encounter.get("sandbox")),
         }
         return _jsonable(payload)
 
@@ -1991,15 +2013,19 @@ class Session:
         self.battle.order = order
 
     def _guard_battle(self) -> BattleSession:
-        self._guard_run()
-        if self.battle is None:
+        battle = self.battle
+        if battle is None:
             raise ApiError("not_in_battle", "error.not_in_battle")
-        return self.battle
+        # The §4.12.4 sandbox branch: a zero-write proving-ground battle is
+        # playable with no run at all (the S21 editor lives off the title).
+        if not battle.encounter.get("sandbox"):
+            self._guard_run()
+        return battle
 
     def _intent_battle_action(self, frame: dict[str, Any]) -> None:
         battle = self._guard_battle()
         verb = frame.get("verb")
-        if verb not in ("broadside", "hook", "retreat", "surrender"):
+        if verb not in ("broadside", "hook", "hold", "retreat", "surrender"):
             raise ApiError("bad_intent", "error.bad_intent", 400)
         sim = battle.sim
         if sim.is_over():
@@ -2016,7 +2042,16 @@ class Session:
         unit = sim.current_unit()
         if not unit or str(unit.get("side", "")) != SIDE_PLAYER:
             raise ApiError("not_your_turn", "error.not_your_turn")
+        # Every action rides the order's movement first (§4.9b semantics).
         self._apply_player_movement(sim, unit, battle.order)
+        if verb == "hold":
+            # The 2026-11-14 amendment: the pure-move verb — move by the
+            # order, hold, end the turn (90-* §0.3).
+            sim.hold(unit)
+            sim.end_turn()
+            if sim.is_over():
+                self._finish_battle()
+            return
         target = self._battle_target(sim, unit, battle.order)
         if not target:
             sim.hold(unit)
@@ -2095,6 +2130,154 @@ class Session:
             raise ApiError("bad_locale", "error.bad_locale", 400)
         self.set_locale(locale)
 
+    # =====================================================================
+    # The §4.12.4 zero-write sandbox seam (90-* §0.4, 2026-11-14)
+    # =====================================================================
+
+    #: The §4.7.16 fleet clamps.
+    SANDBOX_FLEET_MAX: Final[int] = 5
+    SANDBOX_FLEET_MIN: Final[int] = 1
+
+    def _sandbox_battle(self, body: dict[str, Any]) -> dict[str, Any]:
+        """``POST /api/sandbox/battle`` — opens the §4.7.16 fixture
+        encounter from the S21 editor's export shape. Zero-write: no run
+        is required and nothing but the transient ``Session.battle`` is
+        touched. The body is the canonical export (``80-*`` §4.7.16);
+        malformed shapes refuse with ``error.sandbox_config``."""
+        if self.battle is not None:
+            raise ApiError("battle_active", "error.battle_active")
+        if not isinstance(body, dict) or body.get("kind") != "sailage_sandbox":
+            raise ApiError("bad_request", "error.sandbox_config", 400)
+        player = body.get("player")
+        enemy = body.get("enemy")
+        conditions = body.get("conditions")
+        if not all(isinstance(block, dict) for block in (player, enemy, conditions)):
+            raise ApiError("bad_request", "error.sandbox_config", 400)
+        player_ships = self._sandbox_fleet(player.get("ships"))
+        enemy_ships = self._sandbox_fleet(enemy.get("ships"))
+        if enemy.get("compose"):
+            # `compose: true` ignores the ship rows and one-click generates
+            # the §4.7.16 default trio (80-* §4.7.16).
+            enemy_ships = [self._sandbox_ship("brigantine"),
+                           self._sandbox_ship("sloop"),
+                           self._sandbox_ship("brigantine")]
+        kind = str(enemy.get("kind", "pirate"))
+        stats_in = player.get("stats")
+        stats = stats_in if isinstance(stats_in, dict) else {}
+
+        def morale(value: Any) -> int:
+            return max(0, min(100, _body_int(value, 50)))
+
+        seed_mode = str(conditions.get("seed_mode", "auto"))
+        config: dict[str, Any] = {
+            "player_ships": player_ships,
+            "enemy_ships": enemy_ships,
+            "enemy_kind": kind,
+            "enemy_nation": "",
+            "day": max(1, min(3600, _body_int(conditions.get("day"), 1))),
+            "gold": 0,
+            "contact": (self.gs.world_tile() if self.has_run() else (24, 15)),
+            "weather": str(conditions.get("weather", "calm")),
+            "deployment": str(conditions.get("deployment", "")),
+            "encounter_id": "sandbox",
+            "wind_dir": str(conditions.get("wind_dir", "E")),
+            "current": copy.deepcopy(conditions.get("current")
+                                     if isinstance(conditions.get("current"), dict)
+                                     else {"dir": "", "strength": 0}),
+            "player_stats": {
+                "attributes": {
+                    key: max(0, min(100, _body_int(stats.get(key), 0)))
+                    for key in ("constitution", "intellect", "charisma",
+                                "courage", "luck")
+                },
+                "equipment": {
+                    "weapon": str(stats.get("weapon", "")),
+                    "armor": str(stats.get("armor", "")),
+                },
+            },
+            "player_morale": morale(player.get("morale")),
+            "enemy_morale": morale(enemy.get("morale")),
+        }
+        # `auto` omits the key: BattleSim applies the §4.11.1 formula.
+        if seed_mode == "fixed":
+            config["seed"] = max(0, _body_int(conditions.get("seed"), 0))
+        elif seed_mode == "random":
+            config["seed"] = GodotRng().randi_range(0, 2 ** 31 - 1)
+        sim = BattleSim(config)
+        sim.start()
+        self.battle = BattleSession(
+            sim=sim,
+            encounter={"id": "sandbox", "kind": kind, "sandbox": True},
+            idle_officer_ids=[],
+            profile={
+                "ai_level": max(0, min(1, _body_int(enemy.get("ai_level"), 0))),
+                "archetype": str(enemy.get("archetype", "balanced")),
+                "formation": str(enemy.get("formation", "swarm")),
+            },
+        )
+        self.emit_event("battle_started",
+                        {"encounter_id": "sandbox", "kind": kind,
+                         "sandbox": True})
+        self._pump_battle()
+        return {"ok": True, "encounter_id": "sandbox"}
+
+    def _sandbox_leave(self, body: dict[str, Any]) -> dict[str, Any]:
+        """``POST /api/sandbox/leave`` — abandons a live sandbox battle
+        (no outcome, no event; zero-write either way)."""
+        battle = self.battle
+        if battle is None:
+            raise ApiError("not_in_battle", "error.not_in_battle")
+        if not battle.encounter.get("sandbox"):
+            raise ApiError("not_sandbox", "error.not_in_battle")
+        self.battle = None
+        return {"ok": True}
+
+    def _sandbox_fleet(self, ships: Any) -> list[dict[str, Any]]:
+        """The §4.11.11 instances from the editor's ship rows (1..5)."""
+        if not isinstance(ships, list) \
+                or not self.SANDBOX_FLEET_MIN <= len(ships) <= self.SANDBOX_FLEET_MAX:
+            raise ApiError("bad_request", "error.sandbox_config", 400)
+        fleet: list[dict[str, Any]] = []
+        for row in ships:
+            if not isinstance(row, dict):
+                raise ApiError("bad_request", "error.sandbox_config", 400)
+            equipment = row.get("equipment")
+            equipment = equipment if isinstance(equipment, dict) else {}
+            fleet.append(self._sandbox_ship(
+                str(row.get("ship_type_id", "")),
+                cannons=_body_int(row.get("cannons"), 0),
+                crew=_body_int(row.get("crew"), 0),
+                durability=_body_int(row.get("durability"), 0),
+                figurehead=str(equipment.get("figurehead", "")),
+                sail=str(equipment.get("sail", "")),
+            ))
+        return fleet
+
+    def _sandbox_ship(self, ship_type_id: str, *, cannons: int = 0,
+                      crew: int = 0, durability: int = 0,
+                      figurehead: str = "", sail: str = "") -> dict[str, Any]:
+        """One clamped §4.11.11 ship instance from an editor row (the
+        §4.7.16 clamp rule — an invalid combination never reaches 开战)."""
+        ship_type = self.store.get_ship_type(ship_type_id)
+        slots = max(0, int(ship_type.get("armament_slots", 0)))
+        crew_min = max(0, int(ship_type.get("crew_min", 0)))
+        crew_max = max(crew_min, int(ship_type.get("crew_max", crew_min)))
+        hull_max = max(1, int(ship_type.get("durability", 1)))
+        return {
+            "ship_type_id": ship_type_id,
+            "cannons": max(0, min(slots, cannons)),
+            # Unset reads (≤0) take the §4.11.3 spawn values: crew = crew_min,
+            # durability = the hull's full value.
+            "crew": max(crew_min, min(crew_max,
+                                      crew if crew > 0 else crew_min)),
+            "durability": max(1, min(hull_max, durability
+                                     if durability > 0 else hull_max)),
+            "provisions": 0,
+            "water": 0,
+            "equipment": {"figurehead": figurehead, "sail": sail},
+            "cargo": {},
+        }
+
     def _cancel_appointment(self, reason: str) -> None:
         if autopilot.appointed(self.gs):
             autopilot.cancel(self.gs, self.run_view, self.rt, reason)
@@ -2154,6 +2337,8 @@ class Session:
             idle_officer_ids=skills.officers_in_post(gs, ""))
         gs.pending_encounter = copy.deepcopy(encounter)
         # §4.11.11.2 / §4.11.10: the single battle-start piracy funnel.
+        # (The §4.12.4 sandbox branch never reaches here — it opens through
+        # `_sandbox_battle` and writes nothing.)
         if str(encounter.get("role", "")) != npc_fleets.PIRATE:
             nation_id = str(encounter.get("nation_id", ""))
             if nation_id:
@@ -2186,7 +2371,7 @@ class Session:
                 sim.end_turn()
                 continue
             if str(unit.get("side", "")) == SIDE_ENEMY:
-                decision = ai_fleet.decide(sim, unit, {}, None)
+                decision = ai_fleet.decide(sim, unit, {}, battle.profile)
                 # The oracle's own decision executor (battle_screen.gd's
                 # guarded `_apply_decision` seam).
                 sim._apply_decision(unit, decision)  # noqa: SLF001
@@ -2203,7 +2388,7 @@ class Session:
         if battle is None:
             return {"type": "battle_tick", "round": 0, "phase": "none",
                     "ships": [], "wind": "E", "weather": "calm",
-                    "orders_due": False}
+                    "orders_due": False, "acting_id": "", "move_range": []}
         sim = battle.sim
         acting = sim.current_unit()
         if sim.is_over():
@@ -2233,6 +2418,21 @@ class Session:
                     "starboard": int(unit.get("reload_starboard", 0)),
                 },
             })
+        # §0.3 (2026-11-14 amendment): the acting unit's id (the §4.7.1
+        # camera-follow target and the only ship a player action drives)
+        # plus — for a player actor — the reachable-set endpoints the
+        # overlay draws (`legal_velocities` is the engine's own §4.3a
+        # enumeration; the frame projects it, it decides nothing).
+        acting_id = ""
+        move_range: list[dict[str, int]] = []
+        if acting and not sim.is_over():
+            acting_id = (f"{acting.get('side', '')}_{int(acting.get('index', 0))}")
+            if str(acting.get("side", "")) == SIDE_PLAYER:
+                origin = sim.unit_cell(acting)
+                move_range = [
+                    {"x": int(origin[0] + vel[0]), "y": int(origin[1] + vel[1])}
+                    for vel in sim.legal_velocities(acting)
+                ]
         return {
             "type": "battle_tick",
             "round": int(sim.round_number()),
@@ -2241,6 +2441,8 @@ class Session:
             "wind": str(sim.wind_dir),
             "weather": str(sim.weather),
             "orders_due": bool(acting) and phase == "player",
+            "acting_id": acting_id,
+            "move_range": move_range,
         }
 
     def _finish_battle(self) -> None:
@@ -2250,6 +2452,22 @@ class Session:
             return
         sim = battle.sim
         if not sim.is_over():
+            return
+        # The §4.12.4 sandbox branch: steps 2/3/4 are skipped entirely —
+        # no fleet, gold, XP, reputation, morale, ecology or
+        # pending-encounter write. The read-only outcome still reaches the
+        # client for the §4.7.16 after-action dialog.
+        if battle.encounter.get("sandbox"):
+            outcome = sim.outcome()
+            encounter_id = battle.encounter_id()
+            self.battle = None
+            self.emit_event("battle_finished", {
+                "encounter_id": encounter_id,
+                "result": str(outcome.get("result", "")),
+                "outcome": outcome,
+                "sandbox": True,
+            })
+            self.queue_state()
             return
         self.battle = None
         gs = self.gs

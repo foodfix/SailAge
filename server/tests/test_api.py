@@ -49,6 +49,7 @@ EXPECTED_INVENTORY: dict[str, tuple[str, ...]] = {
                "appoint", "allocate"),
     "fleet": ("jettison", "promote"),
     "settings": ("npc_preset", "input_mode", "current_mode"),
+    "sandbox": ("battle", "leave"),
 }
 
 #: The §0.3 hello frame keys, verbatim.
@@ -66,9 +67,10 @@ TICK_MARKER_KEYS = {"id", "role", "nation_id", "cell", "sailing",
 MARKER_HEADINGS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", ""}
 #: §0.3 `tick.markers` radius (Chebyshev, wrap-aware on x).
 MARKER_VIEW_RADIUS_TILES = 32
-#: The §0.3 battle_tick frame keys, verbatim.
+#: The §0.3 battle_tick frame keys, verbatim (the 2026-11-14 amendment
+#: added the additive acting_id + move_range keys).
 BATTLE_TICK_KEYS = {"round", "phase", "ships", "wind", "weather",
-                    "orders_due"}
+                    "orders_due", "acting_id", "move_range"}
 #: The §0.3 hello.saves entry shape.
 SLOT_KEYS = {"slot", "day", "nation_id", "port_id", "gold", "saved_at"}
 #: The frozen refusal shape (§0.4).
@@ -427,7 +429,10 @@ def test_ws_intent_gates(client: TestClient) -> None:
         error = _receive_until(ws, "error", limit=10)
         assert error["code"] == "no_run"
         ws.send_json({"type": "battle_action", "verb": "broadside"})
-        assert _receive_until(ws, "error", limit=10)["code"] == "no_run"
+        # The 2026-11-14 amendment: the battle guard precedes the run guard
+        # (a sandbox battle is playable with no run), so "not in a battle"
+        # is the honest refusal here.
+        assert _receive_until(ws, "error", limit=10)["code"] == "not_in_battle"
     # In port: helm is refused with the at-sea gate.
     _new_game(client)
     with client.websocket_connect("/ws") as ws:

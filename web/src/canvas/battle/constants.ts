@@ -97,5 +97,11 @@ export const BAR_WARN_RATIO = 0.25;
 /** Render-only token/overlay sizing (fractions of the tile size). */
 export const TOKEN_INSET = 0.08;
 export const SELECTION_RING = 0.5;
+/** The §4.7.1 acting-ship ring (distinct from the order-selection ring). */
+export const ACTING_RING = 0.62;
+/** The §4.7.1 reachable-set endpoint dots (fraction of the tile size). */
+export const MOVE_DOT = 0.16;
+/** Click radius for a reachable endpoint, in cells (§4.3 endpoint = move). */
+export const ENDPOINT_HIT_CELLS = 0.6;
 export const ARC_FAN_ALPHA = 0.18;
 export const HOOK_RING_RADIUS = 0.46;

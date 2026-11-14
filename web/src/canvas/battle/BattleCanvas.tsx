@@ -25,9 +25,11 @@ export interface BattleCanvasProps {
   /** Increment to run the `[fit]` camera. */
   fitSignal: number;
   onSelect: (shipId: string | null) => void;
+  /** A click on a reachable-set endpoint (§4.3: the move order). */
+  onEndpoint?: (cell: { x: number; y: number }) => void;
 }
 
-export function BattleCanvas({ scene, fitSignal, onSelect }: BattleCanvasProps) {
+export function BattleCanvas({ scene, fitSignal, onSelect, onEndpoint }: BattleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<BattleRenderer | null>(null);
   const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -162,7 +164,13 @@ export function BattleCanvas({ scene, fitSignal, onSelect }: BattleCanvasProps) 
           return;
         }
         const ship = renderer.shipAt(event.clientX, event.clientY);
-        onSelect(ship ? ship.id : null);
+        if (ship) {
+          onSelect(ship.id);
+          return;
+        }
+        const endpoint = onEndpoint ? renderer.endpointAt(event.clientX, event.clientY) : null;
+        if (endpoint && onEndpoint) onEndpoint({ x: endpoint.x, y: endpoint.y });
+        else onSelect(null);
       }}
       onPointerCancel={(event) => {
         pointersRef.current.delete(event.pointerId);

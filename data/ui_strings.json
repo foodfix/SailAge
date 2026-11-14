@@ -3688,6 +3688,18 @@
     "zh": "士气",
     "en": "Morale"
   },
+  "battle.turn.player": {
+    "zh": "你的回合",
+    "en": "Your turn"
+  },
+  "battle.turn.enemy": {
+    "zh": "敌方行动",
+    "en": "Enemy turn"
+  },
+  "battle.turn.over": {
+    "zh": "战斗结束",
+    "en": "Battle over"
+  },
   "battle.formation": {
     "zh": "阵型",
     "en": "Formation"
@@ -4091,6 +4103,14 @@
   "error.not_your_turn": {
     "zh": "还没轮到你行动",
     "en": "It is not your turn"
+  },
+  "error.battle_active": {
+    "zh": "已有战斗进行中",
+    "en": "A battle is already running"
+  },
+  "error.sandbox_config": {
+    "zh": "沙盘配置无效",
+    "en": "Invalid sandbox configuration"
   },
   "error.request_failed": {
     "zh": "请求失败",

@@ -207,6 +207,8 @@ export interface GameSnapshot extends GameState {
   pending_encounter: unknown | null;
   npc_port_log: unknown[];
   levelup: unknown | null;
+  /** The live-battle slice (§0.3); `sandbox` = the §4.12.4 zero-write run. */
+  battle?: { active: boolean; encounter_id: string; sandbox: boolean };
 }
 
 /* ---------------------------------------------------------------------- */

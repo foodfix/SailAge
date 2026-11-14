@@ -281,6 +281,11 @@ class BattleFixture {
       wind: { ...fixtureBattle.wind },
       weather: fixtureBattle.weather,
       orders_due: !this.finished && this.phase === "player",
+      // The 2026-11-14 §0.3 amendment (the fixture reproduces the shape).
+      acting_id: this.finished ? "" : (this.phase === "player"
+        ? (ships.find((ship) => ship.side === "player")?.id ?? "")
+        : (ships.find((ship) => ship.side === "enemy")?.id ?? "")),
+      move_range: [],
     };
   }
 
@@ -356,6 +361,10 @@ class BattleFixture {
         this.finished = true;
         this.result = intent.verb;
         return true;
+      }
+      if (intent.verb === "hold") {
+        // The pure-move verb: no volley — the loop advances the round.
+        return false;
       }
       const player = this.ships.find((ship) => ship.side === "player" && ship.alive);
       if (!player) return false;

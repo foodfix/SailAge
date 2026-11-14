@@ -512,3 +512,27 @@ ledger is this doc.
 build`, `npm run audit`, `node scripts/build_tokens.mjs --check`,
 `python -m server.demo_loop_smoke`, and the browser demo loop.
 
+## 10. M8 — the live sea-battle sandbox + the S10 turn/actor/move seams (2026-11-14)
+
+User report: the S21 sandbox's 开战 rendered a dead static snapshot — an
+unused toolbar during the "battle", no turn indicator, no acting-ship
+indicator, no move-range display. Root causes: (a) the server never
+exposed the §4.12.4 zero-write sandbox seam (parking-lot item), so the
+screen faked a deployment snapshot; (b) `battle_tick` carried no acting
+unit or legal-move data, so no battle screen could show those
+affordances; (c) the intent set had no pure-move verb.
+
+| Deliverable | Done-when |
+|---|---|
+| Doc amendments (`90-*` §0.3/§0.4, `80-*` §4.7.16) | `battle_tick` += `acting_id` + `move_range`; `battle_action` += `hold`; `sandbox: battle\|leave` in the facility inventory; the sandbox seam pinned |
+| Server seam | `POST /api/sandbox/battle` (works with no run; fixed/random/auto seed; §4.9a profile override for `ai_level`/`archetype`/`formation`), `POST /api/sandbox/leave`, the sandbox branch in `_finish_battle` (zero-write, `battle_finished` carries `sandbox: true`), the guard exception for sandbox intents |
+| `battle_tick` seams | `acting_id` (the §4.7.1 acting unit) + `move_range` (the acting player unit's `legal_velocities` endpoints) on every frame |
+| `hold` verb | applies the stored order's movement, holds, ends the turn — the pure-move action |
+| S10 presentation | the turn chip (你的回合/敌方行动), the acting-ship ring + camera follow, the reachable-set overlay, click-a-reachable-endpoint fills the order (§4.3 input spec within the frozen heading+band intent) |
+| S21 presentation | editor-only field (the static preview retired per `80-*` §4.7.16 web-era amendment); 开战 opens S10 via the seam; the configuration persists across the round-trip |
+
+Parking-lot closure: the "battle canvas's `battle_tick` extras (acting
+unit…)" bullet is delivered for the acting unit + move range; the log
+stream / cannon counts / per-ship maxima / nation colour bullets remain
+parked.
+

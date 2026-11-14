@@ -4,21 +4,26 @@
  *
  * A pure renderer over the frozen `battle_tick` stream (`90-*` §0.3): the
  * canvas draws the 48×30 world and the DOM chrome is a flow-laid stack of
- * kit atoms — the header plate (battle.title · day · round), the order
- * strip (heading / speed band / assigned target cycles + the §4.9b wind
- * chip and the side morales), the bottom HUD (speed/heading readouts, the
- * reload side pair, action verbs with their gates, the shot selector and
- * the presentation log) and the two overlays (the Esc menu and the
- * §4.12.2 after-action dialog). Every control becomes a frozen WS intent
- * (`battle_order` + `battle_action`). No rule lives here — the server owns
- * the engine; the only client arithmetic is presentation (bars, headings,
- * a Chebyshev read for the shot selector's enabled state).
+ * kit atoms — the header plate (battle.title · day · round · the turn
+ * chip), the order strip (heading / speed band / assigned target cycles +
+ * the §4.9b wind chip and the side morales), the bottom HUD (speed/heading
+ * readouts, the reload side pair, action verbs with their gates, the shot
+ * selector and the presentation log) and the two overlays (the Esc menu and
+ * the §4.12.2 after-action dialog). Every control becomes a frozen WS
+ * intent (`battle_order` + `battle_action`). No rule lives here — the
+ * server owns the engine; the only client arithmetic is presentation
+ * (bars, headings, a Chebyshev read for the shot selector's enabled state,
+ * the §4.3 nearest-ray read that turns a reachable-endpoint click into the
+ * order's heading/band).
+ *
+ * Wire contract (2026-11-14 amendment): `battle_tick` carries `acting_id`
+ * (the acting unit — the §4.7.1 turn/actor indicators and the only ship a
+ * player action may drive) and `move_range` (the acting player unit's
+ * `legal_velocities` endpoints — the reachable-set overlay and the click
+ * target). The frame still carries no log stream or cannon counts: the log
+ * panel remains a presentation log of frame observations + issued intents.
  *
  * Wire-contract notes (reported, not patched):
- *  · `battle_tick` carries no acting-unit id, log stream, cannon counts,
- *    current vector or formation anchor — the canvas derives what it can
- *    (selection, reload pips, sink detection) and the log panel is a
- *    presentation log of frame observations + issued intents.
  *  · `client/types.ts`'s `BattleOrderIntent` types (string station/band)
  *    disagree with the M2 server's validator (station list/dict, heading8
  *    int, band [lo, hi]); the correct wire shape is sent through one cast.
@@ -55,7 +60,35 @@ const EMPTY_VIEW: BattleView = {
   wind: { dir: "E", strength: 0 },
   weather: "calm",
   ordersDue: false,
+  actingId: "",
+  moveRange: [],
 };
+
+/**
+ * The §4.3a nearest-ray heading buckets (the server's `heading8_of` ray
+ * table, grid coords — y grows south). Presentation arithmetic only: it
+ * turns a clicked reachable endpoint into the order's heading bucket.
+ */
+const HEADING_RAYS: readonly (readonly [number, number])[] = [
+  [1, 0], [1, -1], [0, -1], [-1, -1],
+  [-1, 0], [-1, 1], [0, 1], [1, 1],
+];
+
+function nearestRayBucket(dx: number, dy: number): number {
+  let best = 0;
+  let bestScore = -1;
+  for (let bucket = 0; bucket < HEADING_RAYS.length; bucket += 1) {
+    const [rx, ry] = HEADING_RAYS[bucket];
+    const dot = dx * rx + dy * ry;
+    if (dot <= 0) continue;
+    const score = rx === 0 || ry === 0 ? 2 * dot * dot : dot * dot;
+    if (score > bestScore) {
+      bestScore = score;
+      best = bucket;
+    }
+  }
+  return best;
+}
 
 /** The §4.12.2 outcome subset the after-action dialog renders. */
 interface OutcomeSlice {
@@ -143,9 +176,16 @@ export function BattleScreen() {
   const [logLines, setLogLines] = useState<LogLine[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [fitSignal, setFitSignal] = useState(0);
+  /** The §4.12.4 sandbox branch: the after-action dialog returns to S21. */
+  const [sandboxBattle, setSandboxBattle] = useState(false);
+  // A mid-battle reload reads the flag from the state slice instead.
+  useEffect(() => {
+    if (snapshot.battle?.sandbox) setSandboxBattle(true);
+  }, [snapshot.battle?.sandbox]);
 
   const orderTouched = useRef(false);
   const previousShips = useRef<Map<string, boolean>>(new Map());
+  const lastActingId = useRef<string>("");
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -183,6 +223,8 @@ export function BattleScreen() {
               setLogLines([]);
               previousShips.current.clear();
               orderTouched.current = false;
+              lastActingId.current = "";
+              setSandboxBattle(frame.args.sandbox === true);
             }
           } else if (frame.type === "error") {
             setToast(frame.msg);
@@ -194,35 +236,51 @@ export function BattleScreen() {
 
   const ownShips = useMemo(() => livingShips(view, "player"), [view]);
   const enemyShips = useMemo(() => livingShips(view, "enemy"), [view]);
+  const actingShip =
+    view.ships.find((ship) => ship.id === view.actingId && ship.alive) ?? null;
   const selected =
-    view.ships.find((ship) => ship.id === selectedId && ship.alive) ?? ownShips[0] ?? null;
+    view.ships.find((ship) => ship.id === selectedId && ship.alive)
+    ?? (actingShip?.side === "player" ? actingShip : null)
+    ?? ownShips[0]
+    ?? null;
   const target = enemyShips.find((ship) => ship.id === order.assignedTargetId) ?? null;
   const gunnery = Number(snapshot.player.skills.gunnery ?? 0);
   const moralePlayer = ownShips[0]?.morale ?? 0;
   const moraleEnemy = enemyShips[0]?.morale ?? 0;
 
-  // First frame: seed the order from the flagship (heading + nearest enemy).
+  // Each acting turn (the §0.3 `acting_id`): a fresh order from the acting
+  // ship's own state (heading, nearest enemy) and the selection follows —
+  // the order strip edits the order the server applies to THIS ship.
   useEffect(() => {
-    if (orderTouched.current || ownShips.length === 0) return;
-    const flagship = ownShips[0];
+    const actingId = view.actingId;
+    if (!actingId || actingId === lastActingId.current) return;
+    lastActingId.current = actingId;
+    const acting = view.ships.find((ship) => ship.id === actingId);
+    if (!acting || acting.side !== "player") return;
     let nearest: BattleShip | null = null;
     let best = Number.POSITIVE_INFINITY;
-    for (const enemy of enemyShips) {
-      const distance = chebyshev(flagship.position, enemy.position);
+    for (const enemy of view.ships) {
+      if (enemy.side !== "enemy" || !enemy.alive) continue;
+      const distance = chebyshev(acting.position, enemy.position);
       if (distance < best) {
         best = distance;
         nearest = enemy;
       }
     }
-    orderTouched.current = true;
+    orderTouched.current = false;
+    setSelectedId(acting.id);
     setOrder({
-      station: [flagship.position.x, flagship.position.y],
-      headingBucket: flagship.headingBucket,
+      station: [acting.position.x, acting.position.y],
+      headingBucket: acting.headingBucket,
       speedBand: [1, 1],
       assignedTargetId: nearest?.id ?? null,
       discipline: false,
     });
-  }, [ownShips, enemyShips]);
+    pushLog({
+      key: "battle.log.turn",
+      values: { ship: tRef.current(content.shipName(acting.kind)) },
+    });
+  }, [view.actingId, view.ships, pushLog]);
 
   // A dead assigned target falls through to the next living enemy (the
   // presentation retarget; the server still validates the target index).
@@ -253,9 +311,14 @@ export function BattleScreen() {
   }, [client, order, selected]);
 
   const act = useCallback(
-    (verb: "broadside" | "hook" | "retreat" | "surrender") => {
+    (verb: "broadside" | "hook" | "hold" | "retreat" | "surrender") => {
       if (verb === "retreat" || verb === "surrender") {
         client.send({ type: "battle_action", verb });
+      } else if (verb === "hold") {
+        // The 2026-11-14 amendment: the pure-move verb — the order's
+        // movement rides, then the ship holds and the turn ends.
+        sendOrder();
+        client.send({ type: "battle_action", verb: "hold" });
       } else {
         sendOrder();
         client.send({
@@ -270,15 +333,39 @@ export function BattleScreen() {
             ? "battle.action.cannon"
             : verb === "hook"
               ? "battle.action.board"
-              : verb === "retreat"
-                ? "battle.action.retreat"
-                : "battle.action.surrender",
+              : verb === "hold"
+                ? "battle.action.hold"
+                : verb === "retreat"
+                  ? "battle.action.retreat"
+                  : "battle.action.surrender",
         values: {},
       });
       setMenuOpen(false);
       setPendingVerb(null);
     },
     [client, pushLog, selectedShot, selectedSide, sendOrder],
+  );
+
+  /** §4.3 input: a click on a reachable endpoint fills the order's
+   * heading/band from the endpoint geometry (presentation arithmetic — the
+   * server still validates and picks the legal velocity). */
+  const orderFromEndpoint = useCallback(
+    (cell: { x: number; y: number }) => {
+      if (!selected) return;
+      const dx = cell.x - selected.position.x;
+      const dy = cell.y - selected.position.y;
+      if (dx === 0 && dy === 0) return;
+      const magnitude = Math.hypot(dx, dy);
+      const low = Math.max(1, Math.floor(magnitude));
+      const high = Math.max(1, Math.ceil(magnitude));
+      orderTouched.current = true;
+      setOrder((current) => ({
+        ...current,
+        headingBucket: nearestRayBucket(dx, dy),
+        speedBand: [low, high],
+      }));
+    },
+    [selected],
   );
 
   const cycleHeading = useCallback(() => {
@@ -342,6 +429,14 @@ export function BattleScreen() {
   }, [ownShips, pendingVerb, selected]);
 
   const headingToken = HEADING8[order.headingBucket];
+  const turnKey =
+    view.phase === "player"
+      ? "battle.turn.player"
+      : view.phase === "enemy"
+        ? "battle.turn.enemy"
+        : view.phase === "over"
+          ? "battle.turn.over"
+          : null;
   const shotLockedValue = (shot: ShotType): number | null => {
     if (shot === "chain") return gunnery >= CHAIN_GATE ? null : CHAIN_GATE;
     if (shot === "armor_piercing") {
@@ -408,6 +503,19 @@ export function BattleScreen() {
           textValue={fmt("battle.round", { round: view.round })}
           tone={view.ordersDue ? "accent" : "default"}
         />
+        {turnKey ? (
+          <Label
+            className="battle__top_turn"
+            textKey={turnKey}
+            tone={
+              view.phase === "player"
+                ? "accent"
+                : view.phase === "enemy"
+                  ? "warn"
+                  : "dim"
+            }
+          />
+        ) : null}
       </div>
 
       <div className="battle__field sa-grow">
@@ -428,6 +536,7 @@ export function BattleScreen() {
               setOrder((current) => ({ ...current, assignedTargetId: ship.id }));
             }
           }}
+          onEndpoint={orderFromEndpoint}
         />
       </div>
 
@@ -500,21 +609,19 @@ export function BattleScreen() {
             disabled={!canFire}
             onClick={() => act("broadside")}
           />
-          {/* No `ram` verb exists in the frozen §0.3 intent table — the Phase-9
-              action set is broadside/hook/retreat/surrender. Rendered disabled. */}
+          {/* The `hold` verb (the 2026-11-14 §0.3 amendment) — apply the
+              order's movement, hold, end the turn: the pure move. `ram`
+              still has no verb in the frozen intent table (rendered off). */}
           <Button textKey="battle.action.ram" disabled />
           <Button
             textKey="battle.action.board"
             disabled={!canHook}
             onClick={() => act("hook")}
           />
-          {/* No `hold` verb either: this issues the order five-tuple only. */}
           <Button
             textKey="battle.action.hold"
-            onClick={() => {
-              sendOrder();
-              pushLog({ key: "battle.action.hold", values: {} });
-            }}
+            disabled={!view.ordersDue}
+            onClick={() => act("hold")}
           />
         </div>
 
@@ -631,7 +738,10 @@ export function BattleScreen() {
                     kind="primary"
                     onClick={() => {
                       setOutcome(null);
-                      navigate("world");
+                      // The §4.12.4 sandbox branch returns to S21 with the
+                      // configuration kept (80-* §4.7.16); a real battle
+                      // routes back to S3.
+                      navigate(sandboxBattle ? "sandbox" : "world");
                     }}
                   />,
                 ]}

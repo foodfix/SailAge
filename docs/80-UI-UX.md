@@ -1734,6 +1734,15 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   dialog and returns to S21 with the configuration kept (change one
   field and re-run). Preset persistence (`user://sandbox/`) is **out of
   scope** in Phase 9 — clipboard import/export only.
+- **Web-era amendment (2026-11-14):** the seam above is live —
+  `POST /api/sandbox/battle` (`90-*` §0.4) opens the flagged encounter
+  and routes to S10, which streams `battle_tick` (with the §4.7.1
+  acting-unit id and reachable-set overlay data, `90-*` §0.3) exactly as
+  for a real battle; the read-only after-action dialog returns to S21
+  with the configuration kept. The S21 field is therefore the editor
+  bands only — the M6 static deployment preview is retired (it rendered
+  a dead snapshot with no turn/actor/move affordances); 开战, not the
+  canvas, is the proving surface.
 
 #### 4.7.17 FX / UI-motion / animated-sea timing tables (Phase 10 — final values, W1 pins)
 

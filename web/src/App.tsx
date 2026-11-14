@@ -127,12 +127,19 @@ function RunEndRouter({ screen }: { screen: ScreenId }) {
     if (lastEvent && eventFresh) routedEvent.current = lastEvent;
     const over = eventFresh && lastEvent?.type === "event" && lastEvent.name === "game_over";
     const dockedEvent = eventFresh && lastEvent?.type === "event" && lastEvent.name === "port_entered";
+    const battleEvent = eventFresh && lastEvent?.type === "event" && lastEvent.name === "battle_started";
     if (over && screen !== "gameover") {
       navigate("gameover");
       return;
     }
     if ((dockedEvent || dockEdge) && screen === "world") {
       navigate("port");
+      return;
+    }
+    // A contact battle opens S10 (the sandbox start routes explicitly; this
+    // is the at-sea contact path that never had its route).
+    if (battleEvent && screen === "world") {
+      navigate("battle");
       return;
     }
     if (state.retired && screen !== "ending" && screen !== "title") {

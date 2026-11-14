@@ -46,18 +46,6 @@
   min-width: 0;
 }
 
-/* The canvas mount in preview mode. */
-.sandbox__field {
-  position: relative;
-  display: flex;
-  margin: 0 var(--sailage-base-unit) var(--sailage-base-unit);
-}
-
-.sandbox__field > * {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* The editor: one scrolling column of kit windows. */
 .sandbox__editor {
   display: flex;

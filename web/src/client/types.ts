@@ -98,6 +98,10 @@ export interface BattleTickFrame {
   wind: { dir: Direction8; strength: number };
   weather: Weather;
   orders_due: boolean;
+  /** §0.3 (2026-11-14 amendment): the acting unit's ship id ("" none/over). */
+  acting_id?: string;
+  /** The acting player unit's `legal_velocities` endpoints (absolute cells). */
+  move_range?: { x: number; y: number }[];
 }
 
 /** Mirrors the §5.1 EventBus table verbatim. */
@@ -136,7 +140,7 @@ export type ServerFrame =
 /* ---------------------------------------------------------------------- */
 
 export type HelmDir = Direction8 | "stop";
-export type BattleVerb = "broadside" | "hook" | "retreat" | "surrender";
+export type BattleVerb = "broadside" | "hook" | "hold" | "retreat" | "surrender";
 export type CannonSide = "port" | "starboard";
 export type ShotType = "round" | "chain" | "armor_piercing" | "grape";
 
@@ -179,8 +183,7 @@ export interface BattleActionIntent {
   verb: BattleVerb;
   side?: CannonSide;
   shot?: ShotType;
-}
-export interface LocaleIntent {
+}export interface LocaleIntent {
   type: "locale";
   locale: Locale;
 }
@@ -234,7 +237,7 @@ export type FrozenEndpoint =
  * the first screen consumes it (§0.4); these are the M3 proposal used by
  * the eight screens (one route per verb: POST /api/<facility>/<verb>).
  */
-export type ActionFacility = FacilityId | "port" | "provisions" | "settings" | "people" | "fleet";
+export type ActionFacility = FacilityId | "port" | "provisions" | "settings" | "people" | "fleet" | "sandbox";
 
 /* ---------------------------------------------------------------------- */
 /* The screen-facing client                                                */

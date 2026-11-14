@@ -95,11 +95,16 @@ export function toBattleView(frame: {
   wind?: unknown;
   weather?: unknown;
   orders_due?: unknown;
+  acting_id?: unknown;
+  move_range?: unknown;
 }): BattleView {
   const ships = Array.isArray(frame.ships)
     ? frame.ships
         .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
         .map(toBattleShip)
+    : [];
+  const moveRange = Array.isArray(frame.move_range)
+    ? frame.move_range.map(vec)
     : [];
   return {
     round: number(frame.round, 0),
@@ -108,6 +113,8 @@ export function toBattleView(frame: {
     wind: windOf(frame.wind),
     weather: (typeof frame.weather === "string" ? frame.weather : "calm") as Weather,
     ordersDue: Boolean(frame.orders_due),
+    actingId: typeof frame.acting_id === "string" ? frame.acting_id : "",
+    moveRange,
   };
 }
 

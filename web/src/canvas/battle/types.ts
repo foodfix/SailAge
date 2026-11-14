@@ -45,6 +45,10 @@ export interface BattleView {
   wind: { dir: Direction8; strength: number };
   weather: Weather;
   ordersDue: boolean;
+  /** §0.3 (2026-11-14): the acting unit's ship id ("" when none/over). */
+  actingId: string;
+  /** The acting player unit's reachable endpoints (the overlay data). */
+  moveRange: Vec2[];
 }
 
 /** The §4.9b order five-tuple, as the client edits and sends it. */
