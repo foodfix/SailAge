@@ -98,17 +98,35 @@ function LocaleHotkey() {
  * keeps `current_port` set in the client snapshot until the server's state
  * frame clears it, and that clear is no edge; loading a docked save routes
  * itself (SaveSlot) before the world screen is ever shown.
+ *
+ * The event conditions are fresh-only: `lastEvent` is the latest frame the
+ * WS delivered, so each event frame is consumed after it routes once (the
+ * docked-state frame that docks and the set-sail frame that departs both
+ * re-run this effect with the same `lastEvent` still mounted). Without the
+ * freshness gate the docked `port_entered` re-matched on the departing
+ * state frame and yanked the at-sea world screen back to the port hub.
  */
 function RunEndRouter({ screen }: { screen: ScreenId }) {
   const { state, lastEvent } = useGameState();
   const wasDocked = useRef<boolean | null>(null);
+  // Each `event` frame may trigger its route exactly once. `lastEvent` is the
+  // level-triggered "latest frame" store, so without this consumption the
+  // `port_entered` that opened the hub keeps matching on every later `state`
+  // frame: the set-sail frame (current_port cleared, no event of its own)
+  // re-routed the fresh world screen back to the port hub, whose view fetch
+  // the server now refuses with `not_in_port` — the stuck "Only available in
+  // port" report. The dock *edge* above already guards its own transition.
+  const routedEvent = useRef<EventFrame | null>(null);
   useEffect(() => {
     if (!state) return;
     const docked = state.current_port != null;
     const dockEdge = wasDocked.current === false && docked;
     wasDocked.current = docked;
-    const over = lastEvent?.type === "event" && lastEvent.name === "game_over";
-    const dockedEvent = lastEvent?.type === "event" && lastEvent.name === "port_entered";
+    const eventFresh = lastEvent !== null && lastEvent !== undefined
+      && lastEvent !== routedEvent.current;
+    if (lastEvent && eventFresh) routedEvent.current = lastEvent;
+    const over = eventFresh && lastEvent?.type === "event" && lastEvent.name === "game_over";
+    const dockedEvent = eventFresh && lastEvent?.type === "event" && lastEvent.name === "port_entered";
     if (over && screen !== "gameover") {
       navigate("gameover");
       return;
